@@ -1,0 +1,16 @@
+{
+  "name": "@alden/schema",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared data formats for Alden: config, queue items and briefings.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
+}

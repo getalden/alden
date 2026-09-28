@@ -1,0 +1,30 @@
+{
+  "name": "alden",
+  "version": "0.0.0",
+  "description": "A code review companion: triages your PR queue and briefs you on what needs your eyes.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "alden": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "smol-toml": "^1.9.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@alden/core": "workspace:*",
+    "@alden/schema": "workspace:*"
+  }
+}

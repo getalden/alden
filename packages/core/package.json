@@ -1,0 +1,17 @@
+{
+  "name": "@alden/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Alden engine.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@alden/schema": "workspace:*",
+    "smol-toml": "^1.9.0"
+  }
+}
