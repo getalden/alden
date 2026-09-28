@@ -19,6 +19,10 @@
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@napi-rs/keyring": "^2.1.0",
+    "@octokit/core": "^7.0.8",
+    "@octokit/plugin-retry": "^8.1.1",
+    "@octokit/plugin-throttling": "^11.0.5",
     "commander": "^15.0.0",
     "smol-toml": "^1.9.0",
     "zod": "^4.6.5"
