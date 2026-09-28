@@ -30,3 +30,6 @@ export {
   reviewableSize,
   type Score,
 } from "./queue/rank.js";
+export { buildBriefing, NOT_CHECKED, runChecks } from "./review/briefing.js";
+export { CHECKS, ciCheck, configCheck, migrationsCheck, sensitivePathsCheck, testsCheck } from "./review/checks.js";
+export type { Check, CheckOutcome, ReviewContext } from "./review/types.js";
