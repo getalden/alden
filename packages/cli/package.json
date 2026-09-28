@@ -1,7 +1,22 @@
 {
   "name": "alden",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "A code review companion: triages your PR queue and briefs you on what needs your eyes.",
+  "keywords": [
+    "code-review",
+    "pull-requests",
+    "github",
+    "review-queue",
+    "ai",
+    "cli"
+  ],
+  "homepage": "https://getalden.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getalden/alden.git",
+    "directory": "packages/cli"
+  },
+  "bugs": "https://github.com/getalden/alden/issues",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -16,7 +31,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "prepack": "cp ../../README.md ../../LICENSE ."
   },
   "dependencies": {
     "@napi-rs/keyring": "^2.1.0",

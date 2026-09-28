@@ -5,3 +5,7 @@ coverage/
 .DS_Store
 .env
 .env.*
+
+# Copied into the published CLI package by its prepack script
+packages/cli/README.md
+packages/cli/LICENSE
