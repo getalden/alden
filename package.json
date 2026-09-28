@@ -15,13 +15,15 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "changeset": "changeset",
-    "release": "pnpm build && changeset publish"
+    "release": "pnpm build && changeset publish",
+    "fixtures:record": "tsx scripts/record-fixtures.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
     "@changesets/cli": "^3.0.3",
     "@types/node": "^26.6.3",
     "tsup": "^8.5.1",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2"
   }

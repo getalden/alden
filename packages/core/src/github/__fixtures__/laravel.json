@@ -1,0 +1,368 @@
+{
+  "name": "laravel",
+  "repo": "laravel/framework",
+  "language": "PHP",
+  "query": "repo:laravel/framework is:pr is:open draft:false",
+  "recordedAt": "2026-09-28T18:02:40.134Z",
+  "pullRequests": [
+    {
+      "number": 61755,
+      "title": "Prevent escaping from bypassing protection",
+      "url": "https://github.com/laravel/framework/pull/61755",
+      "isDraft": false,
+      "createdAt": "2026-09-28T02:52:13Z",
+      "updatedAt": "2026-09-28T02:52:13Z",
+      "additions": 61,
+      "deletions": 3,
+      "changedFiles": 4,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "13.x",
+      "headRefName": "markdown-encoding",
+      "repository": {
+        "nameWithOwner": "laravel/framework"
+      },
+      "author": {
+        "login": "valorin"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "src/Illuminate/Mail/Markdown.php",
+            "additions": 10,
+            "deletions": 3
+          },
+          {
+            "path": "tests/Integration/Mail/Fixtures/link-with-template.blade.php",
+            "additions": 4,
+            "deletions": 0
+          },
+          {
+            "path": "tests/Integration/Mail/MailableWithSecuredEncodingTest.php",
+            "additions": 40,
+            "deletions": 0
+          },
+          {
+            "path": "tests/Integration/Mail/MarkdownParserTest.php",
+            "additions": 7,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    },
+    {
+      "number": 60005,
+      "title": "[13.x] Run workflows on Ubuntu 26.04",
+      "url": "https://github.com/laravel/framework/pull/60005",
+      "isDraft": false,
+      "createdAt": "2026-05-06T07:51:56Z",
+      "updatedAt": "2026-09-28T13:31:36Z",
+      "additions": 61,
+      "deletions": 60,
+      "changedFiles": 47,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "13.x",
+      "headRefName": "ubuntu26.04",
+      "repository": {
+        "nameWithOwner": "laravel/framework"
+      },
+      "author": {
+        "login": "jnoordsij"
+      },
+      "labels": {
+        "nodes": [
+          {
+            "name": "needs work"
+          }
+        ]
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": ".github/workflows/databases-nightly.yml",
+            "additions": 2,
+            "deletions": 2
+          },
+          {
+            "path": ".github/workflows/databases.yml",
+            "additions": 10,
+            "deletions": 10
+          },
+          {
+            "path": ".github/workflows/facades.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": ".github/workflows/install-nightly.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": ".github/workflows/queues.yml",
+            "additions": 3,
+            "deletions": 2
+          },
+          {
+            "path": ".github/workflows/redis.yml",
+            "additions": 3,
+            "deletions": 3
+          },
+          {
+            "path": ".github/workflows/releases.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": ".github/workflows/static-analysis.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": ".github/workflows/tests.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": ".github/workflows/update-assets.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Auth/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Broadcasting/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Bus/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Cache/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Collections/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Concurrency/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Conditionable/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Config/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Console/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Container/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Contracts/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Cookie/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Database/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Encryption/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Events/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Filesystem/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Hashing/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Http/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Image/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/JsonSchema/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Log/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Macroable/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Mail/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Notifications/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Pagination/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Pipeline/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Process/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Queue/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Redis/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Reflection/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Routing/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Session/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Support/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Testing/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Translation/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/Validation/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "src/Illuminate/View/.github/workflows/close-pull-request.yml",
+            "additions": 1,
+            "deletions": 1
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    }
+  ]
+}

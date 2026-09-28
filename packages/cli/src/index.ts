@@ -2,6 +2,7 @@ import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { registerAuthCommand } from "./commands/auth.js";
 import { registerConfigCommand } from "./commands/config.js";
+import { registerQueueCommand } from "./commands/queue.js";
 
 const program = new Command()
   .name("alden")
@@ -10,5 +11,6 @@ const program = new Command()
 
 registerAuthCommand(program);
 registerConfigCommand(program);
+registerQueueCommand(program);
 
 await program.parseAsync();

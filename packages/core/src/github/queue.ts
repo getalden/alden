@@ -1,0 +1,131 @@
+import type { JsonCache } from "../cache.js";
+import type { GitHubClient } from "./client.js";
+import { CODEOWNERS_PATHS, type CodeownersRule, parseCodeowners } from "./codeowners.js";
+import {
+  PULL_REQUEST_FIELDS,
+  type PullRequestFacts,
+  type RawPullRequest,
+  toFacts,
+  type Viewer,
+} from "./pull-requests.js";
+
+const PAGE_SIZE = 25;
+
+export interface ReviewQueue {
+  viewer: string;
+  fetchedAt: string;
+  pullRequests: PullRequestFacts[];
+  /** Things the user should know, e.g. team requests are invisible without `read:org`. */
+  warnings: string[];
+}
+
+export async function fetchViewer(client: GitHubClient): Promise<{ viewer: Viewer; warnings: string[] }> {
+  const { data: user } = await client.request("GET /user");
+  const teams = new Set<string>();
+  const warnings: string[] = [];
+  try {
+    for (let page = 1; ; page++) {
+      const { data } = await client.request("GET /user/teams", { per_page: 100, page });
+      for (const team of data) teams.add(`${team.organization.login}/${team.slug}`.toLowerCase());
+      if (data.length < 100) break;
+    }
+  } catch {
+    warnings.push(
+      "Couldn't list your teams (the token may lack read:org), so team review requests look like direct ones.",
+    );
+  }
+  return { viewer: { login: user.login, teams }, warnings };
+}
+
+const SEARCH_QUERY = `
+  query($q: String!, $first: Int!, $after: String) {
+    search(query: $q, type: ISSUE, first: $first, after: $after) {
+      pageInfo { hasNextPage endCursor }
+      nodes { ... on PullRequest { ${PULL_REQUEST_FIELDS} } }
+    }
+  }
+`;
+
+interface SearchResult {
+  search: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: RawPullRequest[] };
+}
+
+/** Runs a GitHub issue search for PRs and returns up to `limit` raw PR nodes. */
+export async function searchPullRequests(client: GitHubClient, q: string, limit: number): Promise<RawPullRequest[]> {
+  const results: RawPullRequest[] = [];
+  let after: string | null = null;
+  while (results.length < limit) {
+    const page: SearchResult = await client.graphql<SearchResult>(SEARCH_QUERY, {
+      q,
+      first: Math.min(PAGE_SIZE, limit - results.length),
+      after,
+    });
+    results.push(...page.search.nodes.filter((n) => n && "number" in n));
+    if (!page.search.pageInfo.hasNextPage) break;
+    after = page.search.pageInfo.endCursor;
+  }
+  return results;
+}
+
+/** Reads CODEOWNERS from a branch, checking the same locations GitHub does. Empty if there is none. */
+export async function fetchCodeowners(client: GitHubClient, repo: string, ref: string): Promise<CodeownersRule[]> {
+  const [owner, name] = repo.split("/");
+  const fields = CODEOWNERS_PATHS.map(
+    (path, i) => `f${i}: object(expression: ${JSON.stringify(`${ref}:${path}`)}) { ... on Blob { text } }`,
+  );
+  const data = await client.graphql<{ repository: Record<string, { text?: string } | null> | null }>(
+    `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields.join(" ")} } }`,
+    { owner, name },
+  );
+  const repository = data.repository ?? {};
+  for (let i = 0; i < CODEOWNERS_PATHS.length; i++) {
+    const text = repository[`f${i}`]?.text;
+    if (text) return parseCodeowners(text);
+  }
+  return [];
+}
+
+export interface QueueOptions {
+  includeDrafts?: boolean;
+  limit?: number;
+  cache?: JsonCache;
+  /** How long a cached queue stays fresh. Defaults to 60 seconds. */
+  maxAgeMs?: number;
+  /** Skip the cached queue, but still store the new one. */
+  refresh?: boolean;
+}
+
+/** Every open PR waiting on the viewer's review, directly or through a team, with the facts ranking needs. */
+export async function fetchReviewQueue(client: GitHubClient, options: QueueOptions = {}): Promise<ReviewQueue> {
+  const { includeDrafts = false, limit = 100, cache, maxAgeMs = 60_000, refresh = false } = options;
+  const { viewer, warnings } = await fetchViewer(client);
+
+  const cacheKey = `queue:v1:${viewer.login}:${includeDrafts}:${limit}`;
+  const cached = refresh ? undefined : await cache?.get<ReviewQueue>(cacheKey, maxAgeMs);
+  if (cached) return cached;
+
+  const q = `is:pr is:open archived:false review-requested:@me${includeDrafts ? "" : " draft:false"}`;
+  const raw = await searchPullRequests(client, q, limit);
+
+  // One CODEOWNERS lookup per repo and base branch.
+  const codeowners = new Map<string, Promise<CodeownersRule[]>>();
+  for (const pr of raw) {
+    const key = `${pr.repository.nameWithOwner}@${pr.baseRefName}`;
+    if (!codeowners.has(key)) {
+      codeowners.set(
+        key,
+        fetchCodeowners(client, pr.repository.nameWithOwner, pr.baseRefName).catch(() => []),
+      );
+    }
+  }
+
+  const pullRequests = await Promise.all(
+    raw.map(async (pr) =>
+      toFacts(pr, viewer, await (codeowners.get(`${pr.repository.nameWithOwner}@${pr.baseRefName}`) ?? [])),
+    ),
+  );
+
+  const queue: ReviewQueue = { viewer: viewer.login, fetchedAt: new Date().toISOString(), pullRequests, warnings };
+  await cache?.set(cacheKey, queue);
+  return queue;
+}

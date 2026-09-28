@@ -1,0 +1,478 @@
+{
+  "name": "grafana",
+  "repo": "grafana/grafana",
+  "language": "Go and TypeScript",
+  "query": "repo:grafana/grafana is:pr is:open draft:false",
+  "recordedAt": "2026-09-28T18:02:42.293Z",
+  "pullRequests": [
+    {
+      "number": 133739,
+      "title": "Search: let an index report what it holds for one resource type",
+      "url": "https://github.com/grafana/grafana/pull/133739",
+      "isDraft": false,
+      "createdAt": "2026-09-28T17:03:05Z",
+      "updatedAt": "2026-09-28T17:05:04Z",
+      "additions": 301,
+      "deletions": 0,
+      "changedFiles": 5,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "main",
+      "headRefName": "pstibrany/global-search-document-refs",
+      "repository": {
+        "nameWithOwner": "grafana/grafana"
+      },
+      "author": {
+        "login": "pstibrany"
+      },
+      "labels": {
+        "nodes": [
+          {
+            "name": "area/backend"
+          }
+        ]
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "pkg/storage/unified/resource/global_search.go",
+            "additions": 6,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/storage/unified/resource/search.go",
+            "additions": 24,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/storage/unified/resource/search_test.go",
+            "additions": 24,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/storage/unified/search/bleve.go",
+            "additions": 104,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/storage/unified/search/bleve_document_refs_internal_test.go",
+            "additions": 143,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": [
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "owensmallwood"
+            }
+          }
+        ]
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "FAILURE"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-09-28T17:03:06Z",
+            "requestedReviewer": null
+          },
+          {
+            "createdAt": "2026-09-28T17:03:07Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "owensmallwood"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "number": 133738,
+      "title": "Unified storage: Return BadRequest when reading an invalid name",
+      "url": "https://github.com/grafana/grafana/pull/133738",
+      "isDraft": false,
+      "createdAt": "2026-09-28T16:57:58Z",
+      "updatedAt": "2026-09-28T16:58:15Z",
+      "additions": 77,
+      "deletions": 3,
+      "changedFiles": 3,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "main",
+      "headRefName": "pstibrany/us-read-invalid-name-400",
+      "repository": {
+        "nameWithOwner": "grafana/grafana"
+      },
+      "author": {
+        "login": "pstibrany"
+      },
+      "labels": {
+        "nodes": [
+          {
+            "name": "area/backend"
+          }
+        ]
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "pkg/storage/unified/resource/server.go",
+            "additions": 2,
+            "deletions": 3
+          },
+          {
+            "path": "pkg/storage/unified/resource/storage_backend.go",
+            "additions": 12,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/storage/unified/resource/storage_backend_test.go",
+            "additions": 63,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": [
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "RafaelPaulovic"
+            }
+          }
+        ]
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "FAILURE"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-09-28T16:57:59Z",
+            "requestedReviewer": null
+          },
+          {
+            "createdAt": "2026-09-28T16:57:59Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "RafaelPaulovic"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "number": 133736,
+      "title": "Signal Explorer: Search the full metric catalog, not only loaded metrics",
+      "url": "https://github.com/grafana/grafana/pull/133736",
+      "isDraft": false,
+      "createdAt": "2026-09-28T16:52:49Z",
+      "updatedAt": "2026-09-28T17:21:43Z",
+      "additions": 402,
+      "deletions": 59,
+      "changedFiles": 7,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "main",
+      "headRefName": "ihoryeromin/signal-explorer-server-side-metric-search",
+      "repository": {
+        "nameWithOwner": "grafana/grafana"
+      },
+      "author": {
+        "login": "Develer"
+      },
+      "labels": {
+        "nodes": [
+          {
+            "name": "area/explore"
+          },
+          {
+            "name": "area/frontend"
+          }
+        ]
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "public/app/features/explore/SignalExplorer/MetricsList.tsx",
+            "additions": 2,
+            "deletions": 1
+          },
+          {
+            "path": "public/app/features/explore/SignalExplorer/data/metricResourceClient.test.ts",
+            "additions": 125,
+            "deletions": 13
+          },
+          {
+            "path": "public/app/features/explore/SignalExplorer/data/metricResourceClient.ts",
+            "additions": 76,
+            "deletions": 17
+          },
+          {
+            "path": "public/app/features/explore/SignalExplorer/data/useAsyncResource.test.ts",
+            "additions": 20,
+            "deletions": 0
+          },
+          {
+            "path": "public/app/features/explore/SignalExplorer/data/useAsyncResource.ts",
+            "additions": 8,
+            "deletions": 3
+          },
+          {
+            "path": "public/app/features/explore/SignalExplorer/data/useMetricCatalog.test.ts",
+            "additions": 128,
+            "deletions": 18
+          },
+          {
+            "path": "public/app/features/explore/SignalExplorer/data/useMetricCatalog.ts",
+            "additions": 43,
+            "deletions": 7
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": [
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "nicwestvold"
+            }
+          },
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "NWRichmond"
+            }
+          },
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "baldm0mma"
+            }
+          },
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "alexjonspencer1"
+            }
+          }
+        ]
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-09-28T16:52:55Z",
+            "requestedReviewer": null
+          },
+          {
+            "createdAt": "2026-09-28T16:52:55Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "nicwestvold"
+            }
+          },
+          {
+            "createdAt": "2026-09-28T16:52:55Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "NWRichmond"
+            }
+          },
+          {
+            "createdAt": "2026-09-28T16:52:55Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "baldm0mma"
+            }
+          },
+          {
+            "createdAt": "2026-09-28T16:52:56Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "alexjonspencer1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "number": 133734,
+      "title": "RecentlyDeleted: show when each dashboard was deleted",
+      "url": "https://github.com/grafana/grafana/pull/133734",
+      "isDraft": false,
+      "createdAt": "2026-09-28T16:42:09Z",
+      "updatedAt": "2026-09-28T17:06:46Z",
+      "additions": 191,
+      "deletions": 78,
+      "changedFiles": 8,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "main",
+      "headRefName": "pstibrany/recently-deleted-show-deletion-date",
+      "repository": {
+        "nameWithOwner": "grafana/grafana"
+      },
+      "author": {
+        "login": "pstibrany"
+      },
+      "labels": {
+        "nodes": [
+          {
+            "name": "area/frontend"
+          }
+        ]
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "public/app/core/internationalization/dates.ts",
+            "additions": 0,
+            "deletions": 13
+          },
+          {
+            "path": "public/app/features/search/page/components/SearchResultsTable.test.tsx",
+            "additions": 82,
+            "deletions": 0
+          },
+          {
+            "path": "public/app/features/search/page/components/columns.tsx",
+            "additions": 24,
+            "deletions": 40
+          },
+          {
+            "path": "public/app/features/search/service/deletedDashboardsCache.ts",
+            "additions": 9,
+            "deletions": 10
+          },
+          {
+            "path": "public/app/features/search/service/types.ts",
+            "additions": 2,
+            "deletions": 1
+          },
+          {
+            "path": "public/app/features/search/service/utils.test.ts",
+            "additions": 54,
+            "deletions": 0
+          },
+          {
+            "path": "public/app/features/search/service/utils.ts",
+            "additions": 19,
+            "deletions": 12
+          },
+          {
+            "path": "public/locales/en-US/grafana.json",
+            "additions": 1,
+            "deletions": 2
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": [
+          {
+            "requestedReviewer": null
+          },
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "joshhunt"
+            }
+          },
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "ashharrison90"
+            }
+          }
+        ]
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-09-28T16:42:10Z",
+            "requestedReviewer": null
+          },
+          {
+            "createdAt": "2026-09-28T17:05:45Z",
+            "requestedReviewer": null
+          },
+          {
+            "createdAt": "2026-09-28T17:05:46Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "joshhunt"
+            }
+          },
+          {
+            "createdAt": "2026-09-28T17:05:46Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "ashharrison90"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

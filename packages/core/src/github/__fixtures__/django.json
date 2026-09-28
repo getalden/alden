@@ -1,0 +1,360 @@
+{
+  "name": "django",
+  "repo": "django/django",
+  "language": "Python",
+  "query": "repo:django/django is:pr is:open draft:false",
+  "recordedAt": "2026-09-28T18:02:39.128Z",
+  "pullRequests": [
+    {
+      "number": 22043,
+      "title": "Fixed #36279 -- Made translate_url() handle unnamed URL patterns.",
+      "url": "https://github.com/django/django/pull/22043",
+      "isDraft": false,
+      "createdAt": "2026-09-27T12:12:16Z",
+      "updatedAt": "2026-09-27T12:12:16Z",
+      "additions": 49,
+      "deletions": 7,
+      "changedFiles": 4,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "main",
+      "headRefName": "ticket_36279_translate_url_unnamed",
+      "repository": {
+        "nameWithOwner": "django/django"
+      },
+      "author": {
+        "login": "OsmnvAslan"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "django/urls/base.py",
+            "additions": 37,
+            "deletions": 7
+          },
+          {
+            "path": "tests/i18n/patterns/tests.py",
+            "additions": 9,
+            "deletions": 0
+          },
+          {
+            "path": "tests/i18n/patterns/urls/default.py",
+            "additions": 2,
+            "deletions": 0
+          },
+          {
+            "path": "tests/i18n/patterns/urls/namespace.py",
+            "additions": 1,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "FAILURE"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    },
+    {
+      "number": 22041,
+      "title": "Refs #37372 -- Simplified NULL handling logic in sql.Query.build_filter().",
+      "url": "https://github.com/django/django/pull/22041",
+      "isDraft": false,
+      "createdAt": "2026-09-27T07:34:41Z",
+      "updatedAt": "2026-09-27T14:36:12Z",
+      "additions": 38,
+      "deletions": 38,
+      "changedFiles": 1,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "main",
+      "headRefName": "simplify-null-handling",
+      "repository": {
+        "nameWithOwner": "django/django"
+      },
+      "author": {
+        "login": "charettes"
+      },
+      "labels": {
+        "nodes": [
+          {
+            "name": "Django on the Med 🏖️"
+          }
+        ]
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "django/db/models/sql/query.py",
+            "additions": 38,
+            "deletions": 38
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": [
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "jacobtylerwalls"
+            }
+          }
+        ]
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "charettes"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-27T07:38:01Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "FAILURE"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-09-27T07:38:30Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "jacobtylerwalls"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "number": 22039,
+      "title": "Fixed #23424 -- Corrected tokenization of raw template blocks.",
+      "url": "https://github.com/django/django/pull/22039",
+      "isDraft": false,
+      "createdAt": "2026-09-26T06:14:19Z",
+      "updatedAt": "2026-09-27T07:52:42Z",
+      "additions": 186,
+      "deletions": 39,
+      "changedFiles": 4,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "main",
+      "headRefName": "ticket-23424",
+      "repository": {
+        "nameWithOwner": "django/django"
+      },
+      "author": {
+        "login": "sarahboyce"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "django/template/base.py",
+            "additions": 97,
+            "deletions": 38
+          },
+          {
+            "path": "tests/template_tests/syntax_tests/test_comment.py",
+            "additions": 23,
+            "deletions": 0
+          },
+          {
+            "path": "tests/template_tests/syntax_tests/test_verbatim.py",
+            "additions": 65,
+            "deletions": 0
+          },
+          {
+            "path": "tests/template_tests/test_parser.py",
+            "additions": 1,
+            "deletions": 1
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "LilyFirefly"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-26T07:19:47Z"
+          },
+          {
+            "author": {
+              "login": "sarahboyce"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-26T07:57:16Z"
+          },
+          {
+            "author": {
+              "login": "LilyFirefly"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-26T08:02:42Z"
+          },
+          {
+            "author": {
+              "login": "tim-mccurrach"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-26T23:51:47Z"
+          },
+          {
+            "author": {
+              "login": "tim-mccurrach"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-26T23:55:30Z"
+          },
+          {
+            "author": {
+              "login": "tim-mccurrach"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-27T00:19:38Z"
+          },
+          {
+            "author": {
+              "login": "sarahboyce"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-27T06:10:32Z"
+          },
+          {
+            "author": {
+              "login": "sarahboyce"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-27T06:11:51Z"
+          },
+          {
+            "author": {
+              "login": "sarahboyce"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-27T07:49:52Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "FAILURE"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    },
+    {
+      "number": 22038,
+      "title": "Fixed #37359 -- Fixed A-z regex typo in Signer separator validation.",
+      "url": "https://github.com/django/django/pull/22038",
+      "isDraft": false,
+      "createdAt": "2026-09-25T19:46:30Z",
+      "updatedAt": "2026-09-25T19:46:30Z",
+      "additions": 15,
+      "deletions": 5,
+      "changedFiles": 3,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "main",
+      "headRefName": "fix/signer-sep-regex-typo",
+      "repository": {
+        "nameWithOwner": "django/django"
+      },
+      "author": {
+        "login": "kaii-k"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "django/core/signing.py",
+            "additions": 2,
+            "deletions": 2
+          },
+          {
+            "path": "docs/topics/signing.txt",
+            "additions": 3,
+            "deletions": 2
+          },
+          {
+            "path": "tests/signing/tests.py",
+            "additions": 10,
+            "deletions": 1
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "FAILURE"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    }
+  ]
+}

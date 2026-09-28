@@ -1,0 +1,322 @@
+{
+  "name": "nextjs",
+  "repo": "vercel/next.js",
+  "language": "TypeScript",
+  "query": "repo:vercel/next.js is:pr is:open draft:false",
+  "recordedAt": "2026-09-28T18:02:37.665Z",
+  "pullRequests": [
+    {
+      "number": 99371,
+      "title": "test: fix stale snapshots after `unstable_{prefetch,navigation}` rename",
+      "url": "https://github.com/vercel/next.js/pull/99371",
+      "isDraft": false,
+      "createdAt": "2026-09-28T17:05:49Z",
+      "updatedAt": "2026-09-28T17:15:34Z",
+      "additions": 11,
+      "deletions": 11,
+      "changedFiles": 1,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "canary",
+      "headRefName": "lubieowoce/fix-unrenamed-apis-in-tests",
+      "repository": {
+        "nameWithOwner": "vercel/next.js"
+      },
+      "author": {
+        "login": "lubieowoce"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "test/e2e/app-dir/instant-validation/head-and-reporting.util.ts",
+            "additions": 11,
+            "deletions": 11
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "aurorascharff"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-09-28T17:06:48Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "PENDING"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-09-28T17:06:11Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "aurorascharff"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "number": 99369,
+      "title": "Fix bundle analyzer source table delta sorting",
+      "url": "https://github.com/vercel/next.js/pull/99369",
+      "isDraft": false,
+      "createdAt": "2026-09-28T16:47:37Z",
+      "updatedAt": "2026-09-28T17:57:34Z",
+      "additions": 31,
+      "deletions": 29,
+      "changedFiles": 1,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "canary",
+      "headRefName": "codex/bundle-analyzer-delta-sort-followup",
+      "repository": {
+        "nameWithOwner": "vercel/next.js"
+      },
+      "author": {
+        "login": "wbinnssmith"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "apps/bundle-analyzer/components/diff-table.tsx",
+            "additions": 31,
+            "deletions": 29
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "lukesandberg"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-28T17:56:45Z"
+          },
+          {
+            "author": {
+              "login": "lukesandberg"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-09-28T17:57:34Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "PENDING"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-09-28T17:54:50Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "lukesandberg"
+            }
+          },
+          {
+            "createdAt": "2026-09-28T17:54:50Z",
+            "requestedReviewer": null
+          }
+        ]
+      }
+    },
+    {
+      "number": 99367,
+      "title": "fix(swc): normalize codeFrameColumns options in WASM bindings",
+      "url": "https://github.com/vercel/next.js/pull/99367",
+      "isDraft": false,
+      "createdAt": "2026-09-28T15:35:17Z",
+      "updatedAt": "2026-09-28T16:59:25Z",
+      "additions": 63,
+      "deletions": 4,
+      "changedFiles": 4,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "canary",
+      "headRefName": "fix/wasm-code-frame-options",
+      "repository": {
+        "nameWithOwner": "vercel/next.js"
+      },
+      "author": {
+        "login": "VRAJ-710"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "crates/wasm/Cargo.toml",
+            "additions": 1,
+            "deletions": 0
+          },
+          {
+            "path": "crates/wasm/src/lib.rs",
+            "additions": 59,
+            "deletions": 1
+          },
+          {
+            "path": "packages/next/src/build/swc/index.ts",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "packages/next/src/shared/lib/errors/code-frame.ts",
+            "additions": 2,
+            "deletions": 2
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    },
+    {
+      "number": 99363,
+      "title": "Fix standalone tracing for external async chunks",
+      "url": "https://github.com/vercel/next.js/pull/99363",
+      "isDraft": false,
+      "createdAt": "2026-09-28T14:30:07Z",
+      "updatedAt": "2026-09-28T14:30:07Z",
+      "additions": 134,
+      "deletions": 4,
+      "changedFiles": 8,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "canary",
+      "headRefName": "fix/standalone-trace-external-chunks",
+      "repository": {
+        "nameWithOwner": "vercel/next.js"
+      },
+      "author": {
+        "login": "dmchoi77"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "packages/next/src/build/collect-build-traces.ts",
+            "additions": 17,
+            "deletions": 4
+          },
+          {
+            "path": "test/production/standalone-mode/dynamic-import-externals/app/layout.js",
+            "additions": 7,
+            "deletions": 0
+          },
+          {
+            "path": "test/production/standalone-mode/dynamic-import-externals/app/one/page.js",
+            "additions": 7,
+            "deletions": 0
+          },
+          {
+            "path": "test/production/standalone-mode/dynamic-import-externals/app/two/page.js",
+            "additions": 7,
+            "deletions": 0
+          },
+          {
+            "path": "test/production/standalone-mode/dynamic-import-externals/dynamic-import-externals.test.ts",
+            "additions": 76,
+            "deletions": 0
+          },
+          {
+            "path": "test/production/standalone-mode/dynamic-import-externals/lib/load-external.js",
+            "additions": 6,
+            "deletions": 0
+          },
+          {
+            "path": "test/production/standalone-mode/dynamic-import-externals/next.config.js",
+            "additions": 9,
+            "deletions": 0
+          },
+          {
+            "path": "test/production/standalone-mode/dynamic-import-externals/package.json",
+            "additions": 5,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    }
+  ]
+}

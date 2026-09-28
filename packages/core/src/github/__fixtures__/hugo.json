@@ -1,0 +1,279 @@
+{
+  "name": "hugo",
+  "repo": "gohugoio/hugo",
+  "language": "Go",
+  "query": "repo:gohugoio/hugo is:pr is:open draft:false",
+  "recordedAt": "2026-09-28T18:02:41.131Z",
+  "pullRequests": [
+    {
+      "number": 15387,
+      "title": "paths: Escape malformed percent signs in paths",
+      "url": "https://github.com/gohugoio/hugo/pull/15387",
+      "isDraft": false,
+      "createdAt": "2026-09-26T17:41:40Z",
+      "updatedAt": "2026-09-27T09:47:43Z",
+      "additions": 52,
+      "deletions": 1,
+      "changedFiles": 3,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "master",
+      "headRefName": "fix/12447-invalid-percent-path",
+      "repository": {
+        "nameWithOwner": "gohugoio/hugo"
+      },
+      "author": {
+        "login": "Soundcreates"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "common/paths/path.go",
+            "additions": 28,
+            "deletions": 1
+          },
+          {
+            "path": "common/paths/path_test.go",
+            "additions": 4,
+            "deletions": 0
+          },
+          {
+            "path": "hugolib/pagebundler_test.go",
+            "additions": 20,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    },
+    {
+      "number": 15240,
+      "title": "tpl/tplimpl: support inline partials in content adapters",
+      "url": "https://github.com/gohugoio/hugo/pull/15240",
+      "isDraft": false,
+      "createdAt": "2026-08-23T20:19:58Z",
+      "updatedAt": "2026-08-26T10:27:39Z",
+      "additions": 41,
+      "deletions": 0,
+      "changedFiles": 2,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "master",
+      "headRefName": "fix/content-adapter-inline-partials",
+      "repository": {
+        "nameWithOwner": "gohugoio/hugo"
+      },
+      "author": {
+        "login": "zanarellidev"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "hugolib/pagesfromdata/pagesfromgotmpl_integration_test.go",
+            "additions": 33,
+            "deletions": 0
+          },
+          {
+            "path": "tpl/tplimpl/templatestore.go",
+            "additions": 8,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    },
+    {
+      "number": 15231,
+      "title": "resources: Fix permalinks for multihost resources",
+      "url": "https://github.com/gohugoio/hugo/pull/15231",
+      "isDraft": false,
+      "createdAt": "2026-08-21T06:08:34Z",
+      "updatedAt": "2026-09-23T03:08:45Z",
+      "additions": 52,
+      "deletions": 12,
+      "changedFiles": 5,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "master",
+      "headRefName": "fix/12560-resource-permalink",
+      "repository": {
+        "nameWithOwner": "gohugoio/hugo"
+      },
+      "author": {
+        "login": "Soundcreates"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "hugolib/hugo_sites_multihost_test.go",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "resources/resource_cache.go",
+            "additions": 30,
+            "deletions": 4
+          },
+          {
+            "path": "resources/resource_factories/create/remote.go",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "resources/resource_spec.go",
+            "additions": 3,
+            "deletions": 3
+          },
+          {
+            "path": "resources/transform.go",
+            "additions": 17,
+            "deletions": 3
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "FAILURE"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    },
+    {
+      "number": 15205,
+      "title": "hugolib: Keep nested index.md as a resource on rebuild",
+      "url": "https://github.com/gohugoio/hugo/pull/15205",
+      "isDraft": false,
+      "createdAt": "2026-08-14T10:35:01Z",
+      "updatedAt": "2026-08-14T12:12:49Z",
+      "additions": 122,
+      "deletions": 0,
+      "changedFiles": 4,
+      "mergeable": "MERGEABLE",
+      "baseRefName": "master",
+      "headRefName": "fix/13961-leaf-bundle-index-reclass",
+      "repository": {
+        "nameWithOwner": "gohugoio/hugo"
+      },
+      "author": {
+        "login": "arronKler"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "hugolib/content_map.go",
+            "additions": 9,
+            "deletions": 0
+          },
+          {
+            "path": "hugolib/content_map_page.go",
+            "additions": 34,
+            "deletions": 0
+          },
+          {
+            "path": "hugolib/hugo_sites_build.go",
+            "additions": 5,
+            "deletions": 0
+          },
+          {
+            "path": "hugolib/rebuild_test.go",
+            "additions": 74,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      }
+    }
+  ]
+}
