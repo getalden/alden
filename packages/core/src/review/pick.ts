@@ -1,4 +1,5 @@
 import type { CheckResult, Evidence, LookHere, Severity } from "@alden/schema";
+import { isLockfile } from "../queue/files.js";
 
 export const MAX_LOOK_HERE = 3;
 
@@ -46,7 +47,13 @@ export function pickLookHere(checks: CheckResult[]): LookHere[] {
   const picked: LookHere[] = [];
   const usedPaths = new Set<string>();
   const take = (check: CheckResult): boolean => {
-    const evidence = check.evidence.find((e): e is Anchored => e.anchor !== undefined && !usedPaths.has(e.anchor.path));
+    // Nobody reads a lockfile line by line; what changed in it is the dependency check's job. Secrets still count.
+    const evidence = check.evidence.find(
+      (e): e is Anchored =>
+        e.anchor !== undefined &&
+        !usedPaths.has(e.anchor.path) &&
+        (check.id === "secrets.likely" || !isLockfile(e.anchor.path)),
+    );
     if (!evidence) return false;
     usedPaths.add(evidence.anchor.path);
     const title = TITLES[check.id]?.(evidence.anchor.path) ?? `${check.title}: ${evidence.anchor.path}`;

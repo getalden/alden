@@ -1,24 +1,7 @@
 import { formatAge, type RankedPullRequest, type RankedQueue } from "@alden/core";
+import { fit, paint, type RenderOptions, type Style } from "./style.js";
 
-export interface RenderOptions {
-  /** Terminal width in columns. The title column absorbs whatever the fixed columns leave. */
-  width: number;
-  color: boolean;
-}
-
-const ANSI = { bold: [1, 22], dim: [2, 22], red: [31, 39], green: [32, 39], yellow: [33, 39] } as const;
-type Style = keyof typeof ANSI;
-
-function paint(text: string, style: Style, color: boolean): string {
-  if (!color) return text;
-  const [open, close] = ANSI[style];
-  return `\u001b[${open}m${text}\u001b[${close}m`;
-}
-
-function fit(text: string, width: number): string {
-  if (text.length <= width) return text.padEnd(width);
-  return `${text.slice(0, Math.max(0, width - 1))}…`;
-}
+export { type RenderOptions, shouldColor } from "./style.js";
 
 /** Shortens the repo, never the PR number: "acme/react-apollo-c…#25". */
 function fitPr(repo: string, number: number, width: number): string {
@@ -107,11 +90,4 @@ export function renderQueue(ranked: RankedQueue, options: RenderOptions): string
   }
   out.push(paint("Open one with `alden open <#>`.", "dim", color));
   return `${out.join("\n")}\n`;
-}
-
-/** Colour only for a real terminal, and never when NO_COLOR is set (https://no-color.org). */
-export function shouldColor(stream: NodeJS.WriteStream, env: NodeJS.ProcessEnv = process.env): boolean {
-  if (env.NO_COLOR) return false;
-  if (env.FORCE_COLOR && env.FORCE_COLOR !== "0") return true;
-  return stream.isTTY === true && env.TERM !== "dumb";
 }

@@ -52,6 +52,14 @@ describe("pickLookHere", () => {
     expect(picked.map((p) => p.anchor?.path)).toEqual(["a.ts", "c.ts", "d.yml"]);
   });
 
+  it("skips lockfiles, except for secrets", () => {
+    const picked = pickLookHere([
+      flagged("secrets.likely", "high", ["yarn.lock"]),
+      flagged("paths.sensitive", "medium", ["pnpm-lock.yaml", "app/auth/session.ts"]),
+    ]);
+    expect(picked.map((p) => p.anchor?.path)).toEqual(["yarn.lock", "app/auth/session.ts"]);
+  });
+
   it("never spends a slot on failing CI, passed checks or evidence without a place", () => {
     const ci = flagged("ci.status", "high", []);
     ci.evidence = [{ text: "Status rollup: failing" }];

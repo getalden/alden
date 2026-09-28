@@ -2,7 +2,7 @@
 
 A code review companion. Alden triages the PRs waiting on you, briefs you on what each one touches and what it already checked, and points you at the few places that need your eyes.
 
-> **Status: pre-alpha.** Phase 1 is being built. `alden queue` works today; briefings come next.
+> **Status: pre-alpha.** Phase 1 is being built. `alden queue` and `alden review` work today; LLM briefings come next.
 
 ## Quickstart
 
@@ -12,6 +12,20 @@ Requires Node 22+.
 npx alden@next auth login   # reuses your GitHub CLI sign-in if you have one
 npx alden@next queue        # the PRs waiting on your review, ranked
 npx alden@next open 1       # open the top one in your browser
+
+npx alden@next review 1     # brief yourself on #1 from the queue
+npx alden@next review       # or on your own uncommitted changes, before opening a PR
+```
+
+`alden review` takes a PR URL, `owner/repo#123`, or a # from your last queue. It prints the few places that need
+your eyes, every check Alden ran with its evidence (secrets, migrations, public signatures, dependencies, tests,
+config, sensitive paths, CI), and what it did not check. Checks marked `~` infer from the diff alone. Add `--json` for
+the briefing as data.
+
+```text
+Needs your eyes
+  1. Public API change in public/app/features/explore/SignalExplorer/data/metricResourceClient.ts:191
+     changed: export function fetchCatalog(…): Promise<MetricInfo[]> → export function fetchCatalog(…): Promise<Catalog>
 ```
 
 `alden queue` splits the PRs waiting on you into two groups:
@@ -35,8 +49,8 @@ alden config set queue.includeDrafts true
 
 ## What's coming in phase 1
 
-- `alden review <PR>` briefs you on a PR: blast radius, what Alden checked (with evidence), and at most 3 places to look.
-- `alden review` does the same for your uncommitted local changes, before you open a PR.
+- An LLM layer on top of `alden review`: whether the change does what it says, grouped findings, your choice of model.
+- Blast radius from a code graph: callers and code outside the diff.
 - `alden ui` shows the queue and briefings in a local web UI.
 - `alden stats` shows your repo's time to first review and review cycle time.
 
