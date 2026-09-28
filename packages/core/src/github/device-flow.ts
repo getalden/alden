@@ -5,7 +5,7 @@ export const GITHUB_SCOPES = ["repo", "read:org"];
  * The public client ID of the getalden OAuth App (device flow enabled). Client IDs are not secrets.
  * `ALDEN_GITHUB_CLIENT_ID` overrides it for testing against another app.
  */
-export const DEFAULT_GITHUB_CLIENT_ID = "";
+export const DEFAULT_GITHUB_CLIENT_ID = "Ov23liycKgR0J96Wl90H";
 
 export function githubClientId(env: NodeJS.ProcessEnv = process.env): string {
   const id = env.ALDEN_GITHUB_CLIENT_ID?.trim() || DEFAULT_GITHUB_CLIENT_ID;

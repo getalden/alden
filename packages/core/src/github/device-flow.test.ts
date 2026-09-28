@@ -73,8 +73,8 @@ describe("device flow", () => {
     ).rejects.toThrow(/expired/);
   });
 
-  it("points to the GitHub CLI when no client ID is configured", () => {
-    expect(() => githubClientId({})).toThrow(/gh auth login/);
+  it("uses the getalden OAuth App unless ALDEN_GITHUB_CLIENT_ID overrides it", () => {
+    expect(githubClientId({})).toBe("Ov23liycKgR0J96Wl90H");
     expect(githubClientId({ ALDEN_GITHUB_CLIENT_ID: "Iv1.test" })).toBe("Iv1.test");
   });
 });
