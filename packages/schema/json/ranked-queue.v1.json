@@ -42,7 +42,10 @@
               },
               "author": {
                 "description": "null when the account was deleted",
-                "type": ["string", "null"]
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "authorIsBot": {
                 "type": "boolean",
@@ -101,7 +104,11 @@
                       "maximum": 9007199254740991
                     }
                   },
-                  "required": ["path", "additions", "deletions"],
+                  "required": [
+                    "path",
+                    "additions",
+                    "deletions"
+                  ],
                   "additionalProperties": false
                 }
               },
@@ -117,11 +124,20 @@
               },
               "ci": {
                 "type": "string",
-                "enum": ["success", "failure", "pending", "none"]
+                "enum": [
+                  "success",
+                  "failure",
+                  "pending",
+                  "none"
+                ]
               },
               "mergeable": {
                 "type": "string",
-                "enum": ["mergeable", "conflicting", "unknown"]
+                "enum": [
+                  "mergeable",
+                  "conflicting",
+                  "unknown"
+                ]
               },
               "reviews": {
                 "type": "array",
@@ -129,7 +145,10 @@
                   "type": "object",
                   "properties": {
                     "author": {
-                      "type": ["string", "null"]
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "state": {
                       "type": "string"
@@ -147,7 +166,11 @@
                       ]
                     }
                   },
-                  "required": ["author", "state", "submittedAt"],
+                  "required": [
+                    "author",
+                    "state",
+                    "submittedAt"
+                  ],
                   "additionalProperties": false
                 }
               },
@@ -179,7 +202,11 @@
                     "description": "when the viewer or one of their teams was most recently asked"
                   }
                 },
-                "required": ["direct", "teams", "requestedAt"],
+                "required": [
+                  "direct",
+                  "teams",
+                  "requestedAt"
+                ],
                 "additionalProperties": false
               },
               "codeownedFiles": {
@@ -225,12 +252,19 @@
           },
           "lane": {
             "type": "string",
-            "enum": ["needs-you", "fast-track"]
+            "enum": [
+              "needs-you",
+              "fast-track"
+            ]
           },
           "fastTrack": {
             "description": "why it qualified for fast-track; only set in that lane",
             "type": "string",
-            "enum": ["docs only", "tests only", "dependency patch bump"]
+            "enum": [
+              "docs only",
+              "tests only",
+              "dependency patch bump"
+            ]
           },
           "score": {
             "type": "object",
@@ -248,7 +282,12 @@
                 "type": "number"
               }
             },
-            "required": ["risk", "wait", "blocking", "total"],
+            "required": [
+              "risk",
+              "wait",
+              "blocking",
+              "total"
+            ],
             "additionalProperties": false
           },
           "reasons": {
@@ -267,7 +306,14 @@
             "description": "CI is failing, so the author has to act before a review is worth it"
           }
         },
-        "required": ["pr", "lane", "score", "reasons", "waitingHours", "waitingOnAuthor"],
+        "required": [
+          "pr",
+          "lane",
+          "score",
+          "reasons",
+          "waitingHours",
+          "waitingOnAuthor"
+        ],
         "additionalProperties": false
       }
     },
@@ -297,7 +343,10 @@
               },
               "author": {
                 "description": "null when the account was deleted",
-                "type": ["string", "null"]
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "authorIsBot": {
                 "type": "boolean",
@@ -356,7 +405,11 @@
                       "maximum": 9007199254740991
                     }
                   },
-                  "required": ["path", "additions", "deletions"],
+                  "required": [
+                    "path",
+                    "additions",
+                    "deletions"
+                  ],
                   "additionalProperties": false
                 }
               },
@@ -372,11 +425,20 @@
               },
               "ci": {
                 "type": "string",
-                "enum": ["success", "failure", "pending", "none"]
+                "enum": [
+                  "success",
+                  "failure",
+                  "pending",
+                  "none"
+                ]
               },
               "mergeable": {
                 "type": "string",
-                "enum": ["mergeable", "conflicting", "unknown"]
+                "enum": [
+                  "mergeable",
+                  "conflicting",
+                  "unknown"
+                ]
               },
               "reviews": {
                 "type": "array",
@@ -384,7 +446,10 @@
                   "type": "object",
                   "properties": {
                     "author": {
-                      "type": ["string", "null"]
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "state": {
                       "type": "string"
@@ -402,7 +467,11 @@
                       ]
                     }
                   },
-                  "required": ["author", "state", "submittedAt"],
+                  "required": [
+                    "author",
+                    "state",
+                    "submittedAt"
+                  ],
                   "additionalProperties": false
                 }
               },
@@ -434,7 +503,11 @@
                     "description": "when the viewer or one of their teams was most recently asked"
                   }
                 },
-                "required": ["direct", "teams", "requestedAt"],
+                "required": [
+                  "direct",
+                  "teams",
+                  "requestedAt"
+                ],
                 "additionalProperties": false
               },
               "codeownedFiles": {
@@ -480,12 +553,19 @@
           },
           "lane": {
             "type": "string",
-            "enum": ["needs-you", "fast-track"]
+            "enum": [
+              "needs-you",
+              "fast-track"
+            ]
           },
           "fastTrack": {
             "description": "why it qualified for fast-track; only set in that lane",
             "type": "string",
-            "enum": ["docs only", "tests only", "dependency patch bump"]
+            "enum": [
+              "docs only",
+              "tests only",
+              "dependency patch bump"
+            ]
           },
           "score": {
             "type": "object",
@@ -503,7 +583,12 @@
                 "type": "number"
               }
             },
-            "required": ["risk", "wait", "blocking", "total"],
+            "required": [
+              "risk",
+              "wait",
+              "blocking",
+              "total"
+            ],
             "additionalProperties": false
           },
           "reasons": {
@@ -522,7 +607,14 @@
             "description": "CI is failing, so the author has to act before a review is worth it"
           }
         },
-        "required": ["pr", "lane", "score", "reasons", "waitingHours", "waitingOnAuthor"],
+        "required": [
+          "pr",
+          "lane",
+          "score",
+          "reasons",
+          "waitingHours",
+          "waitingOnAuthor"
+        ],
         "additionalProperties": false
       }
     },
@@ -533,6 +625,13 @@
       }
     }
   },
-  "required": ["schemaVersion", "viewer", "fetchedAt", "needsYou", "fastTrack", "warnings"],
+  "required": [
+    "schemaVersion",
+    "viewer",
+    "fetchedAt",
+    "needsYou",
+    "fastTrack",
+    "warnings"
+  ],
   "additionalProperties": false
 }

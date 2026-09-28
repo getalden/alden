@@ -6,7 +6,8 @@
     "useIgnoreFile": true
   },
   "files": {
-    "ignoreUnknown": false
+    "ignoreUnknown": false,
+    "includes": ["**", "!packages/schema/json", "!**/__fixtures__"]
   },
   "formatter": {
     "enabled": true,

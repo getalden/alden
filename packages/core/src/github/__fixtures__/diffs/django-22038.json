@@ -1,0 +1,23 @@
+[
+  {
+    "filename": "django/core/signing.py",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 2,
+    "patch": "@@ -49,7 +49,7 @@\n from django.utils.regex_helper import _lazy_re_compile\n from django.utils.warnings import django_file_prefixes\n \n-_SEP_UNSAFE = _lazy_re_compile(r\"^[A-z0-9-_=]*$\")\n+_SEP_UNSAFE = _lazy_re_compile(r\"^[A-Za-z0-9-_=]*$\")\n BASE62_ALPHABET = \"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\"\n \n \n@@ -234,7 +234,7 @@ def __init__(\n         if _SEP_UNSAFE.match(self.sep):\n             raise ValueError(\n                 \"Unsafe Signer separator: %r (cannot be empty or consist of \"\n-                \"only A-z0-9-_=)\" % sep,\n+                \"only A-Za-z0-9-_=)\" % sep,\n             )\n \n     def signature(self, value, key=None):"
+  },
+  {
+    "filename": "docs/topics/signing.txt",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 2,
+    "patch": "@@ -114,8 +114,9 @@ generate signatures. You can use a different secret by passing it to the\n \n     Returns a signer which uses ``key`` to generate signatures and ``sep`` to\n     separate values. ``sep`` cannot be in the :rfc:`URL safe base64 alphabet\n-    <4648#section-5>`. This alphabet contains alphanumeric characters, hyphens,\n-    and underscores. ``algorithm`` must be an algorithm supported by\n+    <4648#section-5>` or be the ``=`` padding character. This alphabet\n+    contains alphanumeric characters, hyphens, and underscores.\n+    ``algorithm`` must be an algorithm supported by\n     :mod:`hashlib`, it defaults to ``'sha256'``. ``fallback_keys`` is a list\n     of additional values used to validate signed data, defaults to\n     :setting:`SECRET_KEY_FALLBACKS`."
+  },
+  {
+    "filename": "tests/signing/tests.py",
+    "status": "modified",
+    "additions": 10,
+    "deletions": 1,
+    "patch": "@@ -182,13 +182,22 @@ def test_valid_sep(self):\n     def test_invalid_sep(self):\n         \"\"\"should warn on invalid separator\"\"\"\n         msg = (\n-            \"Unsafe Signer separator: %r (cannot be empty or consist of only A-z0-9-_=)\"\n+            \"Unsafe Signer separator: %r (cannot be empty or consist of only \"\n+            \"A-Za-z0-9-_=)\"\n         )\n         separators = [\"\", \"-\", \"abc\"]\n         for sep in separators:\n             with self.assertRaisesMessage(ValueError, msg % sep):\n                 signing.Signer(sep=sep)\n \n+    def test_sep_excluded_ascii_range(self):\n+        # Regression test: an \"A-z\" typo in the separator validation regex\n+        # used to also match \"[\", \"\\\", \"]\", \"^\", and \"`\", which sit between\n+        # \"Z\" and \"a\" in the ASCII table but aren't in \"A-Za-z0-9-_=\".\n+        for sep in [\"[\", \"\\\\\", \"]\", \"^\", \"`\"]:\n+            signer = signing.Signer(key=\"predictable-secret\", sep=sep)\n+            self.assertIn(sep, signer.sign(\"foo\"))\n+\n     def test_verify_with_non_default_key(self):\n         old_signer = signing.Signer(key=\"secret\")\n         new_signer = signing.Signer("
+  }
+]

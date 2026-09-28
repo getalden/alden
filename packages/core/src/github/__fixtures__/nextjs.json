@@ -2,7 +2,7 @@
   "name": "nextjs",
   "repo": "vercel/next.js",
   "language": "TypeScript",
-  "recordedAt": "2026-09-28T18:23:33.459Z",
+  "recordedAt": "2026-09-28T18:35:05.974Z",
   "pullRequests": [
     {
       "number": 99371,
@@ -83,9 +83,9 @@
       "url": "https://github.com/vercel/next.js/pull/99369",
       "isDraft": false,
       "createdAt": "2026-09-28T16:47:37Z",
-      "updatedAt": "2026-09-28T17:57:34Z",
-      "additions": 31,
-      "deletions": 29,
+      "updatedAt": "2026-09-28T18:29:31Z",
+      "additions": 33,
+      "deletions": 30,
       "changedFiles": 1,
       "mergeable": "MERGEABLE",
       "baseRefName": "canary",
@@ -105,8 +105,8 @@
         "nodes": [
           {
             "path": "apps/bundle-analyzer/components/diff-table.tsx",
-            "additions": 31,
-            "deletions": 29
+            "additions": 33,
+            "deletions": 30
           }
         ],
         "pageInfo": {
@@ -139,7 +139,7 @@
           {
             "commit": {
               "statusCheckRollup": {
-                "state": "FAILURE"
+                "state": "PENDING"
               }
             }
           }
@@ -243,7 +243,7 @@
       "additions": 134,
       "deletions": 4,
       "changedFiles": 8,
-      "mergeable": "UNKNOWN",
+      "mergeable": "MERGEABLE",
       "baseRefName": "canary",
       "headRefName": "fix/standalone-trace-external-chunks",
       "isCrossRepository": true,

@@ -1,0 +1,30 @@
+[
+  {
+    "filename": "hugolib/content_map.go",
+    "status": "modified",
+    "additions": 9,
+    "deletions": 0,
+    "patch": "@@ -300,6 +300,15 @@ func (m *pageMap) AddFi(fi hugofs.FileMetaInfo, buildConfig *BuildCfg) (pageSour\n \t\t}\n \n \tdefault:\n+\t\t// Partial rebuilds may start below a leaf; keep those files as resources.\n+\t\tif m.leafBundleOwner(pi) != nil {\n+\t\t\tpaths.ModifyPathBundleTypeResource(pi)\n+\t\t\tif err := insertResource(fi); err != nil {\n+\t\t\t\taddErr = err\n+\t\t\t}\n+\t\t\treturn\n+\t\t}\n+\n \t\tm.s.Log.Trace(logg.StringFunc(\n \t\t\tfunc() string {\n \t\t\t\treturn fmt.Sprintf(\"insert bundle: %q\", fi.Meta().Filename)"
+  },
+  {
+    "filename": "hugolib/content_map_page.go",
+    "status": "modified",
+    "additions": 34,
+    "deletions": 0,
+    "patch": "@@ -136,6 +136,40 @@ type pageTrees struct {\n \tresourceTrees doctree.MutableTrees\n }\n \n+// leafBundleOwner returns the closest ancestor leaf bundle for p, if any.\n+func (t *pageTrees) leafBundleOwner(p *paths.Path) *paths.Path {\n+\tif p == nil || p.Component() != files.ComponentFolderContent || p.IsContentData() {\n+\t\treturn nil\n+\t}\n+\n+\tt.treePages.Lock(false)\n+\tdefer t.treePages.Unlock(false)\n+\n+\tfor dir := path.Dir(p.Base()); ; dir = path.Dir(dir) {\n+\t\tkey := dir\n+\t\tif dir == \"/\" {\n+\t\t\t// The home page is stored at \"\".\n+\t\t\tkey = \"\"\n+\t\t}\n+\t\tif n, ok := t.treePages.GetRaw(key); ok {\n+\t\t\tvar owner *paths.Path\n+\t\t\tn.forEeachContentNode(func(_ sitesmatrix.Vector, nn contentNode) bool {\n+\t\t\t\tif pi := cnh.PathInfo(nn); pi != nil && pi.IsLeafBundle() {\n+\t\t\t\t\towner = pi\n+\t\t\t\t\treturn false\n+\t\t\t\t}\n+\t\t\t\treturn true\n+\t\t\t})\n+\t\t\tif owner != nil {\n+\t\t\t\treturn owner\n+\t\t\t}\n+\t\t}\n+\t\tif dir == \"/\" || dir == \".\" || dir == \"\" {\n+\t\t\treturn nil\n+\t\t}\n+\t}\n+}\n+\n // collectAndMarkStaleIdentities collects all identities from in all trees matching the given key.\n // We currently re-read all page/resources for all languages that share the same path,\n // so we mark all entries as stale (which will trigger cache invalidation), then"
+  },
+  {
+    "filename": "hugolib/hugo_sites_build.go",
+    "status": "modified",
+    "additions": 5,
+    "deletions": 0,
+    "patch": "@@ -933,6 +933,11 @@ func (h *HugoSites) processPartialFileEvents(ctx context.Context, l logg.LevelLo\n \t\t\t}\n \n \t\t\tpss[i] = h.Configs.ContentPathParser.Parse(cps.Component, p)\n+\t\t\tif pss[i].IsLeafBundle() || pss[i].IsBranchBundle() {\n+\t\t\t\tif h.pageTrees.leafBundleOwner(pss[i]) != nil {\n+\t\t\t\t\tpaths.ModifyPathBundleTypeResource(pss[i])\n+\t\t\t\t}\n+\t\t\t}\n \t\t\tif ev.added && !ev.isChangedDir && cps.Component == files.ComponentFolderContent {\n \t\t\t\taddedContentPaths = append(addedContentPaths, pss[i])\n \t\t\t}"
+  },
+  {
+    "filename": "hugolib/rebuild_test.go",
+    "status": "modified",
+    "additions": 74,
+    "deletions": 0,
+    "patch": "@@ -125,6 +125,80 @@ func TestRebuildEditTextFileInLeafBundle(t *testing.T) {\n \tb.AssertRenderCountContent(0)\n }\n \n+// See issue 13961.\n+func TestRebuildEditNestedContentInLeafBundle(t *testing.T) {\n+\tt.Parallel()\n+\n+\tfiles := `\n+-- hugo.toml --\n+baseURL = \"https://example.com\"\n+disableLiveReload = true\n+disableKinds = [\"taxonomy\", \"term\", \"sitemap\", \"robotsTXT\", \"404\", \"rss\"]\n+-- content/_index.md --\n+---\n+title: \"Home\"\n+---\n+-- content/a/index.md --\n+---\n+title: \"A\"\n+---\n+A.\n+-- content/a/b/index.md --\n+---\n+title: \"B\"\n+---\n+B.\n+-- content/a/b/c.md --\n+---\n+title: \"C\"\n+---\n+C.\n+-- content/s/_index.md --\n+---\n+title: \"S\"\n+---\n+-- content/s/p/index.md --\n+---\n+title: \"P\"\n+---\n+P.\n+-- layouts/home.html --\n+Home.\n+-- layouts/list.html --\n+List: {{ .Title }}|\n+-- layouts/page.html --\n+Page: {{ .Title }}|{{ .Content }}|Resources: {{ range .Resources }}{{ .Name }}:{{ .Content }}{{ end }}|\n+`\n+\n+\tb := Test(t, files, TestOptRunning())\n+\tb.AssertFileContent(\"public/a/index.html\", \"Page: A\", \"index.md:<p>B.</p>\", \"c.md:<p>C.</p>\")\n+\tb.AssertFileExists(\"public/a/b/index.html\", false)\n+\tb.AssertFileExists(\"public/a/b/c/index.html\", false)\n+\tb.AssertFileContent(\"public/s/p/index.html\", \"Page: P\", \"<p>P.</p>\")\n+\n+\tb.EditFileReplaceAll(\"content/a/b/index.md\", \"B.\", \"B edited.\").Build()\n+\tb.AssertFileContent(\"public/a/index.html\", \"index.md:<p>B edited.</p>\")\n+\tb.AssertFileExists(\"public/a/b/index.html\", false)\n+\tb.AssertFileExists(\"public/a/b/c/index.html\", false)\n+\n+\tb.EditFileReplaceAll(\"content/a/b/c.md\", \"C.\", \"C edited.\").Build()\n+\tb.AssertFileContent(\"public/a/index.html\", \"c.md:<p>C edited.</p>\")\n+\tb.AssertFileExists(\"public/a/b/index.html\", false)\n+\tb.AssertFileExists(\"public/a/b/c/index.html\", false)\n+\n+\tb.AddFiles(\"content/a/b/d/index.md\", `---\n+title: \"D\"\n+---\n+D.\n+`).Build()\n+\tb.AssertFileContent(\"public/a/index.html\", \"index.md:<p>D.</p>\")\n+\tb.AssertFileExists(\"public/a/b/d/index.html\", false)\n+\n+\t// A real leaf below a branch bundle must still rebuild as a page.\n+\tb.EditFileReplaceAll(\"content/s/p/index.md\", \"P.\", \"P edited.\").Build()\n+\tb.AssertFileContent(\"public/s/p/index.html\", \"Page: P\", \"<p>P edited.</p>\")\n+}\n+\n func TestRebuildAddingALeaffBundleIssue13925(t *testing.T) {\n \tt.Parallel()\n "
+  }
+]

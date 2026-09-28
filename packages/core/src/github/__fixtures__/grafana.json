@@ -2,7 +2,7 @@
   "name": "grafana",
   "repo": "grafana/grafana",
   "language": "Go and TypeScript",
-  "recordedAt": "2026-09-28T18:23:38.432Z",
+  "recordedAt": "2026-09-28T18:35:16.635Z",
   "pullRequests": [
     {
       "number": 133739,

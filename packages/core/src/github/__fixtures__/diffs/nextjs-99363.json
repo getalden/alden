@@ -1,0 +1,58 @@
+[
+  {
+    "filename": "packages/next/src/build/collect-build-traces.ts",
+    "status": "modified",
+    "additions": 17,
+    "deletions": 4,
+    "patch": "@@ -422,8 +422,6 @@ export async function collectBuildTraces({\n \n         const { entryNameFilesMap } = buildTraceContext?.chunksTrace || {}\n \n-        const cachedLookupIgnoreRoutes = new Map<string, boolean>()\n-\n         await Promise.all(\n           [\n             ...(entryNameFilesMap\n@@ -462,7 +460,22 @@ export async function collectBuildTraces({\n             }\n             const traceOutputDir = path.dirname(traceOutputPath)\n             const curTracedFiles = new Set<string>()\n-\n+            const cachedLookupIgnoreRoutes = new Map<string, boolean>()\n+            const entryNameFilesSet = new Set(\n+              entryNameFiles.map((file: string) =>\n+                path.relative(outputFileTracingRoot, file).replace(/\\\\/g, '/')\n+              )\n+            )\n+            const routeIgnoreFnForEntry = (file: string) => {\n+              // Server chunks are omitted from route traces so that unrelated\n+              // chunks are not copied into every route. The chunks referenced\n+              // by this entry still need to act as trace parents, otherwise\n+              // dependencies externalized from an async chunk are discarded.\n+              return (\n+                routeIgnoreFn(file) &&\n+                !entryNameFilesSet.has(file.replace(/\\\\/g, '/'))\n+              )\n+            }\n             for (const file of [...entryNameFiles, entryOutputPath]) {\n               const curFiles = [\n                 ...(parentFilesMap\n@@ -473,7 +486,7 @@ export async function collectBuildTraces({\n                 if (\n                   !shouldIgnore(\n                     curFile,\n-                    routeIgnoreFn,\n+                    routeIgnoreFnForEntry,\n                     reasons,\n                     cachedLookupIgnoreRoutes\n                   )"
+  },
+  {
+    "filename": "test/production/standalone-mode/dynamic-import-externals/app/layout.js",
+    "status": "added",
+    "additions": 7,
+    "deletions": 0,
+    "patch": "@@ -0,0 +1,7 @@\n+export default function Layout({ children }) {\n+  return (\n+    <html>\n+      <body>{children}</body>\n+    </html>\n+  )\n+}"
+  },
+  {
+    "filename": "test/production/standalone-mode/dynamic-import-externals/app/one/page.js",
+    "status": "added",
+    "additions": 7,
+    "deletions": 0,
+    "patch": "@@ -0,0 +1,7 @@\n+import { getQueueValue } from '../../lib/load-external'\n+\n+export const dynamic = 'force-dynamic'\n+\n+export default async function Page() {\n+  return <p>{await getQueueValue()}</p>\n+}"
+  },
+  {
+    "filename": "test/production/standalone-mode/dynamic-import-externals/app/two/page.js",
+    "status": "added",
+    "additions": 7,
+    "deletions": 0,
+    "patch": "@@ -0,0 +1,7 @@\n+import { getQueueValue } from '../../lib/load-external'\n+\n+export const dynamic = 'force-dynamic'\n+\n+export default async function Page() {\n+  return <p>{await getQueueValue()}</p>\n+}"
+  },
+  {
+    "filename": "test/production/standalone-mode/dynamic-import-externals/dynamic-import-externals.test.ts",
+    "status": "added",
+    "additions": 76,
+    "deletions": 0,
+    "patch": "@@ -0,0 +1,76 @@\n+import { ChildProcess } from 'child_process'\n+import { nextTestSetup } from 'e2e-utils'\n+import fs from 'fs-extra'\n+import {\n+  fetchViaHTTP,\n+  findPort,\n+  initNextServerScript,\n+  killApp,\n+} from 'next-test-utils'\n+import { join } from 'path'\n+\n+describe('standalone mode: dynamic import externals', () => {\n+  let server: ChildProcess\n+  let appPort: number\n+  const routeTraces: Record<string, { files: string[] }> = {}\n+\n+  const { next } = nextTestSetup({\n+    files: __dirname,\n+    dependencies: require('./package.json').dependencies,\n+    skipStart: true,\n+  })\n+\n+  beforeAll(async () => {\n+    await next.build()\n+\n+    for (const route of ['one', 'two']) {\n+      routeTraces[route] = await next.readJSON(\n+        `.next/server/app/${route}/page.js.nft.json`\n+      )\n+    }\n+\n+    await fs.move(\n+      join(next.testDir, '.next/standalone'),\n+      join(next.testDir, 'standalone')\n+    )\n+    await fs.copy(\n+      join(next.testDir, '.next/static'),\n+      join(next.testDir, 'standalone/.next/static')\n+    )\n+\n+    for (const file of await fs.readdir(next.testDir)) {\n+      if (file !== 'standalone') {\n+        await fs.remove(join(next.testDir, file))\n+      }\n+    }\n+\n+    appPort = await findPort()\n+    server = await initNextServerScript(\n+      join(next.testDir, 'standalone/server.js'),\n+      /- Local:/,\n+      {\n+        ...process.env,\n+        ...next.env,\n+        PORT: String(appPort),\n+      }\n+    )\n+  })\n+\n+  afterAll(async () => {\n+    if (server) {\n+      await killApp(server)\n+    }\n+  })\n+\n+  it.each(['/one', '/two'])(\n+    'should resolve the external package on %s',\n+    async (route) => {\n+      expect(routeTraces[route.slice(1)].files).toContainEqual(\n+        expect.stringContaining('node_modules/yocto-queue')\n+      )\n+      const response = await fetchViaHTTP(appPort, route)\n+      expect(response.status).toBe(200)\n+      expect(await response.text()).toContain('ok')\n+    }\n+  )\n+})"
+  },
+  {
+    "filename": "test/production/standalone-mode/dynamic-import-externals/lib/load-external.js",
+    "status": "added",
+    "additions": 6,
+    "deletions": 0,
+    "patch": "@@ -0,0 +1,6 @@\n+export async function getQueueValue() {\n+  const { default: Queue } = await import('yocto-queue')\n+  const queue = new Queue()\n+  queue.enqueue('ok')\n+  return queue.dequeue()\n+}"
+  },
+  {
+    "filename": "test/production/standalone-mode/dynamic-import-externals/next.config.js",
+    "status": "added",
+    "additions": 9,
+    "deletions": 0,
+    "patch": "@@ -0,0 +1,9 @@\n+/**\n+ * @type {import('next').NextConfig}\n+ */\n+const nextConfig = {\n+  output: 'standalone',\n+  serverExternalPackages: ['yocto-queue'],\n+}\n+\n+module.exports = nextConfig"
+  },
+  {
+    "filename": "test/production/standalone-mode/dynamic-import-externals/package.json",
+    "status": "added",
+    "additions": 5,
+    "deletions": 0,
+    "patch": "@@ -0,0 +1,5 @@\n+{\n+  \"dependencies\": {\n+    \"yocto-queue\": \"1.2.1\"\n+  }\n+}"
+  }
+]

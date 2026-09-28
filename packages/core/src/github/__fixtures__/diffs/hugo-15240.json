@@ -1,0 +1,16 @@
+[
+  {
+    "filename": "hugolib/pagesfromdata/pagesfromgotmpl_integration_test.go",
+    "status": "modified",
+    "additions": 33,
+    "deletions": 0,
+    "patch": "@@ -961,3 +961,36 @@ templateMetrics = true\n \tb.Assert(got, qt.Contains, \"/docs/_content.gotmpl\")\n \tb.Assert(got, qt.Not(qt.Contains), \"content/docs/_content.gotmpl\")\n }\n+\n+// See issue 14480.\n+func TestContentAdapterInlinePartial(t *testing.T) {\n+\tt.Parallel()\n+\n+\tfiles := `\n+-- hugo.toml --\n+disableKinds = [\"taxonomy\", \"term\", \"sitemap\", \"robotsTXT\"]\n+-- content/test/_content.gotmpl --\n+{{ define \"_partials/inline/foo.html\" }}\n+The answer is {{ .answer }}.\n+{{ end }}\n+\n+{{ $content := dict\n+  \"mediaType\" \"text/markdown\"\n+  \"value\" (partial \"inline/foo.html\" (dict \"answer\" 1831))\n+}}\n+\n+{{ $page := dict\n+  \"content\" $content\n+  \"kind\" \"page\"\n+  \"path\" \"my-page\"\n+  \"title\" \"The Title\"\n+}}\n+\n+{{ .AddPage $page }}\n+-- layouts/page.html --\n+Title: {{ .Title }}|Content: {{ .Content }}\n+`\n+\n+\tb := hugolib.Test(t, files)\n+\tb.AssertFileContent(\"public/test/my-page/index.html\", \"The answer is 1831.\")\n+}"
+  },
+  {
+    "filename": "tpl/tplimpl/templatestore.go",
+    "status": "modified",
+    "additions": 8,
+    "deletions": 0,
+    "patch": "@@ -788,6 +788,9 @@ func (t *TemplateStore) TextParse(name, tpl string) (*TemplInfo, error) {\n \tif err != nil {\n \t\treturn nil, err\n \t}\n+\tif err := t.extractInlinePartials(false); err != nil {\n+\t\treturn nil, err\n+\t}\n \treturn &TemplInfo{\n \t\tTemplate: templ,\n \t}, nil\n@@ -1070,6 +1073,11 @@ func (s *TemplateStore) allRawTemplates() iter.Seq[tpl.Template] {\n \t\t\t\treturn\n \t\t\t}\n \t\t}\n+\t\tfor t := range p.templatesIn(p.standaloneText) {\n+\t\t\tif !yield(t) {\n+\t\t\t\treturn\n+\t\t\t}\n+\t\t}\n \n \t\tfor _, tt := range p.baseofHtmlClones {\n \t\t\tfor t := range p.templatesIn(tt) {"
+  }
+]

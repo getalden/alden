@@ -1,0 +1,331 @@
+[
+  {
+    "filename": ".github/workflows/databases-nightly.yml",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 2,
+    "patch": "@@ -11,7 +11,7 @@ jobs:\n   mysql_innovation:\n     if: github.repository == 'laravel/framework'\n \n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -45,7 +45,7 @@ jobs:\n   mariadb:\n     if: github.repository == 'laravel/framework'\n \n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     continue-on-error: true\n     timeout-minutes: 10\n "
+  },
+  {
+    "filename": ".github/workflows/databases.yml",
+    "status": "modified",
+    "additions": 10,
+    "deletions": 10,
+    "patch": "@@ -12,7 +12,7 @@ permissions:\n \n jobs:\n   mysql_57:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -45,7 +45,7 @@ jobs:\n           DB_COLLATION: utf8mb4_unicode_ci\n \n   mysql_84:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -77,7 +77,7 @@ jobs:\n           DB_CONNECTION: mysql\n \n   mysql_97:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -109,7 +109,7 @@ jobs:\n           DB_CONNECTION: mysql\n \n   mariadb:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -141,7 +141,7 @@ jobs:\n           DB_CONNECTION: mariadb\n \n   mariadb_118:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -173,7 +173,7 @@ jobs:\n           DB_CONNECTION: mariadb\n \n   mariadb_123:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -205,7 +205,7 @@ jobs:\n           DB_CONNECTION: mariadb\n \n   pgsql_18:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -240,7 +240,7 @@ jobs:\n           DB_PASSWORD: password\n \n   pgsql_14:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -275,7 +275,7 @@ jobs:\n           DB_PASSWORD: password\n \n   pgsql_10:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -378,7 +378,7 @@ jobs:\n           DB_PASSWORD: Forge123\n \n   sqlite:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     name: SQLite"
+  },
+  {
+    "filename": ".github/workflows/facades.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -12,7 +12,7 @@ permissions:\n \n jobs:\n   update:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 5\n \n     name: Facade DocBlocks"
+  },
+  {
+    "filename": ".github/workflows/install-nightly.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -14,7 +14,7 @@ jobs:\n     strategy:\n       fail-fast: false\n       matrix:\n-        os: [ubuntu-24.04, windows-2025]\n+        os: [ubuntu-26.04, windows-2025]\n \n     runs-on: ${{ matrix.os }}\n     timeout-minutes: 10"
+  },
+  {
+    "filename": ".github/workflows/queues.yml",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 2,
+    "patch": "@@ -12,7 +12,7 @@ permissions:\n \n jobs:\n   sync:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     name: Sync Driver\n@@ -34,7 +34,7 @@ jobs:\n           QUEUE_CONNECTION: sync\n \n   database:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     name: Database Driver\n@@ -60,6 +60,7 @@ jobs:\n           QUEUE_CONNECTION: database\n \n   beanstalkd:\n+    # Build of beanstalkd fails on 26.04\n     runs-on: ubuntu-24.04\n     timeout-minutes: 10\n "
+  },
+  {
+    "filename": ".github/workflows/redis.yml",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 3,
+    "patch": "@@ -12,7 +12,7 @@ permissions:\n \n jobs:\n   redis:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -56,7 +56,7 @@ jobs:\n           QUEUE_CONNECTION: redis\n \n   redis-unit:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:\n@@ -88,7 +88,7 @@ jobs:\n         run: vendor/bin/phpunit tests/Redis\n \n   redis-cluster:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     strategy:"
+  },
+  {
+    "filename": ".github/workflows/releases.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -12,7 +12,7 @@ permissions:\n \n jobs:\n   release:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     name: Release ${{ inputs.version }}"
+  },
+  {
+    "filename": ".github/workflows/static-analysis.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -12,7 +12,7 @@ permissions:\n \n jobs:\n   types:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 5\n \n     strategy:"
+  },
+  {
+    "filename": ".github/workflows/tests.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -16,7 +16,7 @@ jobs:\n   linux_tests:\n     if: github.event_name != 'schedule' || github.repository == 'laravel/framework'\n \n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 10\n \n     services:"
+  },
+  {
+    "filename": ".github/workflows/update-assets.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -18,7 +18,7 @@ permissions:\n \n jobs:\n   update:\n-    runs-on: ubuntu-latest\n+    runs-on: ubuntu-26.04\n     timeout-minutes: 5\n \n     steps:"
+  },
+  {
+    "filename": "src/Illuminate/Auth/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Broadcasting/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Bus/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Cache/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Collections/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Concurrency/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Conditionable/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Config/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Console/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Container/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Contracts/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Cookie/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Database/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Encryption/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Events/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Filesystem/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Hashing/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Http/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Image/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/JsonSchema/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Log/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Macroable/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Mail/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Notifications/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Pagination/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Pipeline/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Process/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Queue/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Redis/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Reflection/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Routing/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Session/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Support/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Testing/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Translation/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/Validation/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  },
+  {
+    "filename": "src/Illuminate/View/.github/workflows/close-pull-request.yml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -6,7 +6,7 @@ on:\n \n jobs:\n   run:\n-    runs-on: ubuntu-24.04\n+    runs-on: ubuntu-26.04\n     steps:\n     - uses: superbrothers/close-pull-request@v3\n       with:"
+  }
+]

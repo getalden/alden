@@ -45,5 +45,25 @@ for (const { numbers, ...source } of SOURCES) {
   const pullRequests = numbers.map((n) => data.repository[`p${n}`]).filter((pr): pr is RawPullRequest => pr !== null);
   const fixture = { ...source, recordedAt: new Date().toISOString(), pullRequests };
   await writeFile(join(OUT_DIR, `${source.name}.json`), `${JSON.stringify(fixture, null, 2)}\n`);
-  console.log(`${source.name}: ${pullRequests.length} PRs`);
+
+  // Each PR's per-file patches, as GitHub's files API returns them, for the diff parser and checks.
+  await mkdir(join(OUT_DIR, "diffs"), { recursive: true });
+  for (const pr of pullRequests) {
+    const { data } = await client.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/files", {
+      owner: owner as string,
+      repo: name as string,
+      pull_number: pr.number,
+      per_page: 100,
+    });
+    const files = data.map((f) => ({
+      filename: f.filename,
+      ...(f.previous_filename ? { previous_filename: f.previous_filename } : {}),
+      status: f.status,
+      additions: f.additions,
+      deletions: f.deletions,
+      ...(f.patch ? { patch: f.patch } : {}),
+    }));
+    await writeFile(join(OUT_DIR, "diffs", `${source.name}-${pr.number}.json`), `${JSON.stringify(files, null, 2)}\n`);
+  }
+  console.log(`${source.name}: ${pullRequests.length} PRs with diffs`);
 }

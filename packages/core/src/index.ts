@@ -7,6 +7,16 @@ export {
   setConfigValue,
   userConfigPath,
 } from "./config.js";
+export {
+  addedLines,
+  type DiffFile,
+  type DiffLine,
+  type FileStatus,
+  type Hunk,
+  parseHunks,
+  parseUnifiedDiff,
+} from "./diff/parse.js";
+export { fetchPullRequestDiff, fromRestFile, type LocalDiff, readLocalDiff } from "./diff/sources.js";
 export * from "./github/index.js";
 export { type FileKind, fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";
 export {

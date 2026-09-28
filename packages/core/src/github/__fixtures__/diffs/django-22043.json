@@ -1,0 +1,30 @@
+[
+  {
+    "filename": "django/urls/base.py",
+    "status": "modified",
+    "additions": 37,
+    "deletions": 7,
+    "patch": "@@ -7,7 +7,13 @@\n from django.utils.translation import override\n \n from .exceptions import NoReverseMatch, Resolver404\n-from .resolvers import _get_cached_resolver, get_ns_resolver, get_resolver\n+from .resolvers import (\n+    RegexPattern,\n+    URLResolver,\n+    _get_cached_resolver,\n+    get_ns_resolver,\n+    get_resolver,\n+)\n from .utils import get_callable\n \n # SCRIPT_NAME prefixes for each thread are stored here. If there's no entry for\n@@ -191,18 +197,42 @@ def translate_url(url, lang_code):\n     except Resolver404:\n         pass\n     else:\n-        to_be_reversed = (\n-            \"%s:%s\" % (match.namespace, match.url_name)\n-            if match.namespace\n-            else match.url_name\n-        )\n         with override(lang_code):\n             try:\n-                url = reverse(to_be_reversed, args=match.args, kwargs=match.kwargs)\n+                if match.url_name is None:\n+                    url = _reverse_matched_pattern(match)\n+                else:\n+                    to_be_reversed = (\n+                        \"%s:%s\" % (match.namespace, match.url_name)\n+                        if match.namespace\n+                        else match.url_name\n+                    )\n+                    url = reverse(to_be_reversed, args=match.args, kwargs=match.kwargs)\n             except NoReverseMatch:\n                 pass\n             else:\n                 url = urlunsplit(\n                     (parsed.scheme, parsed.netloc, url, parsed.query, parsed.fragment)\n                 )\n     return url\n+\n+\n+def _reverse_matched_pattern(match):\n+    \"\"\"\n+    Reverse the exact URL pattern that produced the given ResolverMatch.\n+\n+    Unnamed patterns can't be reversed by name, and reversing by the view\n+    callable is ambiguous when the same view is used by several patterns. The\n+    last entry of ``match.tried`` is the chain of resolvers ending with the\n+    pattern that matched, so build a throwaway resolver tree containing only\n+    that chain and reverse the view against it.\n+    \"\"\"\n+    *resolvers, pattern = match.tried[-1]\n+    for resolver in reversed(resolvers):\n+        pattern = URLResolver(\n+            resolver.pattern, [pattern], default_kwargs=resolver.default_kwargs\n+        )\n+    resolver = URLResolver(RegexPattern(r\"^/\"), [pattern])\n+    return resolver._reverse_with_prefix(\n+        match.func, get_script_prefix(), *match.args, **match.kwargs\n+    )"
+  },
+  {
+    "filename": "tests/i18n/patterns/tests.py",
+    "status": "modified",
+    "additions": 9,
+    "deletions": 0,
+    "patch": "@@ -186,6 +186,15 @@ def test_translate_url_utility(self):\n                 translate_url(\"/en/account/register-as-path/\", \"nl\"),\n                 \"/nl/profiel/registreren-als-pad/\",\n             )\n+            # Unnamed patterns, including one in a namespaced include.\n+            self.assertEqual(\n+                translate_url(\"/en/register-as-path/\", \"nl\"),\n+                \"/nl/registreren-als-pad/\",\n+            )\n+            self.assertEqual(\n+                translate_url(\"/en/account/users/\", \"nl\"),\n+                \"/nl/profiel/gebruikers/\",\n+            )\n             self.assertEqual(translation.get_language(), \"en\")\n             # re_path() URL with parameters.\n             self.assertEqual("
+  },
+  {
+    "filename": "tests/i18n/patterns/urls/default.py",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 0,
+    "patch": "@@ -21,6 +21,8 @@\n urlpatterns += i18n_patterns(\n     path(\"prefixed/\", view, name=\"prefixed\"),\n     path(\"prefixed.xml\", view, name=\"prefixed_xml\"),\n+    # Unnamed translated path using the same view as the named patterns.\n+    path(_(\"register-as-path/\"), view),\n     re_path(\n         _(r\"^with-arguments/(?P<argument>[\\w-]+)/(?:(?P<optional>[\\w-]+).html)?$\"),\n         view,"
+  },
+  {
+    "filename": "tests/i18n/patterns/urls/namespace.py",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 0,
+    "patch": "@@ -9,4 +9,5 @@\n     re_path(_(r\"^register/$\"), view, name=\"register\"),\n     re_path(_(r\"^register-without-slash$\"), view, name=\"register-without-slash\"),\n     path(_(\"register-as-path/\"), view, name=\"register-as-path\"),\n+    re_path(_(r\"^users/$\"), view),\n ]"
+  }
+]

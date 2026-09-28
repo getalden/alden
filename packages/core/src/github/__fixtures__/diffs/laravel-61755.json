@@ -1,0 +1,30 @@
+[
+  {
+    "filename": "src/Illuminate/Mail/Markdown.php",
+    "status": "modified",
+    "additions": 10,
+    "deletions": 3,
+    "patch": "@@ -87,12 +87,14 @@ function () use ($view, $data) {\n                 if (static::$withSecuredEncoding === true) {\n                     EncodedHtmlString::encodeUsing(function ($value) {\n                         $replacements = [\n+                            '\\\\' => '\\\\\\\\',\n                             '[' => '\\[',\n+                            ']' => '\\]',\n                             '<' => '&lt;',\n                             '>' => '&gt;',\n                         ];\n \n-                        return str_replace(array_keys($replacements), array_values($replacements), $value);\n+                        return strtr($value, $replacements);\n                     });\n                 }\n \n@@ -116,8 +118,12 @@ function () use ($view, $data) {\n                 : 'mail::themes.'.$this->theme;\n         }\n \n+        $contents = static::$withSecuredEncoding === true\n+            ? strtr($contents, ['\\\\\\\\' => '\\\\', '\\[' => '[', '\\]' => ']'])\n+            : str_replace('\\[', '[', $contents);\n+\n         return new HtmlString(($inliner ?: new CssToInlineStyles)->convert(\n-            str_replace('\\[', '[', $contents), $this->view->make($theme, $data)->render()\n+            $contents, $this->view->make($theme, $data)->render()\n         ));\n     }\n \n@@ -157,11 +163,12 @@ public static function parse($text, bool $encoded = false)\n         if (static::$withSecuredEncoding === true || $encoded === true) {\n             EncodedHtmlString::encodeUsing(function ($value) {\n                 $replacements = [\n+                    '\\\\' => '\\\\\\\\',\n                     '[' => '\\[',\n                     '<' => '\\<',\n                 ];\n \n-                $html = str_replace(array_keys($replacements), array_values($replacements), $value);\n+                $html = strtr($value, $replacements);\n \n                 return static::converter([\n                     'html_input' => 'escape',"
+  },
+  {
+    "filename": "tests/Integration/Mail/Fixtures/link-with-template.blade.php",
+    "status": "added",
+    "additions": 4,
+    "deletions": 0,
+    "patch": "@@ -0,0 +1,4 @@\n+@component('mail::message')\n+*Hi* [{{ $user->name }}](https://laravel.com)\n+\n+@endcomponent"
+  },
+  {
+    "filename": "tests/Integration/Mail/MailableWithSecuredEncodingTest.php",
+    "status": "modified",
+    "additions": 40,
+    "deletions": 0,
+    "patch": "@@ -122,5 +122,45 @@ public static function markdownEncodedTemplateDataProvider()\n             'Visit <span>https://laravel.com/docs</span> to browse the documentation',\n             '<em>Hi</em> Visit &lt;span&gt;https://laravel.com/docs&lt;/span&gt; to browse the documentation',\n         ];\n+\n+        yield ['\\[Laravel](https://laravel.com)', '<em>Hi</em> [Laravel](https://laravel.com)'];\n+\n+        yield ['!\\[Laravel](https://laravel.com)', '<em>Hi</em> ![Laravel](https://laravel.com)'];\n+    }\n+\n+    #[WithMigration]\n+    #[DataProvider('markdownEncodedLinkTextTemplateDataProvider')]\n+    public function testItCanAssertMarkdownEncodedStringUsingTemplateWithLinkText($given, $expected)\n+    {\n+        $user = UserFactory::new()->create([\n+            'name' => $given,\n+        ]);\n+\n+        $mailable = new class($user) extends Mailable\n+        {\n+            public $theme = 'taylor';\n+\n+            public function __construct(public User $user)\n+            {\n+                //\n+            }\n+\n+            public function build()\n+            {\n+                return $this->markdown('link-with-template');\n+            }\n+        };\n+\n+        $mailable->assertSeeInHtml($expected, false);\n+        $mailable->assertDontSeeInHtml('https://example.com\"', false);\n+    }\n+\n+    public static function markdownEncodedLinkTextTemplateDataProvider()\n+    {\n+        yield ['Taylor', '<a href=\"https://laravel.com\">Taylor</a>'];\n+\n+        yield ['Taylor](https://example.com)', '<a href=\"https://laravel.com\">Taylor](https://example.com)</a>'];\n+\n+        yield ['Taylor\\](https://example.com)', '<a href=\"https://laravel.com\">Taylor](https://example.com)</a>'];\n     }\n }"
+  },
+  {
+    "filename": "tests/Integration/Mail/MarkdownParserTest.php",
+    "status": "modified",
+    "additions": 7,
+    "deletions": 0,
+    "patch": "@@ -74,6 +74,13 @@ public static function markdownEncodedDataProvider()\n             '<p>Visit &lt;span&gt;https://laravel.com/docs&lt;/span&gt; to browse the documentation</p>',\n         ];\n \n+        yield [new EncodedHtmlString('\\[Laravel](https://laravel.com)'), '<p>\\[Laravel](https://laravel.com)</p>'];\n+\n+        yield [\n+            new EncodedHtmlString('!\\[Welcome to Laravel](https://laravel.com/assets/img/welcome/background.svg)'),\n+            '<p>!\\[Welcome to Laravel](https://laravel.com/assets/img/welcome/background.svg)</p>',\n+        ];\n+\n         yield [\n             new EncodedHtmlString(new HtmlString('Visit <span>https://laravel.com/docs</span> to browse the documentation')),\n             '<p>Visit <span>https://laravel.com/docs</span> to browse the documentation</p>',"
+  }
+]

@@ -1,0 +1,30 @@
+[
+  {
+    "filename": "crates/wasm/Cargo.toml",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 0,
+    "patch": "@@ -24,6 +24,7 @@ next-custom-transforms = { workspace = true }\n next-taskless = { workspace = true }\n next-code-frame = { workspace = true }\n rustc-hash = { workspace = true }\n+serde = { workspace = true }\n serde-wasm-bindgen = \"0.4.3\"\n serde_json = \"1\"\n wasm-bindgen = { version = \"0.2\", features = [\"enable-interning\"] }"
+  },
+  {
+    "filename": "crates/wasm/src/lib.rs",
+    "status": "modified",
+    "additions": 59,
+    "deletions": 1,
+    "patch": "@@ -226,6 +226,58 @@ pub fn expand_next_js_template(\n     .map_err(convert_err)\n }\n \n+const DEFAULT_MAX_WIDTH: usize = 240;\n+\n+#[derive(serde::Deserialize)]\n+#[serde(untagged)]\n+enum WasmCodeFrameColorMode {\n+    Mode(next_code_frame::CodeFrameColorMode),\n+    Bool(bool),\n+}\n+\n+#[derive(serde::Deserialize, Default)]\n+#[serde(rename_all = \"camelCase\", default)]\n+struct WasmCodeFrameOptions {\n+    lines_above: Option<usize>,\n+    lines_below: Option<usize>,\n+    max_width: Option<usize>,\n+    color: Option<WasmCodeFrameColorMode>,\n+    highlight_code: Option<bool>,\n+    message: Option<String>,\n+    language: Option<String>,\n+}\n+\n+impl From<WasmCodeFrameOptions> for next_code_frame::CodeFrameOptions {\n+    fn from(opts: WasmCodeFrameOptions) -> Self {\n+        let color = match opts.color {\n+            None | Some(WasmCodeFrameColorMode::Bool(false)) => {\n+                next_code_frame::CodeFrameColorMode::None\n+            }\n+            Some(WasmCodeFrameColorMode::Mode(next_code_frame::CodeFrameColorMode::Error))\n+            | Some(WasmCodeFrameColorMode::Bool(true)) => {\n+                next_code_frame::CodeFrameColorMode::Error\n+            }\n+            Some(WasmCodeFrameColorMode::Mode(m)) => m,\n+        };\n+        let highlight_code = opts\n+            .highlight_code\n+            .unwrap_or(color != next_code_frame::CodeFrameColorMode::None);\n+        let language = match opts.language.as_deref() {\n+            Some(\"css\") => next_code_frame::Language::Css,\n+            _ => next_code_frame::Language::JavaScript,\n+        };\n+        next_code_frame::CodeFrameOptions {\n+            lines_above: opts.lines_above.unwrap_or(2),\n+            lines_below: opts.lines_below.unwrap_or(3),\n+            max_width: opts.max_width.unwrap_or(DEFAULT_MAX_WIDTH),\n+            color,\n+            highlight_code,\n+            message: opts.message,\n+            language,\n+        }\n+    }\n+}\n+\n #[wasm_bindgen(js_name = \"codeFrameColumns\")]\n pub fn code_frame_columns(\n     source: Box<[u8]>,\n@@ -235,7 +287,12 @@ pub fn code_frame_columns(\n     console_error_panic_hook::set_once();\n \n     let location: next_code_frame::CodeFrameLocation = serde_wasm_bindgen::from_value(location)?;\n-    let options: next_code_frame::CodeFrameOptions = serde_wasm_bindgen::from_value(options)?;\n+    let options: next_code_frame::CodeFrameOptions = if options.is_undefined() || options.is_null() {\n+        Default::default()\n+    } else {\n+        let opts: WasmCodeFrameOptions = serde_wasm_bindgen::from_value(options)?;\n+        opts.into()\n+    };\n     next_code_frame::render_code_frame(\n         str::from_utf8(&source)\n             .map_err(|e| JsError::new(&format!(\"Failed to render code frame: {e}\")))?,\n@@ -244,3 +301,4 @@ pub fn code_frame_columns(\n     )\n     .map_err(|e| JsError::new(&format!(\"Failed to render code frame: {e}\")))\n }\n+"
+  },
+  {
+    "filename": "packages/next/src/build/swc/index.ts",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -1534,7 +1534,7 @@ async function loadWasm(importPath = '') {\n       return rawBindings.codeFrameColumns(\n         Buffer.from(source),\n         location,\n-        options\n+        removeUndefined(options)\n       )\n     },\n     lockfileTryAcquire(_filePath: string, _content?: string | null) {"
+  },
+  {
+    "filename": "packages/next/src/shared/lib/errors/code-frame.ts",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 2,
+    "patch": "@@ -13,8 +13,8 @@ export function codeFrameColumns(\n   location: NapiCodeFrameLocation,\n   options: NapiCodeFrameOptions = {}\n ): string | undefined {\n-  // Default to the terminal width\n-  if (options.maxWidth === undefined) {\n+  // Default to the terminal width when available\n+  if (options.maxWidth === undefined && process.stdout?.columns !== undefined) {\n     options.maxWidth = process.stdout.columns\n   }\n   return getBindingsSync().codeFrameColumns(file, location, options)"
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "filename": "common/paths/path.go",
+    "status": "modified",
+    "additions": 28,
+    "deletions": 1,
+    "patch": "@@ -306,11 +306,38 @@ func (df DirFile) String() string {\n func PathEscape(pth string) string {\n \tu, err := url.Parse(pth)\n \tif err != nil {\n-\t\tpanic(err)\n+\t\t// url.Parse rejects malformed percent escapes. They are valid literal\n+\t\t// characters in filesystem paths, so escape only those percent signs and\n+\t\t// retry. Valid escapes must remain unchanged to keep this operation\n+\t\t// idempotent.\n+\t\tpth = escapeInvalidPercentEscapes(pth)\n+\t\tu, err = url.Parse(pth)\n+\t\tif err != nil {\n+\t\t\tpanic(err)\n+\t\t}\n \t}\n \treturn u.EscapedPath()\n }\n \n+func escapeInvalidPercentEscapes(s string) string {\n+\tvar b strings.Builder\n+\tfor i := 0; i < len(s); i++ {\n+\t\tif s[i] != '%' {\n+\t\t\tb.WriteByte(s[i])\n+\t\t\tcontinue\n+\t\t}\n+\n+\t\tif i+2 < len(s) && ishex(s[i+1]) && ishex(s[i+2]) {\n+\t\t\tb.WriteString(s[i : i+3])\n+\t\t\ti += 2\n+\t\t\tcontinue\n+\t\t}\n+\n+\t\tb.WriteString(\"%25\")\n+\t}\n+\treturn b.String()\n+}\n+\n // ToSlashTrimLeading is just a filepath.ToSlash with an added / prefix trimmer.\n func ToSlashTrimLeading(s string) string {\n \treturn TrimLeading(filepath.ToSlash(s))"
+  },
+  {
+    "filename": "common/paths/path_test.go",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 0,
+    "patch": "@@ -260,6 +260,10 @@ func TestPathEscape(t *testing.T) {\n \t\t{\"/simple-path\", \"/simple-path\"},\n \t\t{\"/path/with/slash\", \"/path/with/slash\"},\n \t\t{\"/path/with special&chars\", \"/path/with%20special&chars\"},\n+\t\t{\"/path/with/invalid%\", \"/path/with/invalid%25\"},\n+\t\t{\"/path/with/invalid%2\", \"/path/with/invalid%252\"},\n+\t\t{\"/path/with/invalid%zz\", \"/path/with/invalid%25zz\"},\n+\t\t{\"/path/with/valid%20escape\", \"/path/with/valid%20escape\"},\n \t} {\n \t\tin := this.input\n \t\tfor range 2 {"
+  },
+  {
+    "filename": "hugolib/pagebundler_test.go",
+    "status": "modified",
+    "additions": 20,
+    "deletions": 0,
+    "patch": "@@ -157,6 +157,26 @@ Resources: {{ range .Resources }}RelPermalink: {{ .RelPermalink }}|Content: {{ .\n \tb.AssertFileContent(\"public/cpath/section/mybundle/index.html\", \"Basic: My Bundle|page|leaf|/section/mybundle/|\\nResources: RelPermalink: |Content: <p>P1.</p>\\nHello CPATH.\\n|RelPermalink: /section/mybundle/hello.txt|Content: Hello.||\")\n }\n \n+func TestPageBundleResourceWithMalformedPercentPath(t *testing.T) {\n+\tt.Parallel()\n+\n+\tfiles := `\n+-- hugo.toml --\n+disableKinds = [\"taxonomy\", \"term\"]\n+-- content/about/index.md --\n+---\n+title: About\n+---\n+About page.\n+-- content/about/index.md% --\n+File with a literal percent sign.\n+-- layouts/single.html --\n+{{ range .Resources }}{{ .RelPermalink }}{{ end }}\n+`\n+\tb := Test(t, files)\n+\tb.AssertFileContent(\"public/about/index.html\", \"/about/index.md%25\")\n+}\n+\n func TestPageBundlerMultilingualTextResource(t *testing.T) {\n \tt.Parallel()\n "
+  }
+]

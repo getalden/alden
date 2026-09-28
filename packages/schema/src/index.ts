@@ -1,3 +1,24 @@
+export {
+  type Anchor,
+  AnchorSchema,
+  BRIEFING_SCHEMA_VERSION,
+  type Briefing,
+  type BriefingFile,
+  BriefingFileSchema,
+  BriefingSchema,
+  type BriefingTarget,
+  BriefingTargetSchema,
+  type CheckResult,
+  CheckResultSchema,
+  type CheckStatus,
+  CheckStatusSchema,
+  type Evidence,
+  EvidenceSchema,
+  type LookHere,
+  LookHereSchema,
+  type Severity,
+  SeveritySchema,
+} from "./briefing.js";
 export { type AldenConfig, AldenConfigSchema, DEFAULT_SENSITIVE_PATHS } from "./config.js";
 export { jsonSchemas } from "./json-schema.js";
 export {
