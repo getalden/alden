@@ -6,7 +6,16 @@ import type { DiffFile } from "../diff/parse.js";
 import { fromRestFile } from "../diff/sources.js";
 import { type RawPullRequest, toFacts } from "../github/pull-requests.js";
 import { buildBriefing, runChecks } from "./briefing.js";
-import { CHECKS, ciCheck, configCheck, migrationsCheck, sensitivePathsCheck, testsCheck } from "./checks.js";
+import {
+  CHECKS,
+  ciCheck,
+  configCheck,
+  dependenciesCheck,
+  migrationsCheck,
+  secretsCheck,
+  sensitivePathsCheck,
+  testsCheck,
+} from "./checks.js";
 import type { ReviewContext } from "./types.js";
 
 const config = AldenConfigSchema.parse({});
@@ -174,6 +183,118 @@ describe("paths.sensitive", () => {
   it("uses the configured list", () => {
     const none = { ...config, queue: { ...config.queue, sensitivePaths: [] } };
     expect(sensitivePathsCheck.run(ctx([file("app/auth/x.ts")], { config: none })).status).toBe("passed");
+  });
+});
+
+describe("dependencies.changed", () => {
+  const pkg = (deps: Record<string, string>, dev: Record<string, string> = {}) =>
+    JSON.stringify({ dependencies: deps, devDependencies: dev }, null, 2);
+
+  it("passes when no manifest changed, and skips when manifests couldn't be read", () => {
+    expect(dependenciesCheck.run(ctx([file("src/a.ts")])).status).toBe("passed");
+    expect(dependenciesCheck.run(ctx([file("package.json")])).status).toBe("skipped");
+  });
+
+  it("flags a new runtime package as medium and points at the line naming it", () => {
+    const manifest = file("package.json", ['    "dayjs": "^1.11.0",']);
+    const result = dependenciesCheck.run(
+      ctx([manifest], {
+        manifests: [
+          {
+            path: "package.json",
+            before: pkg({ react: "^19.0.0" }),
+            after: pkg({ react: "^19.0.0", dayjs: "^1.11.0" }),
+          },
+        ],
+      }),
+    );
+    expect(result).toMatchObject({
+      status: "flagged",
+      severity: "medium",
+      summary: expect.stringMatching(/^1 dependency added\./),
+    });
+    expect(result.evidence).toEqual([
+      { text: "added dayjs ^1.11.0 (runtime) in package.json", anchor: { path: "package.json", line: 1 } },
+    ]);
+  });
+
+  it("flags only minor changes to dev tools as low", () => {
+    const result = dependenciesCheck.run(
+      ctx([file("package.json")], {
+        manifests: [
+          {
+            path: "package.json",
+            before: pkg({}, { vitest: "^5.0.0" }),
+            after: pkg({}, { vitest: "^5.1.0", biome: "^2.5.0" }),
+          },
+        ],
+      }),
+    );
+    expect(result).toMatchObject({ severity: "low", summary: "1 dependency added, 1 updated." });
+  });
+
+  it("flags major upgrades", () => {
+    const result = dependenciesCheck.run(
+      ctx([file("composer.json")], {
+        manifests: [
+          {
+            path: "composer.json",
+            before: JSON.stringify({ require: { "laravel/framework": "^12.0" } }),
+            after: JSON.stringify({ require: { "laravel/framework": "^13.0" } }),
+          },
+        ],
+      }),
+    );
+    expect(result.severity).toBe("medium");
+    expect(result.evidence[0]?.text).toBe("major upgrade laravel/framework ^12.0 → ^13.0 in composer.json");
+  });
+
+  it("passes when a manifest changed but no dependency did", () => {
+    const before = JSON.stringify({ name: "a", dependencies: { x: "1" } });
+    const after = JSON.stringify({ name: "a", exports: "./i.js", dependencies: { x: "1" } });
+    const result = dependenciesCheck.run(
+      ctx([file("package.json")], { manifests: [{ path: "package.json", before, after }] }),
+    );
+    expect(result).toMatchObject({ status: "passed", summary: "Manifests changed, but no dependencies did." });
+  });
+
+  it("reports manifests it can't parse", () => {
+    const result = dependenciesCheck.run(
+      ctx([file("package.json")], { manifests: [{ path: "package.json", before: "{}", after: "{ broken" }] }),
+    );
+    expect(result.evidence[0]?.text).toBe("couldn't parse package.json");
+  });
+});
+
+describe("secrets.likely", () => {
+  const token = `ghp_${"a1B2c3D4e5".repeat(4)}`;
+
+  it("flags likely secrets as high with masked values and exact lines", () => {
+    const result = secretsCheck.run(ctx([file("src/client.ts", ["import x from 'y';", `const t = "${token}";`])]));
+    expect(result).toMatchObject({ status: "flagged", severity: "high" });
+    expect(result.evidence).toEqual([
+      { text: "GitHub token: ghp_…(44 chars)", anchor: { path: "src/client.ts", line: 2 } },
+    ]);
+    expect(JSON.stringify(result)).not.toContain(token);
+  });
+
+  it("skips lockfiles, binary files and deleted lines", () => {
+    const deleted = file("src/old.ts", [], {
+      hunks: [
+        {
+          header: "@@ -1 +0,0 @@",
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 0,
+          newLines: 0,
+          lines: [{ kind: "del", text: token, oldLine: 1 }],
+        },
+      ],
+    });
+    const result = secretsCheck.run(
+      ctx([file("package-lock.json", [token]), file("a.bin", [token], { binary: true }), deleted]),
+    );
+    expect(result.status).toBe("passed");
   });
 });
 

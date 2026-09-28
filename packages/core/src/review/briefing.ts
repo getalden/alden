@@ -10,7 +10,6 @@ import type { Check, ReviewContext } from "./types.js";
 export const NOT_CHECKED = [
   "Whether the change does what its title says (the LLM briefing is coming)",
   "Callers and code outside the diff (the code graph is coming)",
-  "New dependencies and likely secrets",
   "Changed public signatures",
 ];
 

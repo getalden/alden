@@ -1,6 +1,7 @@
 import type { AldenConfig, BriefingTarget, CheckResult } from "@alden/schema";
 import type { DiffFile } from "../diff/parse.js";
 import type { PullRequestFacts } from "../github/pull-requests.js";
+import type { ManifestSnapshot } from "./dependencies.js";
 
 /** Everything a check may look at. Checks are pure: same context, same result. */
 export interface ReviewContext {
@@ -9,6 +10,11 @@ export interface ReviewContext {
   /** The PR's facts from the queue fetch (CI, labels…). Absent for local changes. */
   pr?: PullRequestFacts;
   config: AldenConfig;
+  /**
+   * Changed manifests read in full on both sides, so dependency changes come from real parsing rather than diff lines.
+   * Absent when they couldn't be read; the dependency check then says so.
+   */
+  manifests?: ManifestSnapshot[];
 }
 
 /** What a check returns; the runner adds its id, title and heuristic flag. */

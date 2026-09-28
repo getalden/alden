@@ -1,7 +1,9 @@
 import type { Evidence } from "@alden/schema";
 import picomatch from "picomatch";
 import { addedLines, type DiffFile } from "../diff/parse.js";
-import { fileKind, sensitiveMatcher } from "../queue/files.js";
+import { fileKind, isLockfile, sensitiveMatcher } from "../queue/files.js";
+import { type DependencyChange, diffDependencies, isManifest } from "./dependencies.js";
+import { findSecrets } from "./secrets.js";
 import { type Check, type CheckOutcome, MAX_EVIDENCE } from "./types.js";
 
 const passed = (summary: string, evidence: Evidence[] = []): CheckOutcome => ({
@@ -223,5 +225,118 @@ export const sensitivePathsCheck: Check = {
   },
 };
 
+// ─── Dependencies ────────────────────────────────────────────────────────────────────────────────
+
+function describeChange(change: DependencyChange, path: string): string {
+  switch (change.kind) {
+    case "added":
+      return `added ${change.dep.name} ${change.dep.version} (${change.dep.group}) in ${path}`;
+    case "removed":
+      return `removed ${change.dep.name} (${change.dep.group}) from ${path}`;
+    case "changed":
+      return `${change.major ? "major upgrade" : "updated"} ${change.to.name} ${change.from.version} → ${change.to.version} in ${path}`;
+  }
+}
+
+/** The added line that names the package, so the evidence points at it. */
+function lineNaming(file: DiffFile | undefined, name: string): number | undefined {
+  if (!file) return undefined;
+  return addedLines(file).find((l) => l.text.includes(name))?.line;
+}
+
+export const dependenciesCheck: Check = {
+  id: "dependencies.changed",
+  title: "Dependencies",
+  heuristic: false,
+  run({ files, manifests }) {
+    const manifestFiles = files.filter((f) => isManifest(f.path));
+    if (manifestFiles.length === 0) return passed("No dependency manifests changed.");
+    if (!manifests) return skipped("Manifests changed, but Alden couldn't read them to compare dependencies.");
+
+    const evidence: Evidence[] = [];
+    const counts = { added: 0, removed: 0, updated: 0, major: 0, unreadable: 0 };
+    let risky = false;
+
+    for (const snapshot of manifests) {
+      let changes: DependencyChange[];
+      try {
+        changes = diffDependencies(snapshot);
+      } catch {
+        counts.unreadable++;
+        evidence.push({ text: `couldn't parse ${snapshot.path}`, anchor: { path: snapshot.path } });
+        continue;
+      }
+      const file = files.find((f) => f.path === snapshot.path);
+      for (const change of changes) {
+        const name = change.kind === "changed" ? change.to.name : change.dep.name;
+        const line = change.kind === "removed" ? undefined : lineNaming(file, name);
+        evidence.push({
+          text: describeChange(change, snapshot.path),
+          anchor: line ? { path: snapshot.path, line } : { path: snapshot.path },
+        });
+        if (change.kind === "added") {
+          counts.added++;
+          if (change.dep.group === "runtime" || change.dep.group === "peer") risky = true;
+        } else if (change.kind === "removed") counts.removed++;
+        else if (change.major) {
+          counts.major++;
+          risky = true;
+        } else counts.updated++;
+      }
+    }
+
+    if (evidence.length === 0) return passed("Manifests changed, but no dependencies did.");
+
+    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+    const parts = [
+      counts.added > 0 && `${plural(counts.added, "dependency")} added`.replace("dependencys", "dependencies"),
+      counts.major > 0 && plural(counts.major, "major upgrade"),
+      counts.updated > 0 && `${counts.updated} updated`,
+      counts.removed > 0 && `${counts.removed} removed`,
+      counts.unreadable > 0 && `${plural(counts.unreadable, "manifest")} unreadable`,
+    ].filter(Boolean);
+    return {
+      status: "flagged",
+      severity: risky ? "medium" : "low",
+      summary: `${parts.join(", ")}.${risky ? " New runtime packages and major upgrades deserve a look at what they bring in." : ""}`,
+      evidence: capped(evidence),
+    };
+  },
+};
+
+// ─── Secrets ─────────────────────────────────────────────────────────────────────────────────────
+
+export const secretsCheck: Check = {
+  id: "secrets.likely",
+  title: "Likely secrets",
+  heuristic: true,
+  run({ files }) {
+    const evidence: Evidence[] = [];
+    for (const file of changed(files)) {
+      if (file.binary || isLockfile(file.path)) continue;
+      for (const { line, text } of addedLines(file)) {
+        for (const finding of findSecrets(text)) {
+          evidence.push({ text: `${finding.kind}: ${finding.masked}`, anchor: { path: file.path, line } });
+        }
+      }
+    }
+    if (evidence.length === 0) return passed("No likely secrets in the added lines.");
+    return {
+      status: "flagged",
+      severity: "high",
+      summary: `${evidence.length} likely secret${evidence.length === 1 ? "" : "s"} in added lines. If real, rotate them: they're in the branch history now, even if removed later.`,
+      evidence: capped(evidence),
+    };
+  },
+};
+
 /** Every check, in the order a briefing lists them. */
-export const CHECKS: Check[] = [ciCheck, testsCheck, migrationsCheck, configCheck, sensitivePathsCheck];
+export const CHECKS: Check[] = [
+  ciCheck,
+  secretsCheck,
+  testsCheck,
+  migrationsCheck,
+  dependenciesCheck,
+  configCheck,
+  sensitivePathsCheck,
+];

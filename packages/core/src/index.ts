@@ -31,5 +31,26 @@ export {
   type Score,
 } from "./queue/rank.js";
 export { buildBriefing, NOT_CHECKED, runChecks } from "./review/briefing.js";
-export { CHECKS, ciCheck, configCheck, migrationsCheck, sensitivePathsCheck, testsCheck } from "./review/checks.js";
+export {
+  CHECKS,
+  ciCheck,
+  configCheck,
+  dependenciesCheck,
+  migrationsCheck,
+  secretsCheck,
+  sensitivePathsCheck,
+  testsCheck,
+} from "./review/checks.js";
+export {
+  type Dependency,
+  type DependencyChange,
+  type DependencyGroup,
+  diffDependencies,
+  isMajorChange,
+  isManifest,
+  type ManifestSnapshot,
+  parseManifest,
+} from "./review/dependencies.js";
+export { loadLocalManifests, loadPullRequestManifests, reverseApply } from "./review/manifests.js";
+export { findSecrets, mask, type SecretFinding, shannonEntropy } from "./review/secrets.js";
 export type { Check, CheckOutcome, ReviewContext } from "./review/types.js";
