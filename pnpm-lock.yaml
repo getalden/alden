@@ -50,6 +50,9 @@ importers:
       ignore:
         specifier: ^7.0.10
         version: 7.0.10
+      picomatch:
+        specifier: ^4.0.7
+        version: 4.0.7
       smol-toml:
         specifier: ^1.9.0
         version: 1.9.0
@@ -84,9 +87,16 @@ importers:
       ignore:
         specifier: ^7.0.10
         version: 7.0.10
+      picomatch:
+        specifier: ^4.0.7
+        version: 4.0.7
       smol-toml:
         specifier: ^1.9.0
         version: 1.9.0
+    devDependencies:
+      '@types/picomatch':
+        specifier: ^4.0.3
+        version: 4.0.3
 
   packages/schema:
     dependencies:
@@ -952,6 +962,9 @@ packages:
 
   '@types/node@26.6.3':
     resolution: {integrity: sha512-dsqMQQoeTLqu9wynDD00q573mNzso3IdQOAfHRJqLCcmCFPoGo9A1bDpUcv/9tnKpErQWv9uKeGfl37EIS02Yg==}
+
+  '@types/picomatch@4.0.3':
+    resolution: {integrity: sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ==}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
@@ -2192,6 +2205,8 @@ snapshots:
   '@types/node@26.6.3':
     dependencies:
       undici-types: 8.9.0
+
+  '@types/picomatch@4.0.3': {}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true

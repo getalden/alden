@@ -2,8 +2,7 @@
   "name": "laravel",
   "repo": "laravel/framework",
   "language": "PHP",
-  "query": "repo:laravel/framework is:pr is:open draft:false",
-  "recordedAt": "2026-09-28T18:02:40.134Z",
+  "recordedAt": "2026-09-28T18:08:16.394Z",
   "pullRequests": [
     {
       "number": 61755,
@@ -18,6 +17,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "13.x",
       "headRefName": "markdown-encoding",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "laravel/framework"
       },
@@ -88,6 +88,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "13.x",
       "headRefName": "ubuntu26.04",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "laravel/framework"
       },

@@ -41,9 +41,18 @@ describe("toFacts on every recorded PR", () => {
 
 describe("toFacts", () => {
   it("maps CI rollups", () => {
-    expect(toFacts(pr("django", 22043), outsider).ci).toBe("failure");
-    expect(toFacts(pr("nextjs", 99371), outsider).ci).toBe("pending");
-    expect(toFacts(pr("hugo", 15387), outsider).ci).toBe("success");
+    // Real CI results change between recordings, so set each rollup explicitly.
+    const withRollup = (state: string | null) => {
+      const raw = pr("hugo", 15387);
+      raw.commits = { nodes: [{ commit: { statusCheckRollup: state === null ? null : { state } } }] };
+      return toFacts(raw, outsider).ci;
+    };
+    expect(withRollup("SUCCESS")).toBe("success");
+    expect(withRollup("FAILURE")).toBe("failure");
+    expect(withRollup("ERROR")).toBe("failure");
+    expect(withRollup("PENDING")).toBe("pending");
+    expect(withRollup("EXPECTED")).toBe("pending");
+    expect(withRollup(null)).toBe("none");
   });
 
   it("spots a direct request and when it was made, ignoring login case", () => {

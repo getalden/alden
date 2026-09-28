@@ -17,6 +17,7 @@ export const PULL_REQUEST_FIELDS = `
   mergeable
   baseRefName
   headRefName
+  isCrossRepository
   repository { nameWithOwner }
   author { login }
   labels(first: 20) { nodes { name } }
@@ -55,6 +56,7 @@ export interface RawPullRequest {
   mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
   baseRefName: string;
   headRefName: string;
+  isCrossRepository: boolean;
   repository: { nameWithOwner: string };
   author: { login: string } | null;
   labels: { nodes: { name: string }[] };
@@ -98,6 +100,8 @@ export interface PullRequestFacts {
   };
   /** Changed files the viewer owns through CODEOWNERS, directly or via a team. */
   codeownedFiles: string[];
+  /** Open PRs built on top of this one (their base branch is this PR's branch). */
+  stackedPrs: number;
 }
 
 export interface Viewer {
@@ -177,5 +181,6 @@ export function toFacts(raw: RawPullRequest, viewer: Viewer, codeowners: Codeown
     codeownedFiles: files
       .map((f) => f.path)
       .filter((path) => isOwner(ownersOf(codeowners, path), viewer.login, viewer.teams)),
+    stackedPrs: 0,
   };
 }

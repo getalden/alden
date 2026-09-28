@@ -2,8 +2,7 @@
   "name": "hugo",
   "repo": "gohugoio/hugo",
   "language": "Go",
-  "query": "repo:gohugoio/hugo is:pr is:open draft:false",
-  "recordedAt": "2026-09-28T18:02:41.131Z",
+  "recordedAt": "2026-09-28T18:08:17.313Z",
   "pullRequests": [
     {
       "number": 15387,
@@ -18,6 +17,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "master",
       "headRefName": "fix/12447-invalid-percent-path",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "gohugoio/hugo"
       },
@@ -83,6 +83,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "master",
       "headRefName": "fix/content-adapter-inline-partials",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "gohugoio/hugo"
       },
@@ -143,6 +144,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "master",
       "headRefName": "fix/12560-resource-permalink",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "gohugoio/hugo"
       },
@@ -218,6 +220,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "master",
       "headRefName": "fix/13961-leaf-bundle-index-reclass",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "gohugoio/hugo"
       },

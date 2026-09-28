@@ -12,11 +12,15 @@ const FIXTURE = join(import.meta.dirname, "__fixtures__", "grafana.json");
 interface Calls {
   searches: { q: string; first: number; after: string | null }[];
   codeowners: number;
+  stackQueries: string[];
 }
 
-/** A stand-in GitHub client serving recorded PRs in pages, and a CODEOWNERS file for every repo. */
-function fakeClient(prs: RawPullRequest[], options: { teamsForbidden?: boolean } = {}) {
-  const calls: Calls = { searches: [], codeowners: 0 };
+/**
+ * A stand-in GitHub client serving recorded PRs in pages, a CODEOWNERS file for every repo, and `stacked` open PRs
+ * on top of every PR's branch.
+ */
+function fakeClient(prs: RawPullRequest[], options: { teamsForbidden?: boolean; stacked?: number } = {}) {
+  const calls: Calls = { searches: [], codeowners: 0, stackQueries: [] };
   const client = {
     request: async (route: string) => {
       if (route === "GET /user") return { data: { login: "nwrichmond" } };
@@ -38,6 +42,11 @@ function fakeClient(prs: RawPullRequest[], options: { teamsForbidden?: boolean }
             pageInfo: { hasNextPage: end < prs.length, endCursor: String(end) },
           },
         };
+      }
+      if (query.includes("pullRequests(baseRefName")) {
+        calls.stackQueries.push(query);
+        const aliases = [...query.matchAll(/\b(p\d+): repository/g)].map((m) => m[1] as string);
+        return Object.fromEntries(aliases.map((a) => [a, { pullRequests: { totalCount: options.stacked ?? 0 } }]));
       }
       calls.codeowners++;
       return { repository: { f0: { text: "* @grafana/frontend-ops\n" } } };
@@ -108,5 +117,13 @@ describe("fetchReviewQueue", () => {
     const refreshed = fakeClient(prs);
     await fetchReviewQueue(refreshed.client, { cache, refresh: true });
     expect(refreshed.calls.searches).toHaveLength(1);
+  });
+
+  it("counts PRs stacked on each PR in one query, skipping PRs from forks", async () => {
+    const mixed = prs.map((p, i) => ({ ...structuredClone(p), isCrossRepository: i === 0 }));
+    const { client, calls } = fakeClient(mixed, { stacked: 2 });
+    const queue = await fetchReviewQueue(client);
+    expect(calls.stackQueries).toHaveLength(1);
+    expect(queue.pullRequests.map((p) => p.stackedPrs)).toEqual(mixed.map((_, i) => (i === 0 ? 0 : 2)));
   });
 });

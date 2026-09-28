@@ -85,6 +85,32 @@ export async function fetchCodeowners(client: GitHubClient, repo: string, ref: s
   return [];
 }
 
+/**
+ * Counts open PRs built on top of each PR (based on its branch), in one batched query.
+ * PRs from forks are skipped: their branch lives in the fork, so a same-named branch upstream is unrelated.
+ */
+export async function fetchStackedCounts(client: GitHubClient, prs: RawPullRequest[]): Promise<number[]> {
+  const counts = prs.map(() => 0);
+  const fields = prs.flatMap((pr, i) => {
+    if (pr.isCrossRepository) return [];
+    const [owner, name] = pr.repository.nameWithOwner.split("/");
+    return [
+      `p${i}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {
+        pullRequests(baseRefName: ${JSON.stringify(pr.headRefName)}, states: OPEN) { totalCount }
+      }`,
+    ];
+  });
+  if (fields.length === 0) return counts;
+
+  const data = await client.graphql<Record<string, { pullRequests: { totalCount: number } } | null>>(
+    `query { ${fields.join("\n")} }`,
+  );
+  for (const [key, value] of Object.entries(data)) {
+    counts[Number(key.slice(1))] = value?.pullRequests.totalCount ?? 0;
+  }
+  return counts;
+}
+
 export interface QueueOptions {
   includeDrafts?: boolean;
   limit?: number;
@@ -100,7 +126,7 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
   const { includeDrafts = false, limit = 100, cache, maxAgeMs = 60_000, refresh = false } = options;
   const { viewer, warnings } = await fetchViewer(client);
 
-  const cacheKey = `queue:v1:${viewer.login}:${includeDrafts}:${limit}`;
+  const cacheKey = `queue:v2:${viewer.login}:${includeDrafts}:${limit}`;
   const cached = refresh ? undefined : await cache?.get<ReviewQueue>(cacheKey, maxAgeMs);
   if (cached) return cached;
 
@@ -119,10 +145,12 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
     }
   }
 
+  const stacked = await fetchStackedCounts(client, raw).catch(() => raw.map(() => 0));
   const pullRequests = await Promise.all(
-    raw.map(async (pr) =>
-      toFacts(pr, viewer, await (codeowners.get(`${pr.repository.nameWithOwner}@${pr.baseRefName}`) ?? [])),
-    ),
+    raw.map(async (pr, i) => ({
+      ...toFacts(pr, viewer, await (codeowners.get(`${pr.repository.nameWithOwner}@${pr.baseRefName}`) ?? [])),
+      stackedPrs: stacked[i] ?? 0,
+    })),
   );
 
   const queue: ReviewQueue = { viewer: viewer.login, fetchedAt: new Date().toISOString(), pullRequests, warnings };

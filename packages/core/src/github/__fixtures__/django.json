@@ -2,8 +2,7 @@
   "name": "django",
   "repo": "django/django",
   "language": "Python",
-  "query": "repo:django/django is:pr is:open draft:false",
-  "recordedAt": "2026-09-28T18:02:39.128Z",
+  "recordedAt": "2026-09-28T18:08:15.104Z",
   "pullRequests": [
     {
       "number": 22043,
@@ -18,6 +17,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "main",
       "headRefName": "ticket_36279_translate_url_unnamed",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "django/django"
       },
@@ -88,6 +88,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "main",
       "headRefName": "simplify-null-handling",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "django/django"
       },
@@ -170,6 +171,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "main",
       "headRefName": "ticket-23424",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "django/django"
       },
@@ -304,6 +306,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "main",
       "headRefName": "fix/signer-sep-regex-typo",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "django/django"
       },

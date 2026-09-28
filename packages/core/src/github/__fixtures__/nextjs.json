@@ -2,8 +2,7 @@
   "name": "nextjs",
   "repo": "vercel/next.js",
   "language": "TypeScript",
-  "query": "repo:vercel/next.js is:pr is:open draft:false",
-  "recordedAt": "2026-09-28T18:02:37.665Z",
+  "recordedAt": "2026-09-28T18:08:14.268Z",
   "pullRequests": [
     {
       "number": 99371,
@@ -11,13 +10,14 @@
       "url": "https://github.com/vercel/next.js/pull/99371",
       "isDraft": false,
       "createdAt": "2026-09-28T17:05:49Z",
-      "updatedAt": "2026-09-28T17:15:34Z",
+      "updatedAt": "2026-09-28T18:07:56Z",
       "additions": 11,
       "deletions": 11,
       "changedFiles": 1,
       "mergeable": "MERGEABLE",
       "baseRefName": "canary",
       "headRefName": "lubieowoce/fix-unrenamed-apis-in-tests",
+      "isCrossRepository": false,
       "repository": {
         "nameWithOwner": "vercel/next.js"
       },
@@ -58,7 +58,7 @@
           {
             "commit": {
               "statusCheckRollup": {
-                "state": "PENDING"
+                "state": "FAILURE"
               }
             }
           }
@@ -89,6 +89,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "canary",
       "headRefName": "codex/bundle-analyzer-delta-sort-followup",
+      "isCrossRepository": false,
       "repository": {
         "nameWithOwner": "vercel/next.js"
       },
@@ -171,6 +172,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "canary",
       "headRefName": "fix/wasm-code-frame-options",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "vercel/next.js"
       },
@@ -241,6 +243,7 @@
       "mergeable": "MERGEABLE",
       "baseRefName": "canary",
       "headRefName": "fix/standalone-trace-external-chunks",
+      "isCrossRepository": true,
       "repository": {
         "nameWithOwner": "vercel/next.js"
       },

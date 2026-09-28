@@ -26,6 +26,7 @@ export {
 export {
   fetchCodeowners,
   fetchReviewQueue,
+  fetchStackedCounts,
   fetchViewer,
   type QueueOptions,
   type ReviewQueue,
