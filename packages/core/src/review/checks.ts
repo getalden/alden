@@ -4,6 +4,7 @@ import { addedLines, type DiffFile } from "../diff/parse.js";
 import { fileKind, isLockfile, sensitiveMatcher } from "../queue/files.js";
 import { type DependencyChange, diffDependencies, isManifest } from "./dependencies.js";
 import { findSecrets } from "./secrets.js";
+import { type SignatureChange, signatureChanges } from "./signatures.js";
 import { type Check, type CheckOutcome, MAX_EVIDENCE } from "./types.js";
 
 const passed = (summary: string, evidence: Evidence[] = []): CheckOutcome => ({
@@ -330,12 +331,69 @@ export const secretsCheck: Check = {
   },
 };
 
+// ─── Public signatures ───────────────────────────────────────────────────────────────────────────
+
+function describeSignature(change: SignatureChange): Evidence {
+  switch (change.kind) {
+    case "changed":
+      return {
+        text: `changed: ${change.before.signature} → ${change.after.signature}`,
+        anchor: { path: change.after.path, ...(change.after.line ? { line: change.after.line } : {}) },
+      };
+    case "removed":
+      return { text: `removed: ${change.before.signature}`, anchor: { path: change.before.path } };
+    case "moved":
+      return {
+        text: `moved ${change.after.name} from ${change.before.path}`,
+        anchor: { path: change.after.path, ...(change.after.line ? { line: change.after.line } : {}) },
+      };
+    case "added":
+      return {
+        text: `added: ${change.after.signature}`,
+        anchor: { path: change.after.path, ...(change.after.line ? { line: change.after.line } : {}) },
+      };
+  }
+}
+
+export const signaturesCheck: Check = {
+  id: "signatures.changed",
+  title: "Changed public signatures",
+  heuristic: true,
+  run({ files }) {
+    const changes = signatureChanges(files);
+    const breaking = changes.filter((c) => c.kind === "changed" || c.kind === "removed");
+    const moved = changes.filter((c) => c.kind === "moved");
+    const added = changes.filter((c) => c.kind === "added");
+
+    if (breaking.length === 0 && moved.length === 0) {
+      return passed(
+        added.length > 0
+          ? `No public signatures changed; ${added.length} new public declaration${added.length === 1 ? "" : "s"}.`
+          : "No public signatures changed.",
+        capped(added.map(describeSignature)),
+      );
+    }
+    const parts = [
+      breaking.length > 0 &&
+        `${breaking.length} public signature${breaking.length === 1 ? "" : "s"} changed or removed`,
+      moved.length > 0 && `${moved.length} moved between files`,
+    ].filter(Boolean);
+    return {
+      status: "flagged",
+      severity: breaking.length > 0 ? "medium" : "low",
+      summary: `${parts.join(", ")}. Callers outside this diff may need updating; Alden can't see them until the code graph lands.`,
+      evidence: capped([...breaking, ...moved].map(describeSignature)),
+    };
+  },
+};
+
 /** Every check, in the order a briefing lists them. */
 export const CHECKS: Check[] = [
   ciCheck,
   secretsCheck,
   testsCheck,
   migrationsCheck,
+  signaturesCheck,
   dependenciesCheck,
   configCheck,
   sensitivePathsCheck,

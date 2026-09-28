@@ -39,6 +39,7 @@ export {
   migrationsCheck,
   secretsCheck,
   sensitivePathsCheck,
+  signaturesCheck,
   testsCheck,
 } from "./review/checks.js";
 export {
@@ -52,5 +53,7 @@ export {
   parseManifest,
 } from "./review/dependencies.js";
 export { loadLocalManifests, loadPullRequestManifests, reverseApply } from "./review/manifests.js";
+export { MAX_LOOK_HERE, pickLookHere } from "./review/pick.js";
 export { findSecrets, mask, type SecretFinding, shannonEntropy } from "./review/secrets.js";
+export { type Declaration, declarationIn, type SignatureChange, signatureChanges } from "./review/signatures.js";
 export type { Check, CheckOutcome, ReviewContext } from "./review/types.js";

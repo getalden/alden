@@ -1,6 +1,7 @@
 import { BRIEFING_SCHEMA_VERSION, type Briefing, type CheckResult } from "@alden/schema";
 import { fileKind, isLockfile } from "../queue/files.js";
 import { CHECKS } from "./checks.js";
+import { pickLookHere } from "./pick.js";
 import type { Check, ReviewContext } from "./types.js";
 
 /**
@@ -10,7 +11,6 @@ import type { Check, ReviewContext } from "./types.js";
 export const NOT_CHECKED = [
   "Whether the change does what its title says (the LLM briefing is coming)",
   "Callers and code outside the diff (the code graph is coming)",
-  "Changed public signatures",
 ];
 
 /** Runs every check. A check that throws is reported as skipped rather than failing the whole review. */
@@ -33,6 +33,7 @@ export function runChecks(context: ReviewContext, checks: Check[] = CHECKS): Che
 
 export function buildBriefing(context: ReviewContext, now: Date = new Date()): Briefing {
   const reviewable = context.files.filter((f) => !isLockfile(f.path));
+  const checks = runChecks(context);
   return {
     schemaVersion: BRIEFING_SCHEMA_VERSION,
     target: context.target,
@@ -54,8 +55,8 @@ export function buildBriefing(context: ReviewContext, now: Date = new Date()): B
       binary: f.binary,
       patchMissing: f.patchMissing,
     })),
-    checks: runChecks(context),
-    needsYourEyes: [],
+    checks,
+    needsYourEyes: pickLookHere(checks),
     notChecked: [
       ...NOT_CHECKED,
       ...context.files.filter((f) => f.patchMissing).map((f) => `${f.path}: too large for GitHub to send its diff`),
