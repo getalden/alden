@@ -24,13 +24,24 @@ const TESTS = picomatch(
 const DEPENDENCIES = picomatch(
   [
     "**/package.json",
-    "**/{package-lock.json,pnpm-lock.yaml,yarn.lock,bun.lockb}",
+    "**/{package-lock.json,npm-shrinkwrap.json,pnpm-lock.yaml,yarn.lock,bun.lockb,bun.lock}",
+    "**/{Cargo.toml,Cargo.lock,Gemfile,Gemfile.lock}",
     "**/{composer.json,composer.lock}",
     "**/{go.mod,go.sum}",
     "**/{requirements*.txt,pyproject.toml,poetry.lock,uv.lock,Pipfile,Pipfile.lock}",
   ],
   { dot: true },
 );
+
+const LOCKFILES = picomatch(
+  "**/{package-lock.json,npm-shrinkwrap.json,pnpm-lock.yaml,yarn.lock,bun.lockb,bun.lock,composer.lock,go.sum,poetry.lock,uv.lock,Pipfile.lock,Cargo.lock,Gemfile.lock}",
+  { dot: true },
+);
+
+/** Generated dependency lockfiles. Their diffs are machine-written, so they don't count toward a PR's size. */
+export function isLockfile(path: string): boolean {
+  return LOCKFILES(path);
+}
 
 const CODE = picomatch("**/*.{ts,tsx,js,jsx,mjs,cjs,vue,svelte,py,php,go,rb,java,kt,rs,swift,dart,cs,c,cc,cpp,h}", {
   dot: true,

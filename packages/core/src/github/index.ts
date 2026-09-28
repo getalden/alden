@@ -29,6 +29,7 @@ export {
   fetchStackedCounts,
   fetchViewer,
   type QueueOptions,
+  queueSearchQuery,
   type ReviewQueue,
   searchPullRequests,
 } from "./queue.js";

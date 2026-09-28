@@ -2,7 +2,7 @@
   "name": "nextjs",
   "repo": "vercel/next.js",
   "language": "TypeScript",
-  "recordedAt": "2026-09-28T18:08:14.268Z",
+  "recordedAt": "2026-09-28T18:23:33.459Z",
   "pullRequests": [
     {
       "number": 99371,
@@ -10,11 +10,11 @@
       "url": "https://github.com/vercel/next.js/pull/99371",
       "isDraft": false,
       "createdAt": "2026-09-28T17:05:49Z",
-      "updatedAt": "2026-09-28T18:07:56Z",
+      "updatedAt": "2026-09-28T18:15:28Z",
       "additions": 11,
       "deletions": 11,
       "changedFiles": 1,
-      "mergeable": "MERGEABLE",
+      "mergeable": "UNKNOWN",
       "baseRefName": "canary",
       "headRefName": "lubieowoce/fix-unrenamed-apis-in-tests",
       "isCrossRepository": false,
@@ -22,6 +22,7 @@
         "nameWithOwner": "vercel/next.js"
       },
       "author": {
+        "__typename": "User",
         "login": "lubieowoce"
       },
       "labels": {
@@ -58,7 +59,7 @@
           {
             "commit": {
               "statusCheckRollup": {
-                "state": "FAILURE"
+                "state": "SUCCESS"
               }
             }
           }
@@ -94,6 +95,7 @@
         "nameWithOwner": "vercel/next.js"
       },
       "author": {
+        "__typename": "User",
         "login": "wbinnssmith"
       },
       "labels": {
@@ -137,7 +139,7 @@
           {
             "commit": {
               "statusCheckRollup": {
-                "state": "PENDING"
+                "state": "FAILURE"
               }
             }
           }
@@ -177,6 +179,7 @@
         "nameWithOwner": "vercel/next.js"
       },
       "author": {
+        "__typename": "User",
         "login": "VRAJ-710"
       },
       "labels": {
@@ -240,7 +243,7 @@
       "additions": 134,
       "deletions": 4,
       "changedFiles": 8,
-      "mergeable": "MERGEABLE",
+      "mergeable": "UNKNOWN",
       "baseRefName": "canary",
       "headRefName": "fix/standalone-trace-external-chunks",
       "isCrossRepository": true,
@@ -248,6 +251,7 @@
         "nameWithOwner": "vercel/next.js"
       },
       "author": {
+        "__typename": "User",
         "login": "dmchoi77"
       },
       "labels": {

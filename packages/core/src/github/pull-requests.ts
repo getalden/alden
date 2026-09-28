@@ -1,4 +1,7 @@
+import type { CiState, PullRequestFacts } from "@alden/schema";
 import { type CodeownersRule, isOwner, ownersOf } from "./codeowners.js";
+
+export type { CiState, PullRequestFacts };
 
 /** Files fetched per PR. Larger PRs are marked `filesTruncated`. */
 export const MAX_FILES = 100;
@@ -19,7 +22,7 @@ export const PULL_REQUEST_FIELDS = `
   headRefName
   isCrossRepository
   repository { nameWithOwner }
-  author { login }
+  author { __typename login }
   labels(first: 20) { nodes { name } }
   files(first: ${MAX_FILES}) { nodes { path additions deletions } pageInfo { hasNextPage } }
   reviewRequests(first: 20) {
@@ -58,50 +61,13 @@ export interface RawPullRequest {
   headRefName: string;
   isCrossRepository: boolean;
   repository: { nameWithOwner: string };
-  author: { login: string } | null;
+  author: { __typename?: string; login: string } | null;
   labels: { nodes: { name: string }[] };
   files: { nodes: { path: string; additions: number; deletions: number }[]; pageInfo: { hasNextPage: boolean } } | null;
   reviewRequests: { nodes: { requestedReviewer: Reviewer | null }[] };
   reviews: { nodes: { author: { login: string } | null; state: string; submittedAt: string | null }[] };
   commits: { nodes: { commit: { statusCheckRollup: { state: string } | null } }[] };
   timelineItems: { nodes: ({ createdAt: string; requestedReviewer: Reviewer | null } | Record<string, never>)[] };
-}
-
-export type CiState = "success" | "failure" | "pending" | "none";
-
-/** Everything the ranking needs to know about one PR waiting on the viewer. */
-export interface PullRequestFacts {
-  repo: string;
-  number: number;
-  title: string;
-  url: string;
-  author: string | null;
-  isDraft: boolean;
-  createdAt: string;
-  updatedAt: string;
-  baseRef: string;
-  headRef: string;
-  additions: number;
-  deletions: number;
-  changedFiles: number;
-  files: { path: string; additions: number; deletions: number }[];
-  filesTruncated: boolean;
-  labels: string[];
-  ci: CiState;
-  mergeable: "mergeable" | "conflicting" | "unknown";
-  reviews: { author: string | null; state: string; submittedAt: string | null }[];
-  request: {
-    /** The viewer was asked by name. */
-    direct: boolean;
-    /** The viewer's teams that were asked, as `org/slug`. */
-    teams: string[];
-    /** When the viewer (or one of their teams) was most recently asked. */
-    requestedAt: string | null;
-  };
-  /** Changed files the viewer owns through CODEOWNERS, directly or via a team. */
-  codeownedFiles: string[];
-  /** Open PRs built on top of this one (their base branch is this PR's branch). */
-  stackedPrs: number;
 }
 
 export interface Viewer {
@@ -159,6 +125,7 @@ export function toFacts(raw: RawPullRequest, viewer: Viewer, codeowners: Codeown
     title: raw.title,
     url: raw.url,
     author: raw.author?.login ?? null,
+    authorIsBot: raw.author?.__typename === "Bot",
     isDraft: raw.isDraft,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,

@@ -2,7 +2,7 @@
   "name": "hugo",
   "repo": "gohugoio/hugo",
   "language": "Go",
-  "recordedAt": "2026-09-28T18:08:17.313Z",
+  "recordedAt": "2026-09-28T18:23:37.197Z",
   "pullRequests": [
     {
       "number": 15387,
@@ -22,6 +22,7 @@
         "nameWithOwner": "gohugoio/hugo"
       },
       "author": {
+        "__typename": "User",
         "login": "Soundcreates"
       },
       "labels": {
@@ -88,6 +89,7 @@
         "nameWithOwner": "gohugoio/hugo"
       },
       "author": {
+        "__typename": "User",
         "login": "zanarellidev"
       },
       "labels": {
@@ -149,6 +151,7 @@
         "nameWithOwner": "gohugoio/hugo"
       },
       "author": {
+        "__typename": "User",
         "login": "Soundcreates"
       },
       "labels": {
@@ -225,6 +228,7 @@
         "nameWithOwner": "gohugoio/hugo"
       },
       "author": {
+        "__typename": "User",
         "login": "arronKler"
       },
       "labels": {

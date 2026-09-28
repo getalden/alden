@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AldenConfigSchema } from "@alden/schema";
+import { AldenConfigSchema, RankedQueueSchema } from "@alden/schema";
 import { describe, expect, it } from "vitest";
 import { type PullRequestFacts, type RawPullRequest, toFacts } from "../github/pull-requests.js";
 import type { ReviewQueue } from "../github/queue.js";
@@ -17,6 +17,7 @@ function facts(overrides: Partial<PullRequestFacts> = {}): PullRequestFacts {
     title: "Change something",
     url: "https://github.com/getalden/alden/pull/1",
     author: "sam",
+    authorIsBot: false,
     isDraft: false,
     createdAt: hoursAgo(2),
     updatedAt: hoursAgo(1),
@@ -120,6 +121,57 @@ describe("rankPullRequest", () => {
   });
 });
 
+describe("size and bots", () => {
+  it("leaves lockfiles out of a PR's size", () => {
+    const r = rank(
+      facts({
+        additions: 1200,
+        deletions: 40,
+        files: [
+          { path: "src/app.ts", additions: 20, deletions: 5 },
+          { path: "src/app.test.ts", additions: 10, deletions: 0 },
+          { path: "package-lock.json", additions: 1170, deletions: 35 },
+        ],
+      }),
+    );
+    // The lockfile still counts as a sensitive path (new dependencies), just not as size.
+    expect(r.score.risk).toBe(2);
+    expect(r.reasons).toEqual(["touches package-lock.json"]);
+  });
+
+  it("fast-tracks a patch bump whose lockfile diff is big", () => {
+    const r = rank(
+      facts({
+        title: "Bump tmpl from 1.0.4 to 1.0.5",
+        additions: 491,
+        deletions: 8,
+        files: [
+          { path: "package.json", additions: 1, deletions: 1 },
+          { path: "package-lock.json", additions: 245, deletions: 4 },
+          { path: "yarn.lock", additions: 245, deletions: 3 },
+        ],
+      }),
+    );
+    expect(r).toMatchObject({ lane: "fast-track", fastTrack: "dependency patch bump" });
+  });
+
+  it("doesn't treat a bot's pile of PRs as a teammate waiting", () => {
+    expect(rank(facts({ author: "dependabot", authorIsBot: true }), 28).reasons).toEqual([]);
+
+    const ranked = rankQueue(
+      {
+        viewer: "me",
+        fetchedAt: hoursAgo(0),
+        warnings: [],
+        pullRequests: [1, 2, 3].map((n) => facts({ number: n, author: "dependabot", authorIsBot: true })),
+      },
+      config,
+      NOW,
+    );
+    expect(ranked.needsYou.every((r) => r.score.blocking === 0)).toBe(true);
+  });
+});
+
 describe("fast-track", () => {
   const docs = facts({
     additions: 12,
@@ -143,6 +195,20 @@ describe("fast-track", () => {
     expect(rank(bump)).toMatchObject({ lane: "fast-track", fastTrack: "dependency patch bump" });
   });
 
+  it("fast-tracks docs in a repo with no CI, but not tests or bumps", () => {
+    expect(rank({ ...docs, ci: "none" })).toMatchObject({ lane: "fast-track", fastTrack: "docs only" });
+
+    const tests = facts({ ci: "none", files: [{ path: "tests/test_queue.py", additions: 20, deletions: 5 }] });
+    expect(rank(tests).lane).toBe("needs-you");
+
+    const bump = facts({
+      ci: "none",
+      title: "Bump object-path from 0.11.4 to 0.11.8",
+      files: [{ path: "package-lock.json", additions: 3, deletions: 3 }],
+    });
+    expect(rank(bump).lane).toBe("needs-you");
+  });
+
   it("keeps a minor version bump in needs-you", () => {
     const bump = facts({
       title: "Bump react from 19.0.0 to 19.1.0",
@@ -153,7 +219,7 @@ describe("fast-track", () => {
 
   it.each([
     ["CI not green", { ci: "pending" as const }],
-    ["too big", { additions: 60 }],
+    ["too big", { files: [{ path: "docs/install.md", additions: 60, deletions: 3 }] }],
     ["conflicting", { mergeable: "conflicting" as const }],
     ["a draft", { isDraft: true }],
     ["truncated", { filesTruncated: true }],
@@ -167,10 +233,10 @@ describe("fast-track", () => {
   });
 
   it("respects the configured size limit", () => {
-    const bigger = { ...docs, additions: 70, deletions: 0 };
-    expect(rankPullRequest(bigger, { ...config, fastTrackMaxLines: 100 }, { now: NOW, authorQueueSize: 1 }).lane).toBe(
-      "fast-track",
-    );
+    const bigger = { ...docs, files: [{ path: "docs/install.md", additions: 70, deletions: 0 }] };
+    const context = { now: NOW, authorQueueSize: 1 };
+    expect(rankPullRequest(bigger, config, context).lane).toBe("needs-you");
+    expect(rankPullRequest(bigger, { ...config, fastTrackMaxLines: 100 }, context).lane).toBe("fast-track");
   });
 });
 
@@ -216,6 +282,8 @@ describe("rankQueue", () => {
 
     const ranked = rankQueue({ viewer: "someone", fetchedAt: hoursAgo(0), warnings: [], pullRequests }, config, NOW);
     expect(ranked.needsYou.length + ranked.fastTrack.length).toBe(pullRequests.length);
+    // What `alden queue --json` prints must match the published schema.
+    expect(RankedQueueSchema.safeParse(JSON.parse(JSON.stringify(ranked))).error).toBeUndefined();
     for (const r of [...ranked.needsYou, ...ranked.fastTrack]) {
       expect(r.score.total).toBeGreaterThanOrEqual(0);
       expect(r.reasons.every((text) => text.length > 0 && text.length < 60)).toBe(true);

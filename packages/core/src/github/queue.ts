@@ -119,18 +119,40 @@ export interface QueueOptions {
   maxAgeMs?: number;
   /** Skip the cached queue, but still store the new one. */
   refresh?: boolean;
+  /** Only these repos (`owner/name`). Combined with `orgs`, a PR matching either is included. */
+  repos?: string[];
+  /** Only repos owned by these users or organisations. */
+  orgs?: string[];
+}
+
+const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
+const OWNER_NAME = /^[\w-]+$/;
+
+/** The GitHub search query for the viewer's queue. Throws on a malformed repo or org name. */
+export function queueSearchQuery(options: Pick<QueueOptions, "includeDrafts" | "repos" | "orgs"> = {}): string {
+  const parts = ["is:pr", "is:open", "archived:false", "review-requested:@me"];
+  if (!options.includeDrafts) parts.push("draft:false");
+  for (const repo of options.repos ?? []) {
+    if (!REPO_NAME.test(repo)) throw new Error(`"${repo}" isn't a repo name. Use owner/name, e.g. getalden/alden.`);
+    parts.push(`repo:${repo}`);
+  }
+  for (const org of options.orgs ?? []) {
+    if (!OWNER_NAME.test(org)) throw new Error(`"${org}" isn't a GitHub user or organisation name.`);
+    parts.push(`org:${org}`);
+  }
+  return parts.join(" ");
 }
 
 /** Every open PR waiting on the viewer's review, directly or through a team, with the facts ranking needs. */
 export async function fetchReviewQueue(client: GitHubClient, options: QueueOptions = {}): Promise<ReviewQueue> {
-  const { includeDrafts = false, limit = 100, cache, maxAgeMs = 60_000, refresh = false } = options;
+  const { limit = 100, cache, maxAgeMs = 60_000, refresh = false } = options;
+  const q = queueSearchQuery(options);
   const { viewer, warnings } = await fetchViewer(client);
 
-  const cacheKey = `queue:v2:${viewer.login}:${includeDrafts}:${limit}`;
+  const cacheKey = `queue:v3:${viewer.login}:${limit}:${q}`;
   const cached = refresh ? undefined : await cache?.get<ReviewQueue>(cacheKey, maxAgeMs);
   if (cached) return cached;
 
-  const q = `is:pr is:open archived:false review-requested:@me${includeDrafts ? "" : " draft:false"}`;
   const raw = await searchPullRequests(client, q, limit);
 
   // One CODEOWNERS lookup per repo and base branch.

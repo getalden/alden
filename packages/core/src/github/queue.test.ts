@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { JsonCache } from "../cache.js";
 import type { GitHubClient } from "./client.js";
 import type { RawPullRequest } from "./pull-requests.js";
-import { fetchReviewQueue } from "./queue.js";
+import { fetchReviewQueue, queueSearchQuery } from "./queue.js";
 
 const FIXTURE = join(import.meta.dirname, "__fixtures__", "grafana.json");
 
@@ -125,5 +125,19 @@ describe("fetchReviewQueue", () => {
     const queue = await fetchReviewQueue(client);
     expect(calls.stackQueries).toHaveLength(1);
     expect(queue.pullRequests.map((p) => p.stackedPrs)).toEqual(mixed.map((_, i) => (i === 0 ? 0 : 2)));
+  });
+});
+
+describe("queueSearchQuery", () => {
+  it("adds repo and org filters", () => {
+    expect(queueSearchQuery({ repos: ["getalden/alden", "vercel/next.js"], orgs: ["laravel"] })).toBe(
+      "is:pr is:open archived:false review-requested:@me draft:false repo:getalden/alden repo:vercel/next.js org:laravel",
+    );
+  });
+
+  it("rejects names that would inject other search qualifiers", () => {
+    expect(() => queueSearchQuery({ repos: ["getalden"] })).toThrow(/owner\/name/);
+    expect(() => queueSearchQuery({ repos: ["a/b is:closed"] })).toThrow();
+    expect(() => queueSearchQuery({ orgs: ["acme author:me"] })).toThrow(/organisation/);
   });
 });

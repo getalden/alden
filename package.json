@@ -16,7 +16,8 @@
     "format": "biome check --write .",
     "changeset": "changeset",
     "release": "pnpm build && changeset publish",
-    "fixtures:record": "tsx scripts/record-fixtures.ts"
+    "fixtures:record": "tsx scripts/record-fixtures.ts",
+    "schema:generate": "tsx scripts/generate-schemas.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

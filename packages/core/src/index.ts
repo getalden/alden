@@ -8,7 +8,7 @@ export {
   userConfigPath,
 } from "./config.js";
 export * from "./github/index.js";
-export { type FileKind, fileKind, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";
+export { type FileKind, fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";
 export {
   type FastTrackKind,
   formatAge,
@@ -17,5 +17,6 @@ export {
   type RankedQueue,
   rankPullRequest,
   rankQueue,
+  reviewableSize,
   type Score,
 } from "./queue/rank.js";

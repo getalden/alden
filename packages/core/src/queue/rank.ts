@@ -1,39 +1,17 @@
-import type { AldenConfig } from "@alden/schema";
+import {
+  type AldenConfig,
+  type FastTrackKind,
+  type Lane,
+  QUEUE_SCHEMA_VERSION,
+  type RankedPullRequest,
+  type RankedQueue,
+  type Score,
+} from "@alden/schema";
 import type { PullRequestFacts } from "../github/pull-requests.js";
 import type { ReviewQueue } from "../github/queue.js";
-import { fileKind, isPatchBumpTitle, sensitiveMatcher } from "./files.js";
+import { fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./files.js";
 
-export type Lane = "needs-you" | "fast-track";
-export type FastTrackKind = "docs only" | "tests only" | "dependency patch bump";
-
-export interface Score {
-  risk: number;
-  wait: number;
-  blocking: number;
-  total: number;
-}
-
-export interface RankedPullRequest {
-  pr: PullRequestFacts;
-  lane: Lane;
-  /** Why it qualified for fast-track. Only set in that lane. */
-  fastTrack?: FastTrackKind;
-  score: Score;
-  /** Short, human reasons in order of weight, e.g. "waiting 3d", "touches migrations/", "no test changes". */
-  reasons: string[];
-  /** Hours since the viewer was asked (or since the PR opened, if GitHub didn't say). */
-  waitingHours: number;
-  /** CI is failing, so the next move is the author's. These sink below every other "needs you" PR. */
-  waitingOnAuthor: boolean;
-}
-
-export interface RankedQueue {
-  viewer: string;
-  fetchedAt: string;
-  needsYou: RankedPullRequest[];
-  fastTrack: RankedPullRequest[];
-  warnings: string[];
-}
+export type { FastTrackKind, Lane, RankedPullRequest, RankedQueue, Score };
 
 /** Labels that mean "someone is blocked on this now". */
 const URGENT_LABEL = /\b(hotfix|urgent|critical|blocker|p0|sev[ -]?[01])\b/i;
@@ -58,6 +36,16 @@ function topDir(path: string, matches: (p: string) => boolean): string {
     if (matches(`${dir}x`)) return dir;
   }
   return path;
+}
+
+/** Lines a reviewer actually reads: everything except lockfiles, unless the file list was cut short. */
+export function reviewableSize(pr: PullRequestFacts): { additions: number; deletions: number } {
+  if (pr.filesTruncated) return { additions: pr.additions, deletions: pr.deletions };
+  const counted = pr.files.filter((f) => !isLockfile(f.path));
+  return {
+    additions: counted.reduce((sum, f) => sum + f.additions, 0),
+    deletions: counted.reduce((sum, f) => sum + f.deletions, 0),
+  };
 }
 
 function fastTrackKind(pr: PullRequestFacts): FastTrackKind | undefined {
@@ -86,10 +74,11 @@ export function rankPullRequest(
 
   // Risk
   let risk = 0;
-  const lines = pr.additions + pr.deletions;
+  const { additions, deletions } = reviewableSize(pr);
+  const lines = additions + deletions;
   const sizeScore = pr.filesTruncated || lines > 1000 ? 3 : lines > 250 ? 2 : lines > config.fastTrackMaxLines ? 1 : 0;
   risk += sizeScore;
-  if (sizeScore >= 2) add(sizeScore * WEIGHTS.risk, `large (+${pr.additions}/-${pr.deletions})`);
+  if (sizeScore >= 2) add(sizeScore * WEIGHTS.risk, `large (+${additions}/-${deletions})`);
 
   const sensitive = pr.files.map((f) => f.path).filter(isSensitive);
   if (sensitive.length > 0) {
@@ -124,7 +113,8 @@ export function rankPullRequest(
     blocking += 2;
     add(2 * WEIGHTS.blocking, `${pr.stackedPrs} PR${pr.stackedPrs === 1 ? "" : "s"} stacked on it`);
   }
-  if (context.authorQueueSize >= 2 && pr.author) {
+  // A bot with a pile of PRs isn't a teammate waiting on you.
+  if (context.authorQueueSize >= 2 && pr.author && !pr.authorIsBot) {
     blocking += 1;
     add(WEIGHTS.blocking, `@${pr.author} has ${context.authorQueueSize} PRs waiting on you`);
   }
@@ -137,11 +127,13 @@ export function rankPullRequest(
   // Lockfiles are sensitive by default, but a patch bump is nothing but lockfile and manifest changes.
   const blockingSensitive =
     kind === "dependency patch bump" ? sensitive.filter((p) => fileKind(p) !== "dependency") : sensitive;
+  // Green CI, or no CI at all for docs: nothing can break. Tests and bumps with no CI have nothing proving they work.
+  const ciOk = pr.ci === "success" || (pr.ci === "none" && kind === "docs only");
   const fastTrack =
     kind !== undefined &&
     lines < config.fastTrackMaxLines &&
     blockingSensitive.length === 0 &&
-    pr.ci === "success" &&
+    ciOk &&
     pr.mergeable !== "conflicting" &&
     !pr.isDraft;
 
@@ -164,7 +156,7 @@ export function rankPullRequest(
 export function rankQueue(queue: ReviewQueue, config: AldenConfig["queue"], now: number = Date.now()): RankedQueue {
   const perAuthor = new Map<string, number>();
   for (const pr of queue.pullRequests) {
-    if (pr.author) perAuthor.set(pr.author, (perAuthor.get(pr.author) ?? 0) + 1);
+    if (pr.author && !pr.authorIsBot) perAuthor.set(pr.author, (perAuthor.get(pr.author) ?? 0) + 1);
   }
 
   const ranked = queue.pullRequests.map((pr) =>
@@ -178,6 +170,7 @@ export function rankQueue(queue: ReviewQueue, config: AldenConfig["queue"], now:
   const byWait = (a: RankedPullRequest, b: RankedPullRequest) => b.waitingHours - a.waitingHours;
 
   return {
+    schemaVersion: QUEUE_SCHEMA_VERSION,
     viewer: queue.viewer,
     fetchedAt: queue.fetchedAt,
     needsYou: ranked.filter((r) => r.lane === "needs-you").sort(byScore),

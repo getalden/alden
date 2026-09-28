@@ -2,7 +2,7 @@
   "name": "django",
   "repo": "django/django",
   "language": "Python",
-  "recordedAt": "2026-09-28T18:08:15.104Z",
+  "recordedAt": "2026-09-28T18:23:35.120Z",
   "pullRequests": [
     {
       "number": 22043,
@@ -22,6 +22,7 @@
         "nameWithOwner": "django/django"
       },
       "author": {
+        "__typename": "User",
         "login": "OsmnvAslan"
       },
       "labels": {
@@ -93,6 +94,7 @@
         "nameWithOwner": "django/django"
       },
       "author": {
+        "__typename": "User",
         "login": "charettes"
       },
       "labels": {
@@ -176,6 +178,7 @@
         "nameWithOwner": "django/django"
       },
       "author": {
+        "__typename": "User",
         "login": "sarahboyce"
       },
       "labels": {
@@ -311,6 +314,7 @@
         "nameWithOwner": "django/django"
       },
       "author": {
+        "__typename": "User",
         "login": "kaii-k"
       },
       "labels": {

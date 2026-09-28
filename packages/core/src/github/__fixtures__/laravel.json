@@ -2,7 +2,7 @@
   "name": "laravel",
   "repo": "laravel/framework",
   "language": "PHP",
-  "recordedAt": "2026-09-28T18:08:16.394Z",
+  "recordedAt": "2026-09-28T18:23:36.008Z",
   "pullRequests": [
     {
       "number": 61755,
@@ -22,6 +22,7 @@
         "nameWithOwner": "laravel/framework"
       },
       "author": {
+        "__typename": "User",
         "login": "valorin"
       },
       "labels": {
@@ -93,6 +94,7 @@
         "nameWithOwner": "laravel/framework"
       },
       "author": {
+        "__typename": "User",
         "login": "jnoordsij"
       },
       "labels": {
