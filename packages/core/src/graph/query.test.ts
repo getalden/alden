@@ -22,6 +22,43 @@ async function repo(files: Record<string, string>, config: Partial<Parameters<ty
 const sites = (list: { path: string; line: number; confidence: string }[]) =>
   list.map((s) => `${s.path}:${s.line}${s.confidence === "name" ? "?" : ""}`);
 
+describe("Go callers", () => {
+  const goModules = [{ path: "github.com/acme/app", dir: "" }];
+
+  it("follows package imports by alias, path name or declared name, and sees the whole package without imports", async () => {
+    const graph = await repo(
+      {
+        "internal/config/load.go": "package config\n\nfunc Load() Config { return defaults() }\n",
+        "internal/config/types.go":
+          "package config\n\ntype Config struct{}\n\nfunc defaults() Config { return Config{} }\n",
+        "internal/config/load_test.go": "package config\n\nfunc TestLoad() { Load() }\n",
+        "internal/config/ext_test.go":
+          'package config_test\n\nimport "github.com/acme/app/internal/config"\n\nfunc TestX() { config.Load() }\n',
+        "cmd/serve.go":
+          'package main\n\nimport cfg "github.com/acme/app/internal/config"\n\nfunc main() {\n\tc := cfg.Load()\n\t_ = cfg.Config{}\n\t_ = c\n}\n',
+        // The directory is "httpx", but the package declares itself "web": importers call web.X.
+        "internal/httpx/server.go": "package web\n\nfunc Serve() {}\n",
+        "cmd/web.go":
+          'package main\n\nimport (\n\t"github.com/acme/app/internal/config"\n\t"github.com/acme/app/internal/httpx"\n)\n\nfunc run() {\n\tconfig.Load()\n\tweb.Serve()\n}\n',
+        // Same name, other package, no import: never a caller.
+        "other/load.go": "package other\n\nfunc Load() {}\n\nfunc x() { Load() }\n",
+      },
+      { goModules },
+    );
+    expect(sites(graph.callersOf({ path: "internal/config/load.go", name: "Load" }))).toEqual([
+      "cmd/serve.go:6",
+      "cmd/web.go:9",
+      "internal/config/ext_test.go:5",
+      "internal/config/load_test.go:3",
+    ]);
+    expect(sites(graph.callersOf({ path: "internal/config/types.go", name: "Config" }))).toEqual([
+      "cmd/serve.go:7",
+      "internal/config/types.go:5",
+    ]);
+    expect(sites(graph.callersOf({ path: "internal/httpx/server.go", name: "Serve" }))).toEqual(["cmd/web.go:10"]);
+  });
+});
+
 describe("TypeScript callers", () => {
   it("follows named, aliased and namespace imports, ESM .js specifiers, and same-file calls", async () => {
     const graph = await repo({

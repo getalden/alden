@@ -1,5 +1,5 @@
 import type { FileSymbols } from "./extract.js";
-import type { Resolver } from "./resolve.js";
+import { dirOf, type Resolver } from "./resolve.js";
 
 /** A place that calls (or instantiates, or renders) a symbol. */
 export interface CallSite {
@@ -96,15 +96,34 @@ const MAX_REEXPORT_DEPTH = 4;
 export class CodeGraph {
   private readonly bindings = new Map<string, Binding[]>();
 
+  /** Go: a package's directory → its non-test files, which share one namespace. */
+  private readonly goPackages = new Map<string, string[]>();
+
   constructor(
     private readonly files: Map<string, FileSymbols>,
     resolve: Resolver,
   ) {
+    for (const path of files.keys()) {
+      if (!path.endsWith(".go") || path.endsWith("_test.go")) continue;
+      const dir = dirOf(path);
+      this.goPackages.set(dir, [...(this.goPackages.get(dir) ?? []), path]);
+    }
     for (const [path, symbols] of files) {
       const list: Binding[] = [];
       for (const imp of symbols.imports) {
         const target = resolve(path, imp.from);
-        if (!target) continue;
+        if (target === undefined) continue;
+        if (symbols.language === "go") {
+          // A Go import names a package: bind it to every file in the package, under the package's declared name
+          // when no alias was written (the directory name is only a convention).
+          const members = this.goPackages.get(target) ?? [];
+          const declared = members.map((m) => files.get(m)?.goPackage).find(Boolean);
+          const local = imp.implicitName && declared ? declared : imp.local;
+          for (const member of members) {
+            list.push({ local, namespace: true, target: member, imported: "*", reexport: false });
+          }
+          continue;
+        }
         // Python `import a.b` binds "a" but calls look like a.b.fn(), so the object to match is the module path.
         const pythonModule = path.endsWith(".py") && imp.imported === "*" && imp.local === imp.from.split(".")[0];
         list.push({
@@ -119,6 +138,10 @@ export class CodeGraph {
       }
       this.bindings.set(path, list);
     }
+  }
+
+  private samePackage(a: string, b: string): boolean {
+    return a.endsWith(".go") && b.endsWith(".go") && dirOf(a) === dirOf(b);
   }
 
   /** Every (file, name) under which a symbol can be imported: its own file, plus re-exports of it. */
@@ -172,7 +195,8 @@ export class CodeGraph {
       // Names in this file that mean the symbol (or its class): named imports and namespace objects.
       const names = new Set<string>();
       const namespaces = new Set<string>();
-      if (path === symbol.path) names.add(lookFor);
+      // Its own file, and in Go its whole package: files in one directory share their names without imports.
+      if (path === symbol.path || this.samePackage(path, symbol.path)) names.add(lookFor);
       for (const b of this.bindings.get(path) ?? []) {
         const names_ = exported.get(b.target);
         if (!names_) continue;
@@ -200,7 +224,8 @@ export class CodeGraph {
     }
 
     // Name-only matches: files calling a bare function of that name with no import resolving to anything we know.
-    if (!isMethod && symbol.name.length >= 4) {
+    // Not for Go: a bare name in another package is always that package's own symbol.
+    if (!isMethod && symbol.name.length >= 4 && !symbol.path.endsWith(".go")) {
       for (const [path, symbols] of this.files) {
         if (path === symbol.path || sites.some((s) => s.path === path)) continue;
         if (symbols.definitions.some((d) => d.name === symbol.name && !d.container)) continue;
