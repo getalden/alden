@@ -85,6 +85,26 @@ describe("buildPrompt", () => {
     expect(prompt).toMatchObject({ includedFiles: ["src/rank.ts"], omittedFiles: [] });
   });
 
+  it("adds callers after the diff only when the diff fitted and there's room", () => {
+    const callerSnippets =
+      "### rankQueue (src/rank.ts, modified) is used in 1 place\nsrc/cli.ts:2\n    2 > rankQueue([]);";
+    const roomy = buildPrompt({ target, files: [code], checks: [], maxInputTokens: 100_000, callerSnippets });
+    expect(roomy.user).toMatch(
+      /## Callers outside the diff\nLines marked ">" call the changed code\..*\n\n### rankQueue/s,
+    );
+    expect(roomy.user.indexOf("## Callers outside the diff")).toBeGreaterThan(roomy.user.indexOf("## Diff"));
+
+    const tight = buildPrompt({
+      target,
+      files: [code],
+      checks: [],
+      maxInputTokens: 1_750,
+      callerSnippets: `${callerSnippets}\n${"x".repeat(3_000)}`,
+    });
+    expect(tight.includedFiles).toEqual(["src/rank.ts"]);
+    expect(tight.user).not.toContain("## Callers outside the diff");
+  });
+
   it("says when there's no description", () => {
     expect(buildPrompt({ target, files: [code], checks: [], maxInputTokens: 100_000 }).user).toContain(
       "(no description)",

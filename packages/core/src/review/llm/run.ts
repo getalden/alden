@@ -38,6 +38,8 @@ export interface ModelReviewOptions {
   files: DiffFile[];
   /** A one-off effort, overriding `model.effort` from config. */
   effort?: Effort;
+  /** Call sites of changed code, from the code graph, for the prompt. */
+  callerSnippets?: string;
 }
 
 function withSection(briefing: Briefing, llm: LlmSection): Briefing {
@@ -74,6 +76,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
     files: options.files,
     checks: briefing.checks,
     maxInputTokens,
+    ...(options.callerSnippets ? { callerSnippets: options.callerSnippets } : {}),
   });
   if (prompt.includedFiles.length === 0) {
     const note =

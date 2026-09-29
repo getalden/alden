@@ -1,12 +1,15 @@
 import type { AldenConfig, Briefing } from "@alden/schema";
+import type { DiffFile } from "../diff/parse.js";
 import { fetchPullRequestDiff, readLocalDiff } from "../diff/sources.js";
 import type { GitHubClient } from "../github/client.js";
 import { PULL_REQUEST_FIELDS, type RawPullRequest, toFacts } from "../github/pull-requests.js";
 import { fetchViewer } from "../github/queue.js";
+import { checkoutPullRequest } from "../graph/checkout.js";
 import type { SpendLedger } from "../llm/ledger.js";
 import type { Effort, LlmProvider } from "../llm/provider.js";
 import { buildBriefing } from "./briefing.js";
 import type { ManifestSnapshot } from "./dependencies.js";
+import { buildGraphReview, type GraphReview } from "./graph-context.js";
 import { addModelReview } from "./llm/run.js";
 import { loadLocalManifests, loadPullRequestManifests } from "./manifests.js";
 
@@ -54,18 +57,52 @@ async function tryManifests(load: () => Promise<ManifestSnapshot[]>): Promise<Ma
 }
 
 /** A briefing for one PR on GitHub. */
+/** Whether and where to build the code graph. On by default; `cwd` must be inside a clone for PR reviews. */
+export interface GraphOptions {
+  enabled?: boolean;
+  cwd?: string;
+}
+
+type GraphResult = { graph?: GraphReview; unavailable?: string };
+
+/** Builds the graph at `root`, or explains why not, without ever failing the review. */
+async function tryGraph(
+  root: Promise<{ ok: true; root: string } | { ok: false; reason: string }>,
+  files: DiffFile[],
+): Promise<GraphResult> {
+  try {
+    const checkout = await root;
+    if (!checkout.ok) return { unavailable: checkout.reason };
+    return { graph: await buildGraphReview(checkout.root, files) };
+  } catch (error) {
+    return { unavailable: `The code graph failed to build (${(error as Error).message.slice(0, 160)}).` };
+  }
+}
+
+const graphFields = (g: GraphResult) => ({
+  ...(g.graph ? { graph: g.graph.context } : {}),
+  ...(g.unavailable ? { graphUnavailable: g.unavailable } : {}),
+});
+
+/** A briefing for one PR on GitHub. */
 export async function reviewPullRequest(
   client: GitHubClient,
   repo: string,
   number: number,
   config: AldenConfig,
   model?: WithModel,
+  graphOptions: GraphOptions = {},
 ): Promise<Briefing> {
   // The PR first, so a wrong number gets a clear message rather than the files API's bare "Not Found".
   const raw = await fetchPullRequest(client, repo, number);
   const [{ viewer }, files] = await Promise.all([fetchViewer(client), fetchPullRequestDiff(client, repo, number)]);
   const pr = toFacts(raw, viewer);
-  const manifests = await tryManifests(() => loadPullRequestManifests(client, repo, number, files));
+  const [manifests, graph] = await Promise.all([
+    tryManifests(() => loadPullRequestManifests(client, repo, number, files)),
+    graphOptions.enabled === false
+      ? Promise.resolve<GraphResult>({})
+      : tryGraph(checkoutPullRequest(graphOptions.cwd ?? process.cwd(), repo, number), files),
+  ]);
   const briefing = buildBriefing({
     target: {
       kind: "pr",
@@ -81,9 +118,16 @@ export async function reviewPullRequest(
     pr,
     config,
     ...(manifests ? { manifests } : {}),
+    ...graphFields(graph),
   });
   if (!model) return briefing;
-  return addModelReview(briefing, { ...model, config, files, description: raw.body });
+  return addModelReview(briefing, {
+    ...model,
+    config,
+    files,
+    description: raw.body,
+    ...(graph.graph?.callerSnippets ? { callerSnippets: graph.graph.callerSnippets } : {}),
+  });
 }
 
 /** A briefing for everything that differs from HEAD in the working tree around `cwd`. */
@@ -91,15 +135,27 @@ export async function reviewLocalChanges(
   config: AldenConfig,
   cwd: string = process.cwd(),
   model?: WithModel,
+  graphOptions: GraphOptions = {},
 ): Promise<Briefing> {
   const { repoRoot, branch, files } = await readLocalDiff(cwd);
-  const manifests = await tryManifests(() => loadLocalManifests(repoRoot, files));
+  const [manifests, graph] = await Promise.all([
+    tryManifests(() => loadLocalManifests(repoRoot, files)),
+    graphOptions.enabled === false || files.length === 0
+      ? Promise.resolve<GraphResult>({})
+      : tryGraph(Promise.resolve({ ok: true as const, root: repoRoot }), files),
+  ]);
   const briefing = buildBriefing({
     target: { kind: "local", repoRoot, branch },
     files,
     config,
     ...(manifests ? { manifests } : {}),
+    ...graphFields(graph),
   });
   if (!model) return briefing;
-  return addModelReview(briefing, { ...model, config, files });
+  return addModelReview(briefing, {
+    ...model,
+    config,
+    files,
+    ...(graph.graph?.callerSnippets ? { callerSnippets: graph.graph.callerSnippets } : {}),
+  });
 }

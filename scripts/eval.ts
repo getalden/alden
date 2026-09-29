@@ -1,23 +1,26 @@
 /**
  * Replays the recorded PRs through the real model review and measures it:
- * `pnpm eval [--model opus] [--effort medium] [--only nextjs] [--yes]`.
+ * `pnpm eval [--model opus] [--effort medium] [--only nextjs] [--clones ~/src] [--yes]`.
  *
  * Without --yes it only prints what the run could cost. With --yes it calls the configured provider (spending against
  * your caps and ledger like any review) and writes eval/results/<time>-<model>.json. Measures what needs no labels
  * (usable-output rate, findings dropped for bad locations, cost, time, verdicts) plus eval/expectations.json.
  */
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import picomatch from "picomatch";
 import {
   addModelReview,
   buildBriefing,
+  buildGraphReview,
+  checkoutPullRequest,
   type Effort,
   estimateTokens,
   fromRestFile,
   loadConfig,
   MAX_OUTPUT_TOKENS,
   type RawPullRequest,
+  type ReviewContext,
   renderFileDiff,
   SpendLedger,
   selectProvider,
@@ -68,7 +71,7 @@ const cases = readdirSync(FIXTURES)
         >[0][]
       ).map(fromRestFile);
       const pr = toFacts(raw, { login: "eval", teams: new Set() });
-      const briefing = buildBriefing({
+      const context: ReviewContext = {
         target: {
           kind: "pr",
           repo: pr.repo,
@@ -83,8 +86,20 @@ const cases = readdirSync(FIXTURES)
         pr,
         config,
         manifests: [],
-      });
-      return { id: `${pr.repo}#${pr.number}`, briefing, files, description: raw.body ?? "" };
+      };
+      const briefing = buildBriefing(context);
+      return {
+        id: `${pr.repo}#${pr.number}`,
+        context,
+        name: fixture.name,
+        repo: pr.repo,
+        number: pr.number,
+        raw,
+        pr,
+        briefing,
+        files,
+        description: raw.body ?? "",
+      };
     });
   });
 
@@ -120,16 +135,30 @@ interface EvalRow {
   titles: string[];
 }
 
+// With --clones <dir>, recorded repos cloned there (dir/django, dir/hugo, …) get the code graph, like a real review.
+const clones = flag("--clones");
+async function withGraph(c: (typeof cases)[number]) {
+  const clone = clones ? join(clones, c.name) : undefined;
+  if (!clone || !existsSync(clone)) return { briefing: c.briefing, callerSnippets: undefined };
+  const checkout = await checkoutPullRequest(clone, c.repo, c.number);
+  if (!checkout.ok) return { briefing: c.briefing, callerSnippets: undefined };
+  const graph = await buildGraphReview(checkout.root, c.files);
+  const briefing = buildBriefing({ ...c.context, graph: graph.context });
+  return { briefing, callerSnippets: graph.callerSnippets };
+}
+
 const ledger = new SpendLedger();
 const rows: EvalRow[] = [];
 for (const c of cases) {
   const started = Date.now();
-  const result: Briefing = await addModelReview(c.briefing, {
+  const { briefing: base, callerSnippets } = await withGraph(c);
+  const result: Briefing = await addModelReview(base, {
     provider,
     config,
     ledger,
     files: c.files,
     description: c.description,
+    ...(callerSnippets ? { callerSnippets } : {}),
     ...(effort ? { effort } : {}),
   });
   const seconds = (Date.now() - started) / 1000;

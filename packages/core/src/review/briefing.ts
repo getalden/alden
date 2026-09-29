@@ -1,6 +1,7 @@
 import { BRIEFING_SCHEMA_VERSION, type Briefing, type CheckResult } from "@alden/schema";
 import { fileKind, isLockfile } from "../queue/files.js";
 import { CHECKS } from "./checks.js";
+import { filesOutsideGraph } from "./graph-context.js";
 import { pickLookHere } from "./pick.js";
 import type { Check, ReviewContext } from "./types.js";
 
@@ -12,6 +13,22 @@ export const NOT_CHECKED = [
   "Whether the change does what its title says (only the model can judge that; see `alden review --help`)",
   "Callers and code outside the diff (the code graph is coming)",
 ];
+
+/** What the code graph couldn't cover in this review, in place of the generic "callers" line when it ran. */
+function notCheckedFor(context: ReviewContext): string[] {
+  const [titleLine, callersLine] = NOT_CHECKED as [string, string];
+  if (!context.graph) return [titleLine, callersLine];
+  const outside = filesOutsideGraph(context.files);
+  const more = outside.length > 3 ? ` and ${outside.length - 3} more` : "";
+  return [
+    titleLine,
+    ...(outside.length > 0
+      ? [`Callers of changes in ${outside.slice(0, 3).join(", ")}${more} (Go and PHP support is coming)`]
+      : []),
+    ...(context.graph.complete ? [] : ["Some callers: indexing the repo ran out of time"]),
+    "Uses of changed types and interfaces (the compiler catches those)",
+  ];
+}
 
 /** Runs every check. A check that throws is reported as skipped rather than failing the whole review. */
 export function runChecks(context: ReviewContext, checks: Check[] = CHECKS): CheckResult[] {
@@ -58,7 +75,7 @@ export function buildBriefing(context: ReviewContext, now: Date = new Date()): B
     checks,
     needsYourEyes: pickLookHere(checks),
     notChecked: [
-      ...NOT_CHECKED,
+      ...notCheckedFor(context),
       ...context.files.filter((f) => f.patchMissing).map((f) => `${f.path}: too large for GitHub to send its diff`),
     ],
   };

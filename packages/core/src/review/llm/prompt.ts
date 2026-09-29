@@ -32,11 +32,11 @@ export type LlmOutput = z.infer<typeof LlmOutputSchema>;
  */
 export const SYSTEM_PROMPT = `You help a software engineer review a code change. They will read your notes before, or instead of, the whole diff, so their attention is the scarce resource.
 
-You receive the change's title and description, deterministic check results that Alden already computed, and the diff. Diff lines are prefixed with their line number in the new file; deleted lines have no number.
+You receive the change's title and description, deterministic check results that Alden already computed, the diff, and sometimes the places outside the diff that call the changed code. Diff lines are prefixed with their line number in the new file; deleted lines have no number.
 
 Report every issue a careful reviewer would want to know about: bugs, behaviour changes, missing edge cases, risky operations, security concerns, and anything that doesn't match what the title and description claim. Include concerns you are unsure about, marked low severity; Alden ranks and filters them, so do not hold back to keep the list short. Do not repeat a check result unless you add something it missed. In particular, never report that CI is failing or pending: Alden already shows that and the author has to act on it. If the diff reveals a likely cause of a CI failure, report the cause itself. When the same change repeats across many files, report it once with every location in its anchors.
 
-Anchor each finding to file paths from the diff and to new-file line numbers exactly as shown. Omit the line for a whole-file concern. Never invent a path or line.
+Anchor each finding to file paths from the diff and to new-file line numbers exactly as shown. If a caller outside the diff will break or behave differently, anchor the finding to the changed code in the diff and name the caller's file and line in the detail. Omit the line for a whole-file concern. Never invent a path or line.
 
 Judge whether the change does what its title and description say: "yes", "partly", "no", or "unclear" when there is no meaningful description. Write plainly, with no preamble and no praise.`;
 
@@ -92,6 +92,8 @@ export interface PromptInput {
   checks: CheckResult[];
   /** Input-token allowance for the whole request (system + user), e.g. from the budget. */
   maxInputTokens: number;
+  /** Call sites of changed code with a few lines around each, from the code graph. Added only if there's room. */
+  callerSnippets?: string;
 }
 
 /**
@@ -137,9 +139,14 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
     omitted.length > 0
       ? `\n\n## Not shown (over budget)\n${omitted.map((p) => `- ${p}`).join("\n")}\nDon't make findings about these files.`
       : "";
+  // Callers go after the diff, only when the whole diff fitted and there's room left: the diff matters more.
+  const callers =
+    input.callerSnippets && omitted.length === 0 && used + tokens(input.callerSnippets) + 50 <= input.maxInputTokens
+      ? `\n\n## Callers outside the diff\nLines marked ">" call the changed code. Check they still work with the change.\n\n${input.callerSnippets}`
+      : "";
   return {
     system: SYSTEM_PROMPT,
-    user: `${preamble}\n\n${inOrder.map(renderFileDiff).join("\n\n")}${omittedNote}`,
+    user: `${preamble}\n\n${inOrder.map(renderFileDiff).join("\n\n")}${omittedNote}${callers}`,
     includedFiles: inOrder.map((f) => f.path),
     omittedFiles: omitted,
   };

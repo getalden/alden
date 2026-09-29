@@ -19,6 +19,8 @@ export interface ReviewContext {
   manifests?: ManifestSnapshot[];
   /** The code graph's view of the change, when the repo could be indexed. */
   graph?: GraphContext;
+  /** Why there's no graph (e.g. not run from a clone of the PR's repo), shown by the callers check. */
+  graphUnavailable?: string;
 }
 
 /** Changed public symbols and who calls them, worked out before the checks run. */

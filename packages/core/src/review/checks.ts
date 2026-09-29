@@ -381,7 +381,7 @@ export const signaturesCheck: Check = {
     return {
       status: "flagged",
       severity: breaking.length > 0 ? "medium" : "low",
-      summary: `${parts.join(", ")}. Callers outside this diff may need updating; Alden can't see them until the code graph lands.`,
+      summary: `${parts.join(", ")}. Callers outside this diff may need updating; see "Callers outside the diff" for where they are.`,
       evidence: capped([...breaking, ...moved].map(describeSignature)),
     };
   },
@@ -393,9 +393,13 @@ export const callersCheck: Check = {
   id: "callers.outside",
   title: "Callers outside the diff",
   heuristic: true,
-  run({ files, graph }) {
-    if (!graph)
-      return skipped("The code graph wasn't available for this review, so callers outside the diff weren't checked.");
+  run({ files, graph, graphUnavailable }) {
+    if (!graph) {
+      return skipped(
+        graphUnavailable ??
+          "The code graph wasn't available for this review, so callers outside the diff weren't checked.",
+      );
+    }
     const publicChanges = graph.changes.filter((c) => c.exported && c.change !== "added");
     if (publicChanges.length === 0) return passed("No public functions, classes or methods changed.");
 

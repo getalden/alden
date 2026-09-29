@@ -25,6 +25,7 @@ export {
   loadChangeSymbols,
   type SymbolChange,
 } from "./graph/changes.js";
+export { type Checkout, checkoutPullRequest, repoFromRemote } from "./graph/checkout.js";
 export {
   type Definition,
   type DefinitionKind,
@@ -104,6 +105,7 @@ export {
   type ManifestSnapshot,
   parseManifest,
 } from "./review/dependencies.js";
+export { buildGraphReview, filesOutsideGraph, type GraphReview } from "./review/graph-context.js";
 export { mergeLookHere } from "./review/llm/merge.js";
 export {
   type BuiltPrompt,
@@ -118,7 +120,13 @@ export { addModelReview, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, type ModelReviewOp
 export { type ValidatedFindings, validateFindings } from "./review/llm/validate.js";
 export { loadLocalManifests, loadPullRequestManifests, reverseApply } from "./review/manifests.js";
 export { MAX_LOOK_HERE, pickLookHere } from "./review/pick.js";
-export { fetchPullRequest, reviewLocalChanges, reviewPullRequest, type WithModel } from "./review/run.js";
+export {
+  fetchPullRequest,
+  type GraphOptions,
+  reviewLocalChanges,
+  reviewPullRequest,
+  type WithModel,
+} from "./review/run.js";
 export { findSecrets, mask, type SecretFinding, shannonEntropy } from "./review/secrets.js";
 export { type Declaration, declarationIn, type SignatureChange, signatureChanges } from "./review/signatures.js";
 export { type Check, type CheckOutcome, type GraphContext, type ReviewContext, symbolKey } from "./review/types.js";

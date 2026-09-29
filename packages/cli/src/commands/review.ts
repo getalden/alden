@@ -24,6 +24,8 @@ interface ReviewOptions {
   json?: boolean;
   /** Commander sets this to false for --no-llm. */
   llm: boolean;
+  /** Commander sets this to false for --no-graph. */
+  graph: boolean;
   model?: string;
   effort?: string;
 }
@@ -36,6 +38,7 @@ export function registerReviewCommand(program: Command): void {
     .description("Brief you on a PR, or on your local changes when you don't name one.")
     .argument("[pr]", "a PR URL, owner/repo#123, or a # from `alden queue`")
     .option("--no-llm", "run only the deterministic checks, without asking a model")
+    .option("--no-graph", "skip the code graph (callers outside the diff)")
     .option("--model <name>", "use this model for this review (e.g. opus), instead of your configured one")
     .option("--effort <level>", "how hard the model thinks: low, medium, high, xhigh or max (default: the model's own)")
     .option("--json", "print the briefing as JSON (see packages/schema/json)")
@@ -60,7 +63,7 @@ export function registerReviewCommand(program: Command): void {
       let source: TokenSource | undefined;
       try {
         if (prArg === undefined) {
-          briefing = await reviewLocalChanges(config, process.cwd(), model);
+          briefing = await reviewLocalChanges(config, process.cwd(), model, { enabled: options.graph });
         } else {
           const last = await new JsonCache().get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
           const ref = parsePrRef(prArg, last?.urls);
@@ -70,7 +73,9 @@ export function registerReviewCommand(program: Command): void {
             program.error("Not signed in. Run `alden auth login`.");
           }
           source = resolved.source;
-          briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model);
+          briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model, {
+            enabled: options.graph,
+          });
         }
       } catch (error) {
         progress.stop();
