@@ -22,7 +22,16 @@ export interface GenerateResult<T> {
 }
 
 /** Why a call failed, in terms a user can act on. */
-export type LlmErrorKind = "auth" | "rate_limit" | "overloaded" | "bad_request" | "not_found" | "network" | "other";
+export type LlmErrorKind =
+  | "auth"
+  | "rate_limit"
+  | "overloaded"
+  | "bad_request"
+  | "not_found"
+  | "network"
+  /** Something to install or configure; the message says what. */
+  | "setup"
+  | "other";
 
 export class LlmError extends Error {
   constructor(

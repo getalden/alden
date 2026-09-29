@@ -9,3 +9,6 @@ coverage/
 # Copied into the published CLI package by its prepack script
 packages/cli/README.md
 packages/cli/LICENSE
+
+# Eval runs (real model output; keep locally, share deliberately)
+eval/results/

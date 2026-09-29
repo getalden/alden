@@ -2,7 +2,7 @@
   "name": "nextjs",
   "repo": "vercel/next.js",
   "language": "TypeScript",
-  "recordedAt": "2026-09-28T18:35:05.974Z",
+  "recordedAt": "2026-09-29T10:33:03.753Z",
   "pullRequests": [
     {
       "number": 99371,
@@ -75,7 +75,8 @@
             }
           }
         ]
-      }
+      },
+      "body": "#99241 added some new snapshots mentioning `unstable_{prefetch,navigation}`. the prefix was later dropped in #99171, which did not include the new tests in the rename (it was created before they existed) and was merged w/o a rebase. as a result the snapshots added in #99241 ended up being stale and broke `canary`"
     },
     {
       "number": 99369,
@@ -83,11 +84,11 @@
       "url": "https://github.com/vercel/next.js/pull/99369",
       "isDraft": false,
       "createdAt": "2026-09-28T16:47:37Z",
-      "updatedAt": "2026-09-28T18:29:31Z",
+      "updatedAt": "2026-09-28T19:01:30Z",
       "additions": 33,
       "deletions": 30,
       "changedFiles": 1,
-      "mergeable": "MERGEABLE",
+      "mergeable": "UNKNOWN",
       "baseRefName": "canary",
       "headRefName": "codex/bundle-analyzer-delta-sort-followup",
       "isCrossRepository": false,
@@ -139,7 +140,7 @@
           {
             "commit": {
               "statusCheckRollup": {
-                "state": "PENDING"
+                "state": "SUCCESS"
               }
             }
           }
@@ -159,7 +160,8 @@
             "requestedReviewer": null
           }
         ]
-      }
+      },
+      "body": "## Summary\n\nFollow-up to #98539 addressing [Luke’s `toSorted()` feedback](https://github.com/vercel/next.js/pull/98539#discussion_r4098899189), [signed Δ ordering feedback](https://github.com/vercel/next.js/pull/98539#discussion_r4098962512), and [locale-aware name tie-breaker feedback](https://github.com/vercel/next.js/pull/99369#discussion_r4125394575).\n\nThe source table sorts individual rows and package aggregates by signed Δ in either direction; identical rows and groups remain last for every column. The separate impact-ranked route picker is unchanged, and table sorting uses `toSorted()` to preserve input arrays. Numeric ties now use the same locale-aware name ordering as the Name column.\n\nIn compare mode the table defaults to **Changes**, showing added, removed, and changed sources; **All** opts into unchanged sources. The footer still reports full build totals. Single-build mode remains unfiltered because its rows are all compared to themselves.\n\n## Verification\n\n- Focused filter checks: 6/6 passed (baseline 2/6).\n- Focused sorting checks: 12/12 passed (two new comparator cases failed before the fix).\n- `pnpm exec prettier --check apps/bundle-analyzer/components/diff-table.tsx`\n- `pnpm exec eslint --config eslint.config.mjs apps/bundle-analyzer/components/diff-table.tsx`\n- `pnpm exec tsc -p apps/bundle-analyzer/tsconfig.json --noEmit`\n\n<!-- NEXT_JS_LLM -->\n\n<!-- fleet d2af60a7-2332-4bf1-a425-0329992b44dd -->"
     },
     {
       "number": 99367,
@@ -167,7 +169,7 @@
       "url": "https://github.com/vercel/next.js/pull/99367",
       "isDraft": false,
       "createdAt": "2026-09-28T15:35:17Z",
-      "updatedAt": "2026-09-28T16:59:25Z",
+      "updatedAt": "2026-09-29T06:37:10Z",
       "additions": 63,
       "deletions": 4,
       "changedFiles": 4,
@@ -231,7 +233,8 @@
       },
       "timelineItems": {
         "nodes": []
-      }
+      },
+      "body": "### What?\r\nNormalizes `codeFrameColumns` options in `@next/swc-wasm-nodejs` and SWC WASM bindings to match the tolerant NAPI options contract.\r\n\r\n### Why?\r\nNext.js callers pass `{ color: boolean }` (e.g. `getOriginalCodeFrame` in dev overlay, `diagnosticFormatter`, `load-jsconfig`) and `{ maxWidth: undefined }` (when `stdout` is not a TTY). \r\n\r\nWhile the native NAPI binding normalizes these via `Either<NapiCodeFrameColorMode, bool>` and `.unwrap_or()`, the WASM binding previously deserialized options directly into `next_code_frame::CodeFrameOptions`.\r\n\r\nBecause `CodeFrameOptions` requires `CodeFrameColorMode` enum and a numeric `usize`, every code frame on the WASM fallback path threw deserialization errors:\r\n- `invalid type: boolean false, expected enum CodeFrameColorMode`\r\n- `invalid type: unit value, expected usize`\r\n\r\nThis caused the dev overlay and server console to lose the actual runtime/build errors.\r\n\r\n### How?\r\n1. Added `WasmCodeFrameOptions` in `crates/wasm/src/lib.rs` mirroring `NapiCodeFrameOptions`, supporting untagged boolean/enum color modes and optional fields with defaults.\r\n2. Wrapped `options` with `removeUndefined(options)` in `packages/next/src/build/swc/index.ts` for consistency with all other WASM bindings.\r\n3. Guarded `process.stdout?.columns` in `packages/next/src/shared/lib/errors/code-frame.ts` to avoid assigning `undefined` when stdout is not a TTY."
     },
     {
       "number": 99363,
@@ -323,7 +326,8 @@
       },
       "timelineItems": {
         "nodes": []
-      }
+      },
+      "body": "## What?\r\n\r\nFix standalone output file tracing for external packages referenced only from route-owned server chunks.\r\n\r\n## Why?\r\n\r\nWhen a Node.js server route dynamically imports a package listed in `serverExternalPackages`, Rspack can emit the external import in an async or shared file under `.next/server/chunks`.\r\n\r\nNext.js intentionally excludes server chunks from each route's trace so unrelated chunks are not copied into every route. However, the server chunks selected for a route by `TraceEntryPointsPlugin` can still be the only parents of the external package in the NFT reasons graph. If those chunks are ignored during the route trace, the package is also treated as ignored and omitted from the route's `.nft.json` file. The standalone output then contains the chunk but not the package, causing a runtime `MODULE_NOT_FOUND` error.\r\n\r\nThis behavior was reported with the Next.js 16.3.0 and `next-rspack` 16.3.0 combination when an external package was loaded through a dynamic import. The regression fixture in this change is verified against the current checkout, which uses `next@16.4.0-canary.51` and `@next/rspack@16.4.0-canary.51`.\r\n\r\nThis is related to the Turbopack external-tracing regression reported in [#95816](https://github.com/vercel/next.js/issues/95816) and addressed for a related server-action path by [#95824](https://github.com/vercel/next.js/pull/95824). The Rspack standalone behavior has also been reported in [#77800](https://github.com/vercel/next.js/discussions/77800). This change fixes the shared route-tracing logic in Next.js; it does not change `@rspack/core`.\r\n\r\n## How?\r\n\r\n- Build a route-specific set from the server files selected by `TraceEntryPointsPlugin`.\r\n- Allow those route-owned server chunks to act as trace parents while continuing to exclude unrelated chunks.\r\n- Keep the ignore-result cache local to each route so one route's chunk graph cannot affect another route's trace.\r\n- Normalize path separators before comparing chunk paths.\r\n- Add a standalone regression fixture that dynamically imports `yocto-queue`, verifies the generated route traces, removes the original project files and dependencies, and starts the standalone server.\r\n\r\n## Verification\r\n\r\nAll of the following checks passed:\r\n\r\n- `HEADLESS=true pnpm test-start-rspack test/production/standalone-mode/dynamic-import-externals/dynamic-import-externals.test.ts --watchman=false`\r\n- `HEADLESS=true pnpm test-start-webpack test/production/standalone-mode/dynamic-import-externals/dynamic-import-externals.test.ts --watchman=false`\r\n- `HEADLESS=true pnpm test-start-rspack test/e2e/app-dir/app/standalone.test.ts --watchman=false`\r\n- `pnpm --filter=next build`\r\n- `pnpm --filter=next types`"
     }
   ]
 }

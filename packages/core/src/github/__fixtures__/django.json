@@ -2,7 +2,7 @@
   "name": "django",
   "repo": "django/django",
   "language": "Python",
-  "recordedAt": "2026-09-28T18:35:08.838Z",
+  "recordedAt": "2026-09-29T10:33:06.781Z",
   "pullRequests": [
     {
       "number": 22043,
@@ -74,7 +74,8 @@
       },
       "timelineItems": {
         "nodes": []
-      }
+      },
+      "body": "#### Trac ticket number\n\nticket-36279\n\n#### Branch description\n\n`translate_url()` builds the name to reverse from `match.url_name`, so a translated pattern without a `name` (or an unnamed pattern inside a namespaced `include()`, which ends up as `\"account:None\"`) is never translated and `set_language()` redirects to a 404.\n\nReversing by the view callable, as in the earlier PR #19327, is ambiguous: when the same view is used by several unnamed patterns (as in `tests/i18n/patterns/urls/default.py`, where one `view` serves every pattern), `reverse(match.func)` picks whichever candidate comes first and silently returns a different URL. This PR instead reverses the exact pattern that matched: the last entry of `match.tried` is the chain of resolvers ending with the matching `URLPattern`, so a throwaway resolver tree containing only that chain is built and the view is reversed against it. Named patterns keep the existing code path.\n\nTests use the case from comment:2 on the ticket, with the unnamed pattern placed between named ones so that the test also fails with the reverse-by-callable approach (it returns `/nl/gebruikers/`), plus an unnamed pattern inside the namespaced include.\n\nOne design note for reviewers: this relies on `match.tried[-1]` being the successful chain, which `URLResolver.resolve()` guarantees but the docs for `tried` don't spell out. If you'd rather have an explicit attribute on `ResolverMatch`, I'm happy to change the approach.\n\n#### AI Assistance Disclosure (REQUIRED)\n- [ ] **No AI tools were used** in preparing this PR.\n- [x] **If AI tools were used**, I have disclosed which ones, and fully reviewed and verified their output.\n\nClaude (Claude Code) was used to investigate the ambiguity of the reverse-by-callable approach and to draft the fix and tests; I reviewed the code and verified the tests locally, including that the new assertions fail on `main` and with the reverse-by-callable approach.\n\n#### Checklist\n- [x] This PR follows the [contribution guidelines](https://docs.djangoproject.com/en/stable/internals/contributing/writing-code/submitting-patches/).\n- [x] This PR **does not** disclose a security vulnerability (see [vulnerability reporting](https://docs.djangoproject.com/en/stable/internals/security/)).\n- [x] This PR targets the `main` branch.\n- [x] The commit message is written in past tense, mentions the ticket number (if applicable), and ends with a period (see [guidelines](https://docs.djangoproject.com/en/dev/internals/contributing/committing-code/#committing-guidelines)).\n- [x] I have not requested, and will not request, an automated AI review for this PR.\n\n- [x] I have checked the \"Has patch\" ticket flag in the Trac system.\n- [x] I have added or updated relevant tests.\n- [ ] I have added or updated relevant docs, including release notes if applicable.\n- [ ] I have attached screenshots in both light and dark modes for any UI changes.\n"
     },
     {
       "number": 22041,
@@ -158,7 +159,8 @@
             }
           }
         ]
-      }
+      },
+      "body": "#### Trac ticket number\r\nticket-37372\r\n\r\n#### Branch description\r\n\r\nReorganizing its logic to branch of `lookup_type` at an earlier layer should simplify its upcoming adjustment to adequately handle `__in=[None]` lookups (see #22040) and make it easier to reason about replacing it by `Expression` flags and methods #16817.\r\n\r\n#### AI Assistance Disclosure (REQUIRED)\r\n<!-- Select exactly ONE of the following: -->\r\n- [x] **No AI tools were used** in preparing this PR.\r\n- [ ] **If AI tools were used**, I have disclosed which ones, and fully reviewed and verified their output.\r\n<!-- If AI tools were used, provide which tools were used here. -->\r\n\r\n#### Checklist\r\n- [x] This PR follows the [contribution guidelines](https://docs.djangoproject.com/en/stable/internals/contributing/writing-code/submitting-patches/).\r\n- [x] This PR **does not** disclose a security vulnerability (see [vulnerability reporting](https://docs.djangoproject.com/en/stable/internals/security/)).\r\n- [x] This PR targets the `main` branch. <!-- Backports will be evaluated and done by mergers, when necessary. -->\r\n- [x] The commit message is written in past tense, mentions the ticket number (if applicable), and ends with a period (see [guidelines](https://docs.djangoproject.com/en/dev/internals/contributing/committing-code/#committing-guidelines)).\r\n- [x] I have not requested, and will not request, an automated AI review for this PR. <!-- You are welcome to do so in your own fork. -->\r\n"
     },
     {
       "number": 22039,
@@ -294,7 +296,8 @@
       },
       "timelineItems": {
         "nodes": []
-      }
+      },
+      "body": "#### Trac ticket number\r\n<!-- Replace XXXXX with the corresponding Trac ticket number. -->\r\n<!-- Or delete the line and write \"N/A - typo\" for typo fixes. -->\r\n\r\nticket-23424\r\n\r\n#### Branch description\r\n<!-- Provide a concise overview of the issue or rationale behind the proposed changes. Minimum five words. -->\r\n\r\nThis is cherry-picked from https://github.com/django/django/pull/21982 "
     },
     {
       "number": 22038,
@@ -361,7 +364,8 @@
       },
       "timelineItems": {
         "nodes": []
-      }
+      },
+      "body": "#### Trac ticket number\n\nticket-37359\n\n#### Branch description\n\nFixes an `A-z` character-range regex typo in `Signer` separator validation.\n\n#### AI Assistance Disclosure (REQUIRED)\n- [ ] **No AI tools were used** in preparing this PR.\n- [x] **If AI tools were used**, I have disclosed which ones, and fully reviewed and verified their output.\n\nAI tools were used: Claude Code (Anthropic) was used to draft the patch, test, and PR description. I personally verified the fix myself: I confirmed the ASCII-range typo interactively in a Python shell (as shown below), reviewed the diff line by line, and ran the test suite (`tests/signing/tests.py`) locally before submitting. This is not a blind AI-generated submission — the analysis and verification are my own.\n\n#### Checklist\n- [x] This PR follows the [contribution guidelines](https://docs.djangoproject.com/en/stable/internals/contributing/writing-code/submitting-patches/).\n- [x] This PR **does not** disclose a security vulnerability (see [vulnerability reporting](https://docs.djangoproject.com/en/stable/internals/security/)).\n- [x] This PR targets the `main` branch.\n- [x] The commit message is written in past tense, mentions the ticket number (if applicable), and ends with a period (see [guidelines](https://docs.djangoproject.com/en/dev/internals/contributing/committing-code/#committing-guidelines)).\n- [x] I have not requested, and will not request, an automated AI review for this PR.\n\n- [x] I have checked the \"Has patch\" ticket flag in the Trac system.\n- [x] I have added or updated relevant tests.\n- [x] I have added or updated relevant docs, including release notes if applicable.\n- [ ] I have attached screenshots in both light and dark modes for any UI changes.\n\n---\n\n`_SEP_UNSAFE` in `django/core/signing.py` uses the character class `[A-z0-9-_=]`. The `A-z` range is the classic ASCII-range regex typo: it spans `A` (0x41) through `z` (0x7A) inclusive, which sweeps in six punctuation characters that sit between `Z` and `a` in ASCII (`[ \\ ] ^ _` `` ` ``) in addition to the intended `A-Z` and `a-z`.\n\n```pycon\n>>> import re\n>>> p = re.compile(r'^[A-z0-9-_=]*$')\n>>> p.match('^')   # True -- should be False, '^' is not in A-Za-z0-9-_=\n>>> p.match('{')   # False -- correctly rejected\n\nThis regex is used to reject \"unsafe\" sep values passed to Signer/TimestampSigner. The typo only makes the rejected set larger than the documented rule, not smaller — it fails safe. It's not a security issue, just an incorrect validation: a handful of legitimate separator choices (e.g. sep=\"^\") are wrongly rejected with a ValueError.\n\nFix:\n\n_SEP_UNSAFE = _lazy_re_compile(r\"^[A-Za-z0-9-_=]*$\")\n\nAlso updates the corresponding ValueError message text (which repeated the same A-z0-9-_= typo), adds a regression test covering the previously-misrejected characters, and clarifies the docs wording for sep to mention the = padding character.\n\nTested via tests/signing/tests.py (21/21 passing, including the new test_sep_excluded_ascii_range).\n\n🤖 Generated with Claude Code\n"
     }
   ]
 }

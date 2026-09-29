@@ -1,0 +1,18 @@
+{
+  "$comment": "What a good review of each recorded PR must include. Grow this from QA notes: when Alden misses something that mattered, add it here so the next prompt change is measured against it. mustFlag passes when a 'needs your eyes' item or model finding points at the path (and line, if given).",
+  "grafana/grafana#133736": {
+    "mustFlag": [
+      {
+        "path": "public/app/features/explore/SignalExplorer/data/metricResourceClient.ts",
+        "why": "fetchCatalog's return type changes from Promise<MetricInfo[]> to Promise<Catalog>; callers outside the diff may break."
+      }
+    ]
+  },
+  "laravel/framework#60005": {
+    "maxSlotsOnGlob": {
+      "glob": ".github/workflows/**",
+      "max": 1,
+      "why": "Ten workflow files make the same runner bump; one grouped finding is enough."
+    }
+  }
+}

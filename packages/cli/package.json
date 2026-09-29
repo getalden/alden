@@ -49,5 +49,21 @@
   "devDependencies": {
     "@alden/core": "workspace:*",
     "@alden/schema": "workspace:*"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/bedrock-sdk": ">=0.34",
+    "@anthropic-ai/vertex-sdk": ">=0.20",
+    "@anthropic-ai/foundry-sdk": ">=0.5"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/bedrock-sdk": {
+      "optional": true
+    },
+    "@anthropic-ai/vertex-sdk": {
+      "optional": true
+    },
+    "@anthropic-ai/foundry-sdk": {
+      "optional": true
+    }
   }
 }

@@ -2,7 +2,7 @@
  * Records real GitHub responses as test fixtures: `pnpm fixtures:record`.
  *
  * Public repos only, one per supported language. Fixtures are committed and the repo will be public, so never
- * record private repos (your own included) here. PR numbers are pinned so re-recording refreshes the same PRs that
+ * record private repos (your own included) here. Descriptions are recorded too, for the eval. PR numbers are pinned so re-recording refreshes the same PRs that
  * tests name; to add a PR, add its number.
  */
 import { mkdir, writeFile } from "node:fs/promises";
@@ -37,7 +37,7 @@ const client = createGitHubClient(resolved.token);
 await mkdir(OUT_DIR, { recursive: true });
 for (const { numbers, ...source } of SOURCES) {
   const [owner, name] = source.repo.split("/");
-  const fields = numbers.map((n) => `p${n}: pullRequest(number: ${n}) { ${PULL_REQUEST_FIELDS} }`).join("\n");
+  const fields = numbers.map((n) => `p${n}: pullRequest(number: ${n}) { ${PULL_REQUEST_FIELDS} body }`).join("\n");
   const data = await client.graphql<{ repository: Record<string, RawPullRequest | null> }>(
     `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields} } }`,
     { owner, name },

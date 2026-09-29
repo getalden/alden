@@ -3,6 +3,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AldenConfig } from "@alden/schema";
 import { AnthropicProvider } from "./anthropic.js";
+import { resolveModel } from "./models.js";
+import { DEFAULT_BASE_URL, OpenAICompatibleProvider } from "./openai-compatible.js";
+import { createPlatformClient, platformModelId } from "./platforms.js";
 import type { LlmProvider } from "./provider.js";
 
 export type ProviderChoice = { ok: true; provider: LlmProvider } | { ok: false; reason: string };
@@ -38,10 +41,28 @@ export function selectProvider(
         };
       }
       return { ok: true, provider: new AnthropicProvider(model) };
-    default:
+    case "bedrock":
+    case "vertex":
+    case "foundry": {
+      const platform = config.model.provider;
+      // Credentials come from AWS, GCP or Azure; a failure shows up as the model's status rather than here.
       return {
-        ok: false,
-        reason: `The ${config.model.provider} provider isn't supported yet, so only the checks ran. Use \`alden config set model.provider anthropic\`, or pass --no-llm.`,
+        ok: true,
+        provider: new AnthropicProvider(
+          platformModelId(platform, resolveModel(model)),
+          () => createPlatformClient(platform, config.model),
+          platform,
+        ),
       };
+    }
+    case "openai-compatible":
+      // The default model name is a Claude alias, which means nothing to Ollama or LM Studio.
+      if (resolveModel(model).startsWith("claude-")) {
+        return {
+          ok: false,
+          reason: `model.name is a Claude model (${resolveModel(model)}), but the provider is openai-compatible. Set your local model, e.g. \`alden config set model.name qwen3-coder:30b\`.`,
+        };
+      }
+      return { ok: true, provider: new OpenAICompatibleProvider(model, config.model.baseUrl ?? DEFAULT_BASE_URL) };
   }
 }

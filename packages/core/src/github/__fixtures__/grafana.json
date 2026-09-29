@@ -2,7 +2,7 @@
   "name": "grafana",
   "repo": "grafana/grafana",
   "language": "Go and TypeScript",
-  "recordedAt": "2026-09-28T18:35:16.635Z",
+  "recordedAt": "2026-09-29T10:33:15.039Z",
   "pullRequests": [
     {
       "number": 133739,
@@ -10,11 +10,11 @@
       "url": "https://github.com/grafana/grafana/pull/133739",
       "isDraft": false,
       "createdAt": "2026-09-28T17:03:05Z",
-      "updatedAt": "2026-09-28T17:05:04Z",
+      "updatedAt": "2026-09-29T04:36:13Z",
       "additions": 301,
       "deletions": 0,
       "changedFiles": 5,
-      "mergeable": "MERGEABLE",
+      "mergeable": "UNKNOWN",
       "baseRefName": "main",
       "headRefName": "pstibrany/global-search-document-refs",
       "isCrossRepository": false,
@@ -75,7 +75,15 @@
         ]
       },
       "reviews": {
-        "nodes": []
+        "nodes": [
+          {
+            "author": {
+              "login": "gassiss"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-09-28T18:53:12Z"
+          }
+        ]
       },
       "commits": {
         "nodes": [
@@ -102,7 +110,8 @@
             }
           }
         ]
-      }
+      },
+      "body": "Part of the global search index work, tracked in grafana/search-and-storage-team#1022.\n\nBefore, an index could count its documents or rank a page of them. Neither tells you which objects are present and at which version, which is what you need to compare an index with storage. Now `ResourceIndex.ListDocumentRefs(ctx, groupResource)` lists the live documents of one resource type, each as a name and the version it was indexed at.\n\n- **The name comes from the document id,** which every document has, rather than from a field a document could be missing.\n- **The version comes from the stored string copy,** because resource versions are too large to survive bleve's float64 numbers. A document whose version can't be read is reported with zero, so a caller treats it as out of date rather than skipping it.\n- **Results are paged by document id,** which is unique, so a page boundary can't repeat or skip a document.\n- **Asking for the wrong type is an error:** another type on a per-resource index, or a type a global index doesn't cover. An empty answer would look like every document had been deleted.\n\nNothing calls it yet. Its first user is the per-type sync that will replace the global index's full rebuilds on coverage changes and imports.\n"
     },
     {
       "number": 133738,
@@ -110,11 +119,11 @@
       "url": "https://github.com/grafana/grafana/pull/133738",
       "isDraft": false,
       "createdAt": "2026-09-28T16:57:58Z",
-      "updatedAt": "2026-09-28T16:58:15Z",
+      "updatedAt": "2026-09-29T05:01:20Z",
       "additions": 77,
       "deletions": 3,
       "changedFiles": 3,
-      "mergeable": "MERGEABLE",
+      "mergeable": "UNKNOWN",
       "baseRefName": "main",
       "headRefName": "pstibrany/us-read-invalid-name-400",
       "isCrossRepository": false,
@@ -165,7 +174,15 @@
         ]
       },
       "reviews": {
-        "nodes": []
+        "nodes": [
+          {
+            "author": {
+              "login": "gassiss"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-09-28T18:45:32Z"
+          }
+        ]
       },
       "commits": {
         "nodes": [
@@ -192,7 +209,8 @@
             }
           }
         ]
-      }
+      },
+      "body": "Reading a resource with an invalid name (for example `GET /dashboards/{name}` with a name containing a space) returned 500 from unified storage. `server.Read` skips name validation on purpose, but the KV backend validates the name when looking up the key and returns an error that `ReadResource` turned into a 500. This burned part of the Provisioning API SLO.\n\n`ReadResource` and `BatchReadResource` in the KV backend now return 400 for invalid names. The existing \"too large resource version\" 400 is still checked first.\n\nWe return 400 rather than 404 because name validation has been made stricter in the past. A 404 would say that an object doesn't exist, when the real problem is its name.\n\nThe SQL backend does not validate names on read and still returns 404 for these names. That difference existed before; this change only removes the 500.\n\nRelated: #133690\n"
     },
     {
       "number": 133736,
@@ -344,7 +362,8 @@
             }
           }
         ]
-      }
+      },
+      "body": "## Description\r\n<!--- A high level description of what this PR is doing -->\r\nSignal explorer metric search only filtered the names loaded when the card opened, which the datasource series limit cuts off on large datasources, so metrics the query editor finds were missing. When the loaded catalog may be incomplete, search now asks the datasource for matching names, as the query editor does. Fixes #132819.\r\n\r\n## Changes\r\n<!--- Describe your changes in detail -->\r\n* `fetchCatalog` reports whether the catalog is truncated: the labels endpoint returning `seriesLimit` names, or any datasource on the series endpoint or search API, whose name lists can't be shown to be complete. Datasources with metrics lookup disabled are never treated as truncated, so they send no search requests.\r\n* New `searchCatalog` queries `__name__` values with a case-insensitive, regex-escaped `{__name__=~\"(?i).*term.*\"}` matcher, cached like the other lookups and capped at 20 terms.\r\n* `useMetricCatalog` keeps filtering in the browser when the catalog is complete, and otherwise runs a 300 ms debounced server search while narrowing the last results by the live term. Clearing the box restores the full catalog immediately.\r\n* `useAsyncResource` accepts a `null` key meaning \"no request\".\r\n\r\n## Risks\r\n<!--- Describe what risks you've considered i.e. what features are most likely to break -->\r\nDatasources on the series endpoint or search API now send one debounced request per search term instead of filtering locally. Search results for names outside the catalog may carry less metadata (type and help) if the metadata endpoint was also truncated.\r\n\r\n## Demo\r\n<!--- Attach a demo gif/video or screenshots of the changes if applicable -->\r\nN/A\r\n\r\n## Testing Instructions\r\n<!--- Provide step by step instructions and the dashboard if applicable -->\r\n* Open Explore with a Prometheus datasource that has more metric names than its series limit (default 40,000), or lower the datasource's series limit below its metric count.\r\n* Open the Datasource explorer sidebar and search for a metric the query editor's metric picker finds but the unfiltered sidebar list doesn't show; it should now appear.\r\n* On a small datasource, confirm typing in the sidebar search sends no `label/__name__/values` requests.\r\n\r\n## Reviewer Checklist\r\n<!--- The reviewer should make sure the following has been done -->\r\n- [ ] Tests are added where applicable\r\n- [ ] Issue is linked to PR\r\n- [ ] Code pulled and tested\r\n- [ ] Code is meaningfully improved if applicable\r\n\r\nClose DPRO-388"
     },
     {
       "number": 133734,
@@ -352,9 +371,9 @@
       "url": "https://github.com/grafana/grafana/pull/133734",
       "isDraft": false,
       "createdAt": "2026-09-28T16:42:09Z",
-      "updatedAt": "2026-09-28T17:06:46Z",
-      "additions": 191,
-      "deletions": 78,
+      "updatedAt": "2026-09-29T10:28:56Z",
+      "additions": 218,
+      "deletions": 204,
       "changedFiles": 8,
       "mergeable": "MERGEABLE",
       "baseRefName": "main",
@@ -388,28 +407,28 @@
           },
           {
             "path": "public/app/features/search/page/components/columns.tsx",
-            "additions": 24,
-            "deletions": 40
-          },
-          {
-            "path": "public/app/features/search/service/deletedDashboardsCache.ts",
-            "additions": 9,
-            "deletions": 10
+            "additions": 32,
+            "deletions": 43
           },
           {
             "path": "public/app/features/search/service/types.ts",
-            "additions": 2,
+            "additions": 3,
             "deletions": 1
           },
           {
+            "path": "public/app/features/search/service/unified.ts",
+            "additions": 6,
+            "deletions": 4
+          },
+          {
             "path": "public/app/features/search/service/utils.test.ts",
-            "additions": 54,
-            "deletions": 0
+            "additions": 49,
+            "deletions": 69
           },
           {
             "path": "public/app/features/search/service/utils.ts",
-            "additions": 19,
-            "deletions": 12
+            "additions": 45,
+            "deletions": 72
           },
           {
             "path": "public/locales/en-US/grafana.json",
@@ -423,9 +442,6 @@
       },
       "reviewRequests": {
         "nodes": [
-          {
-            "requestedReviewer": null
-          },
           {
             "requestedReviewer": {
               "__typename": "User",
@@ -441,14 +457,99 @@
         ]
       },
       "reviews": {
-        "nodes": []
+        "nodes": [
+          {
+            "author": {
+              "login": "RafaelPaulovic"
+            },
+            "state": "DISMISSED",
+            "submittedAt": "2026-09-29T07:57:54Z"
+          },
+          {
+            "author": {
+              "login": "Clarity-89"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:08:51Z"
+          },
+          {
+            "author": {
+              "login": "pstibrany"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:28:44Z"
+          },
+          {
+            "author": {
+              "login": "pstibrany"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:28:46Z"
+          },
+          {
+            "author": {
+              "login": "pstibrany"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:28:47Z"
+          },
+          {
+            "author": {
+              "login": "pstibrany"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:28:49Z"
+          },
+          {
+            "author": {
+              "login": "pstibrany"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:28:50Z"
+          },
+          {
+            "author": {
+              "login": "pstibrany"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:28:51Z"
+          },
+          {
+            "author": {
+              "login": "pstibrany"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:28:53Z"
+          },
+          {
+            "author": {
+              "login": "pstibrany"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:28:54Z"
+          },
+          {
+            "author": {
+              "login": "pstibrany"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:28:56Z"
+          },
+          {
+            "author": {
+              "login": "pstibrany"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T10:28:57Z"
+          }
+        ]
       },
       "commits": {
         "nodes": [
           {
             "commit": {
               "statusCheckRollup": {
-                "state": "SUCCESS"
+                "state": "PENDING"
               }
             }
           }
@@ -479,7 +580,8 @@
             }
           }
         ]
-      }
+      },
+      "body": "The Recently deleted page shows no date for any dashboard. It has since #120790 removed the old search path in April — the only thing that ever produced `permanentlyDeleteDate`, the field the results table column reads. The column has been dead code since.\n\nThe value was there all along: both the trash endpoint and the older listing path put the deletion time into `deletionTimestamp`, and the page already sorts on it. The column now reads that field and shows the deletion date.\n\n\"Time remaining\" goes away with it, because how long is left depends on the retention window, which lives in server config the browser does not have.\n\nDeleted results now always carry the field, even when empty, since the table derives its columns from the first row. An item with no deletion time shows a dash and sorts last.\n\nFound while investigating a support escalation where a customer reported missing deletion timestamps — the data was in the API response, only the display was missing.\n"
     }
   ]
 }

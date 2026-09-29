@@ -38,38 +38,67 @@ function stopReason(reason: string | null): StopReason {
 }
 
 /**
- * Claude through the official SDK. Credentials resolve the SDK's usual way: ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN,
- * or an `ant auth login` profile. Alden never uses Claude.ai subscription logins.
+ * The part of the Messages API Alden uses. The Bedrock, Vertex and Foundry clients leave out batches, so this asks
+ * only for `parse` and `countTokens`.
+ */
+export type MessagesClient = { messages: Pick<Anthropic["messages"], "parse" | "countTokens"> };
+
+/**
+ * Claude through the official SDKs. First-party credentials resolve the SDK's usual way (ANTHROPIC_API_KEY,
+ * ANTHROPIC_AUTH_TOKEN, or an `ant auth login` profile); platforms use their own (AWS, GCP, Azure). Alden never uses
+ * Claude.ai subscription logins.
  */
 export class AnthropicProvider implements LlmProvider {
-  readonly provider = "anthropic";
   readonly model: string;
+  private client: Promise<MessagesClient> | undefined;
 
+  /**
+   * @param client the SDK client, or a function creating it on first use (the platform SDKs are loaded lazily).
+   * @param provider the name shown in briefings and spend records, e.g. "anthropic" or "bedrock".
+   */
   constructor(
     model: string,
-    private readonly client: Anthropic = new Anthropic(),
+    private readonly makeClient: MessagesClient | (() => Promise<MessagesClient>) = () =>
+      Promise.resolve(new Anthropic()),
+    readonly provider: string = "anthropic",
   ) {
     this.model = resolveModel(model);
   }
 
-  async countInputTokens(request: { system: string; user: string }): Promise<number | undefined> {
+  private async messages(): Promise<MessagesClient["messages"]> {
+    this.client ??= typeof this.makeClient === "function" ? this.makeClient() : Promise.resolve(this.makeClient);
     try {
-      const counted = await this.client.messages.countTokens({
+      return (await this.client).messages;
+    } catch (error) {
+      this.client = undefined;
+      throw error instanceof Error && error.name === "LlmError" ? error : toLlmError(error);
+    }
+  }
+
+  /** Undefined when counting isn't available (some platforms), so the budget check falls back to an estimate. */
+  async countInputTokens(request: { system: string; user: string }): Promise<number | undefined> {
+    const messages = await this.messages();
+    try {
+      const counted = await messages.countTokens({
         model: this.model,
         system: request.system,
         messages: [{ role: "user", content: request.user }],
       });
       return counted.input_tokens;
     } catch (error) {
-      throw toLlmError(error);
+      const failure = toLlmError(error);
+      // Bad credentials will fail the real call too, with a clearer message; anything else just means "can't count".
+      if (failure.kind === "auth") throw failure;
+      return undefined;
     }
   }
 
   async generate<T>(request: GenerateRequest<T>): Promise<GenerateResult<T>> {
-    let response: Awaited<ReturnType<typeof this.client.messages.parse>>;
+    const messages = await this.messages();
+    let response: Awaited<ReturnType<typeof messages.parse>>;
     try {
       // Thinking is left to each model's default: adaptive on Sonnet 5 / Opus 5 / Fable, off on Haiku 4.5.
-      response = await this.client.messages.parse({
+      response = await messages.parse({
         model: this.model,
         max_tokens: request.maxOutputTokens,
         system: request.system,

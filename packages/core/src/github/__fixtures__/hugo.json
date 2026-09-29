@@ -2,7 +2,7 @@
   "name": "hugo",
   "repo": "gohugoio/hugo",
   "language": "Go",
-  "recordedAt": "2026-09-28T18:35:13.564Z",
+  "recordedAt": "2026-09-29T10:33:11.943Z",
   "pullRequests": [
     {
       "number": 15387,
@@ -69,7 +69,8 @@
       },
       "timelineItems": {
         "nodes": []
-      }
+      },
+      "body": "Fixes #12447.\r\n\r\n`PathEscape` panics when `url.Parse` receives a literal percent sign that is not followed by two hexadecimal digits. This happens with a page bundle containing `content/about/index.md%`: rendering the resource permalink fails with `invalid URL escape \"%\"`.\r\n\r\nEscape malformed percent signs before parsing, preserving valid `%XX` escapes and making repeated calls idempotent.\r\n\r\nThe Hugo integration test `TestPageBundleResourceWithMalformedPercentPath` builds a page bundle with that exact resource filename and asserts the published permalink is `/about/index.md%25`. The test reproduces the reported panic on the pre-fix implementation. Unit tests also cover trailing, incomplete, malformed, and valid escapes.\r\n\r\nValidation:\r\n- `go test ./common/paths -count=1` passed.\r\n- `go test ./hugolib -run '^TestPageBundleResourceWithMalformedPercentPath$' -count=1` passed; the same test failed with the reported panic before the fix.\r\n- `./check.sh ./common/paths/...` passed.\r\n- `git diff --check` passed.\r\n- Repository-wide staticcheck passed. Some full-suite module-command tests could not complete because GitHub-hosted module downloads failed on unavailable DNS.\r\n\r\nThis PR was written with substantial assistance from OpenAI Codex. The implementation and tests were manually reviewed."
     },
     {
       "number": 15240,
@@ -81,7 +82,7 @@
       "additions": 41,
       "deletions": 0,
       "changedFiles": 2,
-      "mergeable": "MERGEABLE",
+      "mergeable": "UNKNOWN",
       "baseRefName": "master",
       "headRefName": "fix/content-adapter-inline-partials",
       "isCrossRepository": true,
@@ -131,7 +132,8 @@
       },
       "timelineItems": {
         "nodes": []
-      }
+      },
+      "body": "Fixes #14480\n\nExtract inline partials parsed in `_content.gotmpl` into the template store so calls to `partial \"inline/...\"` inside content adapters resolve and execute properly."
     },
     {
       "number": 15231,
@@ -143,7 +145,7 @@
       "additions": 52,
       "deletions": 12,
       "changedFiles": 5,
-      "mergeable": "MERGEABLE",
+      "mergeable": "UNKNOWN",
       "baseRefName": "master",
       "headRefName": "fix/12560-resource-permalink",
       "isCrossRepository": true,
@@ -208,7 +210,8 @@
       },
       "timelineItems": {
         "nodes": []
-      }
+      },
+      "body": "Fixes #12560.\n\n## Summary\n\nShared resource caches are used by each language site in a multihost build, but their keys did not include the site's base URL. As a result, a resource or transformed resource cached while rendering one language could return an absolute permalink for another language's host.\n\nNamespace the per-site resource cache wrapper by base URL, including local, remote, resource-list, and transformation caches. Keep the underlying cache partitions shared while preventing cross-host resource objects from being reused.\n\nAdded a regression assertion to the existing multihost test covering a fingerprinted asset.\n\n## Testing\n\n- `go test ./hugolib -run '^TestMultihost$' -count=1`\n- `go test ./resources -run '^(TestNewResource|TestTransformCached|TestTransform)$' -count=1`\n- `git diff --check`\n\nThe broader resource test suite also contains existing OS-filesystem tests that cannot run in this environment because writes under `/private/Users` are denied.\n\n## AI assistance disclosure\n\nThis PR was written with substantial assistance from OpenAI Codex. The implementation, test change, and reported test results were manually reviewed.\n"
     },
     {
       "number": 15205,
@@ -220,7 +223,7 @@
       "additions": 122,
       "deletions": 0,
       "changedFiles": 4,
-      "mergeable": "MERGEABLE",
+      "mergeable": "UNKNOWN",
       "baseRefName": "master",
       "headRefName": "fix/13961-leaf-bundle-index-reclass",
       "isCrossRepository": true,
@@ -280,7 +283,8 @@
       },
       "timelineItems": {
         "nodes": []
-      }
+      },
+      "body": "A full content walk classifies files below a leaf bundle as resources. A server rebuild can start at the nested directory, so `content/a/b/index.md` was parsed as a new leaf from its filename and published as `/a/b/`.\n\nLook up the owning leaf in the page tree and keep those nested bundle files as resources on rebuild, including when they are inserted.\n\nFixes #13961\n\nThis PR was written with AI assistance; I reviewed the rebuild classification and the regression test."
     }
   ]
 }

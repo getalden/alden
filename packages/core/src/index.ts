@@ -18,7 +18,7 @@ export {
 } from "./diff/parse.js";
 export { fetchPullRequestDiff, fromRestFile, type LocalDiff, readLocalDiff } from "./diff/sources.js";
 export * from "./github/index.js";
-export { AnthropicProvider, toLlmError } from "./llm/anthropic.js";
+export { AnthropicProvider, type MessagesClient, toLlmError } from "./llm/anthropic.js";
 export {
   affordableInputTokens,
   type BudgetDecision,
@@ -28,7 +28,18 @@ export {
 } from "./llm/budget.js";
 export { BudgetExceededError, type BudgetedOptions, type BudgetedResult, budgetedGenerate } from "./llm/budgeted.js";
 export { localDay, type SpendEntry, SpendLedger } from "./llm/ledger.js";
-export { costUsd, MODEL_ALIASES, NO_USAGE, PRICES, resolveModel, type TokenUsage, worstCaseUsd } from "./llm/models.js";
+export {
+  costUsd,
+  MODEL_ALIASES,
+  NO_USAGE,
+  PRICES,
+  priceFor,
+  resolveModel,
+  type TokenUsage,
+  worstCaseUsd,
+} from "./llm/models.js";
+export { DEFAULT_BASE_URL, OpenAICompatibleProvider } from "./llm/openai-compatible.js";
+export { createPlatformClient, type Platform, platformModelId } from "./llm/platforms.js";
 export {
   type GenerateRequest,
   type GenerateResult,

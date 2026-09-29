@@ -1,4 +1,4 @@
-import { PRICES } from "./models.js";
+import { priceFor } from "./models.js";
 
 export interface BudgetLimits {
   perReviewUsd: number;
@@ -44,7 +44,7 @@ export function checkBudget(
  * the model has no known price (no limit from cost), 0 when even the output alone doesn't fit.
  */
 export function affordableInputTokens(model: string, budgetUsd: number, maxOutputTokens: number): number | undefined {
-  const price = PRICES[model];
+  const price = priceFor(model);
   if (!price) return undefined;
   const outputCost = (maxOutputTokens * price.output) / 1_000_000;
   const left = budgetUsd - outputCost;

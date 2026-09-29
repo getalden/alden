@@ -138,7 +138,7 @@ describe("addModelReview on a real PR", () => {
     ["a cut-off answer", { output: null, stopReason: "max_tokens" as const }, "truncated", /cut off/],
     ["an unusable answer", { output: null, stopReason: "end" as const }, "failed", /format/],
     ["an auth error", new LlmError("auth", "401"), "failed", /credentials/],
-    ["a network error", new LlmError("network", "offline"), "failed", /reach/],
+    ["a network error", new LlmError("network", "offline"), "failed", /reach.*\(offline\)/],
   ])("keeps the deterministic briefing after %s", async (_label, behaviour, status, note) => {
     const { briefing, files } = recorded("django", 22041);
     const result = await addModelReview(briefing, {

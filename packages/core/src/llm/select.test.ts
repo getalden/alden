@@ -47,11 +47,34 @@ describe("selectProvider", () => {
     expect(chosen).toEqual({ ok: false, reason: expect.stringMatching(/No Anthropic API key found.*--no-llm/) });
   });
 
-  it("says which providers aren't supported yet", () => {
-    const local = AldenConfigSchema.parse({ model: { provider: "openai-compatible", name: "llama3" } });
+  it("won't send a Claude model name to a local server", () => {
+    const local = AldenConfigSchema.parse({ model: { provider: "openai-compatible" } });
     expect(selectProvider(local, undefined, {})).toEqual({
       ok: false,
-      reason: expect.stringMatching(/openai-compatible provider isn't supported yet/),
+      reason: expect.stringMatching(/model\.name is a Claude model \(claude-sonnet-5\).*alden config set model\.name/),
     });
+  });
+
+  it("uses an OpenAI-compatible server for local models, defaulting to Ollama", () => {
+    const local = AldenConfigSchema.parse({ model: { provider: "openai-compatible", name: "qwen3-coder:30b" } });
+    const chosen = selectProvider(local, undefined, {});
+    expect(chosen.ok && [chosen.provider.provider, chosen.provider.model]).toEqual([
+      "openai-compatible",
+      "qwen3-coder:30b",
+    ]);
+  });
+
+  it("uses Claude on Bedrock, Vertex or Foundry with each platform's model ID", () => {
+    const on = (provider: string) => {
+      const chosen = selectProvider(
+        AldenConfigSchema.parse({ model: { provider, region: "us-east-1" } }),
+        undefined,
+        {},
+      );
+      return chosen.ok ? [chosen.provider.provider, chosen.provider.model] : chosen.reason;
+    };
+    expect(on("bedrock")).toEqual(["bedrock", "anthropic.claude-sonnet-5"]);
+    expect(on("vertex")).toEqual(["vertex", "claude-sonnet-5"]);
+    expect(on("foundry")).toEqual(["foundry", "claude-sonnet-5"]);
   });
 });

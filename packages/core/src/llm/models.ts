@@ -35,11 +35,19 @@ export interface TokenUsage {
 export const NO_USAGE: TokenUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
 /**
+ * List price for a Claude model on any platform. Bedrock IDs carry an "anthropic." prefix. Bedrock and Vertex bill at
+ * their own rates, so there it's an estimate; Foundry bills at Anthropic's.
+ */
+export function priceFor(model: string): { input: number; output: number } | undefined {
+  return PRICES[model.replace(/^anthropic\./, "")];
+}
+
+/**
  * What a call cost at list price, or undefined when Alden doesn't know the model's price (local models cost nothing
- * Alden can see; cloud-provider pricing differs and is billed by that provider).
+ * Alden can see).
  */
 export function costUsd(model: string, usage: TokenUsage): number | undefined {
-  const price = PRICES[model];
+  const price = priceFor(model);
   if (!price) return undefined;
   const perToken = (perMillion: number) => perMillion / 1_000_000;
   return (

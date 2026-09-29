@@ -23,6 +23,7 @@ const ERROR_NOTES: Record<LlmErrorKind, string> = {
   bad_request: "The model provider rejected the request.",
   not_found: "The configured model wasn't found. Check `alden config get model.name`.",
   network: "Couldn't reach the model provider. Check your connection.",
+  setup: "The model provider isn't set up.",
   other: "The model call failed.",
 };
 
@@ -90,7 +91,16 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
     if (error instanceof BudgetExceededError)
       return withSection(briefing, empty("over_budget", error.message, provider));
     const kind = error instanceof LlmError ? error.kind : "other";
-    return withSection(briefing, empty("failed", ERROR_NOTES[kind], provider));
+    // Setup errors carry their own instructions (e.g. the package to install); for others the provider's detail
+    // (which URL, which model) is what makes the note actionable.
+    const detail = error instanceof Error ? error.message.slice(0, 200) : "";
+    const note =
+      kind === "setup"
+        ? detail
+        : kind === "network" || kind === "not_found" || kind === "bad_request"
+          ? `${ERROR_NOTES[kind]} (${detail})`
+          : ERROR_NOTES[kind];
+    return withSection(briefing, empty("failed", note, provider));
   }
 
   const base = {
