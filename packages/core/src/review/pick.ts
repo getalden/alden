@@ -9,6 +9,7 @@ const SEVERITY_RANK: Record<Severity, number> = { high: 3, medium: 2, low: 1, in
 const CHECK_PRIORITY = [
   "secrets.likely",
   "migrations.changed",
+  "callers.outside",
   "signatures.changed",
   "dependencies.changed",
   "tests.missing",
@@ -26,6 +27,7 @@ const TITLES: Record<string, (path: string) => string> = {
   "secrets.likely": (p) => `Possible secret in ${p}`,
   "migrations.changed": (p) => `Migration in ${p}`,
   "signatures.changed": (p) => `Public API change in ${p}`,
+  "callers.outside": (p) => `Caller of changed code in ${p}`,
   "dependencies.changed": (p) => `Dependency changes in ${p}`,
   "tests.missing": (p) => `Untested change in ${p}`,
   "config.changed": (p) => `Config change in ${p}`,

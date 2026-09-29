@@ -5,7 +5,7 @@ import { fileKind, isLockfile, sensitiveMatcher } from "../queue/files.js";
 import { type DependencyChange, diffDependencies, isManifest } from "./dependencies.js";
 import { findSecrets } from "./secrets.js";
 import { type SignatureChange, signatureChanges } from "./signatures.js";
-import { type Check, type CheckOutcome, MAX_EVIDENCE } from "./types.js";
+import { type Check, type CheckOutcome, MAX_EVIDENCE, symbolKey } from "./types.js";
 
 const passed = (summary: string, evidence: Evidence[] = []): CheckOutcome => ({
   status: "passed",
@@ -387,6 +387,71 @@ export const signaturesCheck: Check = {
   },
 };
 
+// ─── Callers outside the diff ────────────────────────────────────────────────────────────────────
+
+export const callersCheck: Check = {
+  id: "callers.outside",
+  title: "Callers outside the diff",
+  heuristic: true,
+  run({ files, graph }) {
+    if (!graph)
+      return skipped("The code graph wasn't available for this review, so callers outside the diff weren't checked.");
+    const publicChanges = graph.changes.filter((c) => c.exported && c.change !== "added");
+    if (publicChanges.length === 0) return passed("No public functions, classes or methods changed.");
+
+    // A removed definition, or one whose signature line changed, can break its callers outright.
+    const signatureChanged = new Set(
+      signatureChanges(files)
+        .filter((c) => c.kind === "changed" || c.kind === "removed")
+        .map((c) => (c.kind === "changed" ? `${c.after.path}#${c.after.name}` : `${c.before.path}#${c.before.name}`)),
+    );
+    const breaking: Evidence[] = [];
+    const reaching: Evidence[] = [];
+    let uncertain = 0;
+    let breakingSymbols = 0;
+    let reachingSymbols = 0;
+
+    for (const change of publicChanges) {
+      const sites = graph.callers.get(symbolKey(change)) ?? [];
+      if (sites.length === 0) continue;
+      const label = `${change.container ? `${change.container}.` : ""}${change.name}`;
+      const isBreaking = change.change === "removed" || signatureChanged.has(`${change.path}#${change.name}`);
+      const why = change.change === "removed" ? "removed" : isBreaking ? "signature changed" : "changed";
+      if (isBreaking) breakingSymbols++;
+      else reachingSymbols++;
+      for (const site of sites) {
+        if (site.confidence === "name") uncertain++;
+        const evidence: Evidence = {
+          text: `calls ${label} (${why})${site.confidence === "name" ? ", name match only" : ""}`,
+          anchor: { path: site.path, line: site.line },
+        };
+        (isBreaking ? breaking : reaching).push(evidence);
+      }
+    }
+
+    const incomplete = graph.complete ? "" : " The index was cut short, so there may be more.";
+    const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+    if (breaking.length > 0) {
+      const sure = breaking.some((e) => !e.text.endsWith("name match only"));
+      return {
+        status: "flagged",
+        severity: sure ? "high" : "medium",
+        summary: `${count(breakingSymbols, "removed or re-signed public symbol")} still called from ${count(breaking.length, "place")} this PR didn't change. Check each caller still works.${incomplete}`,
+        evidence: capped([...breaking, ...reaching]),
+      };
+    }
+    if (reaching.length > 0) {
+      return {
+        status: "flagged",
+        severity: "low",
+        summary: `${count(reachingSymbols, "changed public symbol")} called from ${count(reaching.length, "place")} outside the diff${uncertain > 0 ? ` (${uncertain} by name only)` : ""}. Behaviour changes reach them.${incomplete}`,
+        evidence: capped(reaching),
+      };
+    }
+    return passed(`Changed public code has no callers outside the diff.${incomplete}`);
+  },
+};
+
 /** Every check, in the order a briefing lists them. */
 export const CHECKS: Check[] = [
   ciCheck,
@@ -394,6 +459,7 @@ export const CHECKS: Check[] = [
   testsCheck,
   migrationsCheck,
   signaturesCheck,
+  callersCheck,
   dependenciesCheck,
   configCheck,
   sensitivePathsCheck,

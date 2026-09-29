@@ -35,6 +35,8 @@ export {
 } from "./graph/extract.js";
 export { EXTRACTOR_VERSION, type IndexOptions, indexCachePath, indexRepo, type RepoIndex } from "./graph/index-repo.js";
 export { type GraphLanguage, grammarPath, languageOf, parserFor } from "./graph/parser.js";
+export { type CallSite, CodeGraph, type SymbolRef } from "./graph/query.js";
+export { createResolver, loadResolverConfig, type Resolver, type ResolverConfig } from "./graph/resolve.js";
 export { AnthropicProvider, type MessagesClient, supportsEffort, toLlmError } from "./llm/anthropic.js";
 export {
   affordableInputTokens,
@@ -82,6 +84,7 @@ export {
 export { buildBriefing, NOT_CHECKED, runChecks } from "./review/briefing.js";
 export {
   CHECKS,
+  callersCheck,
   ciCheck,
   configCheck,
   dependenciesCheck,
@@ -118,4 +121,4 @@ export { MAX_LOOK_HERE, pickLookHere } from "./review/pick.js";
 export { fetchPullRequest, reviewLocalChanges, reviewPullRequest, type WithModel } from "./review/run.js";
 export { findSecrets, mask, type SecretFinding, shannonEntropy } from "./review/secrets.js";
 export { type Declaration, declarationIn, type SignatureChange, signatureChanges } from "./review/signatures.js";
-export type { Check, CheckOutcome, ReviewContext } from "./review/types.js";
+export { type Check, type CheckOutcome, type GraphContext, type ReviewContext, symbolKey } from "./review/types.js";

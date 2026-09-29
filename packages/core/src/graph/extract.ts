@@ -28,7 +28,7 @@ export interface ImportBinding {
   reexport?: boolean;
 }
 
-/** A use of a name: a call, `new`, a JSX element, or a base class. */
+/** A use of a name: a call, `new`, a JSX element, a base class, or passed as an argument (callbacks, Django urls). */
 export interface Reference {
   name: string;
   /** For `obj.name(...)`, the object's text, e.g. "ns" or "self". */
@@ -56,6 +56,8 @@ const TS_REFERENCES = `
   (new_expression constructor: (identifier) @name)
   (new_expression constructor: (member_expression object: (_) @object property: (property_identifier) @name))
   (class_heritage (extends_clause value: (identifier) @name))
+  (arguments (identifier) @name)
+  (arguments (member_expression object: (_) @object property: (property_identifier) @name))
 `;
 
 /** Only the TSX grammar has JSX nodes; the plain TypeScript grammar rejects these patterns. */
@@ -226,6 +228,9 @@ const PY_REFERENCES = `
   (call function: (attribute object: (_) @object attribute: (identifier) @name))
   (class_definition superclasses: (argument_list (identifier) @name))
   (class_definition superclasses: (argument_list (attribute attribute: (identifier) @name)))
+  (call arguments: (argument_list (identifier) @name))
+  (call arguments: (argument_list (attribute object: (_) @object attribute: (identifier) @name)))
+  (keyword_argument value: (identifier) @name)
 `;
 
 const isPublic = (name: string) => !name.startsWith("_") || (name.startsWith("__") && name.endsWith("__"));
@@ -266,7 +271,11 @@ function extractPython(root: Node): Omit<FileSymbols, "language" | "references">
     }
   };
 
-  for (const node of root.namedChildren) {
+  // Imports inside functions count too: Django code often imports there to avoid circular imports.
+  const nestedImports = root
+    .descendantsOfType(["import_statement", "import_from_statement"])
+    .filter((n) => n !== null && n.parent?.type !== "module");
+  for (const node of [...root.namedChildren, ...nestedImports]) {
     if (!node) continue;
     if (
       node.type === "function_definition" ||

@@ -8,6 +8,7 @@ import { type RawPullRequest, toFacts } from "../github/pull-requests.js";
 import { buildBriefing, runChecks } from "./briefing.js";
 import {
   CHECKS,
+  callersCheck,
   ciCheck,
   configCheck,
   dependenciesCheck,
@@ -346,4 +347,102 @@ describe("buildBriefing on every recorded real PR", () => {
       expect(briefing.summary.files).toBe(files.length);
     },
   );
+});
+
+describe("callers.outside", () => {
+  const change = (name: string, kind: "modified" | "removed" = "modified", exported = true) => ({
+    path: "src/rank.ts",
+    name,
+    kind: "function" as const,
+    exported,
+    change: kind,
+    startLine: 1,
+    endLine: 3,
+    changedLines: 1,
+  });
+  const graph = (
+    changes: ReturnType<typeof change>[],
+    callers: Record<string, { path: string; line: number; confidence: "import" | "name" }[]>,
+    complete = true,
+  ) => ({
+    changes,
+    callers: new Map(Object.entries(callers)),
+    complete,
+  });
+
+  it("skips without a code graph, and passes when no public code changed", () => {
+    expect(callersCheck.run(ctx([])).status).toBe("skipped");
+    expect(callersCheck.run(ctx([], { graph: graph([change("helper", "modified", false)], {}) })).summary).toBe(
+      "No public functions, classes or methods changed.",
+    );
+  });
+
+  it("flags high when a removed symbol is still called", () => {
+    const result = callersCheck.run(
+      ctx([], {
+        graph: graph([change("rankQueue", "removed")], {
+          "src/rank.ts#rankQueue": [{ path: "src/cli.ts", line: 12, confidence: "import" }],
+        }),
+      }),
+    );
+    expect(result).toMatchObject({ status: "flagged", severity: "high" });
+    expect(result.summary).toMatch(
+      /^1 removed or re-signed public symbol still called from 1 place this PR didn't change/,
+    );
+    expect(result.evidence).toEqual([{ text: "calls rankQueue (removed)", anchor: { path: "src/cli.ts", line: 12 } }]);
+  });
+
+  it("treats a changed signature line as breaking", () => {
+    const files = [
+      {
+        ...file("src/rank.ts", ["export function rankQueue(queue: Queue, now: number) {"]),
+        hunks: [
+          {
+            header: "@@",
+            oldStart: 1,
+            oldLines: 1,
+            newStart: 1,
+            newLines: 1,
+            lines: [
+              { kind: "del" as const, text: "export function rankQueue(queue: Queue) {", oldLine: 1 },
+              { kind: "add" as const, text: "export function rankQueue(queue: Queue, now: number) {", newLine: 1 },
+            ],
+          },
+        ],
+      },
+    ];
+    const result = callersCheck.run(
+      ctx(files, {
+        graph: graph([change("rankQueue")], {
+          "src/rank.ts#rankQueue": [{ path: "src/cli.ts", line: 12, confidence: "import" }],
+        }),
+      }),
+    );
+    expect(result.severity).toBe("high");
+    expect(result.evidence[0]?.text).toBe("calls rankQueue (signature changed)");
+  });
+
+  it("flags low when only the body changed, and counts name-only callers", () => {
+    const result = callersCheck.run(
+      ctx([], {
+        graph: graph([change("formatAge")], {
+          "src/rank.ts#formatAge": [
+            { path: "src/a.ts", line: 3, confidence: "import" },
+            { path: "src/b.js", line: 9, confidence: "name" },
+          ],
+        }),
+      }),
+    );
+    expect(result).toMatchObject({ status: "flagged", severity: "low" });
+    expect(result.summary).toBe(
+      "1 changed public symbol called from 2 places outside the diff (1 by name only). Behaviour changes reach them.",
+    );
+    expect(result.evidence[1]?.text).toBe("calls formatAge (changed), name match only");
+  });
+
+  it("passes when changed public code has no outside callers, and says when the index was cut short", () => {
+    const result = callersCheck.run(ctx([], { graph: graph([change("formatAge")], {}, false) }));
+    expect(result).toMatchObject({ status: "passed" });
+    expect(result.summary).toMatch(/cut short/);
+  });
 });
