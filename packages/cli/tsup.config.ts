@@ -1,4 +1,16 @@
+import { cpSync, mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
 import { defineConfig } from "tsup";
+
+const require = createRequire(import.meta.url);
+
+/** Grammar files the code graph loads at runtime (see core/src/graph/parser.ts), shipped in dist/grammars. */
+const GRAMMARS = [
+  "tree-sitter-typescript/tree-sitter-typescript.wasm",
+  "tree-sitter-typescript/tree-sitter-tsx.wasm",
+  "tree-sitter-python/tree-sitter-python.wasm",
+];
 
 export default defineConfig({
   entry: ["src/index.ts"],
@@ -11,4 +23,11 @@ export default defineConfig({
   noExternal: [/^@alden\//],
   // Loaded only when configured, and installed by the user; never bundled (the AWS and Google SDKs are large).
   external: ["@anthropic-ai/bedrock-sdk", "@anthropic-ai/vertex-sdk", "@anthropic-ai/foundry-sdk"],
+  async onSuccess() {
+    mkdirSync("dist/grammars", { recursive: true });
+    for (const grammar of GRAMMARS) {
+      const source = require.resolve(grammar);
+      cpSync(source, join("dist/grammars", grammar.split("/").at(-1) as string));
+    }
+  },
 });

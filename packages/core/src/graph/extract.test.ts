@@ -1,0 +1,185 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { extractSymbols } from "./extract.js";
+import { languageOf } from "./parser.js";
+
+const names = (defs: { name: string; kind: string; exported: boolean; container?: string }[]) =>
+  defs.map((d) => `${d.exported ? "+" : "-"}${d.container ? `${d.container}.` : ""}${d.name}:${d.kind}`);
+
+describe("languageOf", () => {
+  it("covers TS, JS (via the TSX grammar) and Python, and skips everything else", () => {
+    expect(
+      ["a.ts", "a.mts", "a.tsx", "a.js", "a.jsx", "a.cjs", "a.py", "a.d.ts", "a.go", "a.php"].map(languageOf),
+    ).toEqual(["typescript", "typescript", "tsx", "tsx", "tsx", "tsx", "python", undefined, undefined, undefined]);
+  });
+});
+
+describe("TypeScript", () => {
+  const source = `import { rank as rankOne, config } from "./rank";
+import Anthropic from "@anthropic-ai/sdk";
+import * as fs from "node:fs";
+export { helper } from "./helpers";
+export * from "./types";
+
+export function rankQueue(queue: Queue): Ranked {
+  return queue.items.map((item) => rankOne(item, config));
+}
+
+export const formatAge = (hours: number) => {
+  return fs.existsSync("x") ? String(hours) : "";
+};
+
+export const DEFAULT_LIMIT = 100;
+const internal = () => new Anthropic();
+
+export class Ranker extends Base {
+  rank(pr: Pr) {
+    return this.#score(pr);
+  }
+  private cache() {}
+  #score(pr: Pr) {}
+}
+
+class Hidden {
+  run() {}
+}
+
+interface Options { limit: number }
+export type Lane = "a" | "b";
+export { Hidden };
+export default function main() {}
+`;
+
+  it("finds definitions, with line ranges and what's exported", async () => {
+    const symbols = await extractSymbols("src/queue.ts", source);
+    expect(names(symbols?.definitions ?? [])).toEqual([
+      "+rankQueue:function",
+      "+formatAge:function",
+      "+DEFAULT_LIMIT:variable",
+      "-internal:function",
+      "+Ranker:class",
+      "+Ranker.rank:method",
+      "-Ranker.cache:method",
+      "-Ranker.#score:method",
+      "+Hidden:class",
+      "+Hidden.run:method",
+      "-Options:interface",
+      "+Lane:type",
+      "+main:function",
+    ]);
+    const rankQueue = symbols?.definitions.find((d) => d.name === "rankQueue");
+    expect([rankQueue?.startLine, rankQueue?.endLine]).toEqual([7, 9]);
+  });
+
+  it("reads imports, including aliases, defaults, namespaces and re-exports", async () => {
+    const symbols = await extractSymbols("src/queue.ts", source);
+    expect(
+      symbols?.imports.map((i) => `${i.local}<-${i.imported}@${i.from}${i.reexport ? " (re-export)" : ""}`),
+    ).toEqual([
+      "rankOne<-rank@./rank",
+      "config<-config@./rank",
+      "Anthropic<-default@@anthropic-ai/sdk",
+      "fs<-*@node:fs",
+      "helper<-helper@./helpers (re-export)",
+      "*<-*@./types (re-export)",
+    ]);
+  });
+
+  it("finds calls, method calls, constructors and base classes", async () => {
+    const symbols = await extractSymbols("src/queue.ts", source);
+    const refs = symbols?.references.map((r) => `${r.object ? `${r.object}.` : ""}${r.name}@${r.line}`) ?? [];
+    expect(refs).toEqual(
+      expect.arrayContaining(["rankOne@8", "fs.existsSync@12", "Anthropic@16", "Base@18", "this.#score@20"]),
+    );
+  });
+
+  it("finds JSX components used in TSX", async () => {
+    const symbols = await extractSymbols(
+      "src/App.tsx",
+      "export function App() {\n  return <Layout><QueueTable rows={rows} /></Layout>;\n}\n",
+    );
+    expect(symbols?.references.map((r) => r.name)).toEqual(expect.arrayContaining(["Layout", "QueueTable"]));
+  });
+
+  it("reads a real Alden source file", async () => {
+    const path = join(import.meta.dirname, "../queue/rank.ts");
+    const symbols = await extractSymbols(path, readFileSync(path, "utf8"));
+    const exported = symbols?.definitions.filter((d) => d.exported).map((d) => d.name);
+    expect(exported).toEqual(expect.arrayContaining(["formatAge", "reviewableSize", "rankPullRequest", "rankQueue"]));
+    expect(symbols?.imports.map((i) => i.from)).toEqual(expect.arrayContaining(["./files.js", "@alden/schema"]));
+  });
+});
+
+describe("Python", () => {
+  const source = `import os
+import app.models as models
+from django.db import models as dj_models, transaction
+from .utils import slugify
+from ..core import *
+
+class Invoice(dj_models.Model):
+    def __init__(self, amount):
+        self.amount = amount
+
+    @property
+    def total(self):
+        return round(self.amount)
+
+    def _audit(self):
+        pass
+
+class _Internal:
+    def run(self):
+        pass
+
+@transaction.atomic
+def charge(invoice, card):
+    token = os.getenv("KEY")
+    return models.Payment.create(invoice=invoice, slug=slugify(card))
+
+def _helper():
+    pass
+`;
+
+  it("finds classes, methods and functions; underscores are private", async () => {
+    const symbols = await extractSymbols("billing/charge.py", source);
+    expect(names(symbols?.definitions ?? [])).toEqual([
+      "+Invoice:class",
+      "+Invoice.__init__:method",
+      "+Invoice.total:method",
+      "-Invoice._audit:method",
+      "-_Internal:class",
+      "-_Internal.run:method",
+      "+charge:function",
+      "-_helper:function",
+    ]);
+    // A decorated function's range starts at its decorator.
+    const charge = symbols?.definitions.find((d) => d.name === "charge");
+    expect([charge?.startLine, charge?.endLine]).toEqual([22, 25]);
+  });
+
+  it("reads import and from-import forms, including relative and wildcard", async () => {
+    const symbols = await extractSymbols("billing/charge.py", source);
+    expect(symbols?.imports.map((i) => `${i.local}<-${i.imported}@${i.from}`)).toEqual([
+      "os<-*@os",
+      "models<-*@app.models",
+      "dj_models<-models@django.db",
+      "transaction<-transaction@django.db",
+      "slugify<-slugify@.utils",
+      "*<-*@..core",
+    ]);
+  });
+
+  it("finds calls, method calls and base classes", async () => {
+    const symbols = await extractSymbols("billing/charge.py", source);
+    const refs = symbols?.references.map((r) => `${r.object ? `${r.object}.` : ""}${r.name}@${r.line}`) ?? [];
+    expect(refs).toEqual(
+      expect.arrayContaining(["Model@7", "round@13", "os.getenv@24", "models.Payment.create@25", "slugify@25"]),
+    );
+  });
+});
+
+it("skips languages the graph doesn't cover yet", async () => {
+  expect(await extractSymbols("main.go", "package main")).toBeUndefined();
+});

@@ -18,6 +18,15 @@ export {
 } from "./diff/parse.js";
 export { fetchPullRequestDiff, fromRestFile, type LocalDiff, readLocalDiff } from "./diff/sources.js";
 export * from "./github/index.js";
+export {
+  type Definition,
+  type DefinitionKind,
+  extractSymbols,
+  type FileSymbols,
+  type ImportBinding,
+  type Reference,
+} from "./graph/extract.js";
+export { type GraphLanguage, grammarPath, languageOf, parserFor } from "./graph/parser.js";
 export { AnthropicProvider, type MessagesClient, supportsEffort, toLlmError } from "./llm/anthropic.js";
 export {
   affordableInputTokens,
