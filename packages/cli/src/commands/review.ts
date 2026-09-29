@@ -5,8 +5,10 @@ import {
   resolveToken,
   reviewLocalChanges,
   reviewPullRequest,
+  type TokenSource,
 } from "@alden/core";
 import type { Command } from "commander";
+import { describeGitHubError } from "../github-errors.js";
 import { parsePrRef } from "../pr-ref.js";
 import { renderBriefing } from "../render/briefing.js";
 import { shouldColor } from "../render/style.js";
@@ -21,6 +23,7 @@ export function registerReviewCommand(program: Command): void {
     .action(async (prArg: string | undefined, options: { json?: boolean }) => {
       const config = await loadConfig();
       let briefing: Awaited<ReturnType<typeof reviewLocalChanges>>;
+      let source: TokenSource | undefined;
       try {
         if (prArg === undefined) {
           briefing = await reviewLocalChanges(config);
@@ -29,10 +32,11 @@ export function registerReviewCommand(program: Command): void {
           const ref = parsePrRef(prArg, last?.urls);
           const resolved = await resolveToken();
           if (!resolved) program.error("Not signed in. Run `alden auth login`.");
+          source = resolved.source;
           briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config);
         }
       } catch (error) {
-        program.error((error as Error).message);
+        program.error(source ? describeGitHubError(error, source) : (error as Error).message);
       }
 
       if (options.json) {

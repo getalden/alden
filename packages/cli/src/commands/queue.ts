@@ -1,5 +1,6 @@
 import { createGitHubClient, fetchReviewQueue, JsonCache, loadConfig, rankQueue, resolveToken } from "@alden/core";
 import type { Command } from "commander";
+import { describeGitHubError } from "../github-errors.js";
 import { renderQueue, shouldColor } from "../render/queue.js";
 import { LAST_QUEUE_KEY, type LastQueue } from "./open.js";
 
@@ -44,7 +45,7 @@ export function registerQueueCommand(program: Command): void {
           orgs: options.org,
         });
       } catch (error) {
-        program.error((error as Error).message);
+        program.error(describeGitHubError(error, resolved.source));
       }
       const ranked = rankQueue(queue, config.queue);
 
