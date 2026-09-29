@@ -18,7 +18,7 @@ export {
 } from "./diff/parse.js";
 export { fetchPullRequestDiff, fromRestFile, type LocalDiff, readLocalDiff } from "./diff/sources.js";
 export * from "./github/index.js";
-export { AnthropicProvider, type MessagesClient, toLlmError } from "./llm/anthropic.js";
+export { AnthropicProvider, type MessagesClient, supportsEffort, toLlmError } from "./llm/anthropic.js";
 export {
   affordableInputTokens,
   type BudgetDecision,
@@ -41,6 +41,7 @@ export {
 export { DEFAULT_BASE_URL, OpenAICompatibleProvider } from "./llm/openai-compatible.js";
 export { createPlatformClient, type Platform, platformModelId } from "./llm/platforms.js";
 export {
+  type Effort,
   type GenerateRequest,
   type GenerateResult,
   LlmError,

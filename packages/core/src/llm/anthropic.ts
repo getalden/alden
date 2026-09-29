@@ -30,6 +30,11 @@ export function toLlmError(error: unknown): LlmError {
   return new LlmError(kind, message, error);
 }
 
+/** Haiku 4.5 rejects the effort parameter; every current Opus, Sonnet and Fable model takes it. */
+export function supportsEffort(model: string): boolean {
+  return !model.replace(/^anthropic\./, "").startsWith("claude-haiku-4-5");
+}
+
 function stopReason(reason: string | null): StopReason {
   if (reason === "end_turn" || reason === "stop_sequence") return "end";
   if (reason === "max_tokens") return "max_tokens";
@@ -106,7 +111,10 @@ export class AnthropicProvider implements LlmProvider {
           max_tokens: request.maxOutputTokens,
           system: request.system,
           messages: [{ role: "user", content: request.user }],
-          output_config: { format: zodOutputFormat(request.schema) },
+          output_config: {
+            format: zodOutputFormat(request.schema),
+            ...(request.effort && supportsEffort(this.model) ? { effort: request.effort } : {}),
+          },
         })
         .finalMessage();
     } catch (error) {

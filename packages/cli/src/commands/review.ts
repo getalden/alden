@@ -1,5 +1,6 @@
 import {
   createGitHubClient,
+  type Effort,
   JsonCache,
   loadConfig,
   resolveToken,
@@ -24,7 +25,10 @@ interface ReviewOptions {
   /** Commander sets this to false for --no-llm. */
   llm: boolean;
   model?: string;
+  effort?: string;
 }
+
+const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 export function registerReviewCommand(program: Command): void {
   program
@@ -33,15 +37,20 @@ export function registerReviewCommand(program: Command): void {
     .argument("[pr]", "a PR URL, owner/repo#123, or a # from `alden queue`")
     .option("--no-llm", "run only the deterministic checks, without asking a model")
     .option("--model <name>", "use this model for this review (e.g. opus), instead of your configured one")
+    .option("--effort <level>", "how hard the model thinks: low, medium, high, xhigh or max (default: the model's own)")
     .option("--json", "print the briefing as JSON (see packages/schema/json)")
     .action(async (prArg: string | undefined, options: ReviewOptions) => {
       const config = await loadConfig();
+      const effort = options.effort as Effort | undefined;
+      if (effort !== undefined && !EFFORTS.includes(effort)) {
+        program.error(`--effort must be one of ${EFFORTS.join(", ")}.`);
+      }
 
       let model: WithModel | undefined;
       let unavailable: string | undefined;
       if (options.llm) {
         const choice = selectProvider(config, options.model);
-        if (choice.ok) model = { provider: choice.provider, ledger: new SpendLedger() };
+        if (choice.ok) model = { provider: choice.provider, ledger: new SpendLedger(), ...(effort ? { effort } : {}) };
         else unavailable = choice.reason;
       }
 

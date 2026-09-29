@@ -92,6 +92,38 @@ describe("AnthropicProvider", () => {
     expect(calls[0]).not.toHaveProperty("temperature");
   });
 
+  it("sends effort when asked, except to Haiku 4.5, which rejects it", async () => {
+    const response = { parsed_output: { summary: "x" }, stop_reason: "end_turn", usage, model: "m" };
+    const sonnet = fakeClient(response);
+    await new AnthropicProvider("sonnet", sonnet.client).generate({
+      system: "s",
+      user: "u",
+      schema: Out,
+      maxOutputTokens: 100,
+      effort: "medium",
+    });
+    expect(sonnet.calls[0]).toMatchObject({ output_config: { effort: "medium" } });
+
+    const haiku = fakeClient(response);
+    await new AnthropicProvider("haiku", haiku.client).generate({
+      system: "s",
+      user: "u",
+      schema: Out,
+      maxOutputTokens: 100,
+      effort: "medium",
+    });
+    expect(haiku.calls[0]).not.toHaveProperty("output_config.effort");
+
+    const unset = fakeClient(response);
+    await new AnthropicProvider("sonnet", unset.client).generate({
+      system: "s",
+      user: "u",
+      schema: Out,
+      maxOutputTokens: 100,
+    });
+    expect(unset.calls[0]).not.toHaveProperty("output_config.effort");
+  });
+
   it("reports refusals with their category and no output", async () => {
     const { client } = fakeClient({
       parsed_output: null,

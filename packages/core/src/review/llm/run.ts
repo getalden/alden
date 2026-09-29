@@ -1,9 +1,10 @@
 import type { AldenConfig, Briefing, LlmSection } from "@alden/schema";
 import type { DiffFile } from "../../diff/parse.js";
+import { supportsEffort } from "../../llm/anthropic.js";
 import { affordableInputTokens } from "../../llm/budget.js";
 import { BudgetExceededError, type BudgetedResult, budgetedGenerate } from "../../llm/budgeted.js";
 import type { SpendLedger } from "../../llm/ledger.js";
-import { LlmError, type LlmErrorKind, type LlmProvider } from "../../llm/provider.js";
+import { type Effort, LlmError, type LlmErrorKind, type LlmProvider } from "../../llm/provider.js";
 import { NOT_CHECKED } from "../briefing.js";
 import { mergeLookHere } from "./merge.js";
 import { buildPrompt, type LlmOutput, LlmOutputSchema } from "./prompt.js";
@@ -35,6 +36,8 @@ export interface ModelReviewOptions {
   description?: string;
   /** The files the briefing was built from, with hunks. */
   files: DiffFile[];
+  /** A one-off effort, overriding `model.effort` from config. */
+  effort?: Effort;
 }
 
 function withSection(briefing: Briefing, llm: LlmSection): Briefing {
@@ -58,6 +61,7 @@ const empty = (status: LlmSection["status"], note: string, provider: LlmProvider
 export async function addModelReview(briefing: Briefing, options: ModelReviewOptions): Promise<Briefing> {
   const { provider, config, ledger } = options;
   if (options.files.length === 0) return briefing;
+  const effort = options.effort ?? config.model.effort;
 
   const dailyLeft = config.budget.dailyUsd - (await ledger.spentOn());
   const budgetUsd = Math.min(config.budget.perReviewUsd, dailyLeft);
@@ -84,7 +88,13 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   try {
     result = await budgetedGenerate(
       provider,
-      { system: prompt.system, user: prompt.user, schema: LlmOutputSchema, maxOutputTokens: MAX_OUTPUT_TOKENS },
+      {
+        system: prompt.system,
+        user: prompt.user,
+        schema: LlmOutputSchema,
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        ...(effort ? { effort } : {}),
+      },
       { limits: config.budget, ledger, purpose },
     );
   } catch (error) {
@@ -106,6 +116,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   const base = {
     provider: provider.provider,
     model: result.model,
+    ...(effort && provider.provider !== "openai-compatible" && supportsEffort(result.model) ? { effort } : {}),
     omittedFiles: prompt.omittedFiles,
     ...(result.usd === undefined ? {} : { usd: result.usd }),
   };

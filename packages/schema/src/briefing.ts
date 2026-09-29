@@ -55,6 +55,7 @@ export const LlmSectionSchema = z.object({
   note: z.string().optional().describe("one line explaining a status other than ok"),
   provider: z.string().optional(),
   model: z.string().optional(),
+  effort: z.string().optional().describe("the effort level sent, when one was"),
   summary: z.string().optional().describe("what the change does, in plain words"),
   matchesTitle: z
     .object({ verdict: z.enum(["yes", "partly", "no", "unclear"]), reason: z.string() })

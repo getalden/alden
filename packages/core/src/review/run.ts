@@ -4,7 +4,7 @@ import type { GitHubClient } from "../github/client.js";
 import { PULL_REQUEST_FIELDS, type RawPullRequest, toFacts } from "../github/pull-requests.js";
 import { fetchViewer } from "../github/queue.js";
 import type { SpendLedger } from "../llm/ledger.js";
-import type { LlmProvider } from "../llm/provider.js";
+import type { Effort, LlmProvider } from "../llm/provider.js";
 import { buildBriefing } from "./briefing.js";
 import type { ManifestSnapshot } from "./dependencies.js";
 import { addModelReview } from "./llm/run.js";
@@ -14,6 +14,8 @@ import { loadLocalManifests, loadPullRequestManifests } from "./manifests.js";
 export interface WithModel {
   provider: LlmProvider;
   ledger: SpendLedger;
+  /** A one-off effort, overriding `model.effort` from config. */
+  effort?: Effort;
 }
 
 /** One PR's facts by number: the queue's fields plus its description, which only a review needs. */

@@ -128,6 +128,34 @@ describe("addModelReview on a real PR", () => {
     expect(BriefingSchema.safeParse(JSON.parse(JSON.stringify(result))).error).toBeUndefined();
   });
 
+  it("sends the effort from config, or a one-off override, and records it", async () => {
+    const { briefing, files } = recorded("django", 22041);
+    const seen: (string | undefined)[] = [];
+    const { provider } = model({
+      output: { summary: "s", matchesTitle: { verdict: "yes", reason: "r" }, findings: [] },
+    });
+    const spy: LlmProvider = {
+      ...provider,
+      generate: (request) => {
+        seen.push(request.effort);
+        return provider.generate(request);
+      },
+    };
+    const withConfig = { ...config, model: { ...config.model, effort: "medium" as const } };
+    const ledger = new SpendLedger(dir);
+    const fromConfig = await addModelReview(briefing, { provider: spy, config: withConfig, ledger, files });
+    const overridden = await addModelReview(briefing, {
+      provider: spy,
+      config: withConfig,
+      ledger,
+      files,
+      effort: "low",
+    });
+    const unset = await addModelReview(briefing, { provider: spy, config, ledger, files });
+    expect(seen).toEqual(["medium", "low", undefined]);
+    expect([fromConfig.llm?.effort, overridden.llm?.effort, unset.llm?.effort]).toEqual(["medium", "low", undefined]);
+  });
+
   it.each([
     [
       "a refusal",

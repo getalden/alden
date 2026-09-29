@@ -1,5 +1,6 @@
 /**
- * Replays the recorded PRs through the real model review and measures it: `pnpm eval [--model opus] [--only nextjs] [--yes]`.
+ * Replays the recorded PRs through the real model review and measures it:
+ * `pnpm eval [--model opus] [--effort medium] [--only nextjs] [--yes]`.
  *
  * Without --yes it only prints what the run could cost. With --yes it calls the configured provider (spending against
  * your caps and ledger like any review) and writes eval/results/<time>-<model>.json. Measures what needs no labels
@@ -11,6 +12,7 @@ import picomatch from "picomatch";
 import {
   addModelReview,
   buildBriefing,
+  type Effort,
   estimateTokens,
   fromRestFile,
   loadConfig,
@@ -48,6 +50,7 @@ if (!choice.ok) {
   process.exit(1);
 }
 const { provider } = choice;
+const effort = (flag("--effort") ?? config.model.effort) as Effort | undefined;
 
 // Every recorded PR as the briefing Alden would build offline, with its description.
 const only = flag("--only");
@@ -93,7 +96,7 @@ const worst = cases.reduce(
   0,
 );
 console.log(
-  `${cases.length} recorded PRs with ${provider.model} via ${provider.provider}. Worst case about $${worst.toFixed(2)}; typically far less.`,
+  `${cases.length} recorded PRs with ${provider.model} via ${provider.provider}${effort ? ` at effort ${effort}` : ""}. Worst case about $${worst.toFixed(2)}; typically far less.`,
 );
 if (!args.includes("--yes")) {
   console.log("Nothing sent. Add --yes to run it.");
@@ -127,6 +130,7 @@ for (const c of cases) {
     ledger,
     files: c.files,
     description: c.description,
+    ...(effort ? { effort } : {}),
   });
   const seconds = (Date.now() - started) / 1000;
   const llm = result.llm;
@@ -170,6 +174,7 @@ const checks = rows.flatMap((r) => r.mustFlag);
 const summary = {
   model: provider.model,
   provider: provider.provider,
+  effort: effort ?? "default",
   at: new Date().toISOString(),
   prs: rows.length,
   usableRate: ok.length / rows.length,
@@ -185,6 +190,6 @@ const summary = {
 console.log("\n", summary);
 
 mkdirSync(join(ROOT, "eval/results"), { recursive: true });
-const file = join(ROOT, "eval/results", `${summary.at.replace(/[:.]/g, "-")}-${provider.model}.json`);
+const file = join(ROOT, "eval/results", `${summary.at.replace(/[:.]/g, "-")}-${provider.model}-${summary.effort}.json`);
 writeFileSync(file, `${JSON.stringify({ summary, rows }, null, 2)}\n`);
 console.log(`Saved ${file}`);

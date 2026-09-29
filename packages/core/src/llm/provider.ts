@@ -7,7 +7,11 @@ export interface GenerateRequest<T> {
   /** The output shape. Providers return it validated, or null when the model's answer didn't fit. */
   schema: z.ZodType<T>;
   maxOutputTokens: number;
+  /** Thinking effort, for providers that support it; others ignore it. */
+  effort?: Effort;
 }
+
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export type StopReason = "end" | "max_tokens" | "refusal" | "other";
 

@@ -166,6 +166,7 @@ describe("renderBriefing", () => {
         droppedFindings: 1,
         omittedFiles: [],
         usd: 0.0412,
+        effort: "medium",
       },
     });
     const out = plain(withModel);
@@ -186,7 +187,7 @@ describe("renderBriefing", () => {
 
     it("ends with the model, its cost and what was dropped", () => {
       expect(plain(withModel, 120).trimEnd().split("\n").at(-1)).toBe(
-        "Model: claude-sonnet-5 via anthropic · $0.04 · 1 finding dropped for pointing at lines not in the diff",
+        "Model: claude-sonnet-5 via anthropic (effort medium) · $0.04 · 1 finding dropped for pointing at lines not in the diff",
       );
     });
 

@@ -103,7 +103,7 @@ function modelFooter(llm: LlmSection | undefined, options: RenderOptions): strin
     return ["", ...wrap(`${label}: ${llm.note ?? ""}`, width).map((l) => paint(l, "dim", color))];
   }
   const parts = [
-    `Model: ${llm.model ?? "unknown"}${llm.provider ? ` via ${llm.provider}` : ""}`,
+    `Model: ${llm.model ?? "unknown"}${llm.provider ? ` via ${llm.provider}` : ""}${llm.effort ? ` (effort ${llm.effort})` : ""}`,
     llm.usd === undefined ? "cost unknown" : `$${llm.usd.toFixed(llm.usd < 0.01 ? 4 : 2)}`,
     llm.droppedFindings > 0 &&
       `${llm.droppedFindings} finding${llm.droppedFindings === 1 ? "" : "s"} dropped for pointing at lines not in the diff`,

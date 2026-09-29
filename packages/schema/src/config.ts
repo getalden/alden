@@ -20,6 +20,8 @@ export const AldenConfigSchema = z.object({
     .object({
       provider: z.enum(["anthropic", "bedrock", "vertex", "foundry", "openai-compatible"]).default("anthropic"),
       name: z.string().default("sonnet"),
+      /** How hard Claude thinks: more effort, more time and tokens. Unset means the model's own default (high). */
+      effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
       /** openai-compatible: the endpoint, e.g. http://localhost:11434/v1 for Ollama. */
       baseUrl: z.url().optional(),
       /** bedrock (AWS region) and vertex (GCP region, e.g. "global"). */

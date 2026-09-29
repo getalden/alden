@@ -358,6 +358,10 @@
         "model": {
           "type": "string"
         },
+        "effort": {
+          "description": "the effort level sent, when one was",
+          "type": "string"
+        },
         "summary": {
           "description": "what the change does, in plain words",
           "type": "string"
