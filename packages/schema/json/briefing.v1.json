@@ -308,6 +308,14 @@
           "checkId": {
             "description": "the check that raised it, if any",
             "type": "string"
+          },
+          "source": {
+            "description": "a deterministic check or the model; absent means check",
+            "type": "string",
+            "enum": [
+              "check",
+              "llm"
+            ]
           }
         },
         "required": [
@@ -323,6 +331,137 @@
         "type": "string"
       },
       "description": "what Alden did not check, stated plainly"
+    },
+    "llm": {
+      "description": "the model's view; absent when no model was asked",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "refused",
+            "over_budget",
+            "failed",
+            "truncated",
+            "skipped"
+          ],
+          "description": "ok, or why there is no model section"
+        },
+        "note": {
+          "description": "one line explaining a status other than ok",
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "summary": {
+          "description": "what the change does, in plain words",
+          "type": "string"
+        },
+        "matchesTitle": {
+          "description": "whether the change does what its title and description say",
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "enum": [
+                "yes",
+                "partly",
+                "no",
+                "unclear"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "verdict",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string",
+                "description": "what's wrong or worth checking, and why, in one or two sentences"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "anchors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "line": {
+                      "description": "line in the new file; absent for whole-file findings",
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "path"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "title",
+              "detail",
+              "severity",
+              "anchors"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "droppedFindings": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "description": "findings discarded for pointing at lines not in the diff"
+        },
+        "omittedFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "files left out of the model's view to fit the budget"
+        },
+        "usd": {
+          "description": "what the call cost at list price, when known",
+          "type": "number"
+        }
+      },
+      "required": [
+        "status",
+        "findings",
+        "droppedFindings",
+        "omittedFiles"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

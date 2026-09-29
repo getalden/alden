@@ -36,6 +36,34 @@ export const LookHereSchema = z.object({
   reason: z.string().describe("why a human should look, in one sentence"),
   anchor: AnchorSchema.optional(),
   checkId: z.string().optional().describe("the check that raised it, if any"),
+  source: z.enum(["check", "llm"]).optional().describe("a deterministic check or the model; absent means check"),
+});
+
+/** What the model found, after Alden has thrown away anything pointing at a line that isn't in the diff. */
+export const LlmFindingSchema = z.object({
+  title: z.string(),
+  detail: z.string().describe("what's wrong or worth checking, and why, in one or two sentences"),
+  severity: SeveritySchema,
+  /** One finding can cover several places, e.g. the same change repeated across ten files. */
+  anchors: z.array(AnchorSchema),
+});
+
+export const LlmSectionSchema = z.object({
+  status: z
+    .enum(["ok", "refused", "over_budget", "failed", "truncated", "skipped"])
+    .describe("ok, or why there is no model section"),
+  note: z.string().optional().describe("one line explaining a status other than ok"),
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  summary: z.string().optional().describe("what the change does, in plain words"),
+  matchesTitle: z
+    .object({ verdict: z.enum(["yes", "partly", "no", "unclear"]), reason: z.string() })
+    .optional()
+    .describe("whether the change does what its title and description say"),
+  findings: z.array(LlmFindingSchema),
+  droppedFindings: z.number().int().describe("findings discarded for pointing at lines not in the diff"),
+  omittedFiles: z.array(z.string()).describe("files left out of the model's view to fit the budget"),
+  usd: z.number().optional().describe("what the call cost at list price, when known"),
 });
 
 export const BriefingFileSchema = z.object({
@@ -82,6 +110,7 @@ export const BriefingSchema = z.object({
   checks: z.array(CheckResultSchema),
   needsYourEyes: z.array(LookHereSchema).max(3),
   notChecked: z.array(z.string()).describe("what Alden did not check, stated plainly"),
+  llm: LlmSectionSchema.optional().describe("the model's view; absent when no model was asked"),
 });
 
 export type Anchor = z.infer<typeof AnchorSchema>;
@@ -92,4 +121,6 @@ export type CheckResult = z.infer<typeof CheckResultSchema>;
 export type LookHere = z.infer<typeof LookHereSchema>;
 export type BriefingFile = z.infer<typeof BriefingFileSchema>;
 export type BriefingTarget = z.infer<typeof BriefingTargetSchema>;
+export type LlmFinding = z.infer<typeof LlmFindingSchema>;
+export type LlmSection = z.infer<typeof LlmSectionSchema>;
 export type Briefing = z.infer<typeof BriefingSchema>;

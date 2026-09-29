@@ -71,9 +71,21 @@ export {
   type ManifestSnapshot,
   parseManifest,
 } from "./review/dependencies.js";
+export { mergeLookHere } from "./review/llm/merge.js";
+export {
+  type BuiltPrompt,
+  buildPrompt,
+  type LlmOutput,
+  LlmOutputSchema,
+  type PromptInput,
+  renderFileDiff,
+  SYSTEM_PROMPT,
+} from "./review/llm/prompt.js";
+export { addModelReview, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, type ModelReviewOptions } from "./review/llm/run.js";
+export { type ValidatedFindings, validateFindings } from "./review/llm/validate.js";
 export { loadLocalManifests, loadPullRequestManifests, reverseApply } from "./review/manifests.js";
 export { MAX_LOOK_HERE, pickLookHere } from "./review/pick.js";
-export { fetchPullRequest, reviewLocalChanges, reviewPullRequest } from "./review/run.js";
+export { fetchPullRequest, reviewLocalChanges, reviewPullRequest, type WithModel } from "./review/run.js";
 export { findSecrets, mask, type SecretFinding, shannonEntropy } from "./review/secrets.js";
 export { type Declaration, declarationIn, type SignatureChange, signatureChanges } from "./review/signatures.js";
 export type { Check, CheckOutcome, ReviewContext } from "./review/types.js";
