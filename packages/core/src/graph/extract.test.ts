@@ -244,7 +244,7 @@ func run() {
       "-run:function",
     ]);
     const handle = symbols?.definitions.find((d) => d.name === "Handle");
-    expect([handle?.startLine, handle?.endLine]).toEqual([30, 33]);
+    expect([handle?.startLine, handle?.endLine, handle?.receiver]).toEqual([30, 33, "s"]);
     // Each spec in a grouped declaration has its own lines.
     expect(symbols?.definitions.find((d) => d.name === "Handler")?.startLine).toBe(20);
   });

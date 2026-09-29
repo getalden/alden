@@ -57,6 +57,55 @@ describe("Go callers", () => {
     ]);
     expect(sites(graph.callersOf({ path: "internal/httpx/server.go", name: "Serve" }))).toEqual(["cmd/web.go:10"]);
   });
+
+  it("finds method calls in files that use the package, with common names only on the receiver", async () => {
+    const graph = await repo(
+      {
+        "server/server.go": `package server
+
+type Server struct{ name string }
+
+func (s *Server) Handle() error { return nil }
+func (s *Server) Close() error { return nil }
+func (s *Server) String() string { return s.name }
+
+func (s *Server) Shutdown() {
+\ts.Close()
+\ts.Handle()
+\t_ = s.String()
+}
+`,
+        "server/pool.go":
+          "package server\n\nfunc drain(conn io.Closer, srv *Server) {\n\tconn.Close()\n\tsrv.Handle()\n}\n",
+        "cmd/main.go": `package main
+
+import "github.com/acme/app/server"
+
+func main() {
+\tsrv := &server.Server{}
+\tsrv.Handle()
+\tdefer srv.Close()
+\tfmt.Println(srv.String())
+}
+`,
+        // Doesn't import the server package: its Handle is some other type's.
+        "other/other.go": "package other\n\nfunc x(h Handler) { h.Handle() }\n",
+      },
+      { goModules },
+    );
+    expect(sites(graph.callersOf({ path: "server/server.go", name: "Handle", container: "Server" }))).toEqual([
+      "cmd/main.go:7",
+      "server/pool.go:5",
+      "server/server.go:11",
+    ]);
+    // Close is too common to trust on any receiver: only s.Close() inside Server's own methods counts.
+    expect(sites(graph.callersOf({ path: "server/server.go", name: "Close", container: "Server" }))).toEqual([
+      "server/server.go:10",
+    ]);
+    expect(sites(graph.callersOf({ path: "server/server.go", name: "String", container: "Server" }))).toEqual([
+      "server/server.go:12",
+    ]);
+  });
 });
 
 describe("TypeScript callers", () => {

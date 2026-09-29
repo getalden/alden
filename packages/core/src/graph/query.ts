@@ -87,6 +87,77 @@ const COMMON_METHODS = new Set([
   "toJSON",
 ]);
 
+/**
+ * Go's equivalents: method names that interfaces make universal (String, Error, Close…) or that every type has. For
+ * these, only calls on the method's own receiver inside the type's methods, or on the type itself, count.
+ */
+const GO_COMMON_METHODS = new Set([
+  "String",
+  "Error",
+  "Close",
+  "Get",
+  "Set",
+  "Add",
+  "Delete",
+  "Update",
+  "Create",
+  "Read",
+  "Write",
+  "Run",
+  "Start",
+  "Stop",
+  "Init",
+  "Load",
+  "Save",
+  "Reset",
+  "Len",
+  "Less",
+  "Swap",
+  "Next",
+  "Done",
+  "Wait",
+  "Lock",
+  "Unlock",
+  "Err",
+  "Name",
+  "Type",
+  "Value",
+  "Key",
+  "Keys",
+  "Values",
+  "Do",
+  "Exec",
+  "Query",
+  "Open",
+  "Flush",
+  "Copy",
+  "Clone",
+  "Equal",
+  "Hash",
+  "ID",
+  "Parse",
+  "Format",
+  "Validate",
+  "Apply",
+  "ServeHTTP",
+  "MarshalJSON",
+  "UnmarshalJSON",
+  "MarshalText",
+  "UnmarshalText",
+  "Context",
+  // Logging: every logger has these, so h.Log.Debug() is almost never your Debug.
+  "Debug",
+  "Info",
+  "Warn",
+  "Log",
+  "Print",
+  "Printf",
+  "Println",
+  "Errorf",
+  "Fatal",
+  "Fatalf",
+]);
+
 /** How deep to follow re-export chains (barrel files re-exporting barrel files). */
 const MAX_REEXPORT_DEPTH = 4;
 
@@ -138,6 +209,14 @@ export class CodeGraph {
       }
       this.bindings.set(path, list);
     }
+  }
+
+  /** Whether `object` at `line` is the receiver of one of the symbol's type's own methods (same package only). */
+  private isGoReceiver(path: string, symbols: FileSymbols, symbol: SymbolRef, object: string, line: number): boolean {
+    if (!this.samePackage(path, symbol.path)) return false;
+    return symbols.definitions.some(
+      (d) => d.container === symbol.container && d.receiver === object && d.startLine <= line && line <= d.endLine,
+    );
   }
 
   private samePackage(a: string, b: string): boolean {
@@ -209,9 +288,13 @@ export class CodeGraph {
         if (isMethod) {
           if (ref.name !== symbol.name || ref.object === undefined) continue;
           // Any receiver may be an instance, except for names so common (get, save, filter…) that only a call on
-          // exactly self/this/cls/Class is trustworthy: `this.get()` is the method, `this.data.get()` is not.
-          const selfish = ["self", "this", "cls", lookFor].includes(ref.object);
-          if (selfish || !COMMON_METHODS.has(symbol.name)) add(path, ref.line, "import");
+          // exactly self/this/cls/Class is trustworthy: `this.get()` is the method, `this.data.get()` is not. In Go
+          // the receiver variable (`s` in `func (s *Server)`) plays the part of `this`.
+          const selfish =
+            ["self", "this", "cls", lookFor].includes(ref.object) ||
+            (symbols.language === "go" && this.isGoReceiver(path, symbols, symbol, ref.object, ref.line));
+          const common = symbols.language === "go" ? GO_COMMON_METHODS : COMMON_METHODS;
+          if (selfish || !common.has(symbol.name)) add(path, ref.line, "import");
         } else if (
           ref.object === undefined
             ? names.has(ref.name)

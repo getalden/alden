@@ -13,6 +13,8 @@ export interface Definition {
   endLine: number;
   /** The class a method belongs to. */
   container?: string;
+  /** Go: the method's receiver variable (`s` in `func (s *Server) Handle()`), which plays the part of `this`. */
+  receiver?: string;
 }
 
 /** A name a file brings in from elsewhere. */
@@ -364,9 +366,10 @@ export function goPackageNameFromPath(path: string): string {
     .replace(/[^A-Za-z0-9_]/g, "_");
 }
 
-/** The type a method's receiver names: `(s *Server)`, `(b Box[T])`, `(Server)`. */
-function receiverType(method: Node): string | undefined {
+/** The type a method's receiver names, and its variable: `(s *Server)`, `(b Box[T])`, `(Server)`. */
+function receiverOf(method: Node): { type?: string; name?: string } {
   const param = method.childForFieldName("receiver")?.namedChildren.find((c) => c?.type === "parameter_declaration");
+  const name = param?.childForFieldName("name")?.text;
   let type = param?.childForFieldName("type") ?? null;
   while (type && type.type !== "type_identifier") {
     type =
@@ -376,13 +379,13 @@ function receiverType(method: Node): string | undefined {
           ? type.childForFieldName("type")
           : null;
   }
-  return type?.text;
+  return { ...(type ? { type: type.text } : {}), ...(name ? { name } : {}) };
 }
 
 function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
   const definitions: Definition[] = [];
   const imports: ImportBinding[] = [];
-  const add = (node: Node, name: string | undefined, kind: DefinitionKind, container?: string) => {
+  const add = (node: Node, name: string | undefined, kind: DefinitionKind, container?: string, receiver?: string) => {
     if (!name || name === "_") return;
     definitions.push({
       name,
@@ -391,6 +394,7 @@ function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
       startLine: line(node),
       endLine: endLine(node),
       ...(container ? { container } : {}),
+      ...(receiver && receiver !== "_" ? { receiver } : {}),
     });
   };
   let goPackage: string | undefined;
@@ -420,9 +424,11 @@ function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
       case "function_declaration":
         add(node, node.childForFieldName("name")?.text, "function");
         break;
-      case "method_declaration":
-        add(node, node.childForFieldName("name")?.text, "method", receiverType(node));
+      case "method_declaration": {
+        const receiver = receiverOf(node);
+        add(node, node.childForFieldName("name")?.text, "method", receiver.type, receiver.name);
         break;
+      }
       case "type_declaration":
         for (const spec of node.namedChildren) {
           if (spec?.type !== "type_spec" && spec?.type !== "type_alias") continue;
