@@ -1,4 +1,4 @@
-import type { Anchor, Briefing, CheckResult } from "@alden/schema";
+import type { Anchor, Briefing, CheckResult, LlmSection } from "@alden/schema";
 import { fit, paint, type RenderOptions, type Style, wrap } from "./style.js";
 
 const MARK: Record<CheckResult["status"], { symbol: string; style: Style }> = {
@@ -51,6 +51,66 @@ function header(briefing: Briefing, options: RenderOptions): string[] {
   ];
 }
 
+const VERDICT_STYLE: Record<NonNullable<LlmSection["matchesTitle"]>["verdict"], Style> = {
+  yes: "green",
+  partly: "yellow",
+  no: "red",
+  unclear: "dim",
+};
+
+const place = (anchor: Anchor) => `${anchor.path}${anchor.line ? `:${anchor.line}` : ""}`;
+
+/** The model's summary and whether the change matches its title, right under the header. */
+function whatItDoes(llm: LlmSection, options: RenderOptions): string[] {
+  const { color, width } = options;
+  if (llm.status !== "ok" || !llm.summary) return [];
+  const out = [paint("What it does", "bold", color), ...wrap(llm.summary, width, "  ")];
+  if (llm.matchesTitle) {
+    const verdict = paint(llm.matchesTitle.verdict, VERDICT_STYLE[llm.matchesTitle.verdict], color);
+    const [first = "", ...rest] = wrap(`${llm.matchesTitle.reason}`, width - 22);
+    out.push(`  Matches its title: ${verdict} · ${first}`, ...rest.map((l) => `${" ".repeat(20)}${l}`));
+  }
+  return [...out, ""];
+}
+
+/** The model's findings that didn't make "needs your eyes", most severe first. */
+function alsoNoted(briefing: Briefing, options: RenderOptions): string[] {
+  const { color, width } = options;
+  const llm = briefing.llm;
+  if (llm?.status !== "ok") return [];
+  const shown = new Set(briefing.needsYourEyes.filter((i) => i.source === "llm").map((i) => i.title));
+  const order = { high: 0, medium: 1, low: 2, info: 3 } as const;
+  const rest = llm.findings.filter((f) => !shown.has(f.title)).sort((a, b) => order[a.severity] - order[b.severity]);
+  if (rest.length === 0) return [];
+  const out = [paint("Also noted by the model", "bold", color)];
+  for (const finding of rest) {
+    const where = finding.anchors[0] ? `  ${place(finding.anchors[0])}` : "";
+    const more = finding.anchors.length > 1 ? ` +${finding.anchors.length - 1}` : "";
+    out.push(
+      `  ${paint(finding.severity.padEnd(6), SEVERITY_STYLE[finding.severity], color)} ${finding.title}${paint(`${where}${more}`, "dim", color)}`,
+    );
+    out.push(...wrap(finding.detail, width, "         ").map((l) => paint(l, "dim", color)));
+  }
+  return [...out, ""];
+}
+
+/** One line on the model: which, what it cost, what was dropped, or why it didn't run. */
+function modelFooter(llm: LlmSection | undefined, options: RenderOptions): string[] {
+  if (!llm) return [];
+  const { color, width } = options;
+  if (llm.status !== "ok") {
+    const label = llm.status === "skipped" ? "Model not used" : `Model ${llm.status.replace("_", " ")}`;
+    return ["", ...wrap(`${label}: ${llm.note ?? ""}`, width).map((l) => paint(l, "dim", color))];
+  }
+  const parts = [
+    `Model: ${llm.model ?? "unknown"}${llm.provider ? ` via ${llm.provider}` : ""}`,
+    llm.usd === undefined ? "cost unknown" : `$${llm.usd.toFixed(llm.usd < 0.01 ? 4 : 2)}`,
+    llm.droppedFindings > 0 &&
+      `${llm.droppedFindings} finding${llm.droppedFindings === 1 ? "" : "s"} dropped for pointing at lines not in the diff`,
+  ].filter(Boolean);
+  return ["", ...wrap(parts.join(" · "), width).map((l) => paint(l, "dim", color))];
+}
+
 /** The terminal briefing: where to look first, what was checked with evidence, and what wasn't checked. */
 export function renderBriefing(briefing: Briefing, options: RenderOptions): string {
   const { color, width } = options;
@@ -61,17 +121,26 @@ export function renderBriefing(briefing: Briefing, options: RenderOptions): stri
     return `${out.join("\n")}\n`;
   }
 
+  if (briefing.llm) out.push(...whatItDoes(briefing.llm, options));
+
   out.push(paint("Needs your eyes", "bold", color));
   if (briefing.needsYourEyes.length === 0) {
-    out.push(...wrap("Nothing flagged. The checks below found nothing that needs a closer look.", width, "  "));
+    const who = briefing.llm?.status === "ok" ? "Neither the checks nor the model" : "The checks below";
+    out.push(...wrap(`Nothing flagged. ${who} found nothing that needs a closer look.`, width, "  "));
   }
   briefing.needsYourEyes.forEach((item, i) => {
-    out.push(
-      `  ${paint(`${i + 1}.`, "bold", color)} ${item.title}${item.anchor?.line ? paint(`:${item.anchor.line}`, "dim", color) : ""}`,
-    );
+    if (item.source === "llm") {
+      // The model's titles don't name the file, so its place gets a line of its own.
+      out.push(`  ${paint(`${i + 1}.`, "bold", color)} ${item.title}${paint(" (model)", "cyan", color)}`);
+      if (item.anchor) out.push(paint(fit(`     ${place(item.anchor)}`, width).trimEnd(), "dim", color));
+    } else {
+      const line = item.anchor?.line ? paint(`:${item.anchor.line}`, "dim", color) : "";
+      out.push(`  ${paint(`${i + 1}.`, "bold", color)} ${item.title}${line}`);
+    }
     out.push(...wrap(item.reason, width, "     ").map((l) => paint(l, "dim", color)));
   });
   out.push("");
+  out.push(...alsoNoted(briefing, options));
 
   out.push(paint("Checked", "bold", color));
   const titleWidth = Math.min(34, Math.max(...briefing.checks.map((c) => c.title.length + (c.heuristic ? 2 : 0))));
@@ -102,5 +171,6 @@ export function renderBriefing(briefing: Briefing, options: RenderOptions): stri
   out.push(paint("Not checked", "bold", color));
   for (const item of briefing.notChecked)
     out.push(...wrap(item, width, "  · ").map((l, i) => (i === 0 ? l : `    ${l.slice(4)}`)));
+  out.push(...modelFooter(briefing.llm, options));
   return `${out.join("\n")}\n`;
 }

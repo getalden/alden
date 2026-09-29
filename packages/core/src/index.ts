@@ -37,6 +37,7 @@ export {
   type LlmProvider,
   type StopReason,
 } from "./llm/provider.js";
+export { hasAnthropicCredentials, type ProviderChoice, selectProvider } from "./llm/select.js";
 export { type FileKind, fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";
 export {
   type FastTrackKind,

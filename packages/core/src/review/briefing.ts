@@ -9,7 +9,7 @@ import type { Check, ReviewContext } from "./types.js";
  * means. Shrinks as checks land.
  */
 export const NOT_CHECKED = [
-  "Whether the change does what its title says (the LLM briefing is coming)",
+  "Whether the change does what its title says (only the model can judge that; see `alden review --help`)",
   "Callers and code outside the diff (the code graph is coming)",
 ];
 

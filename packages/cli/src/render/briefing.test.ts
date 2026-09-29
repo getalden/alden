@@ -133,6 +133,86 @@ describe("renderBriefing", () => {
     expect(plain(briefing())).toMatch(/Not checked\n {2}· Callers and code outside the diff/);
   });
 
+  describe("with the model's view", () => {
+    const withModel = briefing({
+      needsYourEyes: [
+        {
+          title: "fetchCatalog callers must handle Catalog",
+          reason: "The return type changed.",
+          anchor: { path: "src/client.ts", line: 191 },
+          source: "llm",
+        },
+      ],
+      llm: {
+        status: "ok",
+        provider: "anthropic",
+        model: "claude-sonnet-5",
+        summary: "Searches the whole metric catalog on the server.",
+        matchesTitle: { verdict: "partly", reason: "It also changes the return type." },
+        findings: [
+          {
+            title: "fetchCatalog callers must handle Catalog",
+            detail: "The return type changed.",
+            severity: "high",
+            anchors: [{ path: "src/client.ts", line: 191 }],
+          },
+          {
+            title: "Naming nit",
+            detail: "Minor.",
+            severity: "low",
+            anchors: [{ path: "src/a.ts", line: 3 }, { path: "src/b.ts" }],
+          },
+        ],
+        droppedFindings: 1,
+        omittedFiles: [],
+        usd: 0.0412,
+      },
+    });
+    const out = plain(withModel);
+
+    it("opens with what the change does and whether it matches its title", () => {
+      expect(out).toContain(
+        "What it does\n  Searches the whole metric catalog on the server.\n  Matches its title: partly · It also changes the return type.",
+      );
+    });
+
+    it("marks the model's picks and lists its other findings", () => {
+      expect(out).toContain(
+        "  1. fetchCatalog callers must handle Catalog (model)\n     src/client.ts:191\n     The return type changed.",
+      );
+      expect(out).toMatch(/Also noted by the model\n {2}low {4}Naming nit {2}src\/a\.ts:3 \+1\n {9}Minor\./);
+      expect(out.match(/fetchCatalog callers/g)).toHaveLength(1);
+    });
+
+    it("ends with the model, its cost and what was dropped", () => {
+      expect(plain(withModel, 120).trimEnd().split("\n").at(-1)).toBe(
+        "Model: claude-sonnet-5 via anthropic · $0.04 · 1 finding dropped for pointing at lines not in the diff",
+      );
+    });
+
+    it("explains why the model didn't run", () => {
+      const skipped = plain(
+        briefing({
+          llm: {
+            status: "skipped",
+            note: "No Anthropic API key found.",
+            findings: [],
+            droppedFindings: 0,
+            omittedFiles: [],
+          },
+        }),
+      );
+      expect(skipped).not.toContain("What it does");
+      expect(skipped.trimEnd().split("\n").at(-1)).toBe("Model not used: No Anthropic API key found.");
+      const refused = plain(
+        briefing({
+          llm: { status: "over_budget", note: "Over the cap.", findings: [], droppedFindings: 0, omittedFiles: [] },
+        }),
+      );
+      expect(refused).toContain("Model over budget: Over the cap.");
+    });
+  });
+
   it("stops early when nothing changed", () => {
     expect(plain(briefing({ files: [], checks: [] }))).toContain("Nothing has changed, so there's nothing to review.");
   });

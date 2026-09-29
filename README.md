@@ -2,7 +2,7 @@
 
 A code review companion. Alden triages the PRs waiting on you, briefs you on what each one touches and what it already checked, and points you at the few places that need your eyes.
 
-> **Status: pre-alpha.** Phase 1 is being built. `alden queue` and `alden review` work today; LLM briefings come next.
+> **Status: pre-alpha.** Phase 1 is being built. `alden queue` and `alden review` (with or without a model) work today.
 
 ## Quickstart
 
@@ -21,6 +21,11 @@ npx alden@next review       # or on your own uncommitted changes, before opening
 your eyes, every check Alden ran with its evidence (secrets, migrations, public signatures, dependencies, tests,
 config, sensitive paths, CI), and what it did not check. Checks marked `~` infer from the diff alone. Add `--json` for
 the briefing as data.
+
+With an Anthropic API key (`ANTHROPIC_API_KEY`, or `ant auth login`), the review also asks a model what the change
+does, whether it matches its title, and what else deserves a look. Alden keeps only findings that point at real lines
+in the diff, and never lets them displace high-severity checks. Use `--model opus` for one review, or `--no-llm` to
+skip the model. Every call is checked against your caps before it's sent; `alden spend` shows what you've spent.
 
 ```text
 Needs your eyes
@@ -49,7 +54,7 @@ alden config set queue.includeDrafts true
 
 ## What's coming in phase 1
 
-- An LLM layer on top of `alden review`: whether the change does what it says, grouped findings, your choice of model.
+- More model providers: Ollama and other OpenAI-compatible endpoints, Bedrock, Vertex and Foundry.
 - Blast radius from a code graph: callers and code outside the diff.
 - `alden ui` shows the queue and briefings in a local web UI.
 - `alden stats` shows your repo's time to first review and review cycle time.
