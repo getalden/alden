@@ -86,7 +86,15 @@ export async function buildGraphReview(root: string, files: DiffFile[], budgetMs
   };
 }
 
-/** Changed files the graph can't read yet (e.g. Go, PHP), for "Not checked". */
+/** Languages whose callers the graph can find across files. Go is parsed, but its packages aren't resolved yet. */
+const CALLERS_READY = new Set(["typescript", "tsx", "python"]);
+
+/** Changed files the graph can't trace callers for yet (e.g. Go, PHP), for "Not checked". */
 export function filesOutsideGraph(files: DiffFile[]): string[] {
-  return files.filter((f) => fileKind(f.path) === "code" && !languageOf(f.path)).map((f) => f.path);
+  return files
+    .filter((f) => {
+      const language = languageOf(f.path);
+      return fileKind(f.path) === "code" && (!language || !CALLERS_READY.has(language));
+    })
+    .map((f) => f.path);
 }

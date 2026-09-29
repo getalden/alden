@@ -7,7 +7,7 @@ export type DefinitionKind = "function" | "class" | "method" | "variable" | "int
 export interface Definition {
   name: string;
   kind: DefinitionKind;
-  /** Usable from other files: exported in TS/JS, not underscore-prefixed in Python. */
+  /** Usable from other files: exported in TS/JS, not underscore-prefixed in Python, capitalised in Go. */
   exported: boolean;
   startLine: number;
   endLine: number;
@@ -26,6 +26,11 @@ export interface ImportBinding {
   line: number;
   /** `export { x } from "./y"`: re-exported, so importers of this file may reach y. */
   reexport?: boolean;
+  /**
+   * Go: no alias was written, so `local` is a guess from the import path. The package's own `package` clause, when
+   * the package is in the repo, is the real name.
+   */
+  implicitName?: boolean;
 }
 
 /** A use of a name: a call, `new`, a JSX element, a base class, or passed as an argument (callbacks, Django urls). */
@@ -38,6 +43,8 @@ export interface Reference {
 
 export interface FileSymbols {
   language: GraphLanguage;
+  /** Go: the name in the file's `package` clause. */
+  goPackage?: string;
   definitions: Definition[];
   imports: ImportBinding[];
   references: Reference[];
@@ -323,6 +330,123 @@ function extractPython(root: Node): Omit<FileSymbols, "language" | "references">
   return { definitions, imports };
 }
 
+// ─── Go ──────────────────────────────────────────────────────────────────────────────────────────
+
+const GO_REFERENCES = `
+  (call_expression function: (identifier) @name)
+  (call_expression function: (selector_expression operand: (_) @object field: (field_identifier) @name))
+  (call_expression function: (index_expression operand: (identifier) @name))
+  (call_expression function: (index_expression operand: (selector_expression operand: (_) @object field: (field_identifier) @name)))
+  (type_conversion_expression type: (generic_type type: (type_identifier) @name))
+  (type_conversion_expression type: (generic_type type: (qualified_type package: (package_identifier) @object name: (type_identifier) @name)))
+  (composite_literal type: (type_identifier) @name)
+  (composite_literal type: (qualified_type package: (package_identifier) @object name: (type_identifier) @name))
+  (composite_literal type: (generic_type type: (type_identifier) @name))
+  (composite_literal type: (generic_type type: (qualified_type package: (package_identifier) @object name: (type_identifier) @name)))
+  (argument_list (identifier) @name)
+  (argument_list (selector_expression operand: (_) @object field: (field_identifier) @name))
+`;
+
+const isGoExported = (name: string) => /^\p{Lu}/u.test(name);
+
+/**
+ * The name a package is usually imported as, from its path: the last element, skipping a major-version suffix
+ * (`.../foo/v2` is `foo`) and dropping `.vN` (`gopkg.in/yaml.v3` is `yaml`) and a `go-` prefix (`go-sqlite3`).
+ */
+export function goPackageNameFromPath(path: string): string {
+  const parts = path.split("/").filter(Boolean);
+  let last = parts.at(-1) ?? path;
+  if (/^v\d+$/.test(last) && parts.length > 1) last = parts.at(-2) ?? last;
+  return last
+    .replace(/\.v\d+$/, "")
+    .replace(/^go-/, "")
+    .replace(/-go$/, "")
+    .replace(/[^A-Za-z0-9_]/g, "_");
+}
+
+/** The type a method's receiver names: `(s *Server)`, `(b Box[T])`, `(Server)`. */
+function receiverType(method: Node): string | undefined {
+  const param = method.childForFieldName("receiver")?.namedChildren.find((c) => c?.type === "parameter_declaration");
+  let type = param?.childForFieldName("type") ?? null;
+  while (type && type.type !== "type_identifier") {
+    type =
+      type.type === "pointer_type"
+        ? type.namedChild(0)
+        : type.type === "generic_type"
+          ? type.childForFieldName("type")
+          : null;
+  }
+  return type?.text;
+}
+
+function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
+  const definitions: Definition[] = [];
+  const imports: ImportBinding[] = [];
+  const add = (node: Node, name: string | undefined, kind: DefinitionKind, container?: string) => {
+    if (!name || name === "_") return;
+    definitions.push({
+      name,
+      kind,
+      exported: isGoExported(name),
+      startLine: line(node),
+      endLine: endLine(node),
+      ...(container ? { container } : {}),
+    });
+  };
+  let goPackage: string | undefined;
+
+  for (const node of root.namedChildren) {
+    if (!node) continue;
+    switch (node.type) {
+      case "package_clause":
+        goPackage = node.namedChild(0)?.text;
+        break;
+      case "import_declaration":
+        for (const spec of node.descendantsOfType("import_spec")) {
+          if (!spec) continue;
+          const from = unquote(spec.childForFieldName("path")?.text ?? "");
+          const alias = spec.childForFieldName("name");
+          // `_` imports run init() only; `.` imports merge names in, which bare-name matching covers.
+          if (!from || alias?.type === "blank_identifier" || alias?.type === "dot") continue;
+          imports.push({
+            local: alias?.text ?? goPackageNameFromPath(from),
+            imported: "*",
+            from,
+            line: line(spec),
+            ...(alias ? {} : { implicitName: true }),
+          });
+        }
+        break;
+      case "function_declaration":
+        add(node, node.childForFieldName("name")?.text, "function");
+        break;
+      case "method_declaration":
+        add(node, node.childForFieldName("name")?.text, "method", receiverType(node));
+        break;
+      case "type_declaration":
+        for (const spec of node.namedChildren) {
+          if (spec?.type !== "type_spec" && spec?.type !== "type_alias") continue;
+          const type = spec.childForFieldName("type")?.type;
+          const kind = type === "struct_type" ? "class" : type === "interface_type" ? "interface" : "type";
+          // A grouped `type ( ... )` spans many specs; each gets its own lines.
+          add(spec, spec.childForFieldName("name")?.text, kind);
+        }
+        break;
+      case "const_declaration":
+      case "var_declaration":
+        // Plain values only matter when exported, as in TypeScript.
+        for (const spec of node.descendantsOfType(["const_spec", "var_spec"])) {
+          if (!spec) continue;
+          for (const name of spec.childrenForFieldName("name")) {
+            if (name && isGoExported(name.text)) add(spec, name.text, "variable");
+          }
+        }
+        break;
+    }
+  }
+  return { definitions, imports, ...(goPackage ? { goPackage } : {}) };
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────────────────────────
 
 const queries = new Map<string, Query>();
@@ -336,15 +460,20 @@ export async function extractSymbols(path: string, source: string): Promise<File
   if (!tree) return undefined;
   try {
     const root = tree.rootNode;
-    const { definitions, imports } = language === "python" ? extractPython(root) : extractTs(root);
+    const extracted: Omit<FileSymbols, "language" | "references"> =
+      language === "python" ? extractPython(root) : language === "go" ? extractGo(root) : extractTs(root);
+    const { definitions, imports, goPackage } = extracted;
 
-    const queryKey = language === "python" ? "python" : language;
-    let query = queries.get(queryKey);
+    let query = queries.get(language);
     if (!query) {
-      const source =
-        language === "python" ? PY_REFERENCES : language === "tsx" ? TS_REFERENCES + JSX_REFERENCES : TS_REFERENCES;
+      const source = {
+        python: PY_REFERENCES,
+        go: GO_REFERENCES,
+        tsx: TS_REFERENCES + JSX_REFERENCES,
+        typescript: TS_REFERENCES,
+      }[language];
       query = new Query(lang, source);
-      queries.set(queryKey, query);
+      queries.set(language, query);
     }
     const references: Reference[] = [];
     for (const match of query.matches(root)) {
@@ -352,7 +481,7 @@ export async function extractSymbols(path: string, source: string): Promise<File
       const object = match.captures.find((c) => c.name === "object")?.node;
       if (name) references.push({ name: name.text, ...(object ? { object: object.text } : {}), line: line(name) });
     }
-    return { language, definitions, imports, references };
+    return { language, ...(goPackage ? { goPackage } : {}), definitions, imports, references };
   } finally {
     tree.delete();
   }

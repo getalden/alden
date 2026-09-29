@@ -1,17 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { extractSymbols } from "./extract.js";
+import { extractSymbols, goPackageNameFromPath } from "./extract.js";
 import { languageOf } from "./parser.js";
 
 const names = (defs: { name: string; kind: string; exported: boolean; container?: string }[]) =>
   defs.map((d) => `${d.exported ? "+" : "-"}${d.container ? `${d.container}.` : ""}${d.name}:${d.kind}`);
 
 describe("languageOf", () => {
-  it("covers TS, JS (via the TSX grammar) and Python, and skips everything else", () => {
+  it("covers TS, JS (via the TSX grammar), Python and Go, and skips everything else", () => {
     expect(
       ["a.ts", "a.mts", "a.tsx", "a.js", "a.jsx", "a.cjs", "a.py", "a.d.ts", "a.go", "a.php"].map(languageOf),
-    ).toEqual(["typescript", "typescript", "tsx", "tsx", "tsx", "tsx", "python", undefined, undefined, undefined]);
+    ).toEqual(["typescript", "typescript", "tsx", "tsx", "tsx", "tsx", "python", undefined, "go", undefined]);
   });
 });
 
@@ -180,6 +180,117 @@ def _helper():
   });
 });
 
+describe("Go", () => {
+  const source = `package server
+
+import (
+	"fmt"
+	cfg "github.com/acme/app/internal/config"
+	"gopkg.in/yaml.v3"
+	_ "embed"
+	. "github.com/acme/app/testutil"
+)
+
+const (
+	MaxConns = 10
+	retries  = 3
+)
+
+var ErrClosed = fmt.Errorf("closed")
+
+type (
+	Server struct{ Config cfg.Config }
+	Handler interface{ Serve() error }
+)
+
+type ID string
+type Box[T any] struct{ v T }
+
+func New(c cfg.Config) *Server {
+	return &Server{Config: c}
+}
+
+func (s *Server) Handle(h Handler) error {
+	s.log()
+	return helper(h, cfg.Load)
+}
+
+func (s *Server) log() {}
+
+func (b Box[T]) Get() T { return b.v }
+
+func run() {
+	x := cfg.Config{Port: 1}
+	New(x).Handle(nil)
+	yaml.Unmarshal(nil, nil)
+	cfg.Parse[int](nil)
+}
+`;
+
+  it("finds functions, methods by receiver type, types and exported values; capitalised means exported", async () => {
+    const symbols = await extractSymbols("internal/server/server.go", source);
+    expect(symbols?.goPackage).toBe("server");
+    expect(names(symbols?.definitions ?? [])).toEqual([
+      "+MaxConns:variable",
+      "+ErrClosed:variable",
+      "+Server:class",
+      "+Handler:interface",
+      "+ID:type",
+      "+Box:class",
+      "+New:function",
+      "+Server.Handle:method",
+      "-Server.log:method",
+      "+Box.Get:method",
+      "-run:function",
+    ]);
+    const handle = symbols?.definitions.find((d) => d.name === "Handle");
+    expect([handle?.startLine, handle?.endLine]).toEqual([30, 33]);
+    // Each spec in a grouped declaration has its own lines.
+    expect(symbols?.definitions.find((d) => d.name === "Handler")?.startLine).toBe(20);
+  });
+
+  it("names imports by alias or by their path, and skips blank and dot imports", async () => {
+    const symbols = await extractSymbols("internal/server/server.go", source);
+    expect(symbols?.imports.map((i) => `${i.local}${i.implicitName ? "?" : ""}<-${i.from}`)).toEqual([
+      "fmt?<-fmt",
+      "cfg<-github.com/acme/app/internal/config",
+      "yaml?<-gopkg.in/yaml.v3",
+    ]);
+  });
+
+  it("finds calls, method calls, struct literals, generic calls and functions passed as arguments", async () => {
+    const symbols = await extractSymbols("internal/server/server.go", source);
+    const refs = symbols?.references.map((r) => `${r.object ? `${r.object}.` : ""}${r.name}@${r.line}`) ?? [];
+    expect(refs).toEqual(
+      expect.arrayContaining([
+        "fmt.Errorf@16",
+        "Server@27",
+        "s.log@31",
+        "helper@32",
+        "cfg.Load@32",
+        "cfg.Config@40",
+        "New@41",
+        "New(x).Handle@41",
+        "yaml.Unmarshal@42",
+        "cfg.Parse@43",
+      ]),
+    );
+  });
+});
+
+describe("goPackageNameFromPath", () => {
+  it.each([
+    ["fmt", "fmt"],
+    ["net/http", "http"],
+    ["github.com/acme/app/internal/config", "config"],
+    ["gopkg.in/yaml.v3", "yaml"],
+    ["github.com/jackc/pgx/v5", "pgx"],
+    ["github.com/mattn/go-sqlite3", "sqlite3"],
+  ])("%s → %s", (path, name) => {
+    expect(goPackageNameFromPath(path)).toBe(name);
+  });
+});
+
 it("skips languages the graph doesn't cover yet", async () => {
-  expect(await extractSymbols("main.go", "package main")).toBeUndefined();
+  expect(await extractSymbols("index.php", "<?php echo 1;")).toBeUndefined();
 });
