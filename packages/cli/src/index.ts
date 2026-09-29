@@ -5,6 +5,7 @@ import { registerConfigCommand } from "./commands/config.js";
 import { registerOpenCommand } from "./commands/open.js";
 import { registerQueueCommand } from "./commands/queue.js";
 import { registerReviewCommand } from "./commands/review.js";
+import { registerSpendCommand } from "./commands/spend.js";
 
 const program = new Command()
   .name("alden")
@@ -16,5 +17,6 @@ registerConfigCommand(program);
 registerQueueCommand(program);
 registerOpenCommand(program);
 registerReviewCommand(program);
+registerSpendCommand(program);
 
 await program.parseAsync();
