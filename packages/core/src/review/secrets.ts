@@ -55,21 +55,73 @@ export interface SecretFinding {
   masked: string;
 }
 
-/** Finds likely secrets in one added line. Returns masked values only. */
-export function findSecrets(line: string): SecretFinding[] {
-  const findings: SecretFinding[] = [];
+interface SecretMatch extends SecretFinding {
+  value: string;
+}
+
+const everywhere = (pattern: RegExp) => new RegExp(pattern.source, `${pattern.flags.replace("g", "")}g`);
+
+/** Every likely secret in one line, with its raw value. `all` finds repeats too; otherwise the first per kind. */
+function matchSecrets(line: string, all: boolean): SecretMatch[] {
+  const found: SecretMatch[] = [];
+  const add = (kind: string, value: string | undefined, showPrefix: boolean) => {
+    if (value && !PLACEHOLDER.test(value)) found.push({ kind, value, masked: mask(value, showPrefix) });
+  };
   for (const { name, pattern } of KNOWN_FORMATS) {
-    const value = pattern.exec(line)?.[1];
-    if (value && !PLACEHOLDER.test(value)) findings.push({ kind: name, masked: mask(value, true) });
+    if (all) for (const match of line.matchAll(everywhere(pattern))) add(name, match[1], true);
+    else add(name, pattern.exec(line)?.[1], true);
   }
-  const password = URL_CREDENTIALS.exec(line)?.[1];
-  if (password && !PLACEHOLDER.test(password)) findings.push({ kind: "password in a URL", masked: mask(password) });
-  if (findings.length === 0) {
+  add("password in a URL", URL_CREDENTIALS.exec(line)?.[1], false);
+  // Assignments are the weakest signal, so they only count when nothing stronger matched.
+  if (found.length === 0) {
     const assignment = ASSIGNMENT.exec(line);
     const [name, value] = [assignment?.[1], assignment?.[2]];
-    if (name && value && !PLACEHOLDER.test(value) && looksRandom(value)) {
-      findings.push({ kind: `hard-coded value for ${name}`, masked: mask(value) });
-    }
+    if (name && value && looksRandom(value)) add(`hard-coded value for ${name}`, value, false);
   }
-  return findings;
+  return found;
+}
+
+/** Finds likely secrets in one added line. Returns masked values only. */
+export function findSecrets(line: string): SecretFinding[] {
+  return matchSecrets(line, false).map(({ kind, masked }) => ({ kind, masked }));
+}
+
+const PRIVATE_KEY_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
+const PRIVATE_KEY_END = /-----END [A-Z ]*PRIVATE KEY-----/;
+/** The body of a PEM key: long base64 runs. Line numbers and diff markers are too short to match. */
+const KEY_BODY = /[A-Za-z0-9+/=]{16,}/g;
+const KEY_PLACEHOLDER = "[redacted private key]";
+
+/**
+ * Text with every likely secret replaced by a masked placeholder, for anything that leaves the machine (the model's
+ * prompt). Works on whole prompts: diff lines, descriptions and code snippets. Private keys are redacted from their
+ * BEGIN line to their END line, including keys written on one line with escaped newlines.
+ */
+export function redactSecrets(text: string): { text: string; redacted: number } {
+  let redacted = 0;
+  let inKey = false;
+  const lines = text.split("\n").map((line) => {
+    let out = line;
+    // A key with no END line (cut off by the diff) stops at the next file or hunk in a prompt.
+    if (/^(### |@@ )/.test(out)) inKey = false;
+    const begin = PRIVATE_KEY_BEGIN.exec(out);
+    if (begin || inKey) {
+      if (begin) redacted++;
+      // Keep the BEGIN and END lines readable; only the key material between them goes.
+      const from = begin ? begin.index + begin[0].length : 0;
+      const end = PRIVATE_KEY_END.exec(out.slice(from));
+      const to = end ? from + end.index : out.length;
+      out = out.slice(0, from) + out.slice(from, to).replace(KEY_BODY, KEY_PLACEHOLDER) + out.slice(to);
+      inKey = !end;
+    }
+    for (const match of matchSecrets(out, true)) {
+      if (match.kind === "private key") continue;
+      // Repeats of a value were all replaced by its first match.
+      const parts = out.split(match.value);
+      redacted += parts.length - 1;
+      out = parts.join(`[redacted ${match.kind}, ${match.masked}]`);
+    }
+    return out;
+  });
+  return { text: lines.join("\n"), redacted };
 }

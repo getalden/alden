@@ -107,6 +107,8 @@ function modelFooter(llm: LlmSection | undefined, options: RenderOptions): strin
     llm.usd === undefined ? "cost unknown" : `$${llm.usd.toFixed(llm.usd < 0.01 ? 4 : 2)}`,
     llm.droppedFindings > 0 &&
       `${llm.droppedFindings} finding${llm.droppedFindings === 1 ? "" : "s"} dropped for pointing at lines not in the diff`,
+    llm.redactedSecrets &&
+      `${llm.redactedSecrets} likely secret${llm.redactedSecrets === 1 ? "" : "s"} hidden from the model`,
   ].filter(Boolean);
   return ["", ...wrap(parts.join(" · "), width).map((l) => paint(l, "dim", color))];
 }

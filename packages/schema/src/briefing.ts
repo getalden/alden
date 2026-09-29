@@ -64,6 +64,12 @@ export const LlmSectionSchema = z.object({
   findings: z.array(LlmFindingSchema),
   droppedFindings: z.number().int().describe("findings discarded for pointing at lines not in the diff"),
   omittedFiles: z.array(z.string()).describe("files left out of the model's view to fit the budget"),
+  redactedSecrets: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("likely secrets replaced with placeholders before the prompt was sent"),
   usd: z.number().optional().describe("what the call cost at list price, when known"),
 });
 

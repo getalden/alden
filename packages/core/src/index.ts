@@ -127,6 +127,6 @@ export {
   reviewPullRequest,
   type WithModel,
 } from "./review/run.js";
-export { findSecrets, mask, type SecretFinding, shannonEntropy } from "./review/secrets.js";
+export { findSecrets, mask, redactSecrets, type SecretFinding, shannonEntropy } from "./review/secrets.js";
 export { type Declaration, declarationIn, type SignatureChange, signatureChanges } from "./review/signatures.js";
 export { type Check, type CheckOutcome, type GraphContext, type ReviewContext, symbolKey } from "./review/types.js";

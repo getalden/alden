@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findSecrets, mask, shannonEntropy } from "./secrets.js";
+import { findSecrets, mask, redactSecrets, shannonEntropy } from "./secrets.js";
 
 // Fake credentials in the right shapes, assembled at runtime so this file never contains a full key-shaped string.
 const fake = {
@@ -67,5 +67,67 @@ describe("mask and entropy", () => {
   it("scores random strings higher than words", () => {
     expect(shannonEntropy("f3Kd9Q2mZx81Lp0vW7yT")).toBeGreaterThan(4);
     expect(shannonEntropy("aaaaaaaaaaaa")).toBe(0);
+  });
+});
+
+describe("redactSecrets", () => {
+  // Key material assembled at runtime, like the fakes above.
+  const keyLines = ["MIIEvQIBADANBgkqhkiG9w0BAQEFAASC", "BKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj"];
+
+  it("replaces every known-format secret, keeping the kind and a masked hint", () => {
+    const { text, redacted } = redactSecrets(`   12 + const a = "${fake.github}"; const b = "${fake.github}";`);
+    expect(text).not.toContain(fake.github);
+    expect(text).toContain("[redacted GitHub token, ghp_…(44 chars)]");
+    expect(redacted).toBe(2);
+  });
+
+  it("redacts connection-string passwords and secret-looking assignments", () => {
+    const { text } = redactSecrets(
+      `DATABASE_URL=postgres://app:Xk92vLq7Rt@db.internal/app\n$config['client_secret'] = 'f3Kd9Q2mZx81Lp0vW7yT';`,
+    );
+    expect(text).not.toContain("Xk92vLq7Rt");
+    expect(text).not.toContain("f3Kd9Q2mZx81Lp0vW7yT");
+    expect(text).toContain("postgres://app:[redacted password in a URL, …(10 chars)]@db.internal/app");
+  });
+
+  it("redacts a private key's body across lines, keeping its BEGIN and END lines", () => {
+    const diff = [
+      "    3 + -----BEGIN RSA PRIVATE KEY-----",
+      ...keyLines.map((l, i) => `${String(4 + i).padStart(5)} + ${l}`),
+      "    6 + -----END RSA PRIVATE KEY-----",
+      "    7 + const handleSomethingVeryLong = 1;",
+    ].join("\n");
+    const { text, redacted } = redactSecrets(diff);
+    for (const l of keyLines) expect(text).not.toContain(l);
+    expect(text).toContain("    4 + [redacted private key]");
+    expect(text).toContain("-----END RSA PRIVATE KEY-----");
+    expect(text).toContain("handleSomethingVeryLong");
+    expect(redacted).toBe(1);
+  });
+
+  it("redacts a key written on one line with escaped newlines", () => {
+    const { text } = redactSecrets(
+      `KEY="-----BEGIN PRIVATE KEY-----\\n${keyLines.join("\\n")}\\n-----END PRIVATE KEY-----"`,
+    );
+    for (const l of keyLines) expect(text).not.toContain(l.slice(1));
+    expect(text).toContain("-----END PRIVATE KEY-----");
+  });
+
+  it("stops a key with no END line at the next file in a prompt", () => {
+    const { text } = redactSecrets(
+      [
+        "    1 + -----BEGIN PRIVATE KEY-----",
+        `    2 + ${keyLines[0]}`,
+        "### src/next.ts (added, +1/-0)",
+        "    1 + const aVeryLongIdentifierName = 1;",
+      ].join("\n"),
+    );
+    expect(text).not.toContain(keyLines[0]);
+    expect(text).toContain("aVeryLongIdentifierName");
+  });
+
+  it("leaves ordinary code alone", () => {
+    const code = 'const key = process.env.STRIPE_SECRET_KEY;\nAPI_KEY="your-api-key-here"';
+    expect(redactSecrets(code)).toEqual({ text: code, redacted: 0 });
   });
 });

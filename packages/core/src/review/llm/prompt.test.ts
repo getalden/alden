@@ -36,6 +36,25 @@ const code = file(
   "@@ -10,3 +10,3 @@ export function rank() {\n const a = 1;\n-if (ci) risk++;\n+if (ci) sink = true;\n return a;",
 );
 
+describe("secrets in the prompt", () => {
+  it("never sends a likely secret to the model, from the diff, description or callers", () => {
+    const token = `ghp_${"a1B2c3D4e5".repeat(4)}`;
+    const leaky = file("src/client.ts", `@@ -1,1 +1,2 @@\n const a = 1;\n+const token = "${token}";`);
+    const prompt = buildPrompt({
+      target,
+      description: `Uses ${token} for now`,
+      files: [leaky],
+      checks: [],
+      maxInputTokens: 100_000,
+      callerSnippets: `src/use.ts:3\n    3 > call("${token}")`,
+    });
+    expect(prompt.user).not.toContain(token);
+    expect(prompt.user).toContain('    2 + const token = "[redacted GitHub token, ghp_…(44 chars)]";');
+    expect(prompt.redactedSecrets).toBe(3);
+    expect(prompt.system).toContain("[redacted");
+  });
+});
+
 describe("renderFileDiff", () => {
   it("prefixes lines with their new-file numbers and leaves deletions unnumbered", () => {
     expect(renderFileDiff(code).split("\n")).toEqual([

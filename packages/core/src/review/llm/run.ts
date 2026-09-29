@@ -121,6 +121,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
     model: result.model,
     ...(effort && provider.provider !== "openai-compatible" && supportsEffort(result.model) ? { effort } : {}),
     omittedFiles: prompt.omittedFiles,
+    ...(prompt.redactedSecrets > 0 ? { redactedSecrets: prompt.redactedSecrets } : {}),
     ...(result.usd === undefined ? {} : { usd: result.usd }),
   };
   if (result.stopReason === "refusal") {

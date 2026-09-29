@@ -191,6 +191,16 @@ describe("renderBriefing", () => {
       );
     });
 
+    it("says how many secrets were hidden from the model", () => {
+      const llm = withModel.llm && { ...withModel.llm, droppedFindings: 0, redactedSecrets: 2 };
+      expect(
+        plain({ ...withModel, ...(llm ? { llm } : {}) }, 120)
+          .trimEnd()
+          .split("\n")
+          .at(-1),
+      ).toBe("Model: claude-sonnet-5 via anthropic (effort medium) · $0.04 · 2 likely secrets hidden from the model");
+    });
+
     it("explains why the model didn't run", () => {
       const skipped = plain(
         briefing({
