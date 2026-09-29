@@ -19,6 +19,13 @@ export {
 export { fetchPullRequestDiff, fromRestFile, type LocalDiff, readLocalDiff } from "./diff/sources.js";
 export * from "./github/index.js";
 export {
+  type ChangedSymbol,
+  changedNewLines,
+  changedSymbols,
+  loadChangeSymbols,
+  type SymbolChange,
+} from "./graph/changes.js";
+export {
   type Definition,
   type DefinitionKind,
   extractSymbols,
