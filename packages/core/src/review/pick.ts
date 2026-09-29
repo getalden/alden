@@ -39,7 +39,8 @@ type Anchored = Evidence & { anchor: NonNullable<Evidence["anchor"]> };
 /**
  * The few places a human should look, from the flagged checks: most severe first, at most one per file, at most
  * three. Each flagged check gets a slot before any check gets a second, so one noisy check can't crowd out the
- * rest; a file flagged by two checks takes one slot, and so does a directory of similar flags (except secrets).
+ * rest; a file flagged by two checks takes one slot, and so does a directory of similar flags (except secrets). A
+ * low-severity check gets one slot at most: it's worth a look, not the whole list.
  */
 export function pickLookHere(checks: CheckResult[]): LookHere[] {
   const flagged = checks
@@ -74,6 +75,7 @@ export function pickLookHere(checks: CheckResult[]): LookHere[] {
     progress = false;
     for (const check of flagged) {
       if (picked.length >= MAX_LOOK_HERE) break;
+      if (check.severity === "low" && picked.some((p) => p.checkId === check.id)) continue;
       if (take(check)) progress = true;
     }
   }

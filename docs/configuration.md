@@ -79,7 +79,7 @@ Everything is under `~/.alden` (or `ALDEN_HOME`):
 | --- | --- |
 | `config.toml` | Your user settings. |
 | `cache/` | GitHub responses, cached briefly, and your last queue (for `alden open` and `alden review <#>`). |
-| `index/` | The code graph's per-file cache. |
+| `index/` | The code graph's per-file cache. Around 100 MB for a repo the size of Kubernetes. |
 | `worktrees/` | Checkouts of PRs for the code graph, one per repo. |
 | `spend/` | The model spend ledger, one file per day. |
 

@@ -22,10 +22,10 @@ your eyes, every check Alden ran with its evidence (secrets, migrations, public 
 config, sensitive paths, CI), and what it did not check. Checks marked `~` infer from the diff alone. Add `--json` for
 the briefing as data.
 
-For TypeScript, JavaScript and Python, Alden also builds a code graph of the repo and lists the callers outside the
+For TypeScript, JavaScript, Python and Go, Alden also builds a code graph of the repo and lists the callers outside the
 diff of every changed public function, class and method, flagging removed or re-signed code that's still called. Local
 reviews use your working tree. For PR reviews, run `alden review` from a clone of the PR's repo: Alden fetches the PR
-into its own worktree under `~/.alden/worktrees` (your checkout is never touched). Go and PHP come next. `--no-graph`
+into its own worktree under `~/.alden/worktrees` (your checkout is never touched). PHP comes next. `--no-graph`
 skips it.
 
 With an Anthropic API key (`ANTHROPIC_API_KEY`, or `ant auth login`), the review also asks a model what the change
@@ -65,7 +65,7 @@ graph, models and budgets, privacy, and troubleshooting.
 
 ## What's coming in phase 1
 
-- The code graph for Go and PHP (Laravel, Symfony).
+- The code graph for PHP (Laravel, Symfony).
 - `alden ui` shows the queue and briefings in a local web UI.
 - `alden stats` shows your repo's time to first review and review cycle time.
 

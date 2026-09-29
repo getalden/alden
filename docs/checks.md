@@ -25,7 +25,7 @@ them as leads.
 | **CI status** (`ci.status`) | CI failing on the latest commit. Skipped when CI is pending, absent, or for local changes. | High |
 | **Callers outside the diff** (`callers.outside`) | Changed public code that's still called from places the PR didn't touch. See [The code graph](code-graph.md). | High when removed or re-signed code is still called, medium if only by name match, low for behaviour changes |
 | **Database migrations** (`migrations.changed`) | Changed migrations. High when they drop, rename or reshape data (SQL, Django, Laravel, Doctrine). | Medium or high |
-| **Changed public signatures** (`signatures.changed`) | Exported functions, classes and methods whose signature changed or that were removed, in TS/JS, Python, PHP and Go. | Low or medium |
+| **Changed public signatures** (`signatures.changed`) | Exported functions, classes and methods whose signature changed or that were removed, in TS/JS, Python, PHP and Go. Go uses the code graph; the others read the diff. | Low or medium |
 | **Code changed without tests** (`tests.missing`) | Code changes with no test changes alongside them. | Medium |
 | **Dependencies** (`dependencies.changed`) | Added, removed or re-versioned dependencies in package.json, composer.json, go.mod, requirements.txt and pyproject.toml. | Low, or medium for risky changes |
 | **Configuration and environment** (`config.changed`) | Config files (`.env`, settings, Docker, Terraform, CI, deploy config) and new environment variable references. | Medium |
@@ -41,6 +41,8 @@ them as leads.
    are exempt.
 3. CI status never takes a slot: a failing build is already at the top of the checks, and the fix is the author's.
 4. Lockfiles never take a slot, except for secrets.
+
+A low-severity check gets one slot at most, so a harmless change with many callers doesn't fill the list.
 
 With a model, its medium and high findings fill the slots that deterministic checks leave. A high-severity check always
 keeps its slot. Model findings that point at a line outside the diff are dropped, and the footer counts them.

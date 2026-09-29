@@ -53,6 +53,14 @@ describe("pickLookHere", () => {
     expect(picked.map((p) => p.anchor?.path)).toEqual(["a.ts", "b.ts", "c.ts"]);
   });
 
+  it("gives a low-severity check one slot at most", () => {
+    const picked = pickLookHere([
+      flagged("callers.outside", "low", ["cmd/a.go", "web/b.go", "api/c.go"]),
+      flagged("dependencies.changed", "low", ["go.mod"]),
+    ]);
+    expect(picked.map((p) => p.anchor?.path)).toEqual(["cmd/a.go", "go.mod"]);
+  });
+
   it("gives every flagged check a slot before any check gets a second", () => {
     const picked = pickLookHere([
       flagged("secrets.likely", "high", ["a.ts", "b.ts"]),

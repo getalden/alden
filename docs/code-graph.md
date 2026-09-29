@@ -10,7 +10,7 @@ removed or re-signed code that's still called, and gives the model those call si
 | --- | --- |
 | TypeScript, TSX, JavaScript | Supported |
 | Python | Supported |
-| Go | Planned |
+| Go | Supported |
 | PHP (Laravel, Symfony) | Planned |
 
 Changed files in other languages are listed under "Not checked".
@@ -29,17 +29,35 @@ Changed files in other languages are listed under "Not checked".
    - TypeScript and JavaScript: relative imports (including `.js` imports of `.ts` files), `index` files, `tsconfig`
      path aliases, workspace packages, and re-exports through barrel files.
    - Python: module paths from the repo's source roots, relative imports, and names re-exported through `__init__.py`.
+   - Go: import paths under the repo's modules, read from every `go.mod` (nested modules, and local `replace`
+     directives such as Kubernetes' `staging/` packages). An import reaches every file in the package, under the name
+     its `package` clause declares. Files in one package see each other's names without imports.
 
-Indexing stops after 60 seconds. When that happens, the briefing says the results may be incomplete.
+Indexing stops after 60 seconds. When that happens, the briefing says the results may be incomplete. As a guide,
+Kubernetes (13,500 Go files outside `vendor/`) indexes in about 18 seconds the first time and 1.5 seconds after that.
+`vendor/`, `node_modules/` and build output are skipped.
+
+## Signatures
+
+For Go, "Changed public signatures" uses the graph: it compares each function's and method's whole declaration before
+and after the change, keyed by type, so multi-line parameter lists compare properly and two types' `Close` methods
+don't get mixed up. An interface's signature is its method set; a struct's is its name, since adding fields breaks
+nobody using keyed literals. Moving a declaration to another file in the same package isn't reported. Other languages
+use a heuristic that reads declarations from the diff's changed lines.
 
 ## How sure it is
 
 - **Import match.** The call resolves to the changed symbol through the file's imports, or is in the same file.
 - **Name match only.** A bare call with the same name (4 characters or more) and no import that resolves elsewhere.
   These are marked `name match only`.
-- **Methods.** `obj.method()` counts in files that import the class. For very common names (`get`, `save`, `filter`,
-  `update` and so on) only calls on `self`, `this`, `cls` or the class itself count, because `request.data.get()` is
-  almost never your view's `get`.
+- **Methods.** `obj.method()` counts in files that import the class (in Go, the type's package). For very common
+  names (`get`, `save`, `filter`, `update` and so on) only calls on `self`, `this`, `cls` or the class itself count,
+  because `request.data.get()` is almost never your view's `get`. Go has its own list (`String`, `Error`, `Close`,
+  `Get`, `Save`, logging methods…), where the method's receiver (`s` in `func (s *Server)`) plays the part of `this`.
+
+Alden doesn't infer types, so a method call on a variable of another type with the same method name, in a file that
+imports the package, is counted too. In Go, a bare name in another package is always that package's own, so Go has no
+name-only matches.
 
 Dynamic code (reflection, string-based dispatch, dependency injection) can't be traced statically. Treat "no callers"
 as "none found", not "none exist".

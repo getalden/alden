@@ -67,7 +67,7 @@ Google Vertex, Azure Foundry and local models such as Ollama.
 
 ## Get callers outside the diff
 
-For TypeScript, JavaScript and Python, Alden builds a code graph of the repo and lists who calls the code a change
+For TypeScript, JavaScript, Python and Go, Alden builds a code graph of the repo and lists who calls the code a change
 touches. For local changes this just works. For a PR, run `alden review` from inside a clone of that PR's repo:
 
 ```sh
