@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { OpenAICompatibleProvider } from "./openai-compatible.js";
@@ -126,10 +129,29 @@ describe("platforms", () => {
     });
   });
 
+  it("explains missing Google Cloud credentials for Vertex instead of failing later", async () => {
+    vi.stubEnv("GOOGLE_APPLICATION_CREDENTIALS", join(tmpdir(), "alden-no-such-credentials.json"));
+    await expect(
+      createPlatformClient("vertex", { provider: "vertex", name: "sonnet", region: "global", projectId: "p" }),
+    ).rejects.toMatchObject({
+      kind: "setup",
+      message: expect.stringMatching(
+        /^Couldn't find Google Cloud credentials for Vertex\. Run `gcloud auth application-default login`/,
+      ),
+    });
+  });
+
   it.each(["bedrock", "vertex", "foundry"] as const)(
     "creates the %s client with the Messages API",
     async (platform) => {
       vi.stubEnv("ANTHROPIC_FOUNDRY_API_KEY", "test-key");
+      // A stand-in user credential, so Vertex starts the same way with or without a real gcloud login.
+      const credentials = join(mkdtempSync(join(tmpdir(), "alden-gcp-")), "adc.json");
+      writeFileSync(
+        credentials,
+        JSON.stringify({ type: "authorized_user", client_id: "id", client_secret: "not-a-secret", refresh_token: "r" }),
+      );
+      vi.stubEnv("GOOGLE_APPLICATION_CREDENTIALS", credentials);
       const client = await createPlatformClient(platform, {
         provider: platform,
         name: "sonnet",

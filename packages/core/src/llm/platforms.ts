@@ -55,10 +55,23 @@ async function construct(platform: Platform, model: AldenConfig["model"]): Promi
     }
     case "vertex": {
       const { AnthropicVertex } = await load(platform, () => import("@anthropic-ai/vertex-sdk"));
-      return new AnthropicVertex({
+      const client = new AnthropicVertex({
         ...(model.region ? { region: model.region } : {}),
         ...(model.projectId ? { projectId: model.projectId } : {}),
       });
+      // The client starts looking up Google credentials in its constructor and nothing handles a failure until the
+      // first request, which can surface as an unhandled rejection. Wait for it here so it becomes a setup note.
+      const pending = (client as unknown as { _authClientPromise?: Promise<unknown> })._authClientPromise;
+      try {
+        await pending;
+      } catch (error) {
+        throw new LlmError(
+          "setup",
+          `Couldn't find Google Cloud credentials for Vertex. Run \`gcloud auth application-default login\`, or set GOOGLE_APPLICATION_CREDENTIALS. (${(error as Error).message})`,
+          error,
+        );
+      }
+      return client;
     }
     case "foundry": {
       const { AnthropicFoundry } = await load(platform, () => import("@anthropic-ai/foundry-sdk"));
