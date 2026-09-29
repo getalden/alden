@@ -58,9 +58,13 @@ alden config set queue.fastTrackMaxLines 100
 alden config set queue.includeDrafts true
 ```
 
+## Documentation
+
+See [docs/](docs/README.md): getting started, every command and setting, how the queue and checks work, the code
+graph, models and budgets, privacy, and troubleshooting.
+
 ## What's coming in phase 1
 
-- More model providers: Ollama and other OpenAI-compatible endpoints, Bedrock, Vertex and Foundry.
 - The code graph for Go and PHP (Laravel, Symfony).
 - `alden ui` shows the queue and briefings in a local web UI.
 - `alden stats` shows your repo's time to first review and review cycle time.
@@ -77,7 +81,8 @@ alden config set budget.dailyUsd 20
 alden config list
 ```
 
-Settings live in `~/.alden/config.toml`. A repo can override them in `.alden.toml`.
+Settings live in `~/.alden/config.toml`. A repo can override them in `.alden.toml`. See
+[Models, providers and budgets](docs/models.md) and [Configuration](docs/configuration.md).
 
 ## Development
 
