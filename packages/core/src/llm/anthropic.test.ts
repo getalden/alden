@@ -9,9 +9,9 @@ function fakeClient(response: Record<string, unknown>) {
   const calls: Record<string, unknown>[] = [];
   const client = {
     messages: {
-      parse: async (params: Record<string, unknown>) => {
+      stream: (params: Record<string, unknown>) => {
         calls.push(params);
-        return response;
+        return { finalMessage: async () => response };
       },
       countTokens: async (params: Record<string, unknown>) => {
         calls.push(params);

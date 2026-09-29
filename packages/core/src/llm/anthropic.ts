@@ -39,9 +39,9 @@ function stopReason(reason: string | null): StopReason {
 
 /**
  * The part of the Messages API Alden uses. The Bedrock, Vertex and Foundry clients leave out batches, so this asks
- * only for `parse` and `countTokens`.
+ * only for `stream` and `countTokens`.
  */
-export type MessagesClient = { messages: Pick<Anthropic["messages"], "parse" | "countTokens"> };
+export type MessagesClient = { messages: Pick<Anthropic["messages"], "stream" | "countTokens"> };
 
 /**
  * Claude through the official SDKs. First-party credentials resolve the SDK's usual way (ANTHROPIC_API_KEY,
@@ -95,16 +95,20 @@ export class AnthropicProvider implements LlmProvider {
 
   async generate<T>(request: GenerateRequest<T>): Promise<GenerateResult<T>> {
     const messages = await this.messages();
-    let response: Awaited<ReturnType<typeof messages.parse>>;
+    let response: Awaited<ReturnType<ReturnType<typeof messages.stream>["finalMessage"]>>;
     try {
+      // Streamed, so bytes keep flowing while the model thinks: a silent non-streaming request of a minute or more
+      // gets dropped by some networks as idle ("Connection error"). The final message is parsed the same way.
       // Thinking is left to each model's default: adaptive on Sonnet 5 / Opus 5 / Fable, off on Haiku 4.5.
-      response = await messages.parse({
-        model: this.model,
-        max_tokens: request.maxOutputTokens,
-        system: request.system,
-        messages: [{ role: "user", content: request.user }],
-        output_config: { format: zodOutputFormat(request.schema) },
-      });
+      response = await messages
+        .stream({
+          model: this.model,
+          max_tokens: request.maxOutputTokens,
+          system: request.system,
+          messages: [{ role: "user", content: request.user }],
+          output_config: { format: zodOutputFormat(request.schema) },
+        })
+        .finalMessage();
     } catch (error) {
       throw toLlmError(error);
     }

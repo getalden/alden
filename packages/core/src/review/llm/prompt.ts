@@ -34,7 +34,7 @@ export const SYSTEM_PROMPT = `You help a software engineer review a code change.
 
 You receive the change's title and description, deterministic check results that Alden already computed, and the diff. Diff lines are prefixed with their line number in the new file; deleted lines have no number.
 
-Report every issue a careful reviewer would want to know about: bugs, behaviour changes, missing edge cases, risky operations, security concerns, and anything that doesn't match what the title and description claim. Include concerns you are unsure about, marked low severity; Alden ranks and filters them, so do not hold back to keep the list short. Do not repeat a check result unless you add something it missed. When the same change repeats across many files, report it once with every location in its anchors.
+Report every issue a careful reviewer would want to know about: bugs, behaviour changes, missing edge cases, risky operations, security concerns, and anything that doesn't match what the title and description claim. Include concerns you are unsure about, marked low severity; Alden ranks and filters them, so do not hold back to keep the list short. Do not repeat a check result unless you add something it missed. In particular, never report that CI is failing or pending: Alden already shows that and the author has to act on it. If the diff reveals a likely cause of a CI failure, report the cause itself. When the same change repeats across many files, report it once with every location in its anchors.
 
 Anchor each finding to file paths from the diff and to new-file line numbers exactly as shown. Omit the line for a whole-file concern. Never invent a path or line.
 

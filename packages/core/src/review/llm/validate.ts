@@ -18,6 +18,13 @@ function visibleLines(files: DiffFile[]): Map<string, Set<number>> {
   return index;
 }
 
+/** "CI is failing on this branch" and the like, with nothing added. "CI is failing — missing import in x.go" passes. */
+export function restatesCi(title: string): boolean {
+  return /^(the )?(ci|checks?|build|tests?)( is| are)? (failing|failed|red|broken|pending)( on (this|the) (pr|branch|commit|latest commit))?\.?$/i.test(
+    title.trim(),
+  );
+}
+
 export interface ValidatedFindings {
   findings: LlmFinding[];
   /** Findings thrown away because every place they named was outside what the model saw. */
@@ -35,6 +42,8 @@ export function validateFindings(output: LlmOutput, shownFiles: DiffFile[]): Val
   let dropped = 0;
 
   for (const finding of output.findings) {
+    // The prompt says not to; this catches the bare restatement while keeping findings that name a cause.
+    if (restatesCi(finding.title)) continue;
     const valid: Anchor[] = [];
     for (const anchor of finding.anchors) {
       const lines = index.get(anchor.path);

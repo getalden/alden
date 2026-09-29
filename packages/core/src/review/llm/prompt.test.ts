@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DiffFile } from "../../diff/parse.js";
 import { parseHunks } from "../../diff/parse.js";
 import { buildPrompt, renderFileDiff, SYSTEM_PROMPT } from "./prompt.js";
-import { validateFindings } from "./validate.js";
+import { restatesCi, validateFindings } from "./validate.js";
 
 const target: BriefingTarget = {
   kind: "pr",
@@ -162,5 +162,25 @@ describe("validateFindings", () => {
       shown,
     );
     expect(findings).toHaveLength(1);
+  });
+});
+
+describe("restatesCi", () => {
+  it.each([
+    "CI is failing on this branch",
+    "CI is failing on this PR",
+    "Checks failing",
+    "Build is broken.",
+    "Tests are failing",
+  ])("drops %s", (title) => {
+    expect(restatesCi(title)).toBe(true);
+  });
+
+  it.each([
+    "CI is failing — possible missing `iter` import in bleve.go",
+    "Retry loop can hide CI flakiness",
+    "Tests don't cover NULL",
+  ])("keeps %s", (title) => {
+    expect(restatesCi(title)).toBe(false);
   });
 });

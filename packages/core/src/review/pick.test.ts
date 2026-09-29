@@ -35,7 +35,17 @@ describe("pickLookHere", () => {
       flagged("config.changed", "medium", [".github/workflows/ci.yml", ".github/workflows/nightly.yml"]),
       flagged("paths.sensitive", "medium", [".github/workflows/ci.yml", ".github/workflows/nightly.yml"]),
     ]);
-    expect(picked.map((p) => p.anchor?.path)).toEqual([".github/workflows/ci.yml", ".github/workflows/nightly.yml"]);
+    // ci.yml is claimed by the first check; nightly.yml shares its directory, so it doesn't take a second slot.
+    expect(picked.map((p) => p.anchor?.path)).toEqual([".github/workflows/ci.yml"]);
+    expect(picked[0]?.reason).toMatch(/Other files in \.github\/workflows\/ are flagged too\.$/);
+  });
+
+  it("gives a directory of similar flags one slot, but every secret its own", () => {
+    const picked = pickLookHere([
+      flagged("secrets.likely", "high", ["config/keys.ts", "config/more-keys.ts"]),
+      flagged("config.changed", "medium", ["config/app.php", "config/queue.php", "Dockerfile"]),
+    ]);
+    expect(picked.map((p) => p.anchor?.path)).toEqual(["config/keys.ts", "config/app.php", "config/more-keys.ts"]);
   });
 
   it("fills empty slots from a single check's other files", () => {

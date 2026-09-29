@@ -159,7 +159,7 @@ describe("platforms", () => {
         projectId: "alden-test",
         resource: "alden-test",
       });
-      expect(typeof client.messages.parse).toBe("function");
+      expect(typeof client.messages.stream).toBe("function");
       expect(typeof client.messages.countTokens).toBe("function");
     },
   );
