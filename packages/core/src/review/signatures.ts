@@ -1,4 +1,6 @@
+import { posix } from "node:path";
 import type { DiffFile } from "../diff/parse.js";
+import type { ChangedSymbol } from "../graph/changes.js";
 import { fileKind } from "../queue/files.js";
 
 /**
@@ -45,6 +47,8 @@ function normalise(line: string): string {
 
 export interface Declaration {
   name: string;
+  /** For methods the code graph found, the type they belong to. */
+  container?: string;
   signature: string;
   path: string;
   /** Line in the new file, for added declarations. */
@@ -71,7 +75,77 @@ export type SignatureChange =
   | { kind: "moved"; before: Declaration; after: Declaration };
 
 /** Public declarations that changed, disappeared, appeared or moved between files. Tests are ignored. */
-export function signatureChanges(files: DiffFile[]): SignatureChange[] {
+export function signatureChanges(files: DiffFile[], graph?: GraphSignatures): SignatureChange[] {
+  // Files the code graph parsed with signatures come from the graph; the rest from the diff alone.
+  const fromGraph = graph ? files.filter((f) => graph.covered?.has(f.path) && hasGraphSignatures(f.path)) : [];
+  const byGraph = new Set(fromGraph.map((f) => f.path));
+  const heuristic = diffSignatureChanges(files.filter((f) => !byGraph.has(f.path)));
+  if (!graph || fromGraph.length === 0) return heuristic;
+  return [...heuristic, ...graphSignatureChanges(graph.changes.filter((c) => byGraph.has(c.path)))];
+}
+
+/** What the signature check needs from the code graph. */
+export interface GraphSignatures {
+  changes: ChangedSymbol[];
+  /** Changed files the graph parsed. */
+  covered?: Set<string>;
+}
+
+/** Languages whose definitions carry their signature in the graph. */
+const hasGraphSignatures = (path: string) => path.endsWith(".go");
+
+const declaration = (c: ChangedSymbol, signature: string, withLine: boolean): Declaration => ({
+  name: c.name,
+  ...(c.container ? { container: c.container } : {}),
+  signature,
+  path: c.path,
+  ...(withLine ? { line: c.startLine } : {}),
+});
+
+/**
+ * Signature changes from the graph's before-and-after parse: keyed by type and name, so two types' Close methods
+ * don't collide, and whole declarations, so multi-line parameter lists compare properly.
+ */
+export function graphSignatureChanges(changes: ChangedSymbol[]): SignatureChange[] {
+  const out: SignatureChange[] = [];
+  const isTest = (c: ChangedSymbol) => fileKind(c.path) === "test";
+  const key = (c: ChangedSymbol) => `${c.container ?? ""}.${c.name}`;
+  const removed = changes.filter((c) => c.exported && !isTest(c) && c.change === "removed" && c.signature);
+  const added = changes.filter((c) => c.exported && !isTest(c) && c.change === "added" && c.signature);
+
+  for (const c of changes) {
+    if (!c.exported || isTest(c) || c.change !== "modified") continue;
+    if (c.signature && c.previousSignature && c.signature !== c.previousSignature) {
+      out.push({
+        kind: "changed",
+        before: declaration(c, c.previousSignature, false),
+        after: declaration(c, c.signature, true),
+      });
+    }
+  }
+  const unmatched = new Set(added);
+  for (const before of removed) {
+    const moved = [...unmatched].find((a) => key(a) === key(before) && a.signature === before.signature);
+    if (moved) {
+      unmatched.delete(moved);
+      // Within one Go package, moving between files changes nothing for callers.
+      if (posix.dirname(moved.path) !== posix.dirname(before.path)) {
+        out.push({
+          kind: "moved",
+          before: declaration(before, before.signature ?? "", false),
+          after: declaration(moved, moved.signature ?? "", true),
+        });
+      }
+      continue;
+    }
+    out.push({ kind: "removed", before: declaration(before, before.signature ?? "", false) });
+  }
+  for (const after of unmatched) out.push({ kind: "added", after: declaration(after, after.signature ?? "", true) });
+  return out;
+}
+
+/** The diff-only heuristic: declarations recognisable from single changed lines. */
+function diffSignatureChanges(files: DiffFile[]): SignatureChange[] {
   const removed: Declaration[] = [];
   const added: Declaration[] = [];
 

@@ -30,6 +30,8 @@ export interface GraphContext {
   callers: Map<string, CallSite[]>;
   /** False when indexing ran out of time, so some callers may be missing. */
   complete: boolean;
+  /** Changed files the graph parsed (before or after), whose symbols and signatures it knows. */
+  covered?: Set<string>;
 }
 
 /** "path#Class.method" or "path#name". */

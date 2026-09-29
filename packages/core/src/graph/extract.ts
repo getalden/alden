@@ -15,6 +15,11 @@ export interface Definition {
   container?: string;
   /** Go: the method's receiver variable (`s` in `func (s *Server) Handle()`), which plays the part of `this`. */
   receiver?: string;
+  /**
+   * The declaration without its body, whitespace collapsed: what callers depend on. Set where the graph knows it
+   * (Go so far); elsewhere the diff-based heuristic in review/signatures.ts applies.
+   */
+  signature?: string;
 }
 
 /** A name a file brings in from elsewhere. */
@@ -382,11 +387,45 @@ function receiverOf(method: Node): { type?: string; name?: string } {
   return { ...(type ? { type: type.text } : {}), ...(name ? { name } : {}) };
 }
 
+const collapse = (text: string) =>
+  text
+    .replace(/\/\/.*$/gm, "")
+    .replace(/\s+/g, " ")
+    .replace(/\( /g, "(")
+    .replace(/,? \)/g, ")")
+    .trim();
+
+/** A func's declaration up to its body: `func (s *Server) Handle(ctx context.Context) error`. */
+function goSignature(node: Node): string {
+  const body = node.childForFieldName("body");
+  return collapse(body ? node.text.slice(0, body.startIndex - node.startIndex) : node.text);
+}
+
+/**
+ * What code using a type depends on. An interface's whole method set (adding a method breaks implementers); for any
+ * other type, its underlying type. A struct counts as its name only: adding fields breaks nobody using keyed literals,
+ * so field changes are left to the model rather than flagged as a changed signature.
+ */
+function goTypeSignature(spec: Node): string {
+  const type = spec.childForFieldName("type");
+  if (type?.type === "struct_type") {
+    const params = spec.childForFieldName("type_parameters")?.text ?? "";
+    return collapse(`type ${spec.childForFieldName("name")?.text}${params} struct`);
+  }
+  return collapse(`type ${spec.text}`);
+}
+
 function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
   const definitions: Definition[] = [];
   const imports: ImportBinding[] = [];
-  const add = (node: Node, name: string | undefined, kind: DefinitionKind, container?: string, receiver?: string) => {
+  const add = (
+    node: Node,
+    name: string | undefined,
+    kind: DefinitionKind,
+    extra: { container?: string; receiver?: string; signature?: string } = {},
+  ) => {
     if (!name || name === "_") return;
+    const { container, receiver, signature } = extra;
     definitions.push({
       name,
       kind,
@@ -395,6 +434,7 @@ function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
       endLine: endLine(node),
       ...(container ? { container } : {}),
       ...(receiver && receiver !== "_" ? { receiver } : {}),
+      ...(signature ? { signature } : {}),
     });
   };
   let goPackage: string | undefined;
@@ -422,11 +462,15 @@ function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
         }
         break;
       case "function_declaration":
-        add(node, node.childForFieldName("name")?.text, "function");
+        add(node, node.childForFieldName("name")?.text, "function", { signature: goSignature(node) });
         break;
       case "method_declaration": {
         const receiver = receiverOf(node);
-        add(node, node.childForFieldName("name")?.text, "method", receiver.type, receiver.name);
+        add(node, node.childForFieldName("name")?.text, "method", {
+          ...(receiver.type ? { container: receiver.type } : {}),
+          ...(receiver.name ? { receiver: receiver.name } : {}),
+          signature: goSignature(node),
+        });
         break;
       }
       case "type_declaration":
@@ -435,7 +479,7 @@ function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
           const type = spec.childForFieldName("type")?.type;
           const kind = type === "struct_type" ? "class" : type === "interface_type" ? "interface" : "type";
           // A grouped `type ( ... )` spans many specs; each gets its own lines.
-          add(spec, spec.childForFieldName("name")?.text, kind);
+          add(spec, spec.childForFieldName("name")?.text, kind, { signature: goTypeSignature(spec) });
         }
         break;
       case "const_declaration":

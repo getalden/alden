@@ -18,6 +18,10 @@ export interface ChangedSymbol {
   endLine: number;
   /** How many changed lines fall inside it. */
   changedLines: number;
+  /** Its declaration after the change (before it, for removed ones), where the graph knows it. */
+  signature?: string;
+  /** Its declaration before the change, for modified ones. */
+  previousSignature?: string;
 }
 
 /**
@@ -53,6 +57,7 @@ function addedNewLines(file: DiffFile): Set<number> {
 }
 
 const key = (d: Definition) => `${d.container ?? ""}.${d.name}`;
+const previous = (d: Definition | undefined) => (d?.signature ? { previousSignature: d.signature } : {});
 
 /**
  * The definitions a diff changes, innermost first: a change inside a method reports the method, not its class; a
@@ -71,6 +76,7 @@ export function changedSymbols(
     const symbols = after.get(file.path);
     const old = before.get(file.previousPath ?? file.path);
     const existedBefore = old ? new Set(old.definitions.map(key)) : undefined;
+    const oldByKey = new Map((old?.definitions ?? []).map((d) => [key(d), d]));
     const changed = file.status === "removed" ? new Set<number>() : changedNewLines(file);
     const added = addedNewLines(file);
 
@@ -101,6 +107,8 @@ export function changedSymbols(
           startLine: def.startLine,
           endLine: def.endLine,
           changedLines: count,
+          ...(def.signature ? { signature: def.signature } : {}),
+          ...previous(oldByKey.get(key(def))),
         });
       }
     }
@@ -120,6 +128,7 @@ export function changedSymbols(
           startLine: def.startLine,
           endLine: def.endLine,
           changedLines: def.endLine - def.startLine + 1,
+          ...(def.signature ? { signature: def.signature } : {}),
         });
       }
     }

@@ -31,7 +31,7 @@ beforeEach(async () => {
   await mkdir(join(repo, "src"));
   await writeFile(join(repo, "src/rank.ts"), "export function rankQueue(queue) {\n  return queue;\n}\n");
   await writeFile(join(repo, "src/cli.ts"), 'import { rankQueue } from "./rank";\nrankQueue([]);\n');
-  await writeFile(join(repo, "src/other.go"), "package main\n\nfunc main() {}\n");
+  await writeFile(join(repo, "src/other.php"), "<?php\nfunction main() {}\n");
   git(repo, "add", ".");
   git(repo, "commit", "-q", "-m", "init");
 });
@@ -45,7 +45,7 @@ afterEach(async () => {
 describe("local review with the code graph", () => {
   it("flags a re-signed function's callers and says what the graph couldn't cover", async () => {
     await writeFile(join(repo, "src/rank.ts"), "export function rankQueue(queue, now) {\n  return queue;\n}\n");
-    await writeFile(join(repo, "src/other.go"), "package main\n\nfunc main() { println(1) }\n");
+    await writeFile(join(repo, "src/other.php"), "<?php\nfunction main() { echo 1; }\n");
     const briefing = await reviewLocalChanges(config, repo);
 
     const callers = briefing.checks.find((c) => c.id === "callers.outside");
@@ -55,8 +55,47 @@ describe("local review with the code graph", () => {
       anchor: { path: "src/cli.ts", line: 2 },
     });
     expect(briefing.needsYourEyes.some((i) => i.anchor?.path === "src/cli.ts")).toBe(true);
-    expect(briefing.notChecked).toContain("Callers of changes in src/other.go (Go and PHP support is coming)");
+    expect(briefing.notChecked).toContain("Callers of changes in src/other.php (PHP support is coming)");
     expect(briefing.notChecked.some((n) => n.startsWith("Callers and code outside the diff"))).toBe(false);
+  });
+
+  it("follows Go packages: a re-signed method's callers in another package, but not another type's", async () => {
+    await writeFile(join(repo, "go.mod"), "module example.com/app\n");
+    await mkdir(join(repo, "store"));
+    await mkdir(join(repo, "cmd"));
+    const store = (params: string) => `package store
+
+type Store struct{}
+
+func (s *Store) Put(${params}) error {
+\treturn nil
+}
+
+type Cache struct{}
+
+func (c *Cache) Put(key string) error { return nil }
+`;
+    await writeFile(join(repo, "store/store.go"), store("key string"));
+    await writeFile(
+      join(repo, "cmd/main.go"),
+      'package main\n\nimport "example.com/app/store"\n\nfunc main() {\n\tst := &store.Store{}\n\tst.Put("k")\n}\n',
+    );
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "go");
+
+    await writeFile(join(repo, "store/store.go"), store("\n\tkey string,\n\tttl int,\n"));
+    const briefing = await reviewLocalChanges(config, repo);
+
+    const signatures = briefing.checks.find((c) => c.id === "signatures.changed");
+    expect(signatures?.evidence.map((e) => e.text)).toEqual([
+      "changed: func (s *Store) Put(key string) error → func (s *Store) Put(key string, ttl int) error",
+    ]);
+    const callers = briefing.checks.find((c) => c.id === "callers.outside");
+    expect(callers).toMatchObject({ status: "flagged", severity: "high" });
+    expect(callers?.evidence).toEqual([
+      { text: "calls Store.Put (signature changed)", anchor: { path: "cmd/main.go", line: 7 } },
+    ]);
+    expect(briefing.notChecked.some((n) => n.includes("store.go"))).toBe(false);
   });
 
   it("can be switched off", async () => {

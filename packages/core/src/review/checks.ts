@@ -333,6 +333,8 @@ export const secretsCheck: Check = {
 
 // ─── Public signatures ───────────────────────────────────────────────────────────────────────────
 
+const labelOf = (d: { name: string; container?: string }) => (d.container ? `${d.container}.${d.name}` : d.name);
+
 function describeSignature(change: SignatureChange): Evidence {
   switch (change.kind) {
     case "changed":
@@ -344,7 +346,7 @@ function describeSignature(change: SignatureChange): Evidence {
       return { text: `removed: ${change.before.signature}`, anchor: { path: change.before.path } };
     case "moved":
       return {
-        text: `moved ${change.after.name} from ${change.before.path}`,
+        text: `moved ${labelOf(change.after)} from ${change.before.path}`,
         anchor: { path: change.after.path, ...(change.after.line ? { line: change.after.line } : {}) },
       };
     case "added":
@@ -359,8 +361,8 @@ export const signaturesCheck: Check = {
   id: "signatures.changed",
   title: "Changed public signatures",
   heuristic: true,
-  run({ files }) {
-    const changes = signatureChanges(files);
+  run({ files, graph }) {
+    const changes = signatureChanges(files, graph);
     const breaking = changes.filter((c) => c.kind === "changed" || c.kind === "removed");
     const moved = changes.filter((c) => c.kind === "moved");
     const added = changes.filter((c) => c.kind === "added");
@@ -403,11 +405,12 @@ export const callersCheck: Check = {
     const publicChanges = graph.changes.filter((c) => c.exported && c.change !== "added");
     if (publicChanges.length === 0) return passed("No public functions, classes or methods changed.");
 
-    // A removed definition, or one whose signature line changed, can break its callers outright.
+    // A removed definition, or one whose signature changed, can break its callers outright. Graph-based changes
+    // name their type; diff-based ones only a name, which then matches any symbol of that name in the file.
     const signatureChanged = new Set(
-      signatureChanges(files)
+      signatureChanges(files, graph)
         .filter((c) => c.kind === "changed" || c.kind === "removed")
-        .map((c) => (c.kind === "changed" ? `${c.after.path}#${c.after.name}` : `${c.before.path}#${c.before.name}`)),
+        .map((c) => symbolKey(c.kind === "changed" ? c.after : c.before)),
     );
     const breaking: Evidence[] = [];
     const reaching: Evidence[] = [];
@@ -419,7 +422,10 @@ export const callersCheck: Check = {
       const sites = graph.callers.get(symbolKey(change)) ?? [];
       if (sites.length === 0) continue;
       const label = `${change.container ? `${change.container}.` : ""}${change.name}`;
-      const isBreaking = change.change === "removed" || signatureChanged.has(`${change.path}#${change.name}`);
+      const isBreaking =
+        change.change === "removed" ||
+        signatureChanged.has(symbolKey(change)) ||
+        signatureChanged.has(`${change.path}#${change.name}`);
       const why = change.change === "removed" ? "removed" : isBreaking ? "signature changed" : "changed";
       if (isBreaking) breakingSymbols++;
       else reachingSymbols++;

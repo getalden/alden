@@ -81,13 +81,20 @@ export async function buildGraphReview(root: string, files: DiffFile[], budgetMs
   }
 
   return {
-    context: { changes, callers, complete: index.complete },
+    context: {
+      changes,
+      callers,
+      complete: index.complete,
+      covered: new Set(
+        files.filter((f) => after.has(f.path) || before.has(f.previousPath ?? f.path)).map((f) => f.path),
+      ),
+    },
     callerSnippets: snippets.join("\n\n"),
   };
 }
 
-/** Languages whose callers the graph can find across files. Go is parsed, but its packages aren't resolved yet. */
-const CALLERS_READY = new Set(["typescript", "tsx", "python"]);
+/** Languages whose callers the graph can find across files. */
+const CALLERS_READY = new Set(["typescript", "tsx", "python", "go"]);
 
 /** Changed files the graph can't trace callers for yet (e.g. Go, PHP), for "Not checked". */
 export function filesOutsideGraph(files: DiffFile[]): string[] {

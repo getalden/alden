@@ -23,7 +23,7 @@ function notCheckedFor(context: ReviewContext): string[] {
   return [
     titleLine,
     ...(outside.length > 0
-      ? [`Callers of changes in ${outside.slice(0, 3).join(", ")}${more} (Go and PHP support is coming)`]
+      ? [`Callers of changes in ${outside.slice(0, 3).join(", ")}${more} (PHP support is coming)`]
       : []),
     ...(context.graph.complete ? [] : ["Some callers: indexing the repo ran out of time"]),
     "Uses of changed types and interfaces (the compiler catches those)",
