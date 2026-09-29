@@ -18,6 +18,16 @@ export {
 } from "./diff/parse.js";
 export { fetchPullRequestDiff, fromRestFile, type LocalDiff, readLocalDiff } from "./diff/sources.js";
 export * from "./github/index.js";
+export { AnthropicProvider, toLlmError } from "./llm/anthropic.js";
+export { costUsd, MODEL_ALIASES, NO_USAGE, PRICES, resolveModel, type TokenUsage, worstCaseUsd } from "./llm/models.js";
+export {
+  type GenerateRequest,
+  type GenerateResult,
+  LlmError,
+  type LlmErrorKind,
+  type LlmProvider,
+  type StopReason,
+} from "./llm/provider.js";
 export { type FileKind, fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";
 export {
   type FastTrackKind,
