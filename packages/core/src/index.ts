@@ -26,6 +26,7 @@ export {
   type ImportBinding,
   type Reference,
 } from "./graph/extract.js";
+export { EXTRACTOR_VERSION, type IndexOptions, indexCachePath, indexRepo, type RepoIndex } from "./graph/index-repo.js";
 export { type GraphLanguage, grammarPath, languageOf, parserFor } from "./graph/parser.js";
 export { AnthropicProvider, type MessagesClient, supportsEffort, toLlmError } from "./llm/anthropic.js";
 export {
