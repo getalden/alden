@@ -25,7 +25,7 @@ them as leads.
 | **CI status** (`ci.status`) | CI failing on the latest commit. Skipped when CI is pending, absent, or for local changes. | High |
 | **Callers outside the diff** (`callers.outside`) | Changed public code that's still called from places the PR didn't touch. See [The code graph](code-graph.md). | High when removed or re-signed code is still called, medium if only by name match, low for behaviour changes |
 | **Database migrations** (`migrations.changed`) | Changed migrations. High when they drop, rename or reshape data (SQL, Django, Laravel, Doctrine). | Medium or high |
-| **Changed public signatures** (`signatures.changed`) | Exported functions, classes and methods whose signature changed or that were removed, in TS/JS, Python, PHP and Go. Go uses the code graph; the others read the diff. | Low or medium |
+| **Changed public signatures** (`signatures.changed`) | Exported functions, classes and methods whose signature changed or that were removed, in TS/JS, Python, PHP and Go. Go and PHP use the code graph; TS/JS and Python read the diff. | Low or medium |
 | **Code changed without tests** (`tests.missing`) | Code changes with no test changes alongside them. | Medium |
 | **Dependencies** (`dependencies.changed`) | Added, removed or re-versioned dependencies in package.json, composer.json, go.mod, requirements.txt and pyproject.toml. | Low, or medium for risky changes |
 | **Configuration and environment** (`config.changed`) | Config files (`.env`, settings, Docker, Terraform, CI, deploy config) and new environment variable references. | Medium |
