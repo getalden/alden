@@ -29,7 +29,8 @@ export interface UiApi {
   review(request: ReviewRequest, onStage: (stage: ReviewStage, label: string) => void): Promise<Briefing>;
   spend(): Promise<unknown>;
   config(): Promise<unknown>;
-  setConfig(key: string, value: string): Promise<unknown>;
+  /** `null` removes the setting, so its default applies again. */
+  setConfig(key: string, value: string | null): Promise<unknown>;
 }
 
 /** An error the UI should show as is, with an HTTP status. */
@@ -182,8 +183,8 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         return;
       case "PUT /api/config": {
         const body = await readJsonBody(req);
-        if (typeof body.key !== "string" || typeof body.value !== "string") {
-          throw new ApiError(400, "Send { key, value } as strings.");
+        if (typeof body.key !== "string" || !(typeof body.value === "string" || body.value === null)) {
+          throw new ApiError(400, "Send { key, value }: value a string, or null to remove the setting.");
         }
         send(res, 200, await api.setConfig(body.key, body.value));
         return;

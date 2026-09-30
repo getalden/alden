@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { type AldenConfig, AldenConfigSchema } from "@alden/schema";
 import { parse, stringify } from "smol-toml";
+import { z } from "zod";
 
 type Table = Record<string, unknown>;
 
@@ -88,4 +89,31 @@ export async function setConfigValue(key: string, raw: string): Promise<void> {
 
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, stringify(table), "utf8");
+}
+
+/** Removes a dotted key from the user config, so the default (or the repo's config) applies again. */
+export async function unsetConfigValue(key: string): Promise<void> {
+  const path = userConfigPath();
+  const table = await readToml(path);
+  const parts = key.split(".");
+  const last = parts.pop();
+  if (!last) throw new Error("Config key is empty.");
+  if (!isKnownKey(key)) throw new Error(`Unknown config key: ${key}`);
+  let node: Table | undefined = table;
+  for (const part of parts) node = isTable(node?.[part]) ? (node?.[part] as Table) : undefined;
+  if (!node || !(last in node)) return;
+  delete node[last];
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, stringify(table), "utf8");
+}
+
+/** Whether a dotted key names a setting, including optional ones with no default (e.g. model.effort). */
+export function isKnownKey(key: string): boolean {
+  let node = z.toJSONSchema(AldenConfigSchema, { io: "input" }) as { properties?: Record<string, unknown> };
+  for (const part of key.split(".")) {
+    const next = node.properties?.[part] as { properties?: Record<string, unknown> } | undefined;
+    if (!next) return false;
+    node = next;
+  }
+  return true;
 }

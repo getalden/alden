@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getConfigValue, loadConfig, setConfigValue, userConfigPath } from "./config.js";
+import { getConfigValue, isKnownKey, loadConfig, setConfigValue, unsetConfigValue, userConfigPath } from "./config.js";
 
 let home: string;
 let repo: string;
@@ -49,5 +49,32 @@ describe("setConfigValue", () => {
 
   it("rejects unknown keys", async () => {
     await expect(setConfigValue("model.colour", "blue")).rejects.toThrow(/Unknown config key/);
+  });
+});
+
+describe("unsetConfigValue", () => {
+  it("removes a setting so its default applies again", async () => {
+    await setConfigValue("model.effort", "low");
+    await setConfigValue("budget.dailyUsd", "20");
+    await unsetConfigValue("model.effort");
+    await unsetConfigValue("budget.dailyUsd");
+    const config = await loadConfig(repo);
+    expect(config.model.effort).toBeUndefined();
+    expect(config.budget.dailyUsd).toBe(10);
+  });
+
+  it("does nothing for a setting that isn't there, and rejects unknown keys", async () => {
+    await expect(unsetConfigValue("model.baseUrl")).resolves.toBeUndefined();
+    await expect(unsetConfigValue("model.colour")).rejects.toThrow(/Unknown config key/);
+  });
+
+  it("knows optional keys that have no default", () => {
+    expect(["model.effort", "model.baseUrl", "queue.sensitivePaths", "budget"].map(isKnownKey)).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ]);
+    expect(["model.colour", "nope", "model.name.x"].map(isKnownKey)).toEqual([false, false, false]);
   });
 });

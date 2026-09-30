@@ -97,7 +97,8 @@ export class Api {
 
   spend = () => this.request<SpendReport>("/api/spend");
 
-  setConfig = (key: string, value: string) =>
+  /** `null` removes the setting, so its default applies again. */
+  setConfig = (key: string, value: string | null) =>
     this.request<unknown>("/api/config", { method: "PUT", body: JSON.stringify({ key, value }) });
 
   /** Runs a review, calling `onEvent` for each stage, then resolving with the briefing. */

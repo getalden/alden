@@ -2,9 +2,11 @@ export { JsonCache } from "./cache.js";
 export {
   aldenHome,
   getConfigValue,
+  isKnownKey,
   loadConfig,
   repoConfigPath,
   setConfigValue,
+  unsetConfigValue,
   userConfigPath,
 } from "./config.js";
 export {

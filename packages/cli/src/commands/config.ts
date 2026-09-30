@@ -1,4 +1,4 @@
-import { getConfigValue, loadConfig, setConfigValue, userConfigPath } from "@alden/core";
+import { getConfigValue, loadConfig, setConfigValue, unsetConfigValue, userConfigPath } from "@alden/core";
 import type { Command } from "commander";
 
 export function registerConfigCommand(program: Command): void {
@@ -24,6 +24,20 @@ export function registerConfigCommand(program: Command): void {
     .action(async (key: string, value: string) => {
       try {
         await setConfigValue(key, value);
+      } catch (error) {
+        program.error((error as Error).message);
+      }
+    });
+
+  config
+    .command("unset")
+    .description(
+      "Remove a setting from your user config, so its default applies, e.g. `alden config unset model.effort`.",
+    )
+    .argument("<key>", "dotted key")
+    .action(async (key: string) => {
+      try {
+        await unsetConfigValue(key);
       } catch (error) {
         program.error((error as Error).message);
       }

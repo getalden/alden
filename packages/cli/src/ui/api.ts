@@ -18,6 +18,7 @@ import {
   selectProvider,
   setConfigValue,
   supportsEffort,
+  unsetConfigValue,
   userConfigPath,
   type WithModel,
 } from "@alden/core";
@@ -175,7 +176,8 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
 
     async setConfig(key, value) {
       try {
-        await setConfigValue(key, value);
+        if (value === null) await unsetConfigValue(key);
+        else await setConfigValue(key, value);
       } catch (error) {
         throw new ApiError(400, (error as Error).message);
       }

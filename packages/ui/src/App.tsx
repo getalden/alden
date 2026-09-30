@@ -2,7 +2,9 @@ import type { RankedPullRequest, RankedQueue } from "@alden/schema";
 import { useCallback, useEffect, useState } from "react";
 import { type Api, ApiError, type Session } from "./api";
 import { QueueView } from "./components/QueueView";
+import { type Choices, initialChoices, ReviewOptions, toRequest } from "./components/ReviewOptions";
 import { ReviewPane } from "./components/ReviewPane";
+import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
 import { useReviews } from "./reviews";
 import { useRoute } from "./router";
@@ -18,17 +20,24 @@ export function App({ api }: { api: Api | undefined }) {
   const [queueError, setQueueError] = useState<string>();
   const [queueLoading, setQueueLoading] = useState(false);
   const [repoFilter, setRepoFilter] = useState("");
-  const reviews = useReviews(api);
+  const [choices, setChoices] = useState<Choices>();
 
-  useEffect(() => {
+  const loadSession = useCallback(() => {
     if (!api) return;
     api
       .session()
-      .then(setSession)
+      .then((next) => {
+        setSession(next);
+        // The first session sets the picker; later ones (after a review or a settings change) only refresh the budget.
+        setChoices((current) => current ?? initialChoices(next));
+      })
       .catch((error: unknown) =>
         setFatal(error instanceof ApiError && error.status === 401 ? "expired" : messageOf(error)),
       );
   }, [api]);
+
+  useEffect(loadSession, [loadSession]);
+  const reviews = useReviews(api, loadSession);
 
   const loadQueue = useCallback(
     (refresh: boolean) => {
@@ -93,7 +102,9 @@ export function App({ api }: { api: Api | undefined }) {
                   row={[...(queue?.needsYou ?? []), ...(queue?.fastTrack ?? [])].find(
                     (r) => r.pr.repo === route.pr?.repo && r.pr.number === route.pr?.number,
                   )}
-                  modelAvailable={session?.model.available ?? false}
+                  session={session}
+                  choices={choices ?? initialChoices(session)}
+                  onChoices={setChoices}
                   reviews={reviews}
                 />
               ) : (
@@ -117,15 +128,32 @@ export function App({ api }: { api: Api | undefined }) {
                 )
               }
               run={reviews.runs.local}
-              request={{ llm: session?.model.available ?? false, graph: true }}
+              request={toRequest(choices ?? initialChoices(session), session)}
               onStart={(request) => reviews.start("local", request)}
               onCancel={() => reviews.cancel("local")}
-              controls={null}
+              controls={
+                <ReviewOptions session={session} choices={choices ?? initialChoices(session)} onChange={setChoices} />
+              }
               emptyHint="Review your uncommitted changes (staged, unstaged and untracked) before you open a PR."
             />
           </div>
         )}
-        {route.view === "settings" && <div className="pane" />}
+        {route.view === "settings" && (
+          <div className="pane">
+            {session ? (
+              <SettingsView
+                api={api}
+                session={session}
+                onSaved={() => {
+                  setChoices(undefined);
+                  loadSession();
+                }}
+              />
+            ) : (
+              <p className="state">Loading…</p>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
@@ -134,7 +162,9 @@ export function App({ api }: { api: Api | undefined }) {
 function PrPane(props: {
   prRef: { repo: string; number: number };
   row: RankedPullRequest | undefined;
-  modelAvailable: boolean;
+  session: Session | undefined;
+  choices: Choices;
+  onChoices: (choices: Choices) => void;
   reviews: ReturnType<typeof useReviews>;
 }) {
   const { prRef, row, reviews } = props;
@@ -160,10 +190,10 @@ function PrPane(props: {
       row={row}
       backToQueue
       run={reviews.runs[key]}
-      request={{ pr: key, llm: props.modelAvailable, graph: true }}
+      request={{ pr: key, ...toRequest(props.choices, props.session) }}
       onStart={(request) => reviews.start(key, request)}
       onCancel={() => reviews.cancel(key)}
-      controls={null}
+      controls={<ReviewOptions session={props.session} choices={props.choices} onChange={props.onChoices} />}
       emptyHint="Alden fetches the PR, finds who calls the code it changes (from a clone of the repo), runs its checks, and asks the model if one is set up."
     />
   );

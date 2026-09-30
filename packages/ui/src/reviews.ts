@@ -16,7 +16,7 @@ export interface ReviewRun {
  * Reviews by key ("owner/repo#123", or "local"), kept for the session: a review keeps running while you look at
  * another PR, and its briefing is there when you come back.
  */
-export function useReviews(api: Api | undefined) {
+export function useReviews(api: Api | undefined, onDone?: () => void) {
   const [runs, setRuns] = useState<Record<string, ReviewRun>>({});
   const controllers = useRef(new Map<string, AbortController>());
 
@@ -48,9 +48,11 @@ export function useReviews(api: Api | undefined) {
         })
         .finally(() => {
           if (controllers.current.get(key) === controller) controllers.current.delete(key);
+          // A review may have spent money; whoever shows the budget should know.
+          onDone?.();
         });
     },
-    [api, update],
+    [api, update, onDone],
   );
 
   const cancel = useCallback(
