@@ -8,10 +8,36 @@ const names = (defs: { name: string; kind: string; exported: boolean; container?
   defs.map((d) => `${d.exported ? "+" : "-"}${d.container ? `${d.container}.` : ""}${d.name}:${d.kind}`);
 
 describe("languageOf", () => {
-  it("covers TS, JS (via the TSX grammar), Python and Go, and skips everything else", () => {
+  it("covers TS, JS (via the TSX grammar), Python, Go and PHP, and skips everything else", () => {
     expect(
-      ["a.ts", "a.mts", "a.tsx", "a.js", "a.jsx", "a.cjs", "a.py", "a.d.ts", "a.go", "a.php"].map(languageOf),
-    ).toEqual(["typescript", "typescript", "tsx", "tsx", "tsx", "tsx", "python", undefined, "go", undefined]);
+      [
+        "a.ts",
+        "a.mts",
+        "a.tsx",
+        "a.js",
+        "a.jsx",
+        "a.cjs",
+        "a.py",
+        "a.d.ts",
+        "a.go",
+        "a.php",
+        "a.blade.php",
+        "a.rb",
+      ].map(languageOf),
+    ).toEqual([
+      "typescript",
+      "typescript",
+      "tsx",
+      "tsx",
+      "tsx",
+      "tsx",
+      "python",
+      undefined,
+      "go",
+      "php",
+      undefined,
+      undefined,
+    ]);
   });
 });
 
@@ -291,6 +317,112 @@ describe("goPackageNameFromPath", () => {
   });
 });
 
-it("skips languages the graph doesn't cover yet", async () => {
-  expect(await extractSymbols("index.php", "<?php echo 1;")).toBeUndefined();
+describe("PHP", () => {
+  const source = `<?php
+
+namespace App\\Services;
+
+use App\\Models\\{User, Post as Article};
+use App\\Contracts\\PaymentGateway;
+use function App\\Support\\helper;
+use Illuminate\\Support\\Facades\\Cache;
+
+function top(int $x): int { return $x; }
+
+final class Billing extends Base implements PaymentGateway, \\Countable
+{
+    public function __construct(private PaymentGateway $gateway) {}
+
+    public function charge(
+        User $user,
+        int $cents,
+    ): Receipt {
+        $this->gateway->charge($cents);
+        $user?->notify();
+        $r = new Receipt($cents);
+        User::where('a', 1)->first();
+        \\App\\Support\\Log::info('x');
+        helper(User::class);
+        new \\App\\Mail\\Invoice();
+        return self::make(static::class, parent::boot());
+    }
+
+    protected function audit() {}
+    private static function make() {}
+    function implicitPublic() {}
+}
+
+interface Chargeable { public function charge(int $c): void; }
+trait HasBilling { public function bill() {} }
+enum Status: string { case Active = 'a'; public function label(): string { return 'x'; } }
+`;
+
+  it("finds classes, interfaces, traits, enums, functions and methods; no modifier means public", async () => {
+    const symbols = await extractSymbols("app/Services/Billing.php", source);
+    expect(symbols?.phpNamespace).toBe("App\\Services");
+    expect(names(symbols?.definitions ?? [])).toEqual([
+      "+top:function",
+      "+Billing:class",
+      "+Billing.__construct:method",
+      "+Billing.charge:method",
+      "-Billing.audit:method",
+      "-Billing.make:method",
+      "+Billing.implicitPublic:method",
+      "+Chargeable:interface",
+      "+Chargeable.charge:method",
+      "+HasBilling:class",
+      "+HasBilling.bill:method",
+      "+Status:class",
+      "+Status.label:method",
+    ]);
+    const billing = symbols?.definitions.find((d) => d.name === "Billing");
+    expect(billing?.bases).toEqual(["Base", "PaymentGateway", "\\Countable"]);
+    const charge = symbols?.definitions.find((d) => d.name === "charge" && d.container === "Billing");
+    expect(charge?.signature).toBe("public function charge(User $user, int $cents): Receipt");
+    expect(symbols?.definitions.find((d) => d.container === "Chargeable")?.signature).toBe(
+      "public function charge(int $c): void",
+    );
+  });
+
+  it("reads plain, aliased and grouped use imports, skips use function, and imports fully qualified names", async () => {
+    const symbols = await extractSymbols("app/Services/Billing.php", source);
+    expect(symbols?.imports.map((i) => `${i.local}<-${i.imported}@${i.from}`)).toEqual(
+      expect.arrayContaining([
+        "User<-User@App\\Models\\User",
+        "Article<-Post@App\\Models\\Post",
+        "PaymentGateway<-PaymentGateway@App\\Contracts\\PaymentGateway",
+        "Cache<-Cache@Illuminate\\Support\\Facades\\Cache",
+        "Log<-Log@App\\Support\\Log",
+        "Invoice<-Invoice@App\\Mail\\Invoice",
+        "Countable<-Countable@Countable",
+      ]),
+    );
+    expect(symbols?.imports.some((i) => i.imported === "helper")).toBe(false);
+  });
+
+  it("finds calls, static calls, new, ::class and base classes", async () => {
+    const symbols = await extractSymbols("app/Services/Billing.php", source);
+    const refs = symbols?.references.map((r) => `${r.object ? `${r.object}::` : ""}${r.name}@${r.line}`) ?? [];
+    expect(refs).toEqual(
+      expect.arrayContaining([
+        "Base@12",
+        "PaymentGateway@12",
+        "Countable@12",
+        "$this->gateway::charge@20",
+        "$user::notify@21",
+        "Receipt@22",
+        "User::where@23",
+        "Log::info@24",
+        "helper@25",
+        "User::class@25",
+        "Invoice@26",
+        "self::make@27",
+        "parent::boot@27",
+      ]),
+    );
+  });
+});
+
+it("skips languages the graph doesn't cover", async () => {
+  expect(await extractSymbols("app.rb", "puts 1")).toBeUndefined();
 });

@@ -20,6 +20,8 @@ export interface Definition {
    * (Go so far); elsewhere the diff-based heuristic in review/signatures.ts applies.
    */
   signature?: string;
+  /** Classes: what they extend and implement, as written (PHP so far). */
+  bases?: string[];
 }
 
 /** A name a file brings in from elsewhere. */
@@ -52,6 +54,8 @@ export interface FileSymbols {
   language: GraphLanguage;
   /** Go: the name in the file's `package` clause. */
   goPackage?: string;
+  /** PHP: the file's namespace, e.g. "App\\Models". */
+  phpNamespace?: string;
   definitions: Definition[];
   imports: ImportBinding[];
   references: Reference[];
@@ -497,6 +501,128 @@ function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
   return { definitions, imports, ...(goPackage ? { goPackage } : {}) };
 }
 
+// ─── PHP ─────────────────────────────────────────────────────────────────────────────────────────
+
+const PHP_REFERENCES = `
+  (function_call_expression function: (name) @name)
+  (function_call_expression function: (qualified_name (name) @name))
+  (member_call_expression object: (_) @object name: (name) @name)
+  (nullsafe_member_call_expression object: (_) @object name: (name) @name)
+  (scoped_call_expression scope: (_) @object name: (name) @name)
+  (object_creation_expression (name) @name)
+  (object_creation_expression (qualified_name) @qualified)
+  (class_constant_access_expression . (name) @object (name) @name)
+  (class_constant_access_expression . (qualified_name) @qualified)
+  (base_clause (name) @name)
+  (base_clause (qualified_name) @qualified)
+  (class_interface_clause (name) @name)
+  (class_interface_clause (qualified_name) @qualified)
+`;
+
+/** "\\App\\Models\\User" → "App\\Models\\User"; relative names are joined to the file's namespace. */
+function phpFqn(name: string, namespace: string | undefined): string {
+  if (name.startsWith("\\")) return name.slice(1);
+  return namespace ? `${namespace}\\${name}` : name;
+}
+
+const lastSegment = (name: string) => name.split("\\").at(-1) ?? name;
+
+/** A declaration up to its body: `public function charge(User $user, int $cents): Receipt`. */
+function phpSignature(node: Node): string {
+  const body = node.childForFieldName("body");
+  return collapse((body ? node.text.slice(0, body.startIndex - node.startIndex) : node.text).replace(/;\s*$/, ""));
+}
+
+function extractPhp(root: Node): Omit<FileSymbols, "language" | "references"> {
+  const definitions: Definition[] = [];
+  const imports: ImportBinding[] = [];
+  let namespace: string | undefined;
+
+  const classLike = (node: Node) => {
+    const name = node.childForFieldName("name")?.text;
+    if (!name) return;
+    const bases = node.namedChildren
+      .filter((c) => c?.type === "base_clause" || c?.type === "class_interface_clause")
+      .flatMap((c) => c?.namedChildren.map((n) => n?.text ?? "") ?? [])
+      .filter(Boolean);
+    definitions.push({
+      name,
+      kind: node.type === "interface_declaration" ? "interface" : "class",
+      exported: true,
+      startLine: line(node),
+      endLine: endLine(node),
+      signature: phpSignature(node),
+      ...(bases.length > 0 ? { bases } : {}),
+    });
+    for (const member of node.childForFieldName("body")?.namedChildren ?? []) {
+      if (member?.type !== "method_declaration") continue;
+      const method = member.childForFieldName("name")?.text;
+      if (!method) continue;
+      // No modifier means public; protected methods are the class family's business, like TypeScript's.
+      const visibility = member.namedChildren.find((c) => c?.type === "visibility_modifier")?.text ?? "public";
+      definitions.push({
+        name: method,
+        kind: "method",
+        exported: visibility === "public",
+        startLine: line(member),
+        endLine: endLine(member),
+        container: name,
+        signature: phpSignature(member),
+      });
+    }
+  };
+
+  const visit = (node: Node) => {
+    switch (node.type) {
+      case "namespace_definition": {
+        namespace = node.childForFieldName("name")?.text;
+        // `namespace Foo { ... }` wraps its declarations.
+        const body = node.childForFieldName("body");
+        if (body) for (const child of body.namedChildren) if (child) visit(child);
+        break;
+      }
+      case "namespace_use_declaration": {
+        // `use function` and `use const` import functions and constants, which PSR-4 can't place in a file.
+        if (/^use\s+(function|const)\b/i.test(node.text)) break;
+        const group = node.childForFieldName("body");
+        const prefix = group ? node.namedChildren.find((c) => c?.type === "namespace_name")?.text : undefined;
+        const clauses = (group ?? node).namedChildren.filter((c) => c?.type === "namespace_use_clause");
+        for (const clause of clauses) {
+          if (!clause) continue;
+          const target = clause.namedChildren.find((c) => c?.type === "qualified_name" || c?.type === "name");
+          if (!target) continue;
+          const fqn = (prefix ? `${prefix}\\${target.text}` : target.text).replace(/^\\/, "");
+          const alias = clause.childForFieldName("alias")?.text;
+          imports.push({ local: alias ?? lastSegment(fqn), imported: lastSegment(fqn), from: fqn, line: line(node) });
+        }
+        break;
+      }
+      case "class_declaration":
+      case "interface_declaration":
+      case "trait_declaration":
+      case "enum_declaration":
+        classLike(node);
+        break;
+      case "function_definition": {
+        const name = node.childForFieldName("name")?.text;
+        if (name) {
+          definitions.push({
+            name,
+            kind: "function",
+            exported: true,
+            startLine: line(node),
+            endLine: endLine(node),
+            signature: phpSignature(node),
+          });
+        }
+        break;
+      }
+    }
+  };
+  for (const node of root.namedChildren) if (node) visit(node);
+  return { definitions, imports, ...(namespace ? { phpNamespace: namespace } : {}) };
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────────────────────────
 
 const queries = new Map<string, Query>();
@@ -511,14 +637,21 @@ export async function extractSymbols(path: string, source: string): Promise<File
   try {
     const root = tree.rootNode;
     const extracted: Omit<FileSymbols, "language" | "references"> =
-      language === "python" ? extractPython(root) : language === "go" ? extractGo(root) : extractTs(root);
-    const { definitions, imports, goPackage } = extracted;
+      language === "python"
+        ? extractPython(root)
+        : language === "go"
+          ? extractGo(root)
+          : language === "php"
+            ? extractPhp(root)
+            : extractTs(root);
+    const { definitions, imports, goPackage, phpNamespace } = extracted;
 
     let query = queries.get(language);
     if (!query) {
       const source = {
         python: PY_REFERENCES,
         go: GO_REFERENCES,
+        php: PHP_REFERENCES,
         tsx: TS_REFERENCES + JSX_REFERENCES,
         typescript: TS_REFERENCES,
       }[language];
@@ -529,9 +662,31 @@ export async function extractSymbols(path: string, source: string): Promise<File
     for (const match of query.matches(root)) {
       const name = match.captures.find((c) => c.name === "name")?.node;
       const object = match.captures.find((c) => c.name === "object")?.node;
-      if (name) references.push({ name: name.text, ...(object ? { object: object.text } : {}), line: line(name) });
+      const qualified = match.captures.find((c) => c.name === "qualified")?.node;
+      if (qualified) {
+        // PHP `new \\App\\Foo()` or `Foo\\Bar::class`: the name refers to a class directly, so it imports itself.
+        const fqn = phpFqn(qualified.text, phpNamespace);
+        imports.push({ local: lastSegment(fqn), imported: lastSegment(fqn), from: fqn, line: line(qualified) });
+        references.push({ name: lastSegment(fqn), line: line(qualified) });
+        continue;
+      }
+      if (!name) continue;
+      let objectText = object?.text;
+      if (language === "php" && object?.type === "qualified_name") {
+        const fqn = phpFqn(object.text, phpNamespace);
+        imports.push({ local: lastSegment(fqn), imported: lastSegment(fqn), from: fqn, line: line(object) });
+        objectText = lastSegment(fqn);
+      }
+      references.push({ name: name.text, ...(objectText ? { object: objectText } : {}), line: line(name) });
     }
-    return { language, ...(goPackage ? { goPackage } : {}), definitions, imports, references };
+    return {
+      language,
+      ...(goPackage ? { goPackage } : {}),
+      ...(phpNamespace ? { phpNamespace } : {}),
+      definitions,
+      imports,
+      references,
+    };
   } finally {
     tree.delete();
   }

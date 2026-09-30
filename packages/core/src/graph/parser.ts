@@ -4,13 +4,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Language, Parser } from "web-tree-sitter";
 
-export type GraphLanguage = "typescript" | "tsx" | "python" | "go";
+export type GraphLanguage = "typescript" | "tsx" | "python" | "go" | "php";
 
 const GRAMMAR_FILES: Record<GraphLanguage, { file: string; pkg: string }> = {
   typescript: { file: "tree-sitter-typescript.wasm", pkg: "tree-sitter-typescript" },
   tsx: { file: "tree-sitter-tsx.wasm", pkg: "tree-sitter-typescript" },
   python: { file: "tree-sitter-python.wasm", pkg: "tree-sitter-python" },
   go: { file: "tree-sitter-go.wasm", pkg: "tree-sitter-go" },
+  php: { file: "tree-sitter-php.wasm", pkg: "tree-sitter-php" },
 };
 
 /** Which grammar reads a file, or undefined for files the code graph doesn't cover yet. */
@@ -20,6 +21,8 @@ export function languageOf(path: string): GraphLanguage | undefined {
   if (/\.(tsx|js|jsx|mjs|cjs)$/.test(path)) return "tsx";
   if (path.endsWith(".py")) return "python";
   if (path.endsWith(".go")) return "go";
+  // Blade templates are HTML with directives, not PHP classes.
+  if (path.endsWith(".php") && !path.endsWith(".blade.php")) return "php";
   return undefined;
 }
 

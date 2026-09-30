@@ -11,6 +11,7 @@ const GRAMMARS = [
   "tree-sitter-typescript/tree-sitter-tsx.wasm",
   "tree-sitter-python/tree-sitter-python.wasm",
   "tree-sitter-go/tree-sitter-go.wasm",
+  "tree-sitter-php/tree-sitter-php.wasm",
 ];
 
 export default defineConfig({
