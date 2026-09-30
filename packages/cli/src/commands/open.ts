@@ -10,7 +10,7 @@ export interface LastQueue {
   urls: string[];
 }
 
-function openInBrowser(url: string): void {
+export function openInBrowser(url: string, fallback = `Couldn't open a browser. The PR is at ${url}`): void {
   const [command, args] =
     process.platform === "darwin"
       ? ["open", [url]]
@@ -18,7 +18,7 @@ function openInBrowser(url: string): void {
         ? ["cmd", ["/c", "start", '""', url]]
         : ["xdg-open", [url]];
   const child = spawn(command, args, { detached: true, stdio: "ignore" });
-  child.on("error", () => console.log(`Couldn't open a browser. The PR is at ${url}`));
+  child.on("error", () => console.log(fallback));
   child.unref();
 }
 

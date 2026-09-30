@@ -123,6 +123,7 @@ export { MAX_LOOK_HERE, pickLookHere } from "./review/pick.js";
 export {
   fetchPullRequest,
   type GraphOptions,
+  type ReviewStage,
   reviewLocalChanges,
   reviewPullRequest,
   type WithModel,

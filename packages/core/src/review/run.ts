@@ -56,11 +56,17 @@ async function tryManifests(load: () => Promise<ManifestSnapshot[]>): Promise<Ma
   }
 }
 
-/** A briefing for one PR on GitHub. */
-/** Whether and where to build the code graph. On by default; `cwd` must be inside a clone for PR reviews. */
+/** A step of a review, for progress displays. */
+export type ReviewStage = "fetch" | "graph" | "checks" | "model";
+
+/**
+ * Whether and where to build the code graph (on by default; `cwd` must be inside a clone for PR reviews), and a
+ * callback as the review moves through its stages.
+ */
 export interface GraphOptions {
   enabled?: boolean;
   cwd?: string;
+  onStage?: (stage: ReviewStage, label: string) => void;
 }
 
 type GraphResult = { graph?: GraphReview; unavailable?: string };
@@ -93,16 +99,20 @@ export async function reviewPullRequest(
   model?: WithModel,
   graphOptions: GraphOptions = {},
 ): Promise<Briefing> {
+  const stage = graphOptions.onStage ?? (() => {});
+  stage("fetch", `Fetching ${repo}#${number}`);
   // The PR first, so a wrong number gets a clear message rather than the files API's bare "Not Found".
   const raw = await fetchPullRequest(client, repo, number);
   const [{ viewer }, files] = await Promise.all([fetchViewer(client), fetchPullRequestDiff(client, repo, number)]);
   const pr = toFacts(raw, viewer);
+  if (graphOptions.enabled !== false) stage("graph", "Checking out the PR and finding callers");
   const [manifests, graph] = await Promise.all([
     tryManifests(() => loadPullRequestManifests(client, repo, number, files)),
     graphOptions.enabled === false
       ? Promise.resolve<GraphResult>({})
       : tryGraph(checkoutPullRequest(graphOptions.cwd ?? process.cwd(), repo, number), files),
   ]);
+  stage("checks", "Running checks");
   const briefing = buildBriefing({
     target: {
       kind: "pr",
@@ -121,6 +131,7 @@ export async function reviewPullRequest(
     ...graphFields(graph),
   });
   if (!model) return briefing;
+  stage("model", `Asking ${model.provider.model}`);
   return addModelReview(briefing, {
     ...model,
     config,
@@ -137,13 +148,17 @@ export async function reviewLocalChanges(
   model?: WithModel,
   graphOptions: GraphOptions = {},
 ): Promise<Briefing> {
+  const stage = graphOptions.onStage ?? (() => {});
+  stage("fetch", "Reading your local changes");
   const { repoRoot, branch, files } = await readLocalDiff(cwd);
+  if (graphOptions.enabled !== false && files.length > 0) stage("graph", "Finding callers");
   const [manifests, graph] = await Promise.all([
     tryManifests(() => loadLocalManifests(repoRoot, files)),
     graphOptions.enabled === false || files.length === 0
       ? Promise.resolve<GraphResult>({})
       : tryGraph(Promise.resolve({ ok: true as const, root: repoRoot }), files),
   ]);
+  stage("checks", "Running checks");
   const briefing = buildBriefing({
     target: { kind: "local", repoRoot, branch },
     files,
@@ -152,6 +167,7 @@ export async function reviewLocalChanges(
     ...graphFields(graph),
   });
   if (!model) return briefing;
+  stage("model", `Asking ${model.provider.model}`);
   return addModelReview(briefing, {
     ...model,
     config,
