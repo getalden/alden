@@ -50,6 +50,7 @@
   "devDependencies": {
     "@alden/core": "workspace:*",
     "@alden/schema": "workspace:*",
+    "@alden/ui": "workspace:*",
     "tree-sitter-go": "^0.25.0",
     "tree-sitter-php": "^0.24.2",
     "tree-sitter-python": "^0.25.0",

@@ -18,7 +18,8 @@
     "release": "pnpm build && changeset publish",
     "fixtures:record": "tsx scripts/record-fixtures.ts",
     "schema:generate": "tsx scripts/generate-schemas.ts",
-    "eval": "tsx scripts/eval.ts"
+    "eval": "tsx scripts/eval.ts",
+    "ui:demo": "tsx scripts/ui-demo.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

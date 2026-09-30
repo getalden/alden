@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { defineConfig } from "tsup";
@@ -31,5 +31,7 @@ export default defineConfig({
       const source = require.resolve(grammar);
       cpSync(source, join("dist/grammars", grammar.split("/").at(-1) as string));
     }
+    // The web UI for `alden ui`, built by @alden/ui first (it's a devDependency, so pnpm builds it before this).
+    if (existsSync("../ui/dist/index.html")) cpSync("../ui/dist", "dist/ui", { recursive: true });
   },
 });
