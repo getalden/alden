@@ -1,14 +1,18 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   createGitHubClient,
   type Effort,
   JsonCache,
   loadConfig,
+  repoFromRemote,
   resolveToken,
   reviewLocalChanges,
   reviewPullRequest,
   SpendLedger,
   selectProvider,
   type TokenSource,
+  UsageLog,
   type WithModel,
 } from "@alden/core";
 import type { Briefing } from "@alden/schema";
@@ -31,6 +35,16 @@ interface ReviewOptions {
 }
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+/** The GitHub repo a clone's `origin` points at, if any. */
+async function originRepo(root: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await promisify(execFile)("git", ["remote", "get-url", "origin"], { cwd: root });
+    return repoFromRemote(stdout);
+  } catch {
+    return undefined;
+  }
+}
 
 export function registerReviewCommand(program: Command): void {
   program
@@ -82,6 +96,9 @@ export function registerReviewCommand(program: Command): void {
         program.error(source ? describeGitHubError(error, source) : (error as Error).message);
       }
       progress.stop();
+      // `alden stats` splits before and after at the first use on each repo.
+      const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : await originRepo(briefing.target.repoRoot);
+      if (usedOn) await new UsageLog().markUsed(usedOn).catch(() => {});
 
       if (unavailable && briefing.files.length > 0) {
         briefing = {

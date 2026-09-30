@@ -134,3 +134,15 @@ export {
 export { findSecrets, mask, redactSecrets, type SecretFinding, shannonEntropy } from "./review/secrets.js";
 export { type Declaration, declarationIn, type SignatureChange, signatureChanges } from "./review/signatures.js";
 export { type Check, type CheckOutcome, type GraphContext, type ReviewContext, symbolKey } from "./review/types.js";
+export {
+  DEFAULT_HORIZON_HOURS,
+  distribution,
+  fetchPullRequestsOpened,
+  type Measured,
+  measure,
+  repoStats,
+  type StatsPullRequest,
+  summarizeStats,
+  weekOf,
+} from "./stats/stats.js";
+export { UsageLog } from "./stats/usage.js";

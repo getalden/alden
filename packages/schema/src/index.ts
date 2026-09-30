@@ -54,3 +54,12 @@ export {
   RankedQueueSchema,
   type Score,
 } from "./queue.js";
+export {
+  type Distribution,
+  DistributionSchema,
+  type Metric,
+  MetricSchema,
+  type RepoStats,
+  RepoStatsSchema,
+  STATS_SCHEMA_VERSION,
+} from "./stats.js";

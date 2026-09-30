@@ -1,0 +1,418 @@
+{
+  "$id": "https://getalden.dev/schema/repo-stats.v1.json",
+  "title": "Alden repo review stats",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "repo": {
+      "type": "string"
+    },
+    "fetchedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "window": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "to": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "split": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "first-use",
+                "since"
+              ]
+            }
+          },
+          "required": [
+            "at",
+            "source"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "where before becomes after: when you first used Alden on this repo, or --since"
+    },
+    "prs": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991,
+      "description": "PRs opened in the window (open, merged or closed), bots and drafts included"
+    },
+    "horizonHours": {
+      "type": "number"
+    },
+    "timeToFirstReview": {
+      "type": "object",
+      "properties": {
+        "all": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "medianHours": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "p90Hours": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "count",
+            "medianHours",
+            "p90Hours"
+          ],
+          "additionalProperties": false
+        },
+        "before": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "medianHours": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "p90Hours": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "count",
+                "medianHours",
+                "p90Hours"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "PRs ready for review before the split; null without a split"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "medianHours": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "p90Hours": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "count",
+                "medianHours",
+                "p90Hours"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "all",
+        "before",
+        "after"
+      ],
+      "additionalProperties": false
+    },
+    "cycleTime": {
+      "type": "object",
+      "properties": {
+        "all": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "medianHours": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "p90Hours": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "count",
+            "medianHours",
+            "p90Hours"
+          ],
+          "additionalProperties": false
+        },
+        "before": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "medianHours": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "p90Hours": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "count",
+                "medianHours",
+                "p90Hours"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "PRs ready for review before the split; null without a split"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "medianHours": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "p90Hours": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "count",
+                "medianHours",
+                "p90Hours"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "all",
+        "before",
+        "after"
+      ],
+      "additionalProperties": false
+    },
+    "weeks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "week": {
+            "type": "string",
+            "description": "the Monday the week starts, YYYY-MM-DD"
+          },
+          "prs": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "timeToFirstReviewMedianHours": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "cycleTimeMedianHours": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "week",
+          "prs",
+          "timeToFirstReviewMedianHours",
+          "cycleTimeMedianHours"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "excluded": {
+      "type": "object",
+      "properties": {
+        "bots": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "description": "PRs by bots, left out of both metrics"
+        },
+        "drafts": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "description": "still drafts, so never ready for review"
+        },
+        "tooRecent": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "description": "ready for review less than the horizon ago, so not judged yet"
+        },
+        "noReview": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "description": "merged or closed without a review by someone else"
+        },
+        "noApproval": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "description": "merged or closed without an approval by someone else"
+        }
+      },
+      "required": [
+        "bots",
+        "drafts",
+        "tooRecent",
+        "noReview",
+        "noApproval"
+      ],
+      "additionalProperties": false
+    },
+    "stillWaiting": {
+      "type": "object",
+      "properties": {
+        "review": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "approval": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "review",
+        "approval"
+      ],
+      "additionalProperties": false
+    },
+    "truncated": {
+      "type": "boolean",
+      "description": "GitHub's search stops at 1,000 results, so older PRs in the window may be missing"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "repo",
+    "fetchedAt",
+    "window",
+    "split",
+    "prs",
+    "horizonHours",
+    "timeToFirstReview",
+    "cycleTime",
+    "weeks",
+    "excluded",
+    "stillWaiting",
+    "truncated"
+  ],
+  "additionalProperties": false
+}

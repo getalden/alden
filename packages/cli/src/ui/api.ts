@@ -19,6 +19,7 @@ import {
   selectProvider,
   setConfigValue,
   supportsEffort,
+  UsageLog,
   unsetConfigValue,
   userConfigPath,
   type WithModel,
@@ -159,6 +160,10 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
           throw new ApiError(502, describeGitHubError(error, resolved.source));
         }
       }
+      // `alden stats` splits before and after at the first use on each repo.
+      const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : (await repoOf(options.cwd))?.repos[0];
+      if (usedOn) await new UsageLog().markUsed(usedOn).catch(() => {});
+
       if (unavailable && briefing.files.length > 0 && !briefing.llm) {
         briefing = {
           ...briefing,
