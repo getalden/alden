@@ -31,7 +31,7 @@ beforeEach(async () => {
   await mkdir(join(repo, "src"));
   await writeFile(join(repo, "src/rank.ts"), "export function rankQueue(queue) {\n  return queue;\n}\n");
   await writeFile(join(repo, "src/cli.ts"), 'import { rankQueue } from "./rank";\nrankQueue([]);\n');
-  await writeFile(join(repo, "src/other.php"), "<?php\nfunction main() {}\n");
+  await writeFile(join(repo, "src/other.rb"), "def main\nend\n");
   git(repo, "add", ".");
   git(repo, "commit", "-q", "-m", "init");
 });
@@ -45,7 +45,7 @@ afterEach(async () => {
 describe("local review with the code graph", () => {
   it("flags a re-signed function's callers and says what the graph couldn't cover", async () => {
     await writeFile(join(repo, "src/rank.ts"), "export function rankQueue(queue, now) {\n  return queue;\n}\n");
-    await writeFile(join(repo, "src/other.php"), "<?php\nfunction main() { echo 1; }\n");
+    await writeFile(join(repo, "src/other.rb"), "def main\n  puts 1\nend\n");
     const briefing = await reviewLocalChanges(config, repo);
 
     const callers = briefing.checks.find((c) => c.id === "callers.outside");
@@ -55,7 +55,9 @@ describe("local review with the code graph", () => {
       anchor: { path: "src/cli.ts", line: 2 },
     });
     expect(briefing.needsYourEyes.some((i) => i.anchor?.path === "src/cli.ts")).toBe(true);
-    expect(briefing.notChecked).toContain("Callers of changes in src/other.php (PHP support is coming)");
+    expect(briefing.notChecked).toContain(
+      "Callers of changes in src/other.rb (the code graph reads TypeScript, JavaScript, Python, Go and PHP)",
+    );
     expect(briefing.notChecked.some((n) => n.startsWith("Callers and code outside the diff"))).toBe(false);
   });
 
@@ -96,6 +98,63 @@ func (c *Cache) Put(key string) error { return nil }
       { text: "calls Store.Put (signature changed)", anchor: { path: "cmd/main.go", line: 7 } },
     ]);
     expect(briefing.notChecked.some((n) => n.includes("store.go"))).toBe(false);
+  });
+
+  it("follows PHP classes and lists service config naming a class whose constructor changed", async () => {
+    await writeFile(join(repo, "composer.json"), JSON.stringify({ autoload: { "psr-4": { "App\\": "php/" } } }));
+    await mkdir(join(repo, "php/Mailer"), { recursive: true });
+    await mkdir(join(repo, "php/Controller"), { recursive: true });
+    await mkdir(join(repo, "config"));
+    const sender = (params: string) => `<?php
+namespace App\\Mailer;
+
+class Sender
+{
+    public function __construct(${params}) {}
+
+    public function send(string $to): void {}
+}
+`;
+    await writeFile(join(repo, "php/Mailer/Sender.php"), sender("string $from"));
+    await writeFile(
+      join(repo, "php/Controller/SignupController.php"),
+      `<?php
+namespace App\\Controller;
+
+use App\\Mailer\\Sender;
+
+class SignupController
+{
+    public function __construct(private Sender $sender) {}
+
+    public function __invoke(): void
+    {
+        $this->sender->send('a@b.c');
+        new Sender('noreply@b.c');
+    }
+}
+`,
+    );
+    await writeFile(
+      join(repo, "config/services.yaml"),
+      "services:\n    App\\Mailer\\Sender:\n        arguments:\n            $from: '%env(MAIL_FROM)%'\n    App\\Mailer\\SenderFactory: ~\n",
+    );
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "php");
+
+    await writeFile(join(repo, "php/Mailer/Sender.php"), sender("string $from, int $retries"));
+    const briefing = await reviewLocalChanges(config, repo);
+
+    expect(briefing.checks.find((c) => c.id === "signatures.changed")?.evidence.map((e) => e.text)).toEqual([
+      "changed: public function __construct(string $from) → public function __construct(string $from, int $retries)",
+    ]);
+    const callers = briefing.checks.find((c) => c.id === "callers.outside");
+    expect(callers).toMatchObject({ status: "flagged", severity: "high" });
+    expect(callers?.evidence.map((e) => `${e.anchor?.path}:${e.anchor?.line}`)).toEqual([
+      "php/Controller/SignupController.php:13",
+      "config/services.yaml:2",
+    ]);
+    expect(briefing.notChecked.some((n) => n.includes("Sender.php"))).toBe(false);
   });
 
   it("can be switched off", async () => {

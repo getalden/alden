@@ -92,7 +92,7 @@ export interface GraphSignatures {
 }
 
 /** Languages whose definitions carry their signature in the graph. */
-const hasGraphSignatures = (path: string) => path.endsWith(".go");
+const hasGraphSignatures = (path: string) => path.endsWith(".go") || path.endsWith(".php");
 
 const declaration = (c: ChangedSymbol, signature: string, withLine: boolean): Declaration => ({
   name: c.name,
@@ -128,8 +128,8 @@ export function graphSignatureChanges(changes: ChangedSymbol[]): SignatureChange
     const moved = [...unmatched].find((a) => key(a) === key(before) && a.signature === before.signature);
     if (moved) {
       unmatched.delete(moved);
-      // Within one Go package, moving between files changes nothing for callers.
-      if (posix.dirname(moved.path) !== posix.dirname(before.path)) {
+      // Within one Go package, moving between files changes nothing for callers. (A PHP class's file is its name.)
+      if (!moved.path.endsWith(".go") || posix.dirname(moved.path) !== posix.dirname(before.path)) {
         out.push({
           kind: "moved",
           before: declaration(before, before.signature ?? "", false),

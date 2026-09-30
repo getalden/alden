@@ -6,7 +6,7 @@ import type { DiffFile } from "../diff/parse.js";
 import { changedNewLines, changedSymbols, loadChangeSymbols } from "../graph/changes.js";
 import { indexRepo } from "../graph/index-repo.js";
 import { languageOf } from "../graph/parser.js";
-import { CodeGraph } from "../graph/query.js";
+import { type CallSite, CodeGraph } from "../graph/query.js";
 import { createResolver, loadResolverConfig } from "../graph/resolve.js";
 import { fileKind } from "../queue/files.js";
 import { type GraphContext, symbolKey } from "./types.js";
@@ -47,10 +47,7 @@ export async function buildGraphReview(root: string, files: DiffFile[], budgetMs
   const callers = new Map<string, ReturnType<CodeGraph["callersOf"]>>();
   for (const change of changes) {
     if (!change.exported || change.change === "added") continue;
-    const sites = graph.callersOf(change, exclude);
-    // Production code first: that's where a break hurts; tests follow.
-    sites.sort((a, b) => Number(fileKind(a.path) === "test") - Number(fileKind(b.path) === "test"));
-    callers.set(symbolKey(change), sites);
+    callers.set(symbolKey(change), productionFirst(graph.callersOf(change, exclude)));
   }
 
   const snippets: string[] = [];
@@ -80,6 +77,32 @@ export async function buildGraphReview(root: string, files: DiffFile[], budgetMs
     if (sites.length > SNIPPETS_PER_SYMBOL) snippets.push(`…and ${sites.length - SNIPPETS_PER_SYMBOL} more`);
   }
 
+  // Code the parser doesn't read but that names PHP classes in full: service configuration (Symfony's YAML and XML,
+  // which a changed constructor or a removed class breaks) and Blade templates (`{{ \\App\\Support\\Str::x() }}`).
+  for (const change of changes) {
+    if (!change.path.endsWith(".php") || !change.exported || change.change === "added") continue;
+    const namespace = (after.get(change.path) ?? before.get(change.path))?.phpNamespace;
+    const className = change.container ?? change.name;
+    const fqn = namespace ? `${namespace}\\${className}` : className;
+    const constructorChanged = change.name === "__construct" && change.container !== undefined;
+    const removedClass = !change.container && change.kind === "class" && change.change === "removed";
+    const sites: CallSite[] = [];
+    if (constructorChanged || removedClass)
+      sites.push(...(await textMentions(root, tracked, CONFIG_FILE, fqn, "", exclude)));
+    if (change.container && !constructorChanged) {
+      sites.push(...(await textMentions(root, tracked, BLADE_FILE, fqn, `::${change.name}\\s*\\(`, exclude)));
+    } else if (removedClass) {
+      sites.push(...(await textMentions(root, tracked, BLADE_FILE, fqn, "", exclude)));
+    }
+    if (sites.length === 0) continue;
+    const key = symbolKey(change);
+    callers.set(key, productionFirst([...(callers.get(key) ?? []), ...sites]));
+    const label = `${className}${change.container ? `::${change.name}` : ""}`;
+    snippets.push(
+      `### ${label} is named in config or templates\n${sites.map((s) => `${s.path}:${s.line}`).join("\n")}`,
+    );
+  }
+
   return {
     context: {
       changes,
@@ -94,7 +117,45 @@ export async function buildGraphReview(root: string, files: DiffFile[], budgetMs
 }
 
 /** Languages whose callers the graph can find across files. */
-const CALLERS_READY = new Set(["typescript", "tsx", "python", "go"]);
+const CALLERS_READY = new Set(["typescript", "tsx", "python", "go", "php"]);
+
+/** Production code first: that's where a break hurts; tests follow. */
+const productionFirst = (sites: CallSite[]) =>
+  sites.sort((a, b) => Number(fileKind(a.path) === "test") - Number(fileKind(b.path) === "test"));
+
+/** Service config: YAML and XML. Blade templates, which the parser skips. */
+const CONFIG_FILE = /\.(ya?ml|xml)$/;
+const BLADE_FILE = /\.blade\.php$/;
+
+/**
+ * Lines in files matching `files` that name a PHP class in full, followed by `after` (a regex source, e.g. a static
+ * call): `App\\Mailer\\Sender:` in services.yaml, `class="App\\Mailer\\Sender"` in XML, `\\App\\Str::x(` in Blade.
+ * YAML's quoted form doubles the backslashes. Vendored code and files over 1 MB are skipped.
+ */
+export async function textMentions(
+  root: string,
+  tracked: string[],
+  files: RegExp,
+  fqn: string,
+  after = "",
+  exclude: Map<string, Set<number>> = new Map(),
+): Promise<CallSite[]> {
+  const spellings = [fqn, fqn.replace(/\\/g, "\\\\")].map(escapeRegExp).join("|");
+  const pattern = new RegExp(`(^|[^\\w\\\\])\\\\?(${spellings})(?![\\w\\\\])${after}`);
+  const sites: CallSite[] = [];
+  for (const path of tracked) {
+    if (!files.test(path) || /(^|\/)(vendor|node_modules)\//.test(path)) continue;
+    const text = await readFile(join(root, path), "utf8").catch(() => "");
+    if (text.length > 1_000_000 || !text.includes(fqn.split("\\").at(-1) ?? fqn)) continue;
+    text.split("\n").forEach((content, i) => {
+      if (pattern.test(content) && !exclude.get(path)?.has(i + 1))
+        sites.push({ path, line: i + 1, confidence: "import" });
+    });
+  }
+  return sites;
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Changed files the graph can't trace callers for yet (e.g. Go, PHP), for "Not checked". */
 export function filesOutsideGraph(files: DiffFile[]): string[] {
