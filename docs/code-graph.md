@@ -51,8 +51,9 @@ declaration before and after the change, keyed by type, so multi-line parameter 
 fields breaks nobody using keyed literals. Moving a declaration to another file in the same Go package isn't reported.
 TypeScript and Python use a heuristic that reads declarations from the diff's changed lines.
 
-Any signature change counts as breaking, including a new parameter with a default value, which callers don't need to
-pass.
+A change that only appends parameters existing calls don't need to pass (a default value, an optional `b?: T`, a
+rest parameter, Python's `*args` or keyword-only defaults, Go's variadic `...T`) counts as compatible: it's listed,
+but callers are flagged as reached by a behaviour change rather than broken.
 
 ## How sure it is
 

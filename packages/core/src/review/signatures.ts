@@ -69,7 +69,8 @@ export function declarationIn(path: string, text: string): { name: string; signa
 }
 
 export type SignatureChange =
-  | { kind: "changed"; before: Declaration; after: Declaration }
+  /** `compatible`: only parameters callers needn't pass were added (see `compatibleChange`). */
+  | { kind: "changed"; before: Declaration; after: Declaration; compatible: boolean }
   | { kind: "removed"; before: Declaration }
   | { kind: "added"; after: Declaration }
   | { kind: "moved"; before: Declaration; after: Declaration };
@@ -120,6 +121,7 @@ export function graphSignatureChanges(changes: ChangedSymbol[]): SignatureChange
         kind: "changed",
         before: declaration(c, c.previousSignature, false),
         after: declaration(c, c.signature, true),
+        compatible: compatibleChange(c.previousSignature, c.signature),
       });
     }
   }
@@ -174,7 +176,14 @@ function diffSignatureChanges(files: DiffFile[]): SignatureChange[] {
     );
     if (edited) {
       unmatchedAdded.delete(edited);
-      if (edited.signature !== before.signature) changes.push({ kind: "changed", before, after: edited });
+      if (edited.signature !== before.signature) {
+        changes.push({
+          kind: "changed",
+          before,
+          after: edited,
+          compatible: compatibleChange(before.signature, edited.signature),
+        });
+      }
       continue;
     }
     const moved = [...unmatchedAdded].find((a) => a.name === before.name && a.signature === before.signature);
@@ -187,4 +196,56 @@ function diffSignatureChanges(files: DiffFile[]): SignatureChange[] {
   }
   for (const after of unmatchedAdded) changes.push({ kind: "added", after });
   return changes;
+}
+
+/** A declaration split around its parameter list, or undefined when the list isn't complete (a cut-off first line). */
+export function splitParameters(signature: string): { head: string; params: string[]; tail: string } | undefined {
+  const open = signature.indexOf("(");
+  if (open === -1) return undefined;
+  const params: string[] = [];
+  let depth = 0;
+  let quote: string | undefined;
+  let start = open + 1;
+  for (let i = open; i < signature.length; i++) {
+    const ch = signature[i] as string;
+    if (quote) {
+      if (ch === quote && signature[i - 1] !== "\\") quote = undefined;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+    else if ("([{<".includes(ch)) depth++;
+    else if (")]}>".includes(ch) && !(ch === ">" && signature[i - 1] === "=")) {
+      depth--;
+      if (depth === 0) {
+        const last = signature.slice(start, i).trim();
+        if (last) params.push(last);
+        return { head: signature.slice(0, open), params, tail: signature.slice(i + 1).trim() };
+      }
+    } else if (ch === "," && depth === 1) {
+      params.push(signature.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A parameter every existing call already satisfies: it has a default (`b = 1`, `$b = 1`), is optional (`b?: T`),
+ * collects the rest (`...rest`, `*args`, `**kwargs`, Go's `xs ...T`), or is Python's bare `*` separator.
+ */
+function optionalParameter(param: string): boolean {
+  return /=/.test(param) || /^[\w$]+\?\s*:/.test(param) || /\.\.\./.test(param) || /^\*{1,2}\w*/.test(param);
+}
+
+/**
+ * Whether callers written against `before` still work with `after`: same name, return type and existing parameters,
+ * plus only parameters callers needn't pass. `f(a)` → `f(a, b = 1)` is compatible; `f(a)` → `f(a, b)` or `f(b)` isn't.
+ */
+export function compatibleChange(before: string, after: string): boolean {
+  const old = splitParameters(before);
+  const now = splitParameters(after);
+  if (!old || !now) return false;
+  if (old.head !== now.head || old.tail !== now.tail || now.params.length <= old.params.length) return false;
+  if (old.params.some((p, i) => p !== now.params[i])) return false;
+  return now.params.slice(old.params.length).every(optionalParameter);
 }

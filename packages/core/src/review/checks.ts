@@ -339,7 +339,7 @@ function describeSignature(change: SignatureChange): Evidence {
   switch (change.kind) {
     case "changed":
       return {
-        text: `changed: ${change.before.signature} → ${change.after.signature}`,
+        text: `${change.compatible ? "compatible change" : "changed"}: ${change.before.signature} → ${change.after.signature}`,
         anchor: { path: change.after.path, ...(change.after.line ? { line: change.after.line } : {}) },
       };
     case "removed":
@@ -363,16 +363,22 @@ export const signaturesCheck: Check = {
   heuristic: true,
   run({ files, graph }) {
     const changes = signatureChanges(files, graph);
-    const breaking = changes.filter((c) => c.kind === "changed" || c.kind === "removed");
+    const breaking = changes.filter((c) => (c.kind === "changed" && !c.compatible) || c.kind === "removed");
+    const compatible = changes.filter((c) => c.kind === "changed" && c.compatible);
     const moved = changes.filter((c) => c.kind === "moved");
     const added = changes.filter((c) => c.kind === "added");
 
     if (breaking.length === 0 && moved.length === 0) {
+      const notes = [
+        compatible.length > 0 &&
+          `${compatible.length} gained optional parameter${compatible.length === 1 ? "" : "s"}, which existing calls don't need to pass`,
+        added.length > 0 && `${added.length} new public declaration${added.length === 1 ? "" : "s"}`,
+      ].filter(Boolean);
       return passed(
-        added.length > 0
-          ? `No public signatures changed; ${added.length} new public declaration${added.length === 1 ? "" : "s"}.`
+        notes.length > 0
+          ? `No public signatures changed incompatibly; ${notes.join("; ")}.`
           : "No public signatures changed.",
-        capped(added.map(describeSignature)),
+        capped([...compatible, ...added].map(describeSignature)),
       );
     }
     const parts = [
@@ -384,7 +390,7 @@ export const signaturesCheck: Check = {
       status: "flagged",
       severity: breaking.length > 0 ? "medium" : "low",
       summary: `${parts.join(", ")}. Callers outside this diff may need updating; see "Callers outside the diff" for where they are.`,
-      evidence: capped([...breaking, ...moved].map(describeSignature)),
+      evidence: capped([...breaking, ...moved, ...compatible].map(describeSignature)),
     };
   },
 };
@@ -408,9 +414,13 @@ export const callersCheck: Check = {
     // A removed definition, or one whose signature changed, can break its callers outright. Graph-based changes
     // name their type; diff-based ones only a name, which then matches any symbol of that name in the file.
     const signatureChanged = new Set(
-      signatureChanges(files, graph)
-        .filter((c) => c.kind === "changed" || c.kind === "removed")
-        .map((c) => symbolKey(c.kind === "changed" ? c.after : c.before)),
+      signatureChanges(files, graph).flatMap((c) =>
+        c.kind === "changed" && !c.compatible
+          ? [symbolKey(c.after)]
+          : c.kind === "removed"
+            ? [symbolKey(c.before)]
+            : [],
+      ),
     );
     const breaking: Evidence[] = [];
     const reaching: Evidence[] = [];

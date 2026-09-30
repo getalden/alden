@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DiffFile, DiffLine } from "../diff/parse.js";
-import { declarationIn, signatureChanges } from "./signatures.js";
+import { compatibleChange, declarationIn, signatureChanges, splitParameters } from "./signatures.js";
 
 /** A file whose hunk removes `del` lines and adds `add` lines. */
 function edit(path: string, del: string[], add: string[], previousPath?: string): DiffFile {
@@ -101,5 +101,52 @@ describe("signatureChanges", () => {
 
   it("ignores test files", () => {
     expect(signatureChanges([edit("tests/test_users.py", ["def test_a():"], ["def test_b():"])])).toEqual([]);
+  });
+});
+
+describe("compatibleChange", () => {
+  it.each([
+    [
+      "PHP default",
+      "public function findLatest(int $page = 1): Paginator",
+      "public function findLatest(int $page = 1, int $perPage = 10): Paginator",
+    ],
+    ["TS default", "export function rank(queue: Queue)", "export function rank(queue: Queue, now = Date.now())"],
+    [
+      "TS optional",
+      "export function rank(queue: Queue): Ranked",
+      "export function rank(queue: Queue, options?: Options): Ranked",
+    ],
+    ["TS rest", "export function log(msg: string)", "export function log(msg: string, ...args: unknown[])"],
+    ["Python default", "def charge(invoice)", "def charge(invoice, retries=3)"],
+    ["Python keyword-only", "def charge(invoice)", "def charge(invoice, *, dry_run=False)"],
+    ["Python kwargs", "def charge(invoice)", "def charge(invoice, **options)"],
+    ["Go variadic", "func New(name string) *Server", "func New(name string, opts ...Option) *Server"],
+    [
+      "a generic default",
+      "export function pick(xs: Map<string, number>)",
+      "export function pick(xs: Map<string, number>, n = 3)",
+    ],
+  ])("%s is compatible", (_label, before, after) => {
+    expect(compatibleChange(before, after)).toBe(true);
+  });
+
+  it.each([
+    ["a required parameter", "def charge(invoice)", "def charge(invoice, card)"],
+    ["a parameter inserted before", "function f(int $b = 1)", "function f(string $a, int $b = 1)"],
+    ["a changed type", "func New(name string) *Server", "func New(name int, opts ...Option) *Server"],
+    ["a changed return type", "func New(name string) *Server", "func New(name string, opts ...Option) Server"],
+    ["a removed parameter", "def charge(invoice, retries=3)", "def charge(invoice)"],
+    ["a cut-off first line", "def charge(", "def charge(invoice, retries=3)"],
+  ])("%s is not", (_label, before, after) => {
+    expect(compatibleChange(before, after)).toBe(false);
+  });
+
+  it("splits parameters at the top level only", () => {
+    expect(splitParameters("f(a: Map<string, number>, b = [1, 2], c = 'x,y'): void")).toEqual({
+      head: "f",
+      params: ["a: Map<string, number>", "b = [1, 2]", "c = 'x,y'"],
+      tail: ": void",
+    });
   });
 });
