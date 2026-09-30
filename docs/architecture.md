@@ -10,7 +10,7 @@ app, render its output. Deterministic analysis handles what can be proven, and t
 | `packages/schema` | The shared formats, as zod schemas: config, ranked queue, briefing. JSON Schemas are generated into `packages/schema/json`, and a test fails when they're stale. |
 | `packages/core` | The engine: config, GitHub, the queue, diffs, checks, the code graph and the model layer. |
 | `packages/cli` | The `alden` command and terminal rendering. The only published package; tsup bundles `core` and `schema` into it. |
-| `packages/ui` | The local web UI. A placeholder for now. |
+| `packages/ui` | The web UI: React and Vite, talking only to the local API, so the desktop app can wrap it. The CLI build copies it into `dist/ui`. |
 
 ## Inside core
 
@@ -23,6 +23,13 @@ app, render its output. Deterministic analysis handles what can be proven, and t
 | `review/llm/` | The model's prompt (diff packed by priority to fit the budget), validation of its findings against the diff, and merging them into the briefing. |
 | `llm/` | Model aliases and prices, providers (Anthropic, Bedrock, Vertex, Foundry, OpenAI-compatible), budgets and the spend ledger. |
 | `graph/` | tree-sitter parsing and symbol extraction, the repo index and its cache, changed symbols, import resolution, caller queries, and PR worktrees. |
+
+## The web UI's server
+
+`alden ui` runs `packages/cli/src/ui/server.ts`: a `node:http` server on 127.0.0.1 that serves the built UI and a
+JSON API. `api.ts` wires the API to the engine with the same calls the CLI commands make. Every API call needs the
+session token and the server's own Host, and reviews stream newline-delimited JSON: a `stage` event per step (from
+core's `onStage` callback), then the `briefing` or an `error`.
 
 ## How a review flows
 

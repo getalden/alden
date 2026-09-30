@@ -839,3 +839,17 @@ div.check {
   color: var(--text-2);
   font-weight: 550;
 }
+
+.keys {
+  margin: -4px 20px 8px;
+}
+kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-2);
+}

@@ -49,6 +49,8 @@ interface ReviewPaneProps {
   emptyHint: string;
   /** Narrow screens show one pane at a time, so a PR needs a way back to the list. */
   backToQueue?: boolean;
+  /** Something to know before running it, e.g. why callers won't be found. */
+  note?: ReactNode;
 }
 
 /** A PR (or your local changes) and its briefing: run it, watch it, read it. */
@@ -63,6 +65,7 @@ export function ReviewPane({
   request,
   emptyHint,
   backToQueue = false,
+  note,
 }: ReviewPaneProps) {
   return (
     <section className="review-pane" aria-labelledby="review-title">
@@ -92,6 +95,7 @@ export function ReviewPane({
           )}
           {controls}
         </div>
+        {note && <p className="faint small">{note}</p>}
       </header>
 
       {run && (run.running || run.stages.length > 0) && !run.briefing && <Progress run={run} />}

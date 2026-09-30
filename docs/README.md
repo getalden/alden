@@ -10,6 +10,7 @@ sign-in and your own model account.
 
 - [Getting started](getting-started.md): install, sign in, and your first queue and review.
 - [Commands](commands.md): every command and flag.
+- [The web UI](web-ui.md): `alden ui`, its views, keyboard and security.
 - [The review queue](queue.md): how PRs are ranked, and what "fast-track" means.
 - [Briefings and checks](checks.md): what `alden review` checks, and how it picks where to look.
 - [The code graph](code-graph.md): callers outside the diff, languages, and PR checkouts.

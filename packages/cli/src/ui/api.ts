@@ -46,7 +46,8 @@ async function repoOf(cwd: string): Promise<{ root: string; repos: string[] } | 
 
 async function signedIn() {
   const resolved = await resolveToken();
-  if (!resolved) throw new ApiError(401, "Not signed in to GitHub. Run `alden auth login`, then refresh.");
+  // 409, not 401: 401 means the UI's session key is wrong, which the UI handles differently.
+  if (!resolved) throw new ApiError(409, "Not signed in to GitHub. Run `alden auth login`, then refresh.");
   return resolved;
 }
 

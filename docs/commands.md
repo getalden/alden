@@ -60,6 +60,16 @@ Briefs you on a PR, or on your uncommitted local changes when you don't name one
 
 Local reviews cover staged, unstaged and untracked files, compared with `HEAD`.
 
+## alden ui
+
+Opens the queue and briefings in your browser, served on 127.0.0.1 only until you stop it. See
+[The web UI](web-ui.md).
+
+| Flag | What it does |
+| --- | --- |
+| `--port <n>` | Serve on this port instead of a free one. |
+| `--no-open` | Print the link instead of opening a browser. |
+
 ## alden spend
 
 Shows what Alden has spent on models today and over recent days, against your caps. `--json` prints the report as
@@ -73,5 +83,6 @@ Reads and changes settings. See [Configuration](configuration.md).
 | --- | --- |
 | `alden config get <key>` | Prints a setting, e.g. `alden config get model.name`. |
 | `alden config set <key> <value>` | Changes a setting in your user config, e.g. `alden config set budget.dailyUsd 20`. |
+| `alden config unset <key>` | Removes a setting from your user config, so its default applies again, e.g. `alden config unset model.effort`. |
 | `alden config list` | Prints every setting after merging the defaults, your user config and the repo's config. |
 | `alden config path` | Prints the path of your user config file. |

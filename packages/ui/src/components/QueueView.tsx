@@ -20,10 +20,21 @@ interface QueueViewProps {
   onRepoFilter: (repo: string) => void;
   onRefresh: () => void;
   selected: string | undefined;
+  /** No GitHub sign-in: say how to fix it instead of an error. */
+  signedOut?: boolean;
 }
 
 /** The PRs waiting on you: "Needs you", ranked, then "Fast-track". Every row says why it ranks where it does. */
-export function QueueView({ queue, error, loading, repoFilter, onRepoFilter, onRefresh, selected }: QueueViewProps) {
+export function QueueView({
+  queue,
+  error,
+  loading,
+  repoFilter,
+  onRepoFilter,
+  onRefresh,
+  selected,
+  signedOut = false,
+}: QueueViewProps) {
   const repos = useMemo(
     () => [...new Set([...(queue?.needsYou ?? []), ...(queue?.fastTrack ?? [])].map((r) => r.pr.repo))].sort(),
     [queue],
@@ -53,8 +64,20 @@ export function QueueView({ queue, error, loading, repoFilter, onRepoFilter, onR
           {loading ? "Refreshing…" : "Refresh"}
         </button>
       </div>
+      <p className="keys faint small">
+        <kbd>j</kbd> <kbd>k</kbd> move · <kbd>b</kbd> brief me · <kbd>o</kbd> open on GitHub
+      </p>
 
-      {error && <p className="banner error">{error}</p>}
+      {signedOut ? (
+        <div className="state">
+          <h2>Sign in to GitHub</h2>
+          <p>Alden reads your review requests with your own GitHub sign-in. In a terminal, run:</p>
+          <pre>alden auth login</pre>
+          <p>then refresh this page.</p>
+        </div>
+      ) : (
+        error && <p className="banner error">{error}</p>
+      )}
       {queue?.warnings.map((w) => (
         <p key={w} className="banner">
           {w}

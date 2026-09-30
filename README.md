@@ -15,6 +15,7 @@ npx alden@next open 1       # open the top one in your browser
 
 npx alden@next review 1     # brief yourself on #1 from the queue
 npx alden@next review       # or on your own uncommitted changes, before opening a PR
+npx alden@next ui           # or do all of it in your browser
 ```
 
 `alden review` takes a PR URL, `owner/repo#123`, or a # from your last queue. It prints the few places that need
@@ -66,7 +67,6 @@ graph, models and budgets, privacy, and troubleshooting.
 
 ## What's coming in phase 1
 
-- `alden ui` shows the queue and briefings in a local web UI.
 - `alden stats` shows your repo's time to first review and review cycle time.
 
 Alden is GitHub-only for now and supports TypeScript/JavaScript, Python, PHP (Laravel, Symfony) and Go.

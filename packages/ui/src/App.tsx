@@ -1,5 +1,5 @@
 import type { RankedPullRequest, RankedQueue } from "@alden/schema";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type Api, ApiError, type Session } from "./api";
 import { QueueView } from "./components/QueueView";
 import { type Choices, initialChoices, ReviewOptions, toRequest } from "./components/ReviewOptions";
@@ -7,7 +7,7 @@ import { ReviewPane } from "./components/ReviewPane";
 import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
 import { useReviews } from "./reviews";
-import { useRoute } from "./router";
+import { navigate, useRoute } from "./router";
 
 /** Messages worth showing as they are: the server words them for a person. */
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : "Something went wrong.");
@@ -55,6 +55,16 @@ export function App({ api }: { api: Api | undefined }) {
 
   useEffect(() => loadQueue(false), [loadQueue]);
 
+  const visible = [...(queue?.needsYou ?? []), ...(queue?.fastTrack ?? [])].filter(
+    (r) => !repoFilter || r.pr.repo === repoFilter,
+  );
+  useQueueKeys({
+    active: route.view === "queue",
+    order: visible.map((r) => ({ repo: r.pr.repo, number: r.pr.number, url: r.pr.url })),
+    current: route.view === "queue" ? route.pr : undefined,
+    onBrief: (key) => reviews.start(key, { pr: key, ...toRequest(choices ?? initialChoices(session), session) }),
+  });
+
   if (!api || fatal === "expired") {
     return (
       <div className="state">
@@ -93,6 +103,7 @@ export function App({ api }: { api: Api | undefined }) {
                 onRepoFilter={setRepoFilter}
                 onRefresh={() => loadQueue(true)}
                 selected={selected}
+                signedOut={session !== undefined && session.user === null}
               />
             </div>
             <div className="pane detail">
@@ -189,6 +200,14 @@ function PrPane(props: {
       }
       row={row}
       backToQueue
+      note={
+        props.choices.graph && props.session && !props.session.repo?.repos.includes(prRef.repo.toLowerCase()) ? (
+          <>
+            Callers need a clone of <span className="mono">{prRef.repo}</span>: start <code>alden ui</code> inside one
+            to see who calls the changed code.
+          </>
+        ) : undefined
+      }
       run={reviews.runs[key]}
       request={{ pr: key, ...toRequest(props.choices, props.session) }}
       onStart={(request) => reviews.start(key, request)}
@@ -197,4 +216,57 @@ function PrPane(props: {
       emptyHint="Alden fetches the PR, finds who calls the code it changes (from a clone of the repo), runs its checks, and asks the model if one is set up."
     />
   );
+}
+
+const typing = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName));
+
+/**
+ * The queue from the keyboard: j/k (or the arrows) move between PRs and open each briefing, o opens the PR on GitHub,
+ * b briefs you on it.
+ */
+function useQueueKeys(options: {
+  active: boolean;
+  order: { repo: string; number: number; url: string }[];
+  current: { repo: string; number: number } | undefined;
+  onBrief: (key: string) => void;
+}) {
+  const latest = useRef(options);
+  latest.current = options;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const { active, order, current, onBrief } = latest.current;
+      if (!active || event.metaKey || event.ctrlKey || event.altKey || typing(event.target) || order.length === 0)
+        return;
+      const index = current ? order.findIndex((p) => p.repo === current.repo && p.number === current.number) : -1;
+      const go = (i: number) => {
+        const pr = order[Math.max(0, Math.min(order.length - 1, i))];
+        if (!pr) return;
+        navigate({ view: "queue", pr: { repo: pr.repo, number: pr.number } });
+        document.querySelector(`[data-pr="${pr.repo}#${pr.number}"]`)?.scrollIntoView({ block: "nearest" });
+      };
+      const here = order[index];
+      switch (event.key) {
+        case "j":
+        case "ArrowDown":
+          go(index + 1);
+          break;
+        case "k":
+        case "ArrowUp":
+          go(index === -1 ? 0 : index - 1);
+          break;
+        case "o":
+          if (here) window.open(here.url, "_blank", "noopener,noreferrer");
+          break;
+        case "b":
+          if (here) onBrief(`${here.repo}#${here.number}`);
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 }
