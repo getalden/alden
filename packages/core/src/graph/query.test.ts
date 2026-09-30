@@ -188,6 +188,113 @@ class Old { public function x() { (new Billing())->charge(); } }
       "app/Services/Refunds.php:6",
     ]);
   });
+
+  it("reaches methods through interfaces, parents and the app's facades", async () => {
+    const graph = await repo(
+      {
+        "app/Contracts/PaymentGateway.php": `<?php
+namespace App\\Contracts;
+
+interface PaymentGateway { public function charge(int $cents): void; }
+`,
+        "app/Billing/BaseGateway.php": `<?php
+namespace App\\Billing;
+
+abstract class BaseGateway { public function refund(): void {} }
+`,
+        "app/Billing/StripeGateway.php": `<?php
+namespace App\\Billing;
+
+use App\\Contracts\\PaymentGateway;
+
+class StripeGateway extends BaseGateway implements PaymentGateway
+{
+    public function charge(int $cents): void { $this->log(); }
+    public function save(): void {}
+    public function log(): void { $this->save(); }
+}
+`,
+        "app/Facades/Payments.php": `<?php
+namespace App\\Facades;
+
+use App\\Billing\\StripeGateway;
+use Illuminate\\Support\\Facades\\Facade;
+
+class Payments extends Facade
+{
+    protected static function getFacadeAccessor(): string { return StripeGateway::class; }
+}
+`,
+        "app/Http/Controllers/CheckoutController.php": `<?php
+namespace App\\Http\\Controllers;
+
+use App\\Contracts\\PaymentGateway;
+use App\\Facades\\Payments;
+
+class CheckoutController
+{
+    public function __construct(private PaymentGateway $gateway) {}
+
+    public function store()
+    {
+        $this->gateway->charge(100);
+        Payments::charge(200);
+        $this->gateway->save();
+    }
+}
+`,
+      },
+      { psr4 },
+    );
+    expect(
+      sites(graph.callersOf({ path: "app/Billing/StripeGateway.php", name: "charge", container: "StripeGateway" })),
+    ).toEqual(["app/Http/Controllers/CheckoutController.php:13", "app/Http/Controllers/CheckoutController.php:14"]);
+    // save is too common to trust on $this->gateway; inside the class, $this->save() is the method.
+    expect(
+      sites(graph.callersOf({ path: "app/Billing/StripeGateway.php", name: "save", container: "StripeGateway" })),
+    ).toEqual(["app/Billing/StripeGateway.php:10"]);
+  });
+
+  it("follows Eloquent scopes, relationships, accessors and constructors", async () => {
+    const graph = await repo(
+      {
+        "app/Models/Post.php": `<?php
+namespace App\\Models;
+
+use Illuminate\\Database\\Eloquent\\Model;
+
+class Post extends Model
+{
+    public function __construct(array $attributes = []) { parent::__construct($attributes); }
+    public function scopePublished($query) { return $query->where('published', true); }
+    public function author() { return $this->belongsTo(User::class); }
+    public function getFullTitleAttribute(): string { return $this->title; }
+}
+`,
+        "app/Http/Controllers/PostController.php": `<?php
+namespace App\\Http\\Controllers;
+
+use App\\Models\\Post;
+
+class PostController
+{
+    public function index()
+    {
+        $posts = Post::published()->get();
+        $post = new Post(['title' => 'x']);
+        echo $post->author->name, $post->full_title, $post->author();
+    }
+}
+`,
+      },
+      { psr4 },
+    );
+    const callers = (name: string) => sites(graph.callersOf({ path: "app/Models/Post.php", name, container: "Post" }));
+    expect(callers("scopePublished")).toEqual(["app/Http/Controllers/PostController.php:10"]);
+    expect(callers("author")).toEqual(["app/Http/Controllers/PostController.php:12"]);
+    expect(callers("getFullTitleAttribute")).toEqual(["app/Http/Controllers/PostController.php:12?"]);
+    expect(callers("__construct")).toEqual(["app/Http/Controllers/PostController.php:11"]);
+  });
 });
 
 describe("TypeScript callers", () => {

@@ -158,6 +158,80 @@ const GO_COMMON_METHODS = new Set([
   "Fatalf",
 ]);
 
+/** Laravel and PHP names too common to trust on any receiver: only `$this`, `self`, `static` or the class count. */
+const PHP_COMMON_METHODS = new Set([
+  "get",
+  "set",
+  "has",
+  "all",
+  "first",
+  "find",
+  "findOrFail",
+  "where",
+  "with",
+  "load",
+  "save",
+  "create",
+  "update",
+  "delete",
+  "fill",
+  "make",
+  "query",
+  "count",
+  "exists",
+  "pluck",
+  "map",
+  "filter",
+  "each",
+  "push",
+  "put",
+  "forget",
+  "toArray",
+  "toJson",
+  "jsonSerialize",
+  "handle",
+  "boot",
+  "register",
+  "render",
+  "refresh",
+  "send",
+  "dispatch",
+  "validate",
+  "authorize",
+  "rules",
+  "run",
+  "execute",
+  "process",
+  "__invoke",
+  "__toString",
+]);
+
+/** Receivers that mean "this object or class" in any language. */
+const SELF_NAMES = new Set(["self", "this", "cls", "$this", "static", "parent"]);
+
+const snake = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+
+/**
+ * The names a method is called by. Besides its own: an Eloquent scope `scopeActive` is called as `active()`, and on a
+ * model a relationship or accessor is read as a property: `posts()` as `->posts`, `getFullNameAttribute` as
+ * `->full_name`.
+ */
+function phpMethodNames(symbol: SymbolRef, eloquent: boolean): { calls: Set<string>; properties: Set<string> } {
+  const calls = new Set([symbol.name]);
+  const properties = new Set<string>();
+  const scope = /^scope([A-Z]\w*)$/.exec(symbol.name)?.[1];
+  if (scope) calls.add(scope.charAt(0).toLowerCase() + scope.slice(1));
+  if (eloquent) {
+    const accessor = /^get([A-Z]\w*)Attribute$/.exec(symbol.name)?.[1];
+    if (accessor) properties.add(snake(accessor));
+    else if (!scope && !symbol.name.startsWith("__")) {
+      properties.add(symbol.name);
+      properties.add(snake(symbol.name));
+    }
+  }
+  return { calls, properties };
+}
+
 /** How deep to follow re-export chains (barrel files re-exporting barrel files). */
 const MAX_REEXPORT_DEPTH = 4;
 
@@ -170,9 +244,15 @@ export class CodeGraph {
   /** Go: a package's directory → its non-test files, which share one namespace. */
   private readonly goPackages = new Map<string, string[]>();
 
+  /** PHP facades: "file#Class" of a facade's target → the facades pointing at it. */
+  private readonly facades = new Map<string, SymbolRef[]>();
+
+  /** PHP: "file#Class" → classes that extend or implement it, or use it as a trait. */
+  private readonly descendants = new Map<string, SymbolRef[]>();
+
   constructor(
     private readonly files: Map<string, FileSymbols>,
-    resolve: Resolver,
+    private readonly resolve: Resolver,
   ) {
     for (const path of files.keys()) {
       if (!path.endsWith(".go") || path.endsWith("_test.go")) continue;
@@ -209,6 +289,91 @@ export class CodeGraph {
       }
       this.bindings.set(path, list);
     }
+    for (const [path, symbols] of files) {
+      for (const def of symbols.definitions) {
+        if (def.container) continue;
+        for (const base of def.bases ?? []) {
+          const parent = this.resolveClass(path, base);
+          if (!parent) continue;
+          const key = `${parent.path}#${parent.name}`;
+          this.descendants.set(key, [...(this.descendants.get(key) ?? []), { path, name: def.name }]);
+        }
+        if (!def.facadeFor) continue;
+        const target = this.resolveClass(path, def.facadeFor);
+        if (!target) continue;
+        const key = `${target.path}#${target.name}`;
+        this.facades.set(key, [...(this.facades.get(key) ?? []), { path, name: def.name }]);
+      }
+    }
+  }
+
+  /** A class name as written in a PHP file (imported, relative to its namespace, or fully qualified) → its file. */
+  private resolveClass(fromFile: string, written: string): SymbolRef | undefined {
+    const symbols = this.files.get(fromFile);
+    if (!symbols || !fromFile.endsWith(".php")) return undefined;
+    const name = written.split("\\").at(-1) ?? written;
+    let fqn: string;
+    if (written.startsWith("\\")) fqn = written.slice(1);
+    else {
+      const [first, ...rest] = written.split("\\");
+      const imported = symbols.imports.find((i) => i.local === first);
+      if (imported) fqn = [imported.from, ...rest].join("\\");
+      else fqn = symbols.phpNamespace ? `${symbols.phpNamespace}\\${written}` : written;
+    }
+    const path = this.resolve(fromFile, fqn);
+    return path && this.files.get(path)?.definitions.some((d) => d.name === name && !d.container)
+      ? { path, name }
+      : undefined;
+  }
+
+  /**
+   * The classes whose name can stand for `container` at a call site: itself, the interfaces and parents it
+   * extends (a container binding or a type hint calls through those), and facades pointing at it.
+   */
+  private classFamily(symbol: SymbolRef, container: string): SymbolRef[] {
+    const family: SymbolRef[] = [{ path: symbol.path, name: container }];
+    const def = this.files.get(symbol.path)?.definitions.find((d) => d.name === container && !d.container);
+    for (const base of def?.bases ?? []) {
+      const resolved = this.resolveClass(symbol.path, base);
+      if (resolved) family.push(resolved);
+    }
+    // Downwards too: subclasses and classes using it as a trait inherit the method, so `$song->album` reaches a
+    // relationship defined in a trait Song uses.
+    const seen = new Set([`${symbol.path}#${container}`]);
+    let frontier = [{ path: symbol.path, name: container }];
+    for (let depth = 0; depth < 4 && frontier.length > 0; depth++) {
+      const next: SymbolRef[] = [];
+      for (const member of frontier) {
+        for (const child of this.descendants.get(`${member.path}#${member.name}`) ?? []) {
+          const key = `${child.path}#${child.name}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          family.push(child);
+          next.push(child);
+        }
+      }
+      frontier = next;
+    }
+    for (const member of [...family]) family.push(...(this.facades.get(`${member.path}#${member.name}`) ?? []));
+    return family;
+  }
+
+  /** An Eloquent model: extends Model (or a class named like one), Authenticatable or Pivot, possibly via parents. */
+  private isEloquent(path: string, className: string, depth = 0): boolean {
+    // A trait counts when a model uses it.
+    if (depth === 0) {
+      for (const user of this.descendants.get(`${path}#${className}`) ?? []) {
+        if (this.isEloquent(user.path, user.name, 1)) return true;
+      }
+    }
+    const def = this.files.get(path)?.definitions.find((d) => d.name === className && !d.container);
+    for (const base of def?.bases ?? []) {
+      const short = base.split("\\").at(-1) ?? base;
+      if (/Model$|^Authenticatable$|^Pivot$/.test(short)) return true;
+      const parent = depth < 4 ? this.resolveClass(path, base) : undefined;
+      if (parent && this.isEloquent(parent.path, parent.name, depth + 1)) return true;
+    }
+    return false;
   }
 
   /** Whether `object` at `line` is the receiver of one of the symbol's type's own methods (same package only). */
@@ -267,21 +432,43 @@ export class CodeGraph {
     const seen = new Set<string>();
     const add = (path: string, line: number, confidence: CallSite["confidence"]) => {
       const id = `${path}:${line}`;
-      if (seen.has(id) || exclude.get(path)?.has(line)) return;
+      if (exclude.get(path)?.has(line)) return;
+      if (seen.has(id)) {
+        // A sure match on a line beats an uncertain one on the same line.
+        const site = sites.find((s) => s.path === path && s.line === line);
+        if (site && confidence === "import") site.confidence = "import";
+        return;
+      }
       seen.add(id);
       sites.push({ path, line, confidence });
     };
 
     const lookFor = symbol.container ?? symbol.name;
-    const exported = this.exportedAs({ path: symbol.path, name: lookFor });
     const isMethod = symbol.container !== undefined;
+    const isPhp = symbol.path.endsWith(".php");
+    // PHP methods are also reached through interfaces, parents and facades; everything else through its own name.
+    const family = isMethod && isPhp ? this.classFamily(symbol, lookFor) : [{ path: symbol.path, name: lookFor }];
+    const exported = new Map<string, Set<string>>();
+    for (const member of family) {
+      for (const [file, names] of this.exportedAs(member)) {
+        exported.set(file, new Set([...(exported.get(file) ?? []), ...names]));
+      }
+    }
+    const classNames = new Set(family.map((m) => m.name));
+    const methodNames = !isMethod
+      ? undefined
+      : isPhp
+        ? phpMethodNames(symbol, this.isEloquent(symbol.path, lookFor))
+        : { calls: new Set([symbol.name]), properties: new Set<string>() };
 
     for (const [path, symbols] of this.files) {
       // Names in this file that mean the symbol (or its class): named imports and namespace objects.
       const names = new Set<string>();
       const namespaces = new Set<string>();
       // Its own file, and its package: Go directories and PHP namespaces share their names without imports.
-      if (path === symbol.path || this.samePackage(path, symbol.path)) names.add(lookFor);
+      for (const member of family) {
+        if (path === member.path || this.samePackage(path, member.path)) names.add(member.name);
+      }
       for (const b of this.bindings.get(path) ?? []) {
         const names_ = exported.get(b.target);
         if (!names_) continue;
@@ -291,21 +478,39 @@ export class CodeGraph {
       if (names.size === 0 && namespaces.size === 0) continue;
 
       for (const ref of symbols.references) {
-        if (isMethod) {
-          if (ref.name !== symbol.name || ref.object === undefined) continue;
+        if (isMethod && methodNames) {
+          // A PHP constructor runs on `new Class(...)` and `parent::__construct()`.
+          if (symbol.name === "__construct" && ref.kind === "new" && names.has(ref.name)) {
+            add(path, ref.line, "import");
+            continue;
+          }
+          const asProperty = ref.kind === "property";
+          if (!(asProperty ? methodNames.properties : methodNames.calls).has(ref.name) || ref.object === undefined)
+            continue;
+          // parent::x() in the class's own file is its parent's x, not this one.
+          if (ref.object === "parent" && path === symbol.path) continue;
           // Any receiver may be an instance, except for names so common (get, save, filter…) that only a call on
           // exactly self/this/cls/Class is trustworthy: `this.get()` is the method, `this.data.get()` is not. In Go
           // the receiver variable (`s` in `func (s *Server)`) plays the part of `this`.
           const selfish =
-            ["self", "this", "cls", lookFor].includes(ref.object) ||
+            SELF_NAMES.has(ref.object) ||
+            names.has(ref.object) ||
+            classNames.has(ref.object) ||
             (symbols.language === "go" && this.isGoReceiver(path, symbols, symbol, ref.object, ref.line));
-          const common = symbols.language === "go" ? GO_COMMON_METHODS : COMMON_METHODS;
-          if (selfish || !common.has(symbol.name)) add(path, ref.line, "import");
+          const common =
+            symbols.language === "go"
+              ? GO_COMMON_METHODS
+              : symbols.language === "php"
+                ? PHP_COMMON_METHODS
+                : COMMON_METHODS;
+          // A property read only means the method on an Eloquent model, and even then it may be another model's.
+          if (selfish || !common.has(ref.name)) add(path, ref.line, asProperty ? "name" : "import");
         } else if (
-          ref.object === undefined
+          ref.kind !== "property" &&
+          (ref.object === undefined
             ? names.has(ref.name)
             : // ns.fn(), or the symbol as the object of a call: Schema.parse(), Model.objects.filter(), Klass.create()
-              (namespaces.has(ref.object) && ref.name === lookFor) || names.has(ref.object.split(".")[0] ?? "")
+              (namespaces.has(ref.object) && ref.name === lookFor) || names.has(ref.object.split(".")[0] ?? ""))
         ) {
           add(path, ref.line, "import");
         }

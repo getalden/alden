@@ -22,6 +22,8 @@ export interface Definition {
   signature?: string;
   /** Classes: what they extend and implement, as written (PHP so far). */
   bases?: string[];
+  /** PHP facades: the class `getFacadeAccessor` returns (`Foo::class`), as written. */
+  facadeFor?: string;
 }
 
 /** A name a file brings in from elsewhere. */
@@ -48,6 +50,11 @@ export interface Reference {
   /** For `obj.name(...)`, the object's text, e.g. "ns" or "self". */
   object?: string;
   line: number;
+  /**
+   * PHP: what kind of use, when it isn't a call. "new" instantiates (so it calls the constructor), "type" is a type
+   * hint, "property" reads a property (`$user->posts`), which Eloquent turns into a method call.
+   */
+  kind?: "new" | "type" | "property";
 }
 
 export interface FileSymbols {
@@ -519,7 +526,19 @@ const PHP_REFERENCES = `
   (class_interface_clause (qualified_name) @qualified)
   (named_type (name) @name)
   (named_type (qualified_name) @qualified)
+  (member_access_expression object: (_) @object name: (name) @name)
+  (nullsafe_member_access_expression object: (_) @object name: (name) @name)
 `;
+
+/** What a PHP reference is, from where its name sits. */
+function phpKind(node: Node): Reference["kind"] {
+  const parent = node.parent;
+  if (parent?.type === "object_creation_expression") return "new";
+  if (parent?.type === "named_type") return "type";
+  if (parent?.type === "member_access_expression" || parent?.type === "nullsafe_member_access_expression")
+    return "property";
+  return undefined;
+}
 
 // Type hints count as uses: in Laravel and Symfony, a class is mostly used by being injected (`__construct(Foo $foo)`).
 
@@ -545,10 +564,30 @@ function extractPhp(root: Node): Omit<FileSymbols, "language" | "references"> {
   const classLike = (node: Node) => {
     const name = node.childForFieldName("name")?.text;
     if (!name) return;
-    const bases = node.namedChildren
-      .filter((c) => c?.type === "base_clause" || c?.type === "class_interface_clause")
-      .flatMap((c) => c?.namedChildren.map((n) => n?.text ?? "") ?? [])
+    // What it extends and implements, and the traits it uses (`use HasRelationships;` in the body).
+    const traitUses = (node.childForFieldName("body")?.namedChildren ?? []).filter(
+      (c) => c?.type === "use_declaration",
+    );
+    const bases = [
+      ...node.namedChildren.filter((c) => c?.type === "base_clause" || c?.type === "class_interface_clause"),
+      ...traitUses,
+    ]
+      .flatMap((c) => c?.namedChildren.filter((n) => n?.type === "name" || n?.type === "qualified_name") ?? [])
+      .map((n) => n?.text ?? "")
       .filter(Boolean);
+    // A facade names its target in getFacadeAccessor: `return Foo::class;`.
+    const accessor = node
+      .childForFieldName("body")
+      ?.namedChildren.find(
+        (m) => m?.type === "method_declaration" && m.childForFieldName("name")?.text === "getFacadeAccessor",
+      );
+    // Or, when it returns a container key ('download'), the Laravel convention of naming the target in the
+    // docblock: `@see \App\Services\DownloadService`.
+    const docblock = node.previousNamedSibling?.type === "comment" ? node.previousNamedSibling.text : "";
+    const target = accessor
+      ? (accessor.descendantsOfType("class_constant_access_expression").find((c) => c?.lastChild?.text === "class")
+          ?.firstChild?.text ?? /@see\s+(\\?[A-Za-z_][\w\\]*)/.exec(docblock)?.[1])
+      : undefined;
     definitions.push({
       name,
       kind: node.type === "interface_declaration" ? "interface" : "class",
@@ -557,6 +596,7 @@ function extractPhp(root: Node): Omit<FileSymbols, "language" | "references"> {
       endLine: endLine(node),
       signature: phpSignature(node),
       ...(bases.length > 0 ? { bases } : {}),
+      ...(target ? { facadeFor: target } : {}),
     });
     for (const member of node.childForFieldName("body")?.namedChildren ?? []) {
       if (member?.type !== "method_declaration") continue;
@@ -671,7 +711,8 @@ export async function extractSymbols(path: string, source: string): Promise<File
         // PHP `new \\App\\Foo()` or `Foo\\Bar::class`: the name refers to a class directly, so it imports itself.
         const fqn = phpFqn(qualified.text, phpNamespace);
         imports.push({ local: lastSegment(fqn), imported: lastSegment(fqn), from: fqn, line: line(qualified) });
-        references.push({ name: lastSegment(fqn), line: line(qualified) });
+        const kind = phpKind(qualified);
+        references.push({ name: lastSegment(fqn), line: line(qualified), ...(kind ? { kind } : {}) });
         continue;
       }
       if (!name) continue;
@@ -681,7 +722,13 @@ export async function extractSymbols(path: string, source: string): Promise<File
         imports.push({ local: lastSegment(fqn), imported: lastSegment(fqn), from: fqn, line: line(object) });
         objectText = lastSegment(fqn);
       }
-      references.push({ name: name.text, ...(objectText ? { object: objectText } : {}), line: line(name) });
+      const kind = language === "php" ? phpKind(name) : undefined;
+      references.push({
+        name: name.text,
+        ...(objectText ? { object: objectText } : {}),
+        line: line(name),
+        ...(kind ? { kind } : {}),
+      });
     }
     return {
       language,
