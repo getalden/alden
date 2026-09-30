@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { createResolver, loadResolverConfig, parseGoMod } from "./resolve.js";
+import { createResolver, loadResolverConfig, parseComposerPsr4, parseGoMod } from "./resolve.js";
 
 let root: string;
 beforeEach(async () => {
@@ -108,4 +108,46 @@ it("resolves Go import paths to package directories, preferring nested modules",
   expect(resolve("main.go", "github.com/acme/app/internal/testdata")).toBeUndefined();
   expect(resolve("main.go", "github.com/other/lib")).toBeUndefined();
   expect(resolve("main.go", "fmt")).toBeUndefined();
+});
+
+it("reads PSR-4 prefixes from composer.json autoload and autoload-dev", () => {
+  const json = {
+    autoload: { "psr-4": { "App\\": "app/", "Domain\\": ["src/Domain/", "lib/Domain"] } },
+    "autoload-dev": { "psr-4": { "Tests\\": "tests/" } },
+  };
+  expect(parseComposerPsr4(json, "")).toEqual([
+    { prefix: "App\\", dirs: ["app"] },
+    { prefix: "Domain\\", dirs: ["src/Domain", "lib/Domain"] },
+    { prefix: "Tests\\", dirs: ["tests"] },
+  ]);
+  expect(parseComposerPsr4({ autoload: { "psr-4": { "Acme\\Billing": "src" } } }, "packages/billing")).toEqual([
+    { prefix: "Acme\\Billing\\", dirs: ["packages/billing/src"] },
+  ]);
+});
+
+it("resolves PHP class names through PSR-4, then by an unambiguous path", async () => {
+  await writeFile(
+    join(root, "composer.json"),
+    JSON.stringify({ autoload: { "psr-4": { "App\\": "app/", "App\\Admin\\": "admin/src/" } } }),
+  );
+  const files = [
+    "composer.json",
+    "app/Models/User.php",
+    "admin/src/Panel.php",
+    "app/Http/Controllers/Controller.php",
+    "modules/Billing/Invoice.php",
+    "legacy/Mail/Invoice.php",
+    "lib/Support/Str.php",
+  ];
+  const config = await loadResolverConfig(root, files);
+  const resolve = createResolver(files, config);
+  expect(resolve("app/x.php", "App\\Models\\User")).toBe("app/Models/User.php");
+  // The longest prefix wins.
+  expect(resolve("app/x.php", "App\\Admin\\Panel")).toBe("admin/src/Panel.php");
+  // No mapping covers these, but only one file fits.
+  expect(resolve("app/x.php", "Acme\\Support\\Str")).toBe("lib/Support/Str.php");
+  expect(resolve("app/x.php", "Acme\\Billing\\Invoice")).toBe("modules/Billing/Invoice.php");
+  // A framework class with a same-named file in another namespace isn't ours.
+  expect(resolve("app/x.php", "Illuminate\\Routing\\Controller")).toBeUndefined();
+  expect(resolve("app/x.php", "Invoice")).toBeUndefined();
 });

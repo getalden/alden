@@ -517,7 +517,11 @@ const PHP_REFERENCES = `
   (base_clause (qualified_name) @qualified)
   (class_interface_clause (name) @name)
   (class_interface_clause (qualified_name) @qualified)
+  (named_type (name) @name)
+  (named_type (qualified_name) @qualified)
 `;
+
+// Type hints count as uses: in Laravel and Symfony, a class is mostly used by being injected (`__construct(Foo $foo)`).
 
 /** "\\App\\Models\\User" → "App\\Models\\User"; relative names are joined to the file's namespace. */
 function phpFqn(name: string, namespace: string | undefined): string {

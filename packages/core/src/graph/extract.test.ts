@@ -418,6 +418,10 @@ enum Status: string { case Active = 'a'; public function label(): string { retur
         "Invoice@26",
         "self::make@27",
         "parent::boot@27",
+        // Type hints: injected and returned classes.
+        "PaymentGateway@14",
+        "User@17",
+        "Receipt@19",
       ]),
     );
   });

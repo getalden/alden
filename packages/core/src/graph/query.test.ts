@@ -108,6 +108,88 @@ func main() {
   });
 });
 
+describe("PHP callers", () => {
+  const psr4 = [{ prefix: "App\\", dirs: ["app"] }];
+
+  it("follows use imports, aliases, the file's own namespace and fully qualified names", async () => {
+    const graph = await repo(
+      {
+        "app/Services/Billing.php": `<?php
+namespace App\\Services;
+
+class Billing
+{
+    public function charge(int $cents): void {}
+    public static function make(): self { return new self(); }
+}
+`,
+        "app/Http/Controllers/PayController.php": `<?php
+namespace App\\Http\\Controllers;
+
+use App\\Services\\Billing;
+
+class PayController
+{
+    public function store(Billing $billing)
+    {
+        $billing->charge(100);
+        Billing::make();
+        return app(Billing::class);
+    }
+}
+`,
+        "app/Jobs/Charge.php": `<?php
+namespace App\\Jobs;
+
+use App\\Services\\Billing as Payments;
+
+class Charge
+{
+    public function handle() { (new Payments())->charge(5); }
+}
+`,
+        "app/Services/Refunds.php": `<?php
+namespace App\\Services;
+
+class Refunds
+{
+    public function run() { $b = new Billing(); $b->charge(-5); }
+}
+`,
+        "app/Console/Kernel.php": `<?php
+namespace App\\Console;
+
+class Kernel
+{
+    public function run() { \\App\\Services\\Billing::make(); }
+}
+`,
+        // Same class name, other namespace, not imported: a different Billing.
+        "app/Legacy/Billing.php": `<?php
+namespace App\\Legacy;
+
+class Billing { public function charge() {} }
+class Old { public function x() { (new Billing())->charge(); } }
+`,
+      },
+      { psr4 },
+    );
+    expect(sites(graph.callersOf({ path: "app/Services/Billing.php", name: "charge", container: "Billing" }))).toEqual([
+      "app/Http/Controllers/PayController.php:10",
+      "app/Jobs/Charge.php:8",
+      "app/Services/Refunds.php:6",
+    ]);
+    expect(sites(graph.callersOf({ path: "app/Services/Billing.php", name: "Billing" }))).toEqual([
+      "app/Console/Kernel.php:6",
+      "app/Http/Controllers/PayController.php:8",
+      "app/Http/Controllers/PayController.php:11",
+      "app/Http/Controllers/PayController.php:12",
+      "app/Jobs/Charge.php:8",
+      "app/Services/Refunds.php:6",
+    ]);
+  });
+});
+
 describe("TypeScript callers", () => {
   it("follows named, aliased and namespace imports, ESM .js specifiers, and same-file calls", async () => {
     const graph = await repo({

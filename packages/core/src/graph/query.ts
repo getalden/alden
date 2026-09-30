@@ -219,8 +219,14 @@ export class CodeGraph {
     );
   }
 
+  /** Go: one directory is one package. PHP: one namespace, whose classes need no `use` for each other. */
   private samePackage(a: string, b: string): boolean {
-    return a.endsWith(".go") && b.endsWith(".go") && dirOf(a) === dirOf(b);
+    if (a.endsWith(".go") && b.endsWith(".go")) return dirOf(a) === dirOf(b);
+    if (a.endsWith(".php") && b.endsWith(".php")) {
+      const namespace = this.files.get(a)?.phpNamespace;
+      return namespace !== undefined && namespace === this.files.get(b)?.phpNamespace;
+    }
+    return false;
   }
 
   /** Every (file, name) under which a symbol can be imported: its own file, plus re-exports of it. */
@@ -274,7 +280,7 @@ export class CodeGraph {
       // Names in this file that mean the symbol (or its class): named imports and namespace objects.
       const names = new Set<string>();
       const namespaces = new Set<string>();
-      // Its own file, and in Go its whole package: files in one directory share their names without imports.
+      // Its own file, and its package: Go directories and PHP namespaces share their names without imports.
       if (path === symbol.path || this.samePackage(path, symbol.path)) names.add(lookFor);
       for (const b of this.bindings.get(path) ?? []) {
         const names_ = exported.get(b.target);
