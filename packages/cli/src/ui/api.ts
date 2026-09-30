@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import {
   createGitHubClient,
   type Effort,
+  FeedbackLog,
   fetchReviewQueue,
   fetchViewer,
   JsonCache,
@@ -54,6 +55,7 @@ async function signedIn() {
 /** The engine, as the UI sees it: the same calls the CLI commands make, with errors worded for a person. */
 export function createUiApi(options: { version: string; cwd: string }): UiApi {
   const cache = new JsonCache();
+  const feedback = new FeedbackLog();
 
   return {
     async session() {
@@ -174,6 +176,19 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
     async config() {
       return { path: userConfigPath(), config: await loadConfig(options.cwd) };
     },
+
+    async addFeedback(input) {
+      try {
+        return await feedback.add(input);
+      } catch (error) {
+        throw new ApiError(
+          400,
+          `That feedback didn't have the expected shape (${(error as Error).message.slice(0, 200)}).`,
+        );
+      }
+    },
+
+    feedbackSummary: () => feedback.summary(),
 
     async setConfig(key, value) {
       try {

@@ -2,6 +2,7 @@ import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { registerAuthCommand } from "./commands/auth.js";
 import { registerConfigCommand } from "./commands/config.js";
+import { registerFeedbackCommand } from "./commands/feedback.js";
 import { registerOpenCommand } from "./commands/open.js";
 import { registerQueueCommand } from "./commands/queue.js";
 import { registerReviewCommand } from "./commands/review.js";
@@ -19,6 +20,7 @@ registerQueueCommand(program);
 registerOpenCommand(program);
 registerReviewCommand(program);
 registerSpendCommand(program);
+registerFeedbackCommand(program);
 registerUiCommand(program, pkg.version);
 
 await program.parseAsync();

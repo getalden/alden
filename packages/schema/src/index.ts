@@ -24,6 +24,19 @@ export {
   SeveritySchema,
 } from "./briefing.js";
 export { type AldenConfig, AldenConfigSchema, DEFAULT_SENSITIVE_PATHS } from "./config.js";
+export {
+  FEEDBACK_SCHEMA_VERSION,
+  type FeedbackEvent,
+  FeedbackEventSchema,
+  type FeedbackInput,
+  FeedbackInputSchema,
+  type FeedbackItem,
+  FeedbackItemSchema,
+  type FeedbackSummary,
+  FeedbackSummarySchema,
+  type FeedbackTarget,
+  FeedbackTargetSchema,
+} from "./feedback.js";
 export { jsonSchemas } from "./json-schema.js";
 export {
   type CiState,

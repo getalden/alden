@@ -1,0 +1,277 @@
+{
+  "$id": "https://getalden.dev/schema/feedback-event.v1.json",
+  "title": "Alden feedback event",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "id": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "target": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "pr"
+                },
+                "repo": {
+                  "type": "string"
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "kind",
+                "repo",
+                "number"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "local"
+                },
+                "repo": {
+                  "description": "owner/name when known",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "briefingAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "description": "the briefing's generatedAt"
+        },
+        "model": {
+          "description": "the model that contributed to the briefing, if any",
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "const": "verdict"
+        },
+        "item": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": [
+                "check",
+                "llm"
+              ]
+            },
+            "checkId": {
+              "description": "the check that raised it; absent for model findings",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "severity": {
+              "type": "string",
+              "enum": [
+                "info",
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            "anchor": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "line": {
+                  "description": "line in the new file; absent for whole-file findings",
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": false
+            },
+            "placement": {
+              "type": "string",
+              "enum": [
+                "eyes",
+                "finding"
+              ]
+            }
+          },
+          "required": [
+            "source",
+            "title",
+            "placement"
+          ],
+          "additionalProperties": false
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "agree",
+            "not_needed",
+            "clear"
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "at",
+        "target",
+        "briefingAt",
+        "kind",
+        "item",
+        "verdict"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "id": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "target": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "pr"
+                },
+                "repo": {
+                  "type": "string"
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "kind",
+                "repo",
+                "number"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "local"
+                },
+                "repo": {
+                  "description": "owner/name when known",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "briefingAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "description": "the briefing's generatedAt"
+        },
+        "model": {
+          "description": "the model that contributed to the briefing, if any",
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "const": "missed"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "what Alden should have flagged"
+        },
+        "anchor": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "line": {
+              "description": "line in the new file; absent for whole-file findings",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "at",
+        "target",
+        "briefingAt",
+        "kind",
+        "note"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

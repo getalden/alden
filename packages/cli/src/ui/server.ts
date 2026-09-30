@@ -31,6 +31,9 @@ export interface UiApi {
   config(): Promise<unknown>;
   /** `null` removes the setting, so its default applies again. */
   setConfig(key: string, value: string | null): Promise<unknown>;
+  /** Records a verdict or a miss; returns the stored event. */
+  addFeedback(input: unknown): Promise<unknown>;
+  feedbackSummary(): Promise<unknown>;
 }
 
 /** An error the UI should show as is, with an HTTP status. */
@@ -189,6 +192,12 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         send(res, 200, await api.setConfig(body.key, body.value));
         return;
       }
+      case "GET /api/feedback":
+        send(res, 200, await api.feedbackSummary());
+        return;
+      case "POST /api/feedback":
+        send(res, 200, await api.addFeedback(await readJsonBody(req)));
+        return;
       default:
         send(res, 404, { error: `No such endpoint: ${key}` });
     }

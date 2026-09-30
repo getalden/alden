@@ -25,6 +25,11 @@ const api: UiApi = {
   },
   spend: async () => ({ spentToday: 0.12 }),
   config: async () => ({ config: {} }),
+  addFeedback: async (input) => {
+    calls.push({ method: "addFeedback", args: input });
+    return { id: "1" };
+  },
+  feedbackSummary: async () => ({ verdicts: 0 }),
   setConfig: async (key, value) => {
     if (key === "nope") throw new ApiError(400, "Unknown config key: nope");
     calls.push({ method: "setConfig", args: { key, value } });
@@ -140,6 +145,14 @@ describe("alden ui server", () => {
     expect([bad.status, JSON.parse(bad.text)]).toEqual([400, { error: "Unknown config key: nope" }]);
     await call("/api/config", { method: "PUT", headers: authed, body: { key: "model.name", value: "opus" } });
     expect(calls).toEqual([{ method: "setConfig", args: { key: "model.name", value: "opus" } }]);
+  });
+
+  it("records feedback and returns the summary", async () => {
+    const body = { kind: "missed", note: "x" };
+    const res = await call("/api/feedback", { method: "POST", headers: authed, body });
+    expect([res.status, JSON.parse(res.text)]).toEqual([200, { id: "1" }]);
+    expect(calls).toEqual([{ method: "addFeedback", args: body }]);
+    expect(JSON.parse((await call("/api/feedback", { headers: authed })).text)).toEqual({ verdicts: 0 });
   });
 
   it("serves the UI without a token, the app for unknown paths, and nothing outside its folder", async () => {
