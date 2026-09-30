@@ -1,0 +1,749 @@
+{
+  "name": "reg-django",
+  "repo": "django/django",
+  "language": "Python",
+  "recordedAt": "2026-09-30T17:03:51.988Z",
+  "pullRequests": [
+    {
+      "number": 20538,
+      "title": "Fixed #36865 -- Removed casting from exact lookups in admin searches.",
+      "url": "https://github.com/django/django/pull/20538",
+      "isDraft": false,
+      "createdAt": "2026-01-15T00:35:58Z",
+      "updatedAt": "2026-01-30T16:45:39Z",
+      "additions": 128,
+      "deletions": 26,
+      "changedFiles": 3,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "main",
+      "headRefName": "fix-admin-search-cast-performance",
+      "isCrossRepository": true,
+      "repository": {
+        "nameWithOwner": "django/django"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "mlissner"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "django/contrib/admin/options.py",
+            "additions": 37,
+            "deletions": 26
+          },
+          {
+            "path": "tests/admin_changelist/models.py",
+            "additions": 7,
+            "deletions": 0
+          },
+          {
+            "path": "tests/admin_changelist/tests.py",
+            "additions": 84,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "charettes"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-15T00:49:03Z"
+          },
+          {
+            "author": {
+              "login": "charettes"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-15T00:57:41Z"
+          },
+          {
+            "author": {
+              "login": "mlissner"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-15T01:19:16Z"
+          },
+          {
+            "author": {
+              "login": "charettes"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-15T15:21:46Z"
+          },
+          {
+            "author": {
+              "login": "mlissner"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-15T20:32:03Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-16T15:26:44Z"
+          },
+          {
+            "author": {
+              "login": "mlissner"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-16T23:53:35Z"
+          },
+          {
+            "author": {
+              "login": "charettes"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-24T01:27:20Z"
+          },
+          {
+            "author": {
+              "login": "mlissner"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-24T15:50:49Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-28T17:26:10Z"
+          },
+          {
+            "author": {
+              "login": "mlissner"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-29T01:45:37Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-29T15:33:56Z"
+          },
+          {
+            "author": {
+              "login": "mlissner"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-01-29T17:02:42Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-01-29T17:29:01Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "FAILURE"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      },
+      "body": "Fixes https://code.djangoproject.com/ticket/36865\r\n\r\n## Description\r\n\r\nThis PR fixes a performance regression introduced in PR #17885.\r\n\r\nThe `Cast` to `CharField` for non-string field exact lookups prevents database index usage on primary key fields, generating SQL like:\r\n\r\n```sql\r\nWHERE (\"table\".\"id\")::varchar = '123'\r\n```\r\n\r\nThis cannot use the primary key index and causes full table scans, resulting in timeouts on large tables (reported in [ticket #26001 comment 24](https://code.djangoproject.com/ticket/26001#comment:24)), and discovered in a project I work on at https://github.com/freelawproject/courtlistener/issues/6790.\r\n\r\n## Solution\r\n\r\nDrop the casting approach introduced in #17885, and replace it with field validation that uses `to_python` on the results of `smart_split` to ensure that we only apply field-term pairs that make sense. For example: \r\n\r\n - searching a PrimaryKey field for \"foo\" --> Nope!\r\n - searching a TextField for \"foo\" --> Yes!\r\n - searching a TextField for \"123\" --> Close enough. Yes!\r\n\r\nAnd so forth. \r\n\r\nThis should ensure DB indexes are used and that we don't send nonsensical queries in the first place. \r\n\r\n## Trac tickets\r\n\r\nIntroducing issue: https://code.djangoproject.com/ticket/26001\r\nSolving it: https://code.djangoproject.com/ticket/36865"
+    },
+    {
+      "number": 21239,
+      "title": "Fixed #37085 -- Added support for object-based form media stylesheet assets.",
+      "url": "https://github.com/django/django/pull/21239",
+      "isDraft": false,
+      "createdAt": "2026-05-07T01:16:36Z",
+      "updatedAt": "2026-08-08T19:34:18Z",
+      "additions": 98,
+      "deletions": 32,
+      "changedFiles": 4,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "main",
+      "headRefName": "ticket-37085-stylesheet-media-asset",
+      "isCrossRepository": true,
+      "repository": {
+        "nameWithOwner": "django/django"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "nessita"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "django/forms/widgets.py",
+            "additions": 9,
+            "deletions": 6
+          },
+          {
+            "path": "docs/releases/6.1.txt",
+            "additions": 4,
+            "deletions": 0
+          },
+          {
+            "path": "docs/topics/forms/media.txt",
+            "additions": 44,
+            "deletions": 2
+          },
+          {
+            "path": "tests/forms_tests/tests/test_media.py",
+            "additions": 41,
+            "deletions": 24
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "codingjoe"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-05-07T09:20:38Z"
+          },
+          {
+            "author": {
+              "login": "codingjoe"
+            },
+            "state": "CHANGES_REQUESTED",
+            "submittedAt": "2026-05-07T09:24:07Z"
+          },
+          {
+            "author": {
+              "login": "codingjoe"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T10:09:52Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T12:00:35Z"
+          },
+          {
+            "author": {
+              "login": "blighj"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T12:05:33Z"
+          },
+          {
+            "author": {
+              "login": "codingjoe"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T12:13:13Z"
+          },
+          {
+            "author": {
+              "login": "nessita"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T12:27:37Z"
+          },
+          {
+            "author": {
+              "login": "nessita"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T12:30:07Z"
+          },
+          {
+            "author": {
+              "login": "blighj"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T12:33:25Z"
+          },
+          {
+            "author": {
+              "login": "nessita"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T12:46:31Z"
+          },
+          {
+            "author": {
+              "login": "codingjoe"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T12:59:01Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T12:59:40Z"
+          },
+          {
+            "author": {
+              "login": "nessita"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-05-07T13:17:03Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-05-07T13:40:57Z"
+          },
+          {
+            "author": {
+              "login": "codingjoe"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-05-07T13:46:44Z"
+          },
+          {
+            "author": {
+              "login": "blighj"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-05-07T14:08:14Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-05-07T01:18:55Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "jacobtylerwalls"
+            }
+          },
+          {
+            "createdAt": "2026-05-07T13:38:31Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "codingjoe"
+            }
+          },
+          {
+            "createdAt": "2026-05-07T13:38:32Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "blighj"
+            }
+          }
+        ]
+      },
+      "body": "#### Trac ticket number\r\n<!-- Replace XXXXX with the corresponding Trac ticket number. -->\r\n<!-- Or delete the line and write \"N/A - typo\" for typo fixes. -->\r\n\r\nticket-37085\r\n\r\n#### Branch description\r\nExtracted from https://github.com/django/django/pull/21010.\r\n\r\n#### AI Assistance Disclosure (REQUIRED)\r\n<!-- Please select exactly ONE of the following: -->\r\n- [X] **No AI tools were used** in preparing this PR.\r\n- [ ] **If AI tools were used**, I have disclosed which ones, and fully reviewed and verified their output.\r\n\r\n#### Checklist\r\n- [X] This PR follows the [contribution guidelines](https://docs.djangoproject.com/en/stable/internals/contributing/writing-code/submitting-patches/).\r\n- [X] This PR **does not** disclose a security vulnerability (see [vulnerability reporting](https://docs.djangoproject.com/en/stable/internals/security/)).\r\n- [X] This PR targets the `main` branch. <!-- Backports will be evaluated and done by mergers, when necessary. -->\r\n- [X] The commit message is written in past tense, mentions the ticket number, and ends with a period (see [guidelines](https://docs.djangoproject.com/en/dev/internals/contributing/committing-code/#committing-guidelines)).\r\n- [X] I have not requested, and will not request, an automated AI review for this PR. <!-- You are welcome to do so in your own fork. -->\r\n- [X] I have checked the \"Has patch\" ticket flag in the Trac system.\r\n- [X] I have added or updated relevant tests.\r\n- [X] I have added or updated relevant docs, including release notes if applicable.\r\n- [ ] I have attached screenshots in both light and dark modes for any UI changes.\r\n"
+    },
+    {
+      "number": 21420,
+      "title": "Fixed #37139 -- Fixed inlines crash on parent models with db_default on primary key.",
+      "url": "https://github.com/django/django/pull/21420",
+      "isDraft": false,
+      "createdAt": "2026-06-04T18:08:24Z",
+      "updatedAt": "2026-06-17T15:52:39Z",
+      "additions": 61,
+      "deletions": 5,
+      "changedFiles": 7,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "main",
+      "headRefName": "issue-37139",
+      "isCrossRepository": true,
+      "repository": {
+        "nameWithOwner": "django/django"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "felixxm"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "django/db/models/base.py",
+            "additions": 10,
+            "deletions": 2
+          },
+          {
+            "path": "tests/basic/tests.py",
+            "additions": 1,
+            "deletions": 0
+          },
+          {
+            "path": "tests/composite_pk/models/__init__.py",
+            "additions": 2,
+            "deletions": 1
+          },
+          {
+            "path": "tests/composite_pk/models/tenant.py",
+            "additions": 6,
+            "deletions": 0
+          },
+          {
+            "path": "tests/composite_pk/tests.py",
+            "additions": 7,
+            "deletions": 1
+          },
+          {
+            "path": "tests/inline_formsets/models.py",
+            "additions": 22,
+            "deletions": 0
+          },
+          {
+            "path": "tests/inline_formsets/tests.py",
+            "additions": 13,
+            "deletions": 1
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-06-04T19:07:48Z"
+          },
+          {
+            "author": {
+              "login": "charettes"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-06-04T19:39:48Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-06-17T15:45:33Z"
+          },
+          {
+            "author": {
+              "login": "felixxm"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-06-17T15:52:39Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      },
+      "body": "#### Trac ticket number\r\n\r\nticket-37139\r\n\r\n#### Branch description\r\nSee ticket-37139\r\n\r\n#### AI Assistance Disclosure (REQUIRED)\r\n<!-- Please select exactly ONE of the following: -->\r\n- [x] **No AI tools were used** in preparing this PR.\r\n- [ ] **If AI tools were used**, I have disclosed which ones, and fully reviewed and verified their output."
+    },
+    {
+      "number": 19057,
+      "title": "Fixed #35972 -- Fixed lookup crashes after subquery annotations.",
+      "url": "https://github.com/django/django/pull/19057",
+      "isDraft": false,
+      "createdAt": "2025-01-16T13:28:55Z",
+      "updatedAt": "2025-10-08T09:02:53Z",
+      "additions": 128,
+      "deletions": 23,
+      "changedFiles": 11,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "main",
+      "headRefName": "as-sql-tuple",
+      "isCrossRepository": true,
+      "repository": {
+        "nameWithOwner": "django/django"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "jacobtylerwalls"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "django/contrib/gis/db/models/lookups.py",
+            "additions": 4,
+            "deletions": 4
+          },
+          {
+            "path": "django/contrib/postgres/search.py",
+            "additions": 5,
+            "deletions": 5
+          },
+          {
+            "path": "django/db/backends/base/schema.py",
+            "additions": 2,
+            "deletions": 1
+          },
+          {
+            "path": "django/db/models/expressions.py",
+            "additions": 2,
+            "deletions": 2
+          },
+          {
+            "path": "django/db/models/functions/comparison.py",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "django/db/models/lookups.py",
+            "additions": 7,
+            "deletions": 5
+          },
+          {
+            "path": "docs/ref/models/expressions.txt",
+            "additions": 3,
+            "deletions": 1
+          },
+          {
+            "path": "docs/releases/6.0.txt",
+            "additions": 18,
+            "deletions": 0
+          },
+          {
+            "path": "tests/custom_lookups/tests.py",
+            "additions": 38,
+            "deletions": 4
+          },
+          {
+            "path": "tests/expressions/tests.py",
+            "additions": 18,
+            "deletions": 0
+          },
+          {
+            "path": "tests/migrations/test_operations.py",
+            "additions": 30,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-02-09T23:59:00Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-02-10T15:23:01Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-02-10T15:27:19Z"
+          },
+          {
+            "author": {
+              "login": "browniebroke"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-04-26T15:56:15Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-04-26T16:06:53Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-04-26T16:07:51Z"
+          },
+          {
+            "author": {
+              "login": "browniebroke"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-04-26T16:14:21Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-04-26T16:39:50Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-04-26T16:40:37Z"
+          },
+          {
+            "author": {
+              "login": "browniebroke"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-04-27T09:31:40Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-05-11T12:19:42Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-05-12T04:09:53Z"
+          },
+          {
+            "author": {
+              "login": "sarahboyce"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-06-11T12:12:07Z"
+          },
+          {
+            "author": {
+              "login": "sarahboyce"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-06-11T12:14:35Z"
+          },
+          {
+            "author": {
+              "login": "charettes"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-06-11T13:26:19Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-06-12T13:59:10Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-06-15T01:56:15Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-07-02T00:57:02Z"
+          },
+          {
+            "author": {
+              "login": "sarahboyce"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2025-08-01T13:14:04Z"
+          },
+          {
+            "author": {
+              "login": "jacobtylerwalls"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-08-03T02:03:15Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      },
+      "body": "#### Trac ticket number\r\nticket-35972\r\n\r\n#### Branch description\r\nStandardize on tuples rather than lists for params to improve interoperability of ORM expressions.\r\n\r\nPreviously, some queries failed with `TypeError` when combined with `Subquery`:\r\n  - the `__regex` lookup on mariadb (and likely MySQL)\r\n  - the documented [example](https://docs.djangoproject.com/en/5.2/howto/custom-lookups/#a-lookup-example) for custom lookup expressions\r\n\r\n#### Checklist\r\n- [x] This PR targets the `main` branch. <!-- Backports will be evaluated and done by mergers, when necessary. -->\r\n- [x] The commit message is written in past tense, mentions the ticket number, and ends with a period.\r\n- [x] I have checked the \"Has patch\" ticket flag in the Trac system.\r\n- [x] I have added or updated relevant tests.\r\n- [x] I have added or updated relevant docs, including release notes if applicable.\r\n- [x] I have attached screenshots in both light and dark modes for any UI changes.\r\n"
+    }
+  ]
+}

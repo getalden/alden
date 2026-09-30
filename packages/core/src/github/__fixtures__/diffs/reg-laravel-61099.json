@@ -1,0 +1,16 @@
+[
+  {
+    "filename": "src/Illuminate/Http/Concerns/InteractsWithInput.php",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -86,7 +86,7 @@ public function keys()\n      */\n     public function all($keys = null)\n     {\n-        $input = array_replace_recursive($this->input(), $this->allFiles());\n+        $input = array_replace_recursive($this->allFiles(), $this->input());\n \n         if (! $keys) {\n             return $input;"
+  },
+  {
+    "filename": "tests/Http/HttpRequestTest.php",
+    "status": "modified",
+    "additions": 38,
+    "deletions": 0,
+    "patch": "@@ -1368,6 +1368,16 @@ public function testAllInputReturnsNestedInputAndFiles()\n         $this->assertEquals(['foo' => ['bar' => 'baz', 'photo' => $file], 'boom' => 'breeze'], $request->all());\n     }\n \n+    public function testAllInputPrefersInputOverFilesForCollidingKeys()\n+    {\n+        $file = new SymfonyUploadedFile(__FILE__, 'email.txt');\n+        $request = Request::create('/', 'POST', ['email' => 'taylor@laravel.com'], [], ['email' => $file]);\n+\n+        $this->assertSame(['email' => 'taylor@laravel.com'], $request->all());\n+        $this->assertSame(['email' => 'taylor@laravel.com'], $request->only('email'));\n+        $this->assertInstanceOf(UploadedFile::class, $request->file('email'));\n+    }\n+\n     public function testAllInputReturnsInputAfterReplace()\n     {\n         $request = Request::create('/?boom=breeze', 'GET', ['foo' => ['bar' => 'baz']]);\n@@ -1916,6 +1926,34 @@ public function testMagicMethods()\n         $this->assertEmpty($request->undefined);\n     }\n \n+    public function testMagicMethodsPreferInputOverFilesForCollidingKeys()\n+    {\n+        $file = new SymfonyUploadedFile(__FILE__, 'email.txt');\n+        $request = Request::create('/', 'POST', ['email' => 'taylor@laravel.com'], [], ['email' => $file]);\n+\n+        $this->assertSame('taylor@laravel.com', $request->email);\n+        $this->assertSame('taylor@laravel.com', $request['email']);\n+    }\n+\n+    public function testMagicMethodsMergeNestedInputAndFilesWhilePreferringInput()\n+    {\n+        $avatar = new SymfonyUploadedFile(__FILE__, 'avatar.jpg');\n+        $collision = new SymfonyUploadedFile(__FILE__, 'name.txt');\n+        $request = Request::create('/', 'POST', [\n+            'profile' => ['name' => 'Taylor'],\n+        ], [], [\n+            'profile' => ['name' => $collision, 'avatar' => $avatar],\n+        ]);\n+\n+        $expected = [\n+            'name' => 'Taylor',\n+            'avatar' => $request->file('profile.avatar'),\n+        ];\n+\n+        $this->assertSame($expected, $request->profile);\n+        $this->assertSame(['profile' => $expected], $request->all());\n+    }\n+\n     public function testHttpRequestFlashCallsSessionFlashInputWithInputData()\n     {\n         $session = m::mock(Store::class);"
+  }
+]

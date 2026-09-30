@@ -1,0 +1,268 @@
+{
+  "name": "reg-laravel",
+  "repo": "laravel/framework",
+  "language": "PHP",
+  "recordedAt": "2026-09-30T17:03:59.590Z",
+  "pullRequests": [
+    {
+      "number": 61099,
+      "title": "Prefer text input on dynamic access",
+      "url": "https://github.com/laravel/framework/pull/61099",
+      "isDraft": false,
+      "createdAt": "2026-08-07T18:24:28Z",
+      "updatedAt": "2026-08-27T20:50:50Z",
+      "additions": 39,
+      "deletions": 1,
+      "changedFiles": 2,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "13.x",
+      "headRefName": "prefer-text-input-on-dynamic-access",
+      "isCrossRepository": false,
+      "repository": {
+        "nameWithOwner": "laravel/framework"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "taylorotwell"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "src/Illuminate/Http/Concerns/InteractsWithInput.php",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "tests/Http/HttpRequestTest.php",
+            "additions": 38,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      },
+      "body": ""
+    },
+    {
+      "number": 52242,
+      "title": "[12.x] mergeIfMissing allows merging with nested arrays",
+      "url": "https://github.com/laravel/framework/pull/52242",
+      "isDraft": false,
+      "createdAt": "2024-07-23T16:14:48Z",
+      "updatedAt": "2025-02-25T18:00:40Z",
+      "additions": 19,
+      "deletions": 5,
+      "changedFiles": 2,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "master",
+      "headRefName": "master",
+      "isCrossRepository": true,
+      "repository": {
+        "nameWithOwner": "laravel/framework"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "KIKOmanasijev"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "src/Illuminate/Http/Request.php",
+            "additions": 9,
+            "deletions": 5
+          },
+          {
+            "path": "tests/Http/HttpRequestTest.php",
+            "additions": 10,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": null
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      },
+      "body": "Hello,\r\n\r\nThis PR updates the `mergeIfMissing` method from the Http/Request class to allow merging with nested arrays using the \".\" (dot) notation. \r\n\r\nThe section named \"Actual Behaviour\" marks Laravel's current implementation output for the described scenario, while the \"Expected Behaviour\" shows the output if using my changes to the Http/Request class.\r\n\r\nI've added 2 assertions to the `testMergeIfMissingMethod` test.\r\n\r\n## Problem / Setting up the scenario:\r\n- I've been sending POST requests to my endpoint with the following payload: \r\n```\r\n{\r\n    \"user\": {\r\n        \"first_name: \"Taylor\"\r\n    }\r\n}\r\n``` \r\nand tried merging the input in my controller with:\r\n```\r\n$request->mergeIfMissing([\r\n    'user.last_name' => 'Otwell'\r\n]);\r\n```\r\n## Expected Behaviour\r\nexpecting to set the current request input to:\r\n```\r\n[\r\n    'user' => [\r\n        'first_name' => 'Taylor',\r\n        'last_name' => 'Otwell\r\n    ]\r\n]\r\n```\r\n## Actual Behaviour\r\nbut instead I was getting:\r\n```\r\n{\r\n    \"user\": {\r\n        \"first_name\": \"Taylor\"\r\n    },\r\n    \"user.last_name\": \"Otwell\"\r\n}\r\n```"
+    },
+    {
+      "number": 60720,
+      "title": "[13.x] Add incrementEachQuietly and decrementEachQuietly to Eloquent models",
+      "url": "https://github.com/laravel/framework/pull/60720",
+      "isDraft": false,
+      "createdAt": "2026-07-09T21:53:44Z",
+      "updatedAt": "2026-07-09T22:43:55Z",
+      "additions": 98,
+      "deletions": 0,
+      "changedFiles": 2,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "13.x",
+      "headRefName": "increment-each-quietly",
+      "isCrossRepository": true,
+      "repository": {
+        "nameWithOwner": "laravel/framework"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "shanerbaner82"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "src/Illuminate/Database/Eloquent/Model.php",
+            "additions": 28,
+            "deletions": 0
+          },
+          {
+            "path": "tests/Database/DatabaseEloquentModelTest.php",
+            "additions": 70,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      },
+      "body": "This PR adds `incrementEachQuietly` and `decrementEachQuietly` to Eloquent models, the quiet variants of the existing `incrementEach` and `decrementEach` methods.\n\nEloquent already ships `incrementQuietly`/`decrementQuietly` for the single-column `increment`/`decrement`, along with `saveQuietly`, `updateQuietly`, `deleteQuietly`, `touchQuietly`, and `pushQuietly`. The multi-column `incrementEach`/`decrementEach` pair was the only mutator without a \"Quietly\" counterpart, so this closes that consistency gap.\n\n```php\n// Update multiple columns without firing model events\n$user->incrementEachQuietly(['posts_count' => 1, 'points' => 10]);\n\n$user->decrementEachQuietly(['credits' => 3, 'tokens' => 2]);\n```\n\nLike the other quiet variants, they wrap the shared logic in `static::withoutEvents(...)`, so the database is still updated but no `saving`/`saved`/`updating`/`updated` events are dispatched.\n\nTests are included covering both methods."
+    },
+    {
+      "number": 59404,
+      "title": "[13.x] Fix trait initializer collision with Attribute parsing",
+      "url": "https://github.com/laravel/framework/pull/59404",
+      "isDraft": false,
+      "createdAt": "2026-03-27T08:13:02Z",
+      "updatedAt": "2026-03-27T17:21:21Z",
+      "additions": 92,
+      "deletions": 15,
+      "changedFiles": 4,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "13.x",
+      "headRefName": "fix/trait-initializer-attribute-collision",
+      "isCrossRepository": true,
+      "repository": {
+        "nameWithOwner": "laravel/framework"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "sadique-cws"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "src/Illuminate/Database/Eloquent/Concerns/GuardsAttributes.php",
+            "additions": 1,
+            "deletions": 3
+          },
+          {
+            "path": "src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php",
+            "additions": 1,
+            "deletions": 3
+          },
+          {
+            "path": "src/Illuminate/Database/Eloquent/Concerns/HidesAttributes.php",
+            "additions": 2,
+            "deletions": 7
+          },
+          {
+            "path": "tests/Database/DatabaseEloquentModelAttributesTest.php",
+            "additions": 88,
+            "deletions": 2
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      },
+      "body": "Fixes #59381\r\n\r\n## Problem\r\n\r\nWhen a model uses both a **PHP Attribute** (e.g. `#[Appends(['name'])]`) and a **trait that calls `merge*()` in its initializer** (e.g. `$this->mergeAppends(['url'])`), the trait's values get silently dropped. The final result only contains the Attribute values—or worse, only the trait's values—depending on execution order.\r\n\r\n```php\r\n#[Appends(['name'])]\r\nclass MyModel extends Model\r\n{\r\n    use SomeTrait;\r\n}\r\n\r\ntrait SomeTrait\r\n{\r\n    protected function initializeSomeTrait()\r\n    {\r\n        $this->mergeAppends(['url']);\r\n    }\r\n}\r\n\r\n$model = new MyModel;\r\n$model->getAppends(); // Returns ['url'] — 'name' is missing!\r\n```\r\n\r\n## Root Cause\r\n\r\nThe framework's trait initializers (`initializeHasAttributes`, `initializeHidesAttributes`, `initializeGuardsAttributes`) used `if (empty($this->property))` guards before assigning from PHP Attributes:\r\n\r\n```php\r\nif (empty($this->appends)) {\r\n    $this->appends = static::resolveClassAttribute(Appends::class, 'columns') ?? [];\r\n}\r\n```\r\n\r\nWhen a user's trait initializer runs **first** and populates the property via `merge*()`, the `empty()` check sees a non-empty value and skips the Attribute entirely — silently dropping its values.\r\n\r\n## Solution\r\n\r\nReplace the guarded assignment pattern with the corresponding `merge*()` method:\r\n\r\n```php\r\n$this->mergeAppends(static::resolveClassAttribute(Appends::class, 'columns') ?? []);\r\n```\r\n\r\nThis ensures values from **both sources** are always combined, regardless of initializer execution order.\r\n\r\n### Files Changed\r\n\r\n| File | Change |\r\n|---|---|\r\n| `HasAttributes.php` | `appends`: guarded assign → `mergeAppends()` |\r\n| `HidesAttributes.php` | `hidden`/`visible`: guarded assign → `mergeHidden()`/`mergeVisible()` |\r\n| `GuardsAttributes.php` | `fillable`: guarded assign → `mergeFillable()` |\r\n\r\n> **Note:** The `guarded` property is left unchanged because its `['*']` default sentinel value has special \"totally guarded\" semantics that require the existing conditional logic.\r\n\r\n### Tests\r\n\r\nAdded 4 new test cases in `DatabaseEloquentModelAttributesTest.php` that verify trait initializer values are correctly merged with PHP Attribute values for `appends`, `hidden`, `visible`, and `fillable`.\r\n\r\nUpdated 1 existing test (`test_fillable_property_merges_with_attribute`) to reflect that property values and Attribute values are now **merged** rather than the property silently overriding.\r\n"
+    }
+  ]
+}

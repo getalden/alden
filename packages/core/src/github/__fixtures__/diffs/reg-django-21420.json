@@ -1,0 +1,51 @@
+[
+  {
+    "filename": "django/db/models/base.py",
+    "status": "modified",
+    "additions": 10,
+    "deletions": 2,
+    "patch": "@@ -709,9 +709,17 @@ def _set_pk_val(self, value):\n \n     def _is_pk_set(self, meta=None):\n         pk_val = self._get_pk_val(meta)\n+\n+        def _is_set(value):\n+            return (\n+                value is None\n+                # Empty value when db_default is used.\n+                or isinstance(value, DatabaseDefault)\n+            )\n+\n         return not (\n-            pk_val is None\n-            or (isinstance(pk_val, tuple) and any(f is None for f in pk_val))\n+            _is_set(pk_val)\n+            or (isinstance(pk_val, tuple) and any(_is_set(f) for f in pk_val))\n         )\n \n     def get_deferred_fields(self):"
+  },
+  {
+    "filename": "tests/basic/tests.py",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 0,
+    "patch": "@@ -554,6 +554,7 @@ def test_is_pk_unset(self):\n         cases = [\n             Article(),\n             Article(id=None),\n+            PrimaryKeyWithDbDefault(),\n         ]\n         for case in cases:\n             with self.subTest(case=case):"
+  },
+  {
+    "filename": "tests/composite_pk/models/__init__.py",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 1,
+    "patch": "@@ -1,8 +1,9 @@\n-from .tenant import Comment, Post, Tenant, TimeStamped, Token, User\n+from .tenant import Comment, Post, PostDbDefault, Tenant, TimeStamped, Token, User\n \n __all__ = [\n     \"Comment\",\n     \"Post\",\n+    \"PostDbDefault\",\n     \"Tenant\",\n     \"TimeStamped\",\n     \"Token\","
+  },
+  {
+    "filename": "tests/composite_pk/models/tenant.py",
+    "status": "modified",
+    "additions": 6,
+    "deletions": 0,
+    "patch": "@@ -55,6 +55,12 @@ class Post(models.Model):\n     id = models.UUIDField(default=uuid.uuid4)\n \n \n+class PostDbDefault(models.Model):\n+    pk = models.CompositePrimaryKey(\"tenant_id\", \"id\")\n+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, default=1)\n+    id = models.IntegerField(db_default=1)\n+\n+\n class TimeStamped(models.Model):\n     pk = models.CompositePrimaryKey(\"id\", \"created\")\n     id = models.SmallIntegerField(unique=True)"
+  },
+  {
+    "filename": "tests/composite_pk/tests.py",
+    "status": "modified",
+    "additions": 7,
+    "deletions": 1,
+    "patch": "@@ -17,7 +17,7 @@\n from django.forms import modelform_factory\n from django.test import TestCase\n \n-from .models import Comment, Post, Tenant, TimeStamped, Token, User\n+from .models import Comment, Post, PostDbDefault, Tenant, TimeStamped, Token, User\n \n \n class CommentForm(forms.ModelForm):\n@@ -64,6 +64,12 @@ def test_pk_updated_if_field_updated(self):\n         self.assertIsNone(user.id)\n         self.assertIs(user._is_pk_set(), False)\n \n+    def test_pk_not_set_db_default(self):\n+        post = PostDbDefault(tenant=self.tenant)\n+        self.assertEqual(post.tenant_id, self.tenant.pk)\n+        self.assertIsNotNone(post.id)\n+        self.assertIs(post._is_pk_set(), False)\n+\n     def test_hash(self):\n         self.assertEqual(hash(User(pk=(1, 2))), hash((1, 2)))\n         self.assertEqual(hash(User(tenant_id=2, id=3)), hash((2, 3)))"
+  },
+  {
+    "filename": "tests/inline_formsets/models.py",
+    "status": "modified",
+    "additions": 22,
+    "deletions": 0,
+    "patch": "@@ -1,4 +1,5 @@\n from django.db import models\n+from django.db.models.functions import UUID4\n \n \n class School(models.Model):\n@@ -21,6 +22,27 @@ class Meta:\n         ]\n \n \n+class ParentUUIDPk(models.Model):\n+    uuid = models.UUIDField(primary_key=True, db_default=UUID4(), editable=False)\n+\n+    class Meta:\n+        required_db_features = {\n+            \"supports_uuid4_function\",\n+            \"supports_expression_defaults\",\n+        }\n+\n+\n+class ChildUUIDPk(models.Model):\n+    parent = models.ForeignKey(ParentUUIDPk, models.CASCADE)\n+    name = models.CharField(max_length=100)\n+\n+    class Meta:\n+        required_db_features = {\n+            \"supports_uuid4_function\",\n+            \"supports_expression_defaults\",\n+        }\n+\n+\n class Poet(models.Model):\n     name = models.CharField(max_length=100)\n "
+  },
+  {
+    "filename": "tests/inline_formsets/tests.py",
+    "status": "modified",
+    "additions": 13,
+    "deletions": 1,
+    "patch": "@@ -1,7 +1,7 @@\n from django.forms.models import ModelForm, inlineformset_factory\n from django.test import TestCase, skipUnlessDBFeature\n \n-from .models import Child, Parent, Poem, Poet, School\n+from .models import Child, ChildUUIDPk, Parent, ParentUUIDPk, Poem, Poet, School\n \n \n class DeletionTests(TestCase):\n@@ -113,6 +113,18 @@ def test_save_new(self):\n             obj.save()\n         self.assertEqual(school.child_set.count(), 1)\n \n+    @skipUnlessDBFeature(\"supports_uuid4_function\", \"supports_expression_defaults\")\n+    def test_add_form_uuid_pk(self):\n+        ChildFormSet = inlineformset_factory(ParentUUIDPk, ChildUUIDPk, fields=[\"name\"])\n+        data = {\n+            \"child_set-TOTAL_FORMS\": \"1\",\n+            \"child_set-INITIAL_FORMS\": \"1\",\n+            \"child_set-MAX_NUM_FORMS\": \"0\",\n+            \"child_set-0-name\": \"child\",\n+        }\n+        formset = ChildFormSet(data)\n+        self.assertIs(formset.is_valid(), False)\n+\n \n class InlineFormsetFactoryTest(TestCase):\n     def test_inline_formset_factory(self):"
+  }
+]

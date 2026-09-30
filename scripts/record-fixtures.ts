@@ -1,7 +1,7 @@
 /**
  * Records real GitHub responses as test fixtures: `pnpm fixtures:record`.
  *
- * Public repos only, one per supported language. Fixtures are committed and the repo will be public, so never
+ * Public repos only. Fixtures are committed and the repo will be public, so never
  * record private repos (your own included) here. Descriptions are recorded too, for the eval. PR numbers are pinned so re-recording refreshes the same PRs that
  * tests name; to add a PR, add its number.
  */
@@ -26,6 +26,13 @@ const SOURCES = [
     language: "Go and TypeScript",
     numbers: [133739, 133738, 133736, 133734],
   },
+  // PRs a later PR had to fix (found with `pnpm regressions:find`), for the eval: did the briefing point at the code
+  // that broke? Each one's expectation in eval/expectations.json names the files the fix changed.
+  { name: "reg-nextjs", repo: "vercel/next.js", language: "TypeScript", numbers: [99322, 97774, 85741] },
+  { name: "reg-django", repo: "django/django", language: "Python", numbers: [20538, 21239, 21420, 19057] },
+  { name: "reg-cli", repo: "cli/cli", language: "Go", numbers: [13009, 14136, 10513] },
+  { name: "reg-prometheus", repo: "prometheus/prometheus", language: "Go", numbers: [19183] },
+  { name: "reg-laravel", repo: "laravel/framework", language: "PHP", numbers: [61099, 52242, 60720, 59404] },
 ];
 
 const OUT_DIR = join(import.meta.dirname, "../packages/core/src/github/__fixtures__");
@@ -34,8 +41,11 @@ const resolved = await resolveToken();
 if (!resolved) throw new Error("Not signed in. Run `alden auth login`.");
 const client = createGitHubClient(resolved.token);
 
+// `--only reg-django,reg-cli` records just those, leaving the others (and the tests that pin them) as they are.
+const only = process.argv.includes("--only") ? process.argv[process.argv.indexOf("--only") + 1]?.split(",") : undefined;
+
 await mkdir(OUT_DIR, { recursive: true });
-for (const { numbers, ...source } of SOURCES) {
+for (const { numbers, ...source } of SOURCES.filter((s) => !only || only.includes(s.name))) {
   const [owner, name] = source.repo.split("/");
   const fields = numbers.map((n) => `p${n}: pullRequest(number: ${n}) { ${PULL_REQUEST_FIELDS} body }`).join("\n");
   const data = await client.graphql<{ repository: Record<string, RawPullRequest | null> }>(

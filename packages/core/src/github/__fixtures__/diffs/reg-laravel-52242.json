@@ -1,0 +1,16 @@
+[
+  {
+    "filename": "src/Illuminate/Http/Request.php",
+    "status": "modified",
+    "additions": 9,
+    "deletions": 5,
+    "patch": "@@ -349,9 +349,13 @@ public function userAgent()\n      */\n     public function merge(array $input)\n     {\n-        $this->getInputSource()->add($input);\n-\n-        return $this;\n+        return tap($this, function (Request $request) use ($input) {\n+            $request->getInputSource()\n+                    ->replace(collect($input)->reduce(\n+                        fn ($requestInput, $value, $key) => data_set($requestInput, $key, $value),\n+                        $this->getInputSource()->all()\n+                    ));\n+        });\n     }\n \n     /**\n@@ -547,8 +551,8 @@ public function hasSession(bool $skipIfUninitialized = false): bool\n     public function getSession(): SessionInterface\n     {\n         return $this->hasSession()\n-                    ? $this->session\n-                    : throw new SessionNotFoundException;\n+            ? $this->session\n+            : throw new SessionNotFoundException;\n     }\n \n     /**"
+  },
+  {
+    "filename": "tests/Http/HttpRequestTest.php",
+    "status": "modified",
+    "additions": 10,
+    "deletions": 0,
+    "patch": "@@ -983,6 +983,16 @@ public function testMergeIfMissingMethod()\n         $request->mergeIfMissing($merge);\n         $this->assertSame('Taylor', $request->input('name'));\n         $this->assertSame(1, $request->input('boolean_setting'));\n+\n+        $request = Request::create('/', 'GET', ['user' => ['first_name' => 'Taylor', 'email' => 'taylor@laravel.com']]);\n+        $merge = ['user.last_name' => 'Otwell'];\n+        $request->mergeIfMissing($merge);\n+        $this->assertSame('Otwell', $request->input('user.last_name'));\n+\n+        $request = Request::create('/', 'GET', ['user' => ['first_name' => 'Taylor', 'email' => 'taylor@laravel.com']]);\n+        $merge = ['user.first_name' => 'John'];\n+        $request->mergeIfMissing($merge);\n+        $this->assertSame('Taylor', $request->input('user.first_name'));\n     }\n \n     public function testReplaceMethod()"
+  }
+]

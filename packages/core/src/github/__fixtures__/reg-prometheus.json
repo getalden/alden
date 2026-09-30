@@ -1,0 +1,174 @@
+{
+  "name": "reg-prometheus",
+  "repo": "prometheus/prometheus",
+  "language": "Go",
+  "recordedAt": "2026-09-30T17:03:57.779Z",
+  "pullRequests": [
+    {
+      "number": 19183,
+      "title": "tsdb: fix stale-series accounting across sample-type transitions",
+      "url": "https://github.com/prometheus/prometheus/pull/19183",
+      "isDraft": false,
+      "createdAt": "2026-07-14T09:24:29Z",
+      "updatedAt": "2026-07-15T09:33:17Z",
+      "additions": 309,
+      "deletions": 91,
+      "changedFiles": 4,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "main",
+      "headRefName": "krajo/fix-stale-series-accounting",
+      "isCrossRepository": false,
+      "repository": {
+        "nameWithOwner": "prometheus/prometheus"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "krajorama"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "tsdb/head.go",
+            "additions": 25,
+            "deletions": 9
+          },
+          {
+            "path": "tsdb/head_append.go",
+            "additions": 9,
+            "deletions": 32
+          },
+          {
+            "path": "tsdb/head_test.go",
+            "additions": 250,
+            "deletions": 11
+          },
+          {
+            "path": "tsdb/head_wal.go",
+            "additions": 25,
+            "deletions": 39
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": [
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "jesusvazquez"
+            }
+          },
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "codesome"
+            }
+          },
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "bwplotka"
+            }
+          }
+        ]
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "copilot-pull-request-reviewer"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-07-14T10:24:23Z"
+          },
+          {
+            "author": {
+              "login": "krajorama"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-07-14T13:25:15Z"
+          },
+          {
+            "author": {
+              "login": "krajorama"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-07-14T13:26:29Z"
+          },
+          {
+            "author": {
+              "login": "copilot-pull-request-reviewer"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-07-14T13:31:44Z"
+          },
+          {
+            "author": {
+              "login": "aknuds1"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-07-15T08:58:55Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-07-14T09:24:30Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "jesusvazquez"
+            }
+          },
+          {
+            "createdAt": "2026-07-14T09:24:31Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "codesome"
+            }
+          },
+          {
+            "createdAt": "2026-07-14T09:24:31Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "bwplotka"
+            }
+          },
+          {
+            "createdAt": "2026-07-14T09:24:31Z",
+            "requestedReviewer": null
+          },
+          {
+            "createdAt": "2026-07-14T10:20:43Z",
+            "requestedReviewer": {
+              "__typename": "Bot"
+            }
+          },
+          {
+            "createdAt": "2026-07-14T13:28:00Z",
+            "requestedReviewer": {
+              "__typename": "Bot"
+            }
+          }
+        ]
+      },
+      "body": "## What\n\nFixes the `prometheus_tsdb_head_stale_series` gauge, which over-counts when a series changes sample type (float ↔ integer histogram ↔ float histogram). The same fix also prevents such a series from being wrongly evicted as stale.\n\n## Why\n\nStaleness was derived from a *type-specific* last value:\n\n- `commitFloats` used only `series.lastValue`;\n- `commitHistograms`/`commitFloatHistograms` used only `series.lastHistogramValue`/`lastFloatHistogramValue`;\n- `isStaleSeries` (used by GC/removal/snapshot seeding **and the early stale-series eviction** `truncateStaleSeries`) OR-ed all three.\n\n`lastValue` is **not** cleared when a histogram is appended, so a series that went stale as one type and then received a **non-stale** sample of a **different** type was treated as stale until GC. Consequences: the `prometheus_tsdb_head_stale_series` gauge over-counts, and `truncateStaleSeries` can evict such a series early — dropping live data.\n\n## How\n\n- Rework `isStaleSeries` to inspect the series' *current* sample type (histogram → float histogram → float), consulting `lastValue` only when the latest sample is a float.\n- Route the commit paths, WAL replay, snapshot seeding, series removal and eviction through it via a shared `updateStaleSeriesMetricOnAppend(wasStale, isStale)` helper, so the staleness definition is uniform.\n- **Removal** (`gc`, `deleteSeriesByID`) and **eviction** (`truncateStaleSeries`) must use the same definition: a cross-type series no longer counted as stale must not be decremented on GC (gauge underflow) nor evicted as if stale (data loss).\n- **WAL replay** gates the gauge update on the sample being accepted as in-order (`appendChunkAndMmap` now returns `sampleInOrder`). Since staleness is taken from the series' current type, a rejected sample — an older sample appearing later in the WAL, e.g. when concurrent appenders log in one order but apply in another — must not move the gauge.\n\nNo new metric or API; the gauge value simply becomes correct.\n\n## Tests\n\nData-driven, all of which fail on `main`:\n\n- `TestHead_NumStaleSeries_MixedType` — every cross-type stale→non-stale transition, exercised live and after WAL replay and memory-snapshot restore.\n- `TestHead_NumStaleSeries_MixedTypeRemoval` — a cross-type non-stale series is neither miscounted on GC nor evicted by `truncateStaleSeries`.\n- `TestHead_NumStaleSeries_WALReplayIgnoresRejectedCrossTypeSamples` — an older sample rejected during replay does not change the gauge (in-order gating).\n\nFull `./tsdb/...` suite passes. Benchmarked the commit hot path (`BenchmarkHeadAppender_AppendCommit`, floats, 100 samples/commit, interleaved to control for CPU throttling): no meaningful change (−1.0% / +1.9% across the two appenders, geomean +0.4%, within noise; allocations identical).\n\n```release-notes\n[BUGFIX] TSDB: Fix `prometheus_tsdb_head_stale_series` over-counting (and early eviction of affected series) when a series changes between float, integer histogram, and float histogram sample types.\n```\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+    }
+  ]
+}

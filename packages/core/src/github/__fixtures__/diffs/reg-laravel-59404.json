@@ -1,0 +1,30 @@
+[
+  {
+    "filename": "src/Illuminate/Database/Eloquent/Concerns/GuardsAttributes.php",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 3,
+    "patch": "@@ -45,9 +45,7 @@ trait GuardsAttributes\n     #[Initialize]\n     public function initializeGuardsAttributes()\n     {\n-        if (empty($this->fillable)) {\n-            $this->fillable = static::resolveClassAttribute(Fillable::class, 'columns') ?? [];\n-        }\n+        $this->mergeFillable(static::resolveClassAttribute(Fillable::class, 'columns') ?? []);\n \n         if ($this->guarded === ['*']) {\n             if (static::resolveClassAttribute(Unguarded::class) !== null) {"
+  },
+  {
+    "filename": "src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 3,
+    "patch": "@@ -214,9 +214,7 @@ protected function initializeHasAttributes()\n             ?? static::resolveClassAttribute(Table::class)->dateFormat\n             ?? null;\n \n-        if (empty($this->appends)) {\n-            $this->appends = static::resolveClassAttribute(Appends::class, 'columns') ?? [];\n-        }\n+        $this->mergeAppends(static::resolveClassAttribute(Appends::class, 'columns') ?? []);\n     }\n \n     /**"
+  },
+  {
+    "filename": "src/Illuminate/Database/Eloquent/Concerns/HidesAttributes.php",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 7,
+    "patch": "@@ -30,13 +30,8 @@ trait HidesAttributes\n     #[Initialize]\n     public function initializeHidesAttributes()\n     {\n-        if (empty($this->hidden)) {\n-            $this->hidden = static::resolveClassAttribute(Hidden::class, 'columns') ?? [];\n-        }\n-\n-        if (empty($this->visible)) {\n-            $this->visible = static::resolveClassAttribute(Visible::class, 'columns') ?? [];\n-        }\n+        $this->mergeHidden(static::resolveClassAttribute(Hidden::class, 'columns') ?? []);\n+        $this->mergeVisible(static::resolveClassAttribute(Visible::class, 'columns') ?? []);\n     }\n \n     /**"
+  },
+  {
+    "filename": "tests/Database/DatabaseEloquentModelAttributesTest.php",
+    "status": "modified",
+    "additions": 88,
+    "deletions": 2,
+    "patch": "@@ -198,11 +198,11 @@ public function test_fillable_attribute(): void\n         $this->assertSame(['name', 'email'], $model->getFillable());\n     }\n \n-    public function test_fillable_property_takes_precedence(): void\n+    public function test_fillable_property_merges_with_attribute(): void\n     {\n         $model = new ModelWithFillableAttributeAndProperty;\n \n-        $this->assertSame(['title'], $model->getFillable());\n+        $this->assertEqualsCanonicalizing(['title', 'name', 'email'], $model->getFillable());\n     }\n \n     public function test_guarded_attribute(): void\n@@ -312,6 +312,34 @@ public function test_is_ignoring_touch_with_timestamps_attribute(): void\n         $this->assertTrue(ModelWithTimestampsFalseAttribute::isIgnoringTouch());\n         $this->assertFalse(ModelWithFillableAttribute::isIgnoringTouch());\n     }\n+\n+    public function test_trait_initializer_merges_appends_with_attribute(): void\n+    {\n+        $model = new ModelWithAppendsAttributeAndTrait;\n+\n+        $this->assertEqualsCanonicalizing(['full_name', 'is_admin', 'url'], $model->getAppends());\n+    }\n+\n+    public function test_trait_initializer_merges_hidden_with_attribute(): void\n+    {\n+        $model = new ModelWithHiddenAttributeAndTrait;\n+\n+        $this->assertEqualsCanonicalizing(['password', 'secret', 'api_token'], $model->getHidden());\n+    }\n+\n+    public function test_trait_initializer_merges_visible_with_attribute(): void\n+    {\n+        $model = new ModelWithVisibleAttributeAndTrait;\n+\n+        $this->assertEqualsCanonicalizing(['id', 'name', 'email'], $model->getVisible());\n+    }\n+\n+    public function test_trait_initializer_merges_fillable_with_attribute(): void\n+    {\n+        $model = new ModelWithFillableAttributeAndTrait;\n+\n+        $this->assertEqualsCanonicalizing(['name', 'email', 'phone'], $model->getFillable());\n+    }\n }\n \n enum ConnectionUnitEnum\n@@ -517,3 +545,61 @@ class PivotWithIncrementing extends \\Illuminate\\Database\\Eloquent\\Relations\\Pivo\n {\n     //\n }\n+\n+// Traits for testing trait initializer + Attribute collision\n+\n+trait AddsUrlAppend\n+{\n+    protected function initializeAddsUrlAppend()\n+    {\n+        $this->mergeAppends(['url']);\n+    }\n+}\n+\n+trait AddsApiTokenHidden\n+{\n+    protected function initializeAddsApiTokenHidden()\n+    {\n+        $this->mergeHidden(['api_token']);\n+    }\n+}\n+\n+trait AddsEmailVisible\n+{\n+    protected function initializeAddsEmailVisible()\n+    {\n+        $this->mergeVisible(['email']);\n+    }\n+}\n+\n+trait AddsPhoneFillable\n+{\n+    protected function initializeAddsPhoneFillable()\n+    {\n+        $this->mergeFillable(['phone']);\n+    }\n+}\n+\n+#[Appends(['full_name', 'is_admin'])]\n+class ModelWithAppendsAttributeAndTrait extends Model\n+{\n+    use AddsUrlAppend;\n+}\n+\n+#[Hidden(['password', 'secret'])]\n+class ModelWithHiddenAttributeAndTrait extends Model\n+{\n+    use AddsApiTokenHidden;\n+}\n+\n+#[Visible(['id', 'name'])]\n+class ModelWithVisibleAttributeAndTrait extends Model\n+{\n+    use AddsEmailVisible;\n+}\n+\n+#[Fillable(['name', 'email'])]\n+class ModelWithFillableAttributeAndTrait extends Model\n+{\n+    use AddsPhoneFillable;\n+}"
+  }
+]

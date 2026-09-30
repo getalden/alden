@@ -1,0 +1,772 @@
+{
+  "name": "reg-cli",
+  "repo": "cli/cli",
+  "language": "Go",
+  "recordedAt": "2026-09-30T17:03:55.061Z",
+  "pullRequests": [
+    {
+      "number": 13009,
+      "title": "Use login-based assignee mutation on github.com",
+      "url": "https://github.com/cli/cli/pull/13009",
+      "isDraft": false,
+      "createdAt": "2026-03-24T00:26:45Z",
+      "updatedAt": "2026-03-25T02:29:13Z",
+      "additions": 390,
+      "deletions": 271,
+      "changedFiles": 16,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "trunk",
+      "headRefName": "fix/pr-create-assignee-metadata-13000",
+      "isCrossRepository": false,
+      "repository": {
+        "nameWithOwner": "cli/cli"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "BagToad"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "api/queries_issue.go",
+            "additions": 10,
+            "deletions": 1
+          },
+          {
+            "path": "api/queries_pr.go",
+            "additions": 37,
+            "deletions": 0
+          },
+          {
+            "path": "api/queries_repo.go",
+            "additions": 63,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/cmd/issue/create/create.go",
+            "additions": 9,
+            "deletions": 10
+          },
+          {
+            "path": "pkg/cmd/issue/create/create_test.go",
+            "additions": 56,
+            "deletions": 48
+          },
+          {
+            "path": "pkg/cmd/issue/edit/edit.go",
+            "additions": 7,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/cmd/issue/edit/edit_test.go",
+            "additions": 4,
+            "deletions": 40
+          },
+          {
+            "path": "pkg/cmd/pr/create/create.go",
+            "additions": 4,
+            "deletions": 1
+          },
+          {
+            "path": "pkg/cmd/pr/create/create_test.go",
+            "additions": 11,
+            "deletions": 12
+          },
+          {
+            "path": "pkg/cmd/pr/edit/edit.go",
+            "additions": 1,
+            "deletions": 52
+          },
+          {
+            "path": "pkg/cmd/pr/edit/edit_test.go",
+            "additions": 6,
+            "deletions": 13
+          },
+          {
+            "path": "pkg/cmd/pr/shared/editable.go",
+            "additions": 128,
+            "deletions": 31
+          },
+          {
+            "path": "pkg/cmd/pr/shared/editable_http.go",
+            "additions": 2,
+            "deletions": 28
+          },
+          {
+            "path": "pkg/cmd/pr/shared/params.go",
+            "additions": 18,
+            "deletions": 10
+          },
+          {
+            "path": "pkg/cmd/pr/shared/survey.go",
+            "additions": 30,
+            "deletions": 21
+          },
+          {
+            "path": "pkg/cmd/pr/shared/survey_test.go",
+            "additions": 4,
+            "deletions": 4
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": [
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "williammartin"
+            }
+          }
+        ]
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "copilot-pull-request-reviewer"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-03-24T00:39:51Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-03-24T16:37:51Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-03-24T17:24:13Z"
+          },
+          {
+            "author": {
+              "login": "babakks"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-03-24T17:26:52Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-03-24T00:34:17Z",
+            "requestedReviewer": null
+          },
+          {
+            "createdAt": "2026-03-24T00:34:18Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "williammartin"
+            }
+          },
+          {
+            "createdAt": "2026-03-24T00:34:18Z",
+            "requestedReviewer": {
+              "__typename": "Bot"
+            }
+          },
+          {
+            "createdAt": "2026-03-24T01:09:07Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "babakks"
+            }
+          }
+        ]
+      },
+      "body": "Fixes https://github.com/cli/cli/issues/13000\r\n\r\n## Description\r\n\r\n`gh pr create -a @me` fails with `could not assign user: 'xx' not found` when the user interactively adds metadata (reviewers, labels, etc.) during the PR creation flow, because the assignee login cannot be resolved to a node ID from the cached metadata that only contains the interactively selected fields. This has been broken since the actor assignee work shipped a few weeks ago.\r\n\r\nWhile investigating, we found that all assignee flows on github.com were still going through an unnecessary bulk fetch and ID resolution step, even though the API already supports assigning by login directly. This PR fixes the original bug and migrates all assignee paths to use the login-based approach.\r\n## To Fix\r\n\r\nThis PR migrates all github.com assignee flows to pass logins directly to the mutation, and wires up the multi-select with search UX. This experience avoids bulk fetching of IDs. GHES retains the legacy ID-based path unchanged.\r\n\r\n### Before\r\n\r\n| Path | Bulk fetch? | ID resolution? |\r\n|------|------------|----------------|\r\n| `gh pr create -a` | ❌ Yes | ❌ Yes |\r\n| `gh pr create -a` + interactive metadata | ❌ Yes (does not work) | ❌ Yes (does not work) |\r\n| `gh pr create` interactive assignees | ❌ Yes (static list) | ❌ Yes |\r\n| `gh issue create -a` | ✅ No | ✅ No |\r\n| `gh issue create` interactive assignees | ❌ Yes (static list) | ❌ Yes |\r\n| `gh pr edit` interactive | ✅ No | ⚠️ Yes |\r\n| `gh pr edit --add-assignee` | ❌ Yes | ❌ Yes |\r\n| `gh issue edit` interactive | ❌ Yes (static list) | ❌ Yes |\r\n| `gh issue edit --add-assignee` | ❌ Yes | ❌ Yes |\r\n\r\n### After\r\n\r\n| Path | Bulk fetch? | ID resolution? |\r\n|------|------------|----------------|\r\n| `gh pr create -a` | ✅ No | ✅ No |\r\n| `gh pr create -a` + interactive metadata | ✅ No | ✅ No |\r\n| `gh pr create` interactive assignees | ✅ No (search) | ✅ No |\r\n| `gh issue create -a` | ✅ No | ✅ No |\r\n| `gh issue create` interactive assignees | ✅ No (search) | ✅ No |\r\n| `gh pr edit` interactive | ✅ No (search) | ✅ No |\r\n| `gh pr edit --add-assignee` | ✅ No | ✅ No |\r\n| `gh issue edit` interactive | ✅ No (search) | ✅ No |\r\n| `gh issue edit --add-assignee` | ✅ No | ✅ No |\r\n\r\n## Key Changes\r\n\r\n- Fix the missing `state.ActorAssignees = true` in `pr create` that caused the original bug\r\n- On github.com, assignee logins now go straight to the `replaceActorsForAssignable` mutation via its `actorLogins` field. No more fetching all assignable actors just to resolve a login to a node ID\r\n- The `--add-assignee` and `--remove-assignee` flag paths for both `pr edit` and `issue edit` skip the bulk fetch entirely on github.com. A new `AssigneeLogins()` method computes the final set from logins directly\r\n- All interactive assignee selection now uses `MultiSelectWithSearch` on github.com:\r\n  - `pr create` and `issue create` via `MetadataSurvey` (new `assigneeSearchFunc` parameter, backed by new `SearchRepoAssignableActors` repo-level API)\r\n  - `issue edit` wired up with `AssigneeSearchFunc` (previously missing, was using static list)\r\n  - `pr edit` already had search, now simplified (actor accumulation hack removed)\r\n- `AssigneeSearchFunc` extracted to shared location, `actorsToSearchResult` helper shared by both repo-level and node-level search functions\r\n- Fixed a bug where `Editable.Clone()` was silently dropping `AssigneeSearchFunc` and `ReviewerSearchFunc`\r\n\r\n## Reviewer Notes\r\n\r\n- The `replaceActorsForAssignable` mutation has always accepted `actorLogins` alongside `actorIds` on github.com. We just never used it until now\r\n- `AssigneeIds()` on `Editable` is now only called on GHES. On github.com, `AssigneeLogins()` is used instead\r\n- `MetadataSurvey` now accepts an `assigneeSearchFunc` parameter alongside the existing `reviewerSearchFunc`\r\n- Create flows use `SearchRepoAssignableActors` (repo-level, no issue/PR ID needed), edit flows use `SuggestedAssignableActors` (node-level)\r\n- GHES flows are completely unchanged, they still use `RepositoryAssignableUsers` + `assigneeIds`\r\n\r\n## Acceptance & Regression Testing\r\n\r\n**16 scenarios tested** across github.com and GHES (3.20), all passing: [Acceptance test results](https://gist.github.com/BagToad/d472cc6dfeb3aa482494a72c894f08a8)\r\n\r\nCovers `pr create`, `issue create`, `pr edit` (flags + interactive), `issue edit` (flags + interactive), multi-issue edit, remove-all-assignees, and zero-bulk-fetch verification on both hosts.\r\n\r\nThe full automated acceptance test suite (`go test -tags=acceptance ./acceptance`) was also run locally against github.com with all relevant tests passing."
+    },
+    {
+      "number": 14136,
+      "title": "Add worktree checkout to `gh issue develop`",
+      "url": "https://github.com/cli/cli/pull/14136",
+      "isDraft": false,
+      "createdAt": "2026-08-13T10:26:41Z",
+      "updatedAt": "2026-08-21T15:11:56Z",
+      "additions": 736,
+      "deletions": 278,
+      "changedFiles": 8,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "trunk",
+      "headRefName": "270-gh-issue-develop-worktree",
+      "isCrossRepository": false,
+      "repository": {
+        "nameWithOwner": "cli/cli"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "sergiou87"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "acceptance/testdata/issue/issue-develop-worktree-cross-repo.txtar",
+            "additions": 44,
+            "deletions": 0
+          },
+          {
+            "path": "acceptance/testdata/issue/issue-develop-worktree.txtar",
+            "additions": 52,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/cmd/issue/develop/develop.go",
+            "additions": 65,
+            "deletions": 2
+          },
+          {
+            "path": "pkg/cmd/issue/develop/develop_test.go",
+            "additions": 220,
+            "deletions": 12
+          },
+          {
+            "path": "pkg/cmd/pr/checkout/checkout.go",
+            "additions": 12,
+            "deletions": 111
+          },
+          {
+            "path": "pkg/cmd/pr/checkout/checkout_test.go",
+            "additions": 16,
+            "deletions": 153
+          },
+          {
+            "path": "pkg/cmd/pr/shared/worktree.go",
+            "additions": 122,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/cmd/pr/shared/worktree_test.go",
+            "additions": 205,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "copilot-pull-request-reviewer"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-08-13T10:30:25Z"
+          },
+          {
+            "author": {
+              "login": "sergiou87"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-08-13T14:49:51Z"
+          },
+          {
+            "author": {
+              "login": "copilot-pull-request-reviewer"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-08-13T14:52:52Z"
+          },
+          {
+            "author": {
+              "login": "babakks"
+            },
+            "state": "CHANGES_REQUESTED",
+            "submittedAt": "2026-08-18T11:46:11Z"
+          },
+          {
+            "author": {
+              "login": "babakks"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-08-21T14:36:57Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-08-13T10:26:42Z",
+            "requestedReviewer": {
+              "__typename": "Bot"
+            }
+          },
+          {
+            "createdAt": "2026-08-13T14:49:59Z",
+            "requestedReviewer": {
+              "__typename": "Bot"
+            }
+          },
+          {
+            "createdAt": "2026-08-13T15:04:06Z",
+            "requestedReviewer": null
+          },
+          {
+            "createdAt": "2026-08-13T15:04:07Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "babakks"
+            }
+          },
+          {
+            "createdAt": "2026-08-20T17:31:39Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "babakks"
+            }
+          }
+        ]
+      },
+      "body": "### Description\r\n\r\n<!--\r\nWhat's the problem? How are we addressing it?\r\n\r\nWrite for a reviewer who has not worked in this part of the codebase. Give them the\r\nbackground they need before the problem makes sense, and avoid jargon.\r\n-->\r\n\r\n`gh issue develop --checkout` currently checks a linked development branch out in the caller's current working copy. This makes it difficult to start work on an issue without interrupting whatever branch is already checked out there.\r\n\r\nThis change adds `--worktree <path>` to `gh issue develop`. When it is combined with `--checkout`, the command creates the linked branch as usual but checks it out in a new Git worktree at the requested path. The original working copy remains on its current branch.\r\n\r\nThe implementation supports both checkout paths used by `issue develop`:\r\n\r\n- If the linked branch does not exist locally, the command creates it in the new worktree as a tracking branch from the matching remote.\r\n- If the linked branch already exists locally, the command adds a worktree for it and attempts the same fast-forward-only pull used by the existing checkout flow, scoped to the new worktree with `git -C`.\r\n\r\nThe remote is still selected from the linked branch repository, so `--branch-repo` works when the issue and development branch belong to different repositories. Relative worktree paths are normalized to absolute paths, and paths containing spaces are passed to Git as individual arguments.\r\n\r\nThe new flag requires `--checkout`, rejects an explicitly blank path, and is mutually exclusive with `--list`. Without `--worktree`, `gh issue develop` follows its existing checkout behavior.\r\n\r\nA reusable `git.Client.AddWorktree` helper encapsulates the two supported Git operations:\r\n\r\n```console\r\ngit worktree add -- <path> <existing-branch>\r\ngit worktree add --track -b <new-branch> -- <path> <remote>/<new-branch>\r\n```\r\n\r\nAcceptance scenarios cover same-repository and cross-repository worktree creation, both local branch states, `--name`, `--base`, relative paths containing spaces, flag validation, occupied targets, and unchanged traditional checkout behavior.\r\n\r\n### How did you test this change?\r\n\r\n<!--\r\nShow how you exercised the change yourself, as a user of `gh` would.\r\n\r\nAutomated test results do not belong here. Passing unit tests, `go test ./...` output, and\r\ncoverage numbers tell a reviewer nothing they cannot see from CI, so do not paste them.\r\n\r\nUse one or more of these, whichever communicates best:\r\n\r\n1. Screenshots or GIFs of the real command running. Preferred whenever the change is visible\r\n   in terminal output. If output changed, show it before and after.\r\n2. Given/When/Then scenarios. For example:\r\n   Given I am in a repo with no open pull requests\r\n   When I run `gh pr list`\r\n   Then I see \"no open pull requests in cli/cli\"\r\n3. A natural language walkthrough of what you did by hand, the states you covered, and what\r\n   you saw, including error and edge cases.\r\n\r\nIf you leave this empty, your pull request will very likely be closed.\r\n-->\r\n\r\n<details><summary>Flags</summary>\r\n<p>\r\nTesting gh issue develop --worktree flag validation\r\n\r\n$ ../cli/bin/gh issue develop --help\r\nManage linked branches for an issue.\r\n\r\nWhen using the `--base` flag, the new development branch will be created from the specified\r\nremote branch. The new branch will be configured as the base branch for pull requests created using\r\n`gh pr create`.\r\n\r\n\r\nUSAGE\r\n  gh issue develop {<number> | <url>} [flags]\r\n\r\nFLAGS\r\n  -b, --base string          Name of the remote branch you want to make your new branch from\r\n      --branch-repo string   Name or URL of the repository where you want to create your new branch\r\n  -c, --checkout             Checkout the branch after creating it\r\n  -l, --list                 List linked branches for the issue\r\n  -n, --name string          Name of the branch to create\r\n      --worktree path        Check out the branch into a worktree at the given path\r\n\r\nINHERITED FLAGS\r\n      --help                     Show help for command\r\n  -R, --repo [HOST/]OWNER/REPO   Select another repository using the [HOST/]OWNER/REPO format\r\n\r\nEXAMPLES\r\n  # List branches for issue 123\r\n  $ gh issue develop --list 123\r\n  \r\n  # List branches for issue 123 in repo cli/cli\r\n  $ gh issue develop --list --repo cli/cli 123\r\n  \r\n  # Create a branch for issue 123 based on the my-feature branch\r\n  $ gh issue develop 123 --base my-feature\r\n  \r\n  # Create a branch for issue 123 and check it out\r\n  $ gh issue develop 123 --checkout\r\n  \r\n  # Create a branch for issue 123 and check it out in a worktree\r\n  $ gh issue develop 123 --checkout --worktree /path/to/worktree\r\n  \r\n  # Create a branch in repo monalisa/cli for issue 123 in repo cli/cli\r\n  $ gh issue develop 123 --repo cli/cli --branch-repo monalisa/cli\r\n\r\nLEARN MORE\r\n  Use `gh <command> <subcommand> --help` for more information about a command.\r\n  Read the manual at https://cli.github.com/manual\r\n  Learn about exit codes using `gh help exit-codes`\r\n  Learn about accessibility experiences using `gh help accessibility`\r\n\r\n\r\n$ ../cli/bin/gh issue develop 1 --repo sergiou87/test-repo --worktree ../unused-worktree\r\n--worktree requires --checkout\r\n\r\nUsage:  gh issue develop {<number> | <url>} [flags]\r\n\r\nFlags:\r\n  -b, --base string          Name of the remote branch you want to make your new branch from\r\n      --branch-repo string   Name or URL of the repository where you want to create your new branch\r\n  -c, --checkout             Checkout the branch after creating it\r\n  -l, --list                 List linked branches for the issue\r\n  -n, --name string          Name of the branch to create\r\n      --worktree path        Check out the branch into a worktree at the given path\r\n  \r\n[exit status: 1]\r\nPASS: rejected with expected error\r\n\r\n$ ../cli/bin/gh issue develop 1 --repo sergiou87/test-repo --list --worktree ../unused-worktree\r\nspecify only one of `--list` or `--worktree`\r\n\r\nUsage:  gh issue develop {<number> | <url>} [flags]\r\n\r\nFlags:\r\n  -b, --base string          Name of the remote branch you want to make your new branch from\r\n      --branch-repo string   Name or URL of the repository where you want to create your new branch\r\n  -c, --checkout             Checkout the branch after creating it\r\n  -l, --list                 List linked branches for the issue\r\n  -n, --name string          Name of the branch to create\r\n      --worktree path        Check out the branch into a worktree at the given path\r\n  \r\n[exit status: 1]\r\nPASS: rejected with expected error\r\n\r\n$ ../cli/bin/gh issue develop 1 --repo sergiou87/test-repo --checkout --worktree ''\r\n--worktree cannot be blank\r\n\r\nUsage:  gh issue develop {<number> | <url>} [flags]\r\n\r\nFlags:\r\n  -b, --base string          Name of the remote branch you want to make your new branch from\r\n      --branch-repo string   Name or URL of the repository where you want to create your new branch\r\n  -c, --checkout             Checkout the branch after creating it\r\n  -l, --list                 List linked branches for the issue\r\n  -n, --name string          Name of the branch to create\r\n      --worktree path        Check out the branch into a worktree at the given path\r\n  \r\n[exit status: 1]\r\nPASS: rejected with expected error\r\n\r\n$ git -C ../cli diff --exit-code trunk...HEAD -- docs share\r\nPASS: command help contains new source documentation; generated docs are unchanged\r\n\r\n=== Focused unit coverage ===\r\n\r\n$ (cd ../cli && go test ./git -run \\^TestClientAddWorktree\\$)\r\nok  \tgithub.com/cli/cli/v2/git\t(cached)\r\n\r\n$ (cd ../cli && go test ./pkg/cmd/issue/develop -run \\^\\(TestNewCmdDevelop\\|TestDevelopRun\\|TestCheckoutBranchWorktree\\)\\$)\r\nok  \tgithub.com/cli/cli/v2/pkg/cmd/issue/develop\t(cached)\r\n\r\nAll flag and help checks passed.\r\n</p>\r\n</details> \r\n\r\n<details><summary>Basic functionality</summary>\r\n<p>\r\n=== New local branch from remote; relative path with spaces ===\r\n\r\n$ /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --name issue-develop-wt-20260813140601-15620-new --base main --checkout --worktree ../issue\\ develop\\ worktrees\\ 20260813140601-15620/new\\ branch\r\ngithub.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-new\r\nFrom https://github.com/sergiou87/test-repo\r\n * [new branch]      issue-develop-wt-20260813140601-15620-new -> origin/issue-develop-wt-20260813140601-15620-new\r\n\r\n$ git branch --show-current\r\ncommit-msg-demo\r\nPASS\r\n\r\n$ git -C ../issue\\ develop\\ worktrees\\ 20260813140601-15620/new\\ branch rev-parse --show-toplevel\r\n/Users/sergiou87/Developer/GitHub/issue develop worktrees 20260813140601-15620/new branch\r\nPASS\r\n\r\n$ git -C ../issue\\ develop\\ worktrees\\ 20260813140601-15620/new\\ branch branch --show-current\r\nissue-develop-wt-20260813140601-15620-new\r\nPASS\r\n\r\n$ git -C ../issue\\ develop\\ worktrees\\ 20260813140601-15620/new\\ branch rev-parse --abbrev-ref @\\{upstream\\}\r\norigin/issue-develop-wt-20260813140601-15620-new\r\nPASS\r\n\r\n$ git config --get branch.issue-develop-wt-20260813140601-15620-new.gh-merge-base\r\nmain\r\nPASS\r\n\r\n$ git worktree list\r\n/Users/sergiou87/Developer/GitHub/test-repo                                                78b771c [commit-msg-demo]\r\n/Users/sergiou87/Developer/GitHub/issue develop worktrees 20260813140601-15620/new branch  076bfa3 [issue-develop-wt-20260813140601-15620-new]\r\nPASS: caller checkout unchanged; absolute worktree uses named branch and tracks origin\r\n\r\n=== Fresh-worktree scope; rerun delegates failure to git ===\r\n\r\n$ /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --name issue-develop-wt-20260813140601-15620-new --checkout --worktree ../issue\\ develop\\ worktrees\\ 20260813140601-15620/new\\ branch\r\ngithub.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-new\r\nfailed to run git: Preparing worktree (checking out 'issue-develop-wt-20260813140601-15620-new')\r\nfatal: '/Users/sergiou87/Developer/GitHub/issue develop worktrees 20260813140601-15620/new branch' already exists\r\n[exit status: 1]\r\nPASS: git rejected target as expected\r\n\r\n=== Existing local branch reused in a new worktree ===\r\n\r\n$ /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --name issue-develop-wt-20260813140601-15620-existing --base main\r\ngithub.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-existing\r\nFrom https://github.com/sergiou87/test-repo\r\n * [new branch]      issue-develop-wt-20260813140601-15620-existing -> origin/issue-develop-wt-20260813140601-15620-existing\r\n\r\n$ git branch --track issue-develop-wt-20260813140601-15620-existing origin/issue-develop-wt-20260813140601-15620-existing\r\nbranch 'issue-develop-wt-20260813140601-15620-existing' set up to track 'origin/issue-develop-wt-20260813140601-15620-existing'.\r\n\r\n$ /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --name issue-develop-wt-20260813140601-15620-existing --base main --checkout --worktree ../issue\\ develop\\ worktrees\\ 20260813140601-15620/existing\\ branch\r\ngithub.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-existing\r\nFrom https://github.com/sergiou87/test-repo\r\n * branch            issue-develop-wt-20260813140601-15620-existing -> FETCH_HEAD\r\nAlready up to date.\r\n\r\n$ git branch --show-current\r\ncommit-msg-demo\r\nPASS\r\n\r\n$ git -C ../issue\\ develop\\ worktrees\\ 20260813140601-15620/existing\\ branch branch --show-current\r\nissue-develop-wt-20260813140601-15620-existing\r\nPASS\r\n\r\n$ git -C ../issue\\ develop\\ worktrees\\ 20260813140601-15620/existing\\ branch rev-parse --abbrev-ref @\\{upstream\\}\r\norigin/issue-develop-wt-20260813140601-15620-existing\r\nPASS\r\n\r\n$ git config --get branch.issue-develop-wt-20260813140601-15620-existing.gh-merge-base\r\nmain\r\nPASS\r\nPASS: existing local branch checked out and fast-forwarded in worktree\r\n\r\n=== Occupied path delegates failure to git ===\r\n\r\n$ /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --name issue-develop-wt-20260813140601-15620-occupied --base main\r\ngithub.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-occupied\r\nFrom https://github.com/sergiou87/test-repo\r\n * [new branch]      issue-develop-wt-20260813140601-15620-occupied -> origin/issue-develop-wt-20260813140601-15620-occupied\r\n\r\n$ /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --name issue-develop-wt-20260813140601-15620-occupied --checkout --worktree ../issue\\ develop\\ worktrees\\ 20260813140601-15620/occupied\\ path\r\ngithub.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-occupied\r\nfailed to run git: Preparing worktree (new branch 'issue-develop-wt-20260813140601-15620-occupied')\r\nfatal: '/Users/sergiou87/Developer/GitHub/issue develop worktrees 20260813140601-15620/occupied path' already exists\r\n[exit status: 1]\r\nPASS: git rejected target as expected\r\n\r\n$ sed -n 1p ../issue\\ develop\\ worktrees\\ 20260813140601-15620/occupied\\ path/existing-file\r\ndo not overwrite\r\nPASS\r\n\r\n=== Existing behavior without --worktree, isolated in disposable clone ===\r\n\r\n$ /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --name issue-develop-wt-20260813140601-15620-legacy --base main\r\ngithub.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-legacy\r\nFrom https://github.com/sergiou87/test-repo\r\n * [new branch]      issue-develop-wt-20260813140601-15620-legacy -> origin/issue-develop-wt-20260813140601-15620-legacy\r\n\r\n$ git clone --no-local . ../issue\\ develop\\ worktrees\\ 20260813140601-15620/legacy\\ clone\r\nCloning into '../issue develop worktrees 20260813140601-15620/legacy clone'...\r\n\r\n$ git -C ../issue\\ develop\\ worktrees\\ 20260813140601-15620/legacy\\ clone remote set-url origin https://github.com/sergiou87/test-repo.git\r\n\r\n$ (cd ../issue\\ develop\\ worktrees\\ 20260813140601-15620/legacy\\ clone && env GH_PAGER=cat /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --name issue-develop-wt-20260813140601-15620-legacy --checkout)\r\ngithub.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-legacy\r\nFrom https://github.com/sergiou87/test-repo\r\n * [new branch]      issue-develop-wt-20260813140601-15620-legacy -> origin/issue-develop-wt-20260813140601-15620-legacy\r\n\r\n$ git -C ../issue\\ develop\\ worktrees\\ 20260813140601-15620/legacy\\ clone branch --show-current\r\nissue-develop-wt-20260813140601-15620-legacy\r\nPASS\r\n\r\n$ git -C ../issue\\ develop\\ worktrees\\ 20260813140601-15620/legacy\\ clone rev-parse --abbrev-ref @\\{upstream\\}\r\norigin/issue-develop-wt-20260813140601-15620-legacy\r\nPASS\r\n\r\n$ sh -c git\\ -C\\ \\\"../issue\\ develop\\ worktrees\\ 20260813140601-15620/legacy\\ clone\\\"\\ worktree\\ list\\ --porcelain\\ \\|\\ grep\\ -c\\ \\'\\^worktree\\ \\'\r\n1\r\nPASS\r\nPASS: no-worktree checkout still switches checkout and creates no extra worktree\r\n\r\n=== Linked branches created during test ===\r\n\r\n$ /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --list\r\nissue-develop-wt-20260813140601-15620-new\thttps://github.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-new\r\nissue-develop-wt-20260813140601-15620-existing\thttps://github.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-existing\r\nissue-develop-wt-20260813140601-15620-occupied\thttps://github.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-occupied\r\nissue-develop-wt-20260813140601-15620-legacy\thttps://github.com/sergiou87/test-repo/tree/issue-develop-wt-20260813140601-15620-legacy\r\n\r\n$ git branch --show-current\r\ncommit-msg-demo\r\nPASS\r\n\r\nPASS: all live same-repository scenarios passed; caller branch and status unchanged.\r\n</p>\r\n</details> \r\n\r\n<details><summary>Cross-repo support</summary>\r\n<p>\r\nIssue repository: sergiou87/test-repo\r\nBranch repository: sergiou87-org/test-repo\r\nBranch repository base: main\r\n\r\n$ git remote add issue-develop-cross-20260813144150-88754 https://github.com/sergiou87-org/test-repo.git\r\n\r\n$ git remote -v\r\nissue-develop-cross-20260813144150-88754\thttps://github.com/sergiou87-org/test-repo.git (fetch)\r\nissue-develop-cross-20260813144150-88754\thttps://github.com/sergiou87-org/test-repo.git (push)\r\norigin\thttps://github.com/sergiou87/test-repo.git (fetch)\r\norigin\thttps://github.com/sergiou87/test-repo.git (push)\r\n\r\n=== Cross-repository worktree checkout ===\r\n\r\n$ /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --branch-repo sergiou87-org/test-repo --name issue-develop-wt-20260813144150-88754-cross-repo --base main --checkout --worktree ../issue\\ develop\\ cross\\ repo\\ 20260813144150-88754/cross\\ repo\\ branch\r\ngithub.com/sergiou87-org/test-repo/tree/issue-develop-wt-20260813144150-88754-cross-repo\r\nFrom https://github.com/sergiou87-org/test-repo\r\n * [new branch]      issue-develop-wt-20260813144150-88754-cross-repo -> issue-develop-cross-20260813144150-88754/issue-develop-wt-20260813144150-88754-cross-repo\r\n\r\n$ git branch --show-current\r\ncommit-msg-demo\r\nPASS\r\n\r\n$ git -C ../issue\\ develop\\ cross\\ repo\\ 20260813144150-88754/cross\\ repo\\ branch rev-parse --show-toplevel\r\n/Users/sergiou87/Developer/GitHub/issue develop cross repo 20260813144150-88754/cross repo branch\r\nPASS\r\n\r\n$ git -C ../issue\\ develop\\ cross\\ repo\\ 20260813144150-88754/cross\\ repo\\ branch branch --show-current\r\nissue-develop-wt-20260813144150-88754-cross-repo\r\nPASS\r\n\r\n$ git -C ../issue\\ develop\\ cross\\ repo\\ 20260813144150-88754/cross\\ repo\\ branch rev-parse --abbrev-ref @\\{upstream\\}\r\nissue-develop-cross-20260813144150-88754/issue-develop-wt-20260813144150-88754-cross-repo\r\nPASS\r\n\r\n$ git config --get branch.issue-develop-wt-20260813144150-88754-cross-repo.gh-merge-base\r\nmain\r\nPASS\r\n\r\n$ git remote get-url issue-develop-cross-20260813144150-88754\r\nhttps://github.com/sergiou87-org/test-repo.git\r\nPASS\r\n\r\n$ git worktree list\r\n/Users/sergiou87/Developer/GitHub/test-repo                                                        78b771c [commit-msg-demo]\r\n/Users/sergiou87/Developer/GitHub/issue develop cross repo 20260813144150-88754/cross repo branch  076bfa3 [issue-develop-wt-20260813144150-88754-cross-repo]\r\n\r\n$ /Users/sergiou87/Developer/GitHub/cli/bin/gh issue develop 1 --repo sergiou87/test-repo --list\r\nissue-develop-wt-20260813144150-88754-cross-repo\thttps://github.com/sergiou87-org/test-repo/tree/issue-develop-wt-20260813144150-88754-cross-repo\r\n\r\nPASS: cross-repo branch tracks remote matching --branch-repo; caller checkout unchanged.\r\n</p>\r\n</details> \r\n\r\n### Key points\r\n\r\n<!--\r\nTradeoffs you accepted, alternatives you rejected, and anything a reviewer would otherwise have to guess at.\r\n-->\r\n\r\n- This change creates fresh worktrees only. It does not attempt to detect or reuse an existing worktree at the requested path. Occupied paths and branches already checked out elsewhere are delegated to Git so users receive native `git worktree add` errors.\r\n- The broader `gh pr checkout --worktree` implementation includes reuse, force, and detached-HEAD behavior. Refactoring that state machine was intentionally avoided because `issue develop` only needs the two fresh-worktree operations described above.\r\n- Existing local branches retain the current warning-only behavior when they cannot be fast-forwarded. The pull runs inside the newly added worktree rather than the caller's working copy.\r\n- The command source remains the documentation authority; the new flag and example will flow into generated command documentation.\r\n\r\n### Notes for reviewers\r\n\r\n<!--\r\nWhere should review start, and what should be read next? Call out anything you are unsure about.\r\n\r\nLink related issues or prior discussion, with one sentence on why each matters.\r\n-->\r\n\r\nStart with `checkoutBranch` in `pkg/cmd/issue/develop/develop.go`, which contains the behavior split between traditional checkout and worktree checkout. Then review `git.Client.AddWorktree` in `git/client.go` for the exact Git argument forms.\r\n\r\nThe command-constructor tests cover flag curation and validation, while the checkout tests cover existing and missing local branches, cross-repository remote selection, paths containing spaces, and Git error propagation.\r\n\r\n### Authorship and follow-up\r\n\r\n<!--\r\nREQUIRED - If you are an AI agent filling in this template, answer \"Who wrote this\" for yourself and answer honestly. For \"Who answers review comments,\" use only a choice the human has explicitly made in the conversation. If no choice has already been established, pause and ask the human to choose one of the three options before creating or updating the pull request. Do not infer the choice from repository ownership, authorship, assignees, prior interactions, or the current operator. After the human answers, check exactly the option they chose; the last option is valid when the human explicitly chooses nobody.\r\n\r\nCheck exactly one box in each list.\r\n-->\r\n\r\nWho wrote this:\r\n\r\n- [ ] A human wrote it.\r\n- [x] An agent wrote it under close human direction.\r\n- [ ] An agent wrote it independently, and no human has guided the implementation beyond the initial prompt.\r\n\r\nWho answers review comments:\r\n\r\n- [x] @sergiou87 will read and reply directly.\r\n- [ ] An agent will draft replies and @username will read them before they are posted.\r\n- [ ] Nobody has explicitly committed to replying.\r\n"
+    },
+    {
+      "number": 10513,
+      "title": "`gh pr create`: Support Git's `@{push}` revision syntax for determining head ref",
+      "url": "https://github.com/cli/cli/pull/10513",
+      "isDraft": false,
+      "createdAt": "2025-02-27T17:46:52Z",
+      "updatedAt": "2025-04-18T20:42:16Z",
+      "additions": 2520,
+      "deletions": 1104,
+      "changedFiles": 32,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "trunk",
+      "headRefName": "kw/575-detect-push-target-for-local-branches-without-upstream-configuration",
+      "isCrossRepository": false,
+      "repository": {
+        "nameWithOwner": "cli/cli"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "BagToad"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "acceptance/testdata/pr/pr-checkout-with-url-from-fork.txtar",
+            "additions": 1,
+            "deletions": 0
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-create-guesses-remote-from-sha.txtar",
+            "additions": 46,
+            "deletions": 0
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-create-no-local-repo.txtar",
+            "additions": 27,
+            "deletions": 0
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-create-respects-branch-pushremote.txtar",
+            "additions": 49,
+            "deletions": 0
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-create-respects-push-destination.txtar",
+            "additions": 53,
+            "deletions": 0
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-create-respects-remote-pushdefault.txtar",
+            "additions": 49,
+            "deletions": 0
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-create-respects-simple-pushdefault.txtar",
+            "additions": 34,
+            "deletions": 0
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-create-respects-user-colon-branch-syntax.txtar",
+            "additions": 47,
+            "deletions": 0
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-create-without-upstream-config.txtar",
+            "additions": 6,
+            "deletions": 4
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-status-respects-cross-org.txtar",
+            "additions": 46,
+            "deletions": 0
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-view-same-org-fork.txtar",
+            "additions": 2,
+            "deletions": 1
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-view-status-respects-branch-pushremote.txtar",
+            "additions": 4,
+            "deletions": 2
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-view-status-respects-remote-pushdefault.txtar",
+            "additions": 4,
+            "deletions": 2
+          },
+          {
+            "path": "acceptance/testdata/pr/pr-view-status-respects-simple-pushdefault.txtar",
+            "additions": 2,
+            "deletions": 1
+          },
+          {
+            "path": "acceptance/testdata/repo/repo-fork-sync.txtar",
+            "additions": 1,
+            "deletions": 3
+          },
+          {
+            "path": "acceptance/testdata/secret/secret-require-remote-disambiguation.txtar",
+            "additions": 1,
+            "deletions": 3
+          },
+          {
+            "path": "git/client.go",
+            "additions": 74,
+            "deletions": 8
+          },
+          {
+            "path": "git/client_test.go",
+            "additions": 131,
+            "deletions": 16
+          },
+          {
+            "path": "git/command.go",
+            "additions": 12,
+            "deletions": 1
+          },
+          {
+            "path": "internal/run/stub.go",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "pkg/cmd/pr/create/create.go",
+            "additions": 413,
+            "deletions": 254
+          },
+          {
+            "path": "pkg/cmd/pr/create/create_test.go",
+            "additions": 298,
+            "deletions": 157
+          },
+          {
+            "path": "pkg/cmd/pr/shared/find_refs_resolution.go",
+            "additions": 394,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/cmd/pr/shared/find_refs_resolution_test.go",
+            "additions": 508,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/cmd/pr/shared/finder.go",
+            "additions": 49,
+            "deletions": 155
+          },
+          {
+            "path": "pkg/cmd/pr/shared/finder_test.go",
+            "additions": 183,
+            "deletions": 432
+          },
+          {
+            "path": "pkg/cmd/pr/shared/git_cached_config_client.go",
+            "additions": 18,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/cmd/pr/status/status.go",
+            "additions": 21,
+            "deletions": 30
+          },
+          {
+            "path": "pkg/cmd/pr/status/status_test.go",
+            "additions": 20,
+            "deletions": 28
+          },
+          {
+            "path": "pkg/httpmock/registry.go",
+            "additions": 16,
+            "deletions": 6
+          },
+          {
+            "path": "pkg/httpmock/stub.go",
+            "additions": 1,
+            "deletions": 0
+          },
+          {
+            "path": "pkg/option/option.go",
+            "additions": 9,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": [
+          {
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "jtmcg"
+            }
+          }
+        ]
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T16:36:24Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T16:37:43Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T16:41:04Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T16:41:27Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T16:43:27Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T17:04:02Z"
+          },
+          {
+            "author": {
+              "login": "williammartin"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T17:15:59Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T17:32:10Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T17:34:36Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T18:07:53Z"
+          },
+          {
+            "author": {
+              "login": "BagToad"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-12T18:11:57Z"
+          },
+          {
+            "author": {
+              "login": "williammartin"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-13T13:55:46Z"
+          },
+          {
+            "author": {
+              "login": "williammartin"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-13T14:00:10Z"
+          },
+          {
+            "author": {
+              "login": "williammartin"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-13T16:16:31Z"
+          },
+          {
+            "author": {
+              "login": "williammartin"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-13T16:24:34Z"
+          },
+          {
+            "author": {
+              "login": "williammartin"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-13T16:25:26Z"
+          },
+          {
+            "author": {
+              "login": "williammartin"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-03-13T16:34:55Z"
+          },
+          {
+            "author": {
+              "login": "williammartin"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-04-02T11:22:34Z"
+          },
+          {
+            "author": {
+              "login": "williammartin"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2025-04-02T11:30:39Z"
+          },
+          {
+            "author": {
+              "login": "copilot-pull-request-reviewer"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2025-04-15T16:37:49Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": null
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2025-02-27T17:47:20Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "jtmcg"
+            }
+          },
+          {
+            "createdAt": "2025-02-27T17:47:39Z",
+            "requestedReviewer": {
+              "__typename": "Bot"
+            }
+          },
+          {
+            "createdAt": "2025-03-05T23:24:46Z",
+            "requestedReviewer": null
+          },
+          {
+            "createdAt": "2025-03-05T23:24:46Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "andyfeller"
+            }
+          },
+          {
+            "createdAt": "2025-03-05T23:25:40Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "jtmcg"
+            }
+          },
+          {
+            "createdAt": "2025-03-05T23:25:43Z",
+            "requestedReviewer": {
+              "__typename": "Bot"
+            }
+          },
+          {
+            "createdAt": "2025-04-02T11:21:52Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "jtmcg"
+            }
+          },
+          {
+            "createdAt": "2025-04-15T16:37:25Z",
+            "requestedReviewer": {
+              "__typename": "Bot"
+            }
+          }
+        ]
+      },
+      "body": "Fixes #575\r\n\r\n### Description\r\n\r\nThis adds support Git's `@{push}` revision syntax for determining head ref.\r\n\r\n## [Acceptance Criteria](https://github.com/cli/cli/issues/575#issuecomment-2634696871)\r\n\r\n> **Given** `git rev-parse --abbrev-ref @{push}` resolves\r\n> **when** I run `gh pr create`\r\n> **then** I should create a pr with the headRef pointing at the `@[push}` return value\r\n> \r\n> **Given** the `branch.<branchName>.pushremote` key is set on my current branch\r\n> **when** I run `gh pr create`\r\n> **then** I should create a pr with the headRef pointing at the remote value in the `branch.<branchName>.pushremote` key and the current branch name\r\n> \r\n> **Given** the `remote.pushDefault` key is set on my current repo\r\n> **when** I run `gh pr create`\r\n> **then** I should create a pr with the headRef pointing at the remote value in the `remote.pushDefault` key and the current branch name\r\n> \r\n> **Given** `git rev-parse --abbrev-ref @{push}` resolves\r\n> **and/or given** the `branch.<branchName>.pushremote` key is set on my current branch\r\n> **and/or given** the `remote.pushDefault` key is set on my current repo\r\n> **when** I run `gh pr create`\r\n> **then** I should create a pr with the headRef pointing at the given values in the following priority order: `@[push}` -> `branch.<branchName>.pushremote` -> `remote.pushDefault`\r\n\r\n\r\n### Acceptance Tests\r\n\r\n```\r\n--- PASS: TestPullRequests (0.01s)\r\n    --- PASS: TestPullRequests/pr-create-basic (8.67s)\r\n    --- PASS: TestPullRequests/pr-checkout-by-number (8.80s)\r\n    --- PASS: TestPullRequests/pr-create-from-manual-merge-base (8.90s)\r\n    --- PASS: TestPullRequests/pr-checkout (8.93s)\r\n    --- PASS: TestPullRequests/pr-comment (9.26s)\r\n    --- PASS: TestPullRequests/pr-create-with-metadata (9.66s)\r\n    --- PASS: TestPullRequests/pr-view-same-org-fork (11.64s)\r\n    --- PASS: TestPullRequests/pr-create-from-issue-develop-base (11.97s)\r\n    --- PASS: TestPullRequests/pr-view-outside-repo (6.51s)\r\n    --- PASS: TestPullRequests/pr-create-respects-remote-colon-branch-syntax (15.72s)\r\n    --- PASS: TestPullRequests/pr-list (7.05s)\r\n    --- PASS: TestPullRequests/pr-view-status-respects-remote-pushdefault (17.42s)\r\n    --- PASS: TestPullRequests/pr-view-status-respects-push-destination (8.35s)\r\n    --- PASS: TestPullRequests/pr-view (6.52s)\r\n    --- PASS: TestPullRequests/pr-merge-rebase-strategy (9.83s)\r\n    --- PASS: TestPullRequests/pr-merge-merge-strategy (9.97s)\r\n    --- PASS: TestPullRequests/pr-checkout-with-url-from-fork (12.15s)\r\n    --- PASS: TestPullRequests/pr-view-status-respects-simple-pushdefault (8.59s)\r\n    --- PASS: TestPullRequests/pr-create-without-upstream-config (6.96s)\r\n    --- PASS: TestPullRequests/pr-create-respects-simple-pushdefault (7.51s)\r\n    --- PASS: TestPullRequests/pr-create-respects-push-destination (15.02s)\r\n    --- PASS: TestPullRequests/pr-create-respects-branch-pushremote (14.77s)\r\n    --- PASS: TestPullRequests/pr-view-status-respects-branch-pushremote (16.00s)\r\n    --- PASS: TestPullRequests/pr-create-respects-remote-pushdefault (15.02s)\r\nPASS\r\nok      github.com/cli/cli/v2/acceptance        34.077s\r\n```\r\n\r\n### Notes\r\n\r\nA lot of review for this PR happened on https://github.com/cli/cli/pull/10621"
+    }
+  ]
+}

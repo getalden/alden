@@ -1,0 +1,37 @@
+[
+  {
+    "filename": "packages/next/src/server/config-shared.ts",
+    "status": "modified",
+    "additions": 4,
+    "deletions": 2,
+    "patch": "@@ -507,7 +507,9 @@ export interface ExperimentalConfig {\n    * A collapsed entry resolves each request to the same output as the entries\n    * that it replaces.\n    *\n-   * @default true\n+   * The default is `false`, so a build keeps one entry per route.\n+   *\n+   * @default false\n    */\n   collapseAdapterRoutes?: boolean\n   useSkewCookie?: boolean\n@@ -2241,7 +2243,7 @@ export const defaultConfig = Object.freeze({\n   adapterPath: process.env.NEXT_ADAPTER_PATH || undefined,\n   experimental: {\n     coldCacheBadge: false,\n-    collapseAdapterRoutes: true,\n+    collapseAdapterRoutes: false,\n     devValidationWorker: true,\n     useSkewCookie: false,\n     cssChunking: true,"
+  },
+  {
+    "filename": "test/production/app-dir/adapter-dynamic-routes/cache-components/next.config.js",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 0,
+    "patch": "@@ -3,6 +3,9 @@\n  */\n const nextConfig = {\n   cacheComponents: true,\n+  // The option is off by default. These snapshots pin the collapsed route\n+  // table, so the fixture enables it.\n+  experimental: { collapseAdapterRoutes: true },\n   // A build ID that reaches an entry changes the snapshot on every run. A\n   // fixed build ID keeps the snapshot independent of the run.\n   generateBuildId: () => 'test-build-id',"
+  },
+  {
+    "filename": "test/production/app-dir/adapter-dynamic-routes/legacy/next.config.js",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 0,
+    "patch": "@@ -7,6 +7,9 @@ const nextConfig = {\n   // that variable overrides a config that omits the field. An omitted field\n   // would let that matrix turn Cache Components on for this fixture.\n   cacheComponents: false,\n+  // The option is off by default. These snapshots pin the collapsed route\n+  // table, so the fixture enables it.\n+  experimental: { collapseAdapterRoutes: true },\n   // The source regex of a pages router data route holds the build ID. A fixed\n   // build ID keeps the snapshot independent of the run.\n   generateBuildId: () => 'test-build-id',"
+  },
+  {
+    "filename": "test/production/app-dir/adapter-dynamic-routes/no-root-params/next.config.js",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 0,
+    "patch": "@@ -3,6 +3,9 @@\n  */\n const nextConfig = {\n   cacheComponents: true,\n+  // The option is off by default. These snapshots pin the collapsed route\n+  // table, so the fixture enables it.\n+  experimental: { collapseAdapterRoutes: true },\n   // A build ID that reaches an entry changes the snapshot on every run. A fixed\n   // build ID keeps the snapshot independent of the run.\n   generateBuildId: () => 'test-build-id',"
+  },
+  {
+    "filename": "test/production/app-dir/adapter-dynamic-routes/shell-prefixes/next.config.js",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 0,
+    "patch": "@@ -3,6 +3,9 @@\n  */\n const nextConfig = {\n   cacheComponents: true,\n+  // The option is off by default. These snapshots pin the collapsed route\n+  // table, so the fixture enables it.\n+  experimental: { collapseAdapterRoutes: true },\n   // A build ID that reaches an entry changes the snapshot on every run. A fixed\n   // build ID keeps the snapshot independent of the run.\n   generateBuildId: () => 'test-build-id',"
+  }
+]

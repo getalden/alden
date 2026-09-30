@@ -14,5 +14,196 @@
       "max": 1,
       "why": "Ten workflow files make the same runner bump; one grouped finding is enough."
     }
+  },
+  "vercel/next.js#99322": {
+    "fixedBy": 99427,
+    "mustFlag": [
+      {
+        "path": "packages/next/src/server/client-component-renderer-logger.ts",
+        "why": "#99427 (Include async module evaluation in client loading metrics) had to change it."
+      }
+    ]
+  },
+  "vercel/next.js#97774": {
+    "fixedBy": 98218,
+    "mustFlag": [
+      {
+        "path": "packages/next/src/server/config-shared.ts",
+        "why": "#98218 (Turn on the adapter route collapses by default) had to change it."
+      }
+    ]
+  },
+  "vercel/next.js#85741": {
+    "fixedBy": 96019,
+    "mustFlag": [
+      {
+        "path": "packages/next/src/server/dev/next-dev-server.ts",
+        "why": "#96019 (Emit the static paths HMR update after updating the cache) had to change it."
+      }
+    ]
+  },
+  "django/django#20538": {
+    "fixedBy": 21754,
+    "mustFlag": [
+      {
+        "path": "django/contrib/admin/options.py",
+        "why": "#21754 (Fixed #37263 -- Fixed changelist __exact search crashes and over-matching.) had to change it."
+      }
+    ]
+  },
+  "django/django#21239": {
+    "fixedBy": 21752,
+    "mustFlag": [
+      {
+        "path": "django/forms/widgets.py",
+        "why": "#21752 (Fixed #37262 -- Restored rendering of html-safe strings in form media.) had to change it."
+      }
+    ]
+  },
+  "django/django#21420": {
+    "fixedBy": 21693,
+    "mustFlag": [
+      {
+        "path": "django/db/models/base.py",
+        "why": "#21693 (Fixed #37238 -- Fixed unintentional fallback to python default for a db_default.) had to change it."
+      }
+    ]
+  },
+  "django/django#19057": {
+    "fixedBy": 20734,
+    "mustFlag": [
+      {
+        "path": "django/db/models/lookups.py",
+        "why": "#20734 ([6.0.x] Fixed #36934, Refs #35972 -- Coped with params in a tuple in BuiltinLookup.as_sql() had to change it."
+      }
+    ]
+  },
+  "cli/cli#13009": {
+    "fixedBy": 13025,
+    "mustFlag": [
+      {
+        "path": "api/queries_issue.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      },
+      {
+        "path": "api/queries_pr.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      },
+      {
+        "path": "api/queries_repo.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      },
+      {
+        "path": "pkg/cmd/issue/create/create.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      },
+      {
+        "path": "pkg/cmd/issue/edit/edit.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      },
+      {
+        "path": "pkg/cmd/pr/create/create.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      },
+      {
+        "path": "pkg/cmd/pr/edit/edit.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      },
+      {
+        "path": "pkg/cmd/pr/shared/editable.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      },
+      {
+        "path": "pkg/cmd/pr/shared/editable_http.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      },
+      {
+        "path": "pkg/cmd/pr/shared/params.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      },
+      {
+        "path": "pkg/cmd/pr/shared/survey.go",
+        "why": "#13025 (Consolidate actor-mode signals into ApiActorsSupported) had to change it."
+      }
+    ]
+  },
+  "cli/cli#14136": {
+    "fixedBy": 14244,
+    "mustFlag": [
+      {
+        "path": "pkg/cmd/pr/shared/worktree.go",
+        "why": "#14244 (Reject non-empty worktree targets before branch creation) had to change it."
+      }
+    ]
+  },
+  "cli/cli#10513": {
+    "fixedBy": 10863,
+    "mustFlag": [
+      {
+        "path": "pkg/cmd/pr/shared/find_refs_resolution.go",
+        "why": "#10863 (Fix pr create when push.default tracking and no merge ref) had to change it."
+      }
+    ]
+  },
+  "prometheus/prometheus#19183": {
+    "fixedBy": 19202,
+    "mustFlag": [
+      {
+        "path": "tsdb/head.go",
+        "why": "#19202 (tsdb: replay stale float on histogram series as a histogram marker) had to change it."
+      },
+      {
+        "path": "tsdb/head_append.go",
+        "why": "#19202 (tsdb: replay stale float on histogram series as a histogram marker) had to change it."
+      },
+      {
+        "path": "tsdb/head_wal.go",
+        "why": "#19202 (tsdb: replay stale float on histogram series as a histogram marker) had to change it."
+      }
+    ]
+  },
+  "laravel/framework#61099": {
+    "fixedBy": 61221,
+    "mustFlag": [
+      {
+        "path": "src/Illuminate/Http/Concerns/InteractsWithInput.php",
+        "why": "#61221 ([13.x] Preserve input key order when merging files in Request::all()) had to change it."
+      }
+    ]
+  },
+  "laravel/framework#52242": {
+    "fixedBy": 61309,
+    "mustFlag": [
+      {
+        "path": "src/Illuminate/Http/Request.php",
+        "why": "#61309 ([13.x] Treat asterisks as literal keys when merging request input) had to change it."
+      }
+    ]
+  },
+  "laravel/framework#60720": {
+    "fixedBy": 60737,
+    "mustFlag": [
+      {
+        "path": "src/Illuminate/Database/Eloquent/Model.php",
+        "why": "#60737 ([13.x] Fix dynamic calls to incrementEachQuietly and decrementEachQuietly) had to change it."
+      }
+    ]
+  },
+  "laravel/framework#59404": {
+    "fixedBy": 60008,
+    "mustFlag": [
+      {
+        "path": "src/Illuminate/Database/Eloquent/Concerns/GuardsAttributes.php",
+        "why": "#60008 ([13.x] Skip allocation in mergeFillable/Appends/Hidden/Visible when input is empty) had to change it."
+      },
+      {
+        "path": "src/Illuminate/Database/Eloquent/Concerns/HasAttributes.php",
+        "why": "#60008 ([13.x] Skip allocation in mergeFillable/Appends/Hidden/Visible when input is empty) had to change it."
+      },
+      {
+        "path": "src/Illuminate/Database/Eloquent/Concerns/HidesAttributes.php",
+        "why": "#60008 ([13.x] Skip allocation in mergeFillable/Appends/Hidden/Visible when input is empty) had to change it."
+      }
+    ]
   }
 }

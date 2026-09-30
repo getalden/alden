@@ -1,0 +1,37 @@
+[
+  {
+    "filename": "packages/next/src/server/app-render/app-render.tsx",
+    "status": "modified",
+    "additions": 6,
+    "deletions": 7,
+    "patch": "@@ -1963,8 +1963,7 @@ async function renderToHTMLOrFlightImpl(\n       null\n \n     const rootParams = getRootParams(loaderTree, ctx.getDynamicParamFromSegment)\n-    const devValidatingFallbackParams =\n-      getRequestMeta(req, 'devValidatingFallbackParams') || null\n+    const devFallbackParams = getRequestMeta(req, 'devFallbackParams') || null\n \n     const createRequestStore = createRequestStoreForRender.bind(\n       null,\n@@ -1978,7 +1977,7 @@ async function renderToHTMLOrFlightImpl(\n       isHmrRefresh,\n       serverComponentsHmrCache,\n       renderResumeDataCache,\n-      devValidatingFallbackParams\n+      devFallbackParams\n     )\n     const requestStore = createRequestStore()\n \n@@ -2068,7 +2067,7 @@ async function renderToHTMLOrFlightImpl(\n             postponedState,\n             metadata,\n             undefined, // Prevent restartable-render behavior in dev + Cache Components mode\n-            devValidatingFallbackParams\n+            devFallbackParams\n           )\n \n           return new RenderResult(stream, {\n@@ -2112,7 +2111,7 @@ async function renderToHTMLOrFlightImpl(\n       // and we currently we don't copy changes over when creating a new store,\n       // so the restarted render wouldn't be correct.\n       didExecuteServerAction ? undefined : createRequestStore,\n-      devValidatingFallbackParams\n+      devFallbackParams\n     )\n \n     // Invalid dynamic usages should only error the request in development.\n@@ -2318,7 +2317,7 @@ async function renderToStream(\n   postponedState: PostponedState | null,\n   metadata: AppPageRenderResultMetadata,\n   createRequestStore: (() => RequestStore) | undefined,\n-  devValidatingFallbackParams: OpaqueFallbackRouteParams | null\n+  devFallbackParams: OpaqueFallbackRouteParams | null\n ): Promise<ReadableStream<Uint8Array>> {\n   /* eslint-disable @next/internal/no-ambiguous-jsx -- React Client */\n   const {\n@@ -2556,7 +2555,7 @@ async function renderToStream(\n         res.statusCode === 404,\n         clientReferenceManifest,\n         requestStore,\n-        devValidatingFallbackParams\n+        devFallbackParams\n       )\n     } else {\n       // This is a dynamic render. We don't do dynamic tracking because we're not prerendering"
+  },
+  {
+    "filename": "packages/next/src/server/base-server.ts",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -2298,7 +2298,7 @@ export default abstract class Server<\n           if (smallestFallbackRouteParams) {\n             addRequestMeta(\n               req,\n-              'devValidatingFallbackParams',\n+              'devFallbackParams',\n               createOpaqueFallbackRouteParams(smallestFallbackRouteParams)!\n             )\n           }"
+  },
+  {
+    "filename": "packages/next/src/server/dev/next-dev-server.ts",
+    "status": "modified",
+    "additions": 19,
+    "deletions": 0,
+    "patch": "@@ -76,6 +76,7 @@ import {\n import type { PrerenderManifest } from '../../build'\n import { getRouteRegex } from '../../shared/lib/router/utils/route-regex'\n import type { PrerenderedRoute } from '../../build/static-paths/types'\n+import { HMR_MESSAGE_SENT_TO_BROWSER } from './hot-reloader-types'\n \n // Load ReactDevOverlay only when needed\n let PagesDevOverlayBridgeImpl: PagesDevOverlayBridgeType\n@@ -802,6 +803,24 @@ export default class DevServer extends Server {\n               )\n             }\n           }\n+\n+          // Since generateStaticParams run on the background, when accessing the\n+          // devFallbackParams during the render, it is still set to the previous\n+          // result from the cache. Therefore when the result has changed, re-render\n+          // the Server Component to sync the devFallbackParams with the new result.\n+          if (\n+            isAppPath &&\n+            this.nextConfig.cacheComponents &&\n+            // Ensure this is not the first invocation.\n+            result &&\n+            // Ideally, we would want to compare the whole objects, but that is too expensive.\n+            result.prerenderedRoutes?.length !== prerenderedRoutes?.length\n+          ) {\n+            this.bundlerService.triggerHMR({\n+              type: HMR_MESSAGE_SENT_TO_BROWSER.SERVER_COMPONENT_CHANGES,\n+              hash: `generateStaticParams-${Date.now()}`,\n+            })\n+          }\n         }\n \n         if (!isAppPath && this.nextConfig.output === 'export') {"
+  },
+  {
+    "filename": "packages/next/src/server/lib/dev-bundler-service.ts",
+    "status": "modified",
+    "additions": 8,
+    "deletions": 1,
+    "patch": "@@ -4,7 +4,10 @@ import type { WorkerRequestHandler } from './types'\n \n import { LRUCache } from './lru-cache'\n import { createRequestResponseMocks } from './mock-request'\n-import { HMR_MESSAGE_SENT_TO_BROWSER } from '../dev/hot-reloader-types'\n+import {\n+  HMR_MESSAGE_SENT_TO_BROWSER,\n+  type HmrMessageSentToBrowser,\n+} from '../dev/hot-reloader-types'\n import type { ReactDebugChannelForBrowser } from '../dev/debug-channel'\n import type { ServerCacheStatus } from '../../next-devtools/dev-overlay/cache-indicator'\n \n@@ -138,4 +141,8 @@ export class DevBundlerService {\n   public close() {\n     this.bundler.hotReloader.close()\n   }\n+\n+  public triggerHMR(message: HmrMessageSentToBrowser) {\n+    this.bundler.hotReloader.send(message)\n+  }\n }"
+  },
+  {
+    "filename": "packages/next/src/server/request-meta.ts",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 1,
+    "patch": "@@ -261,7 +261,7 @@ export interface RequestMeta {\n   /**\n    * DEV only: The fallback params that should be used when validating prerenders during dev\n    */\n-  devValidatingFallbackParams?: OpaqueFallbackRouteParams\n+  devFallbackParams?: OpaqueFallbackRouteParams\n \n   /**\n    * DEV only: Request timings in process.hrtime.bigint()"
+  }
+]

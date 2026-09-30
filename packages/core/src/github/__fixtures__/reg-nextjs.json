@@ -1,0 +1,390 @@
+{
+  "name": "reg-nextjs",
+  "repo": "vercel/next.js",
+  "language": "TypeScript",
+  "recordedAt": "2026-09-30T17:03:48.909Z",
+  "pullRequests": [
+    {
+      "number": 99322,
+      "title": "Scope client component loading metrics to HTML renders",
+      "url": "https://github.com/vercel/next.js/pull/99322",
+      "isDraft": false,
+      "createdAt": "2026-09-27T18:29:04Z",
+      "updatedAt": "2026-09-29T15:36:18Z",
+      "additions": 1309,
+      "deletions": 352,
+      "changedFiles": 21,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "canary",
+      "headRefName": "jstory/render-scoped-client-component-metrics",
+      "isCrossRepository": false,
+      "repository": {
+        "nameWithOwner": "vercel/next.js"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "gnoff"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "packages/next/src/server/app-render/app-render.tsx",
+            "additions": 195,
+            "deletions": 120
+          },
+          {
+            "path": "packages/next/src/server/app-render/work-async-storage.external.ts",
+            "additions": 2,
+            "deletions": 0
+          },
+          {
+            "path": "packages/next/src/server/async-storage/work-store.ts",
+            "additions": 1,
+            "deletions": 0
+          },
+          {
+            "path": "packages/next/src/server/client-component-renderer-logger.test.ts",
+            "additions": 266,
+            "deletions": 126
+          },
+          {
+            "path": "packages/next/src/server/client-component-renderer-logger.ts",
+            "additions": 133,
+            "deletions": 44
+          },
+          {
+            "path": "packages/next/src/server/dev/use-cache-probe-worker.ts",
+            "additions": 1,
+            "deletions": 0
+          },
+          {
+            "path": "packages/next/src/server/pipe-readable.test.ts",
+            "additions": 104,
+            "deletions": 1
+          },
+          {
+            "path": "packages/next/src/server/pipe-readable.ts",
+            "additions": 14,
+            "deletions": 7
+          },
+          {
+            "path": "packages/next/src/server/render-result.ts",
+            "additions": 15,
+            "deletions": 2
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/app/api/app/[param]/client-component-flush/route.ts",
+            "additions": 18,
+            "deletions": 0
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/app/app/[param]/client-component-action/action-only-client.tsx",
+            "additions": 5,
+            "deletions": 0
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/app/app/[param]/client-component-action/page.tsx",
+            "additions": 39,
+            "deletions": 0
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/app/app/[param]/client-component-html-boundary/async-client.tsx",
+            "additions": 7,
+            "deletions": 0
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/app/app/[param]/client-component-html-boundary/initially-closed-panel.tsx",
+            "additions": 19,
+            "deletions": 0
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/app/app/[param]/client-component-html-boundary/page.tsx",
+            "additions": 28,
+            "deletions": 0
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/app/app/[param]/client-component-loading/early-client.tsx",
+            "additions": 5,
+            "deletions": 0
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/app/app/[param]/client-component-loading/extra-late-client.tsx",
+            "additions": 5,
+            "deletions": 0
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/app/app/[param]/client-component-loading/late-client.tsx",
+            "additions": 5,
+            "deletions": 0
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/app/app/[param]/client-component-loading/page.tsx",
+            "additions": 45,
+            "deletions": 0
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/instrumentation-test.ts",
+            "additions": 26,
+            "deletions": 2
+          },
+          {
+            "path": "test/e2e/opentelemetry/instrumentation/opentelemetry.test.ts",
+            "additions": 376,
+            "deletions": 50
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "vercel"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-27T20:00:15Z"
+          },
+          {
+            "author": {
+              "login": "unstubbable"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-09-29T11:33:59Z"
+          },
+          {
+            "author": {
+              "login": "gnoff"
+            },
+            "state": "COMMENTED",
+            "submittedAt": "2026-09-29T15:36:18Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2026-09-28T19:31:56Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "unstubbable"
+            }
+          }
+        ]
+      },
+      "body": "## Summary\n\nTo measure how client component loading affects HTML render performance, replace telemetry based on process-global counters and incoming request-body completion. Those boundaries mixed overlapping renders and measured a lifecycle unrelated to HTML production.\n\nScope the counters and reporting context to each HTML-producing render. Start tracking before SSR, finish dynamic measurements at React readiness (Node `onAllReady` / Web `allReady`), and finish prerendering when the prerender operation returns. Preparation, action execution, and dedicated Flight rendering do not start tracking. DATA-only resumes finish tracking locally without waiting for output; an empty tracker emits no span. HTML rendered after a form action is still measured.\n\nAlready-started loads may settle and report afterward without keeping the response open. Preserve the first-write performance snapshot, but remove metrics stream wrapping and binding. This advances the larger effort to remove req/res lifecycle assumptions from App Router rendering without adding telemetry to `after()`.\n\nBehavioral tests cover overlapping renders in both completion orders, HTML after a form POST, enhanced actions that only produce Flight, and HTML readiness while unused Flight content remains blocked.\n\n## Verification\n\n- Confirmed both new boundary regressions failed before the runtime change.\n- Five behavioral metrics cases pass in development and production with both Turbopack and Webpack.\n- Full production Turbopack instrumentation suite: 109 passed, 13 existing skips.\n- Focused logger/response-piping units: 11 passed. Full repository build, package/root types, scoped Prettier, ESLint, and diff checks pass.\n- A broader unit run passed 3,065 tests but hit three macOS `/var` versus `/private/var` assertions in unchanged TypeScript CLI tests.\n\nExisting Node response-disconnect propagation to upstream SSR is unchanged; this PR does not claim to fix cancellation.\n\n<!-- NEXT_JS_LLM -->"
+    },
+    {
+      "number": 97774,
+      "title": "Turn off the adapter route collapses by default",
+      "url": "https://github.com/vercel/next.js/pull/97774",
+      "isDraft": false,
+      "createdAt": "2026-08-24T07:45:16Z",
+      "updatedAt": "2026-09-08T00:28:16Z",
+      "additions": 16,
+      "deletions": 2,
+      "changedFiles": 5,
+      "mergeable": "CONFLICTING",
+      "baseRefName": "hl/adapter-collapse-shell-prefix-routes",
+      "headRefName": "hl/adapter-collapse-routes-default-off",
+      "isCrossRepository": false,
+      "repository": {
+        "nameWithOwner": "vercel/next.js"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "unstubbable"
+      },
+      "labels": {
+        "nodes": [
+          {
+            "name": "locked"
+          }
+        ]
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "packages/next/src/server/config-shared.ts",
+            "additions": 4,
+            "deletions": 2
+          },
+          {
+            "path": "test/production/app-dir/adapter-dynamic-routes/cache-components/next.config.js",
+            "additions": 3,
+            "deletions": 0
+          },
+          {
+            "path": "test/production/app-dir/adapter-dynamic-routes/legacy/next.config.js",
+            "additions": 3,
+            "deletions": 0
+          },
+          {
+            "path": "test/production/app-dir/adapter-dynamic-routes/no-root-params/next.config.js",
+            "additions": 3,
+            "deletions": 0
+          },
+          {
+            "path": "test/production/app-dir/adapter-dynamic-routes/shell-prefixes/next.config.js",
+            "additions": 3,
+            "deletions": 0
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "mischnic"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2026-08-24T08:22:27Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": []
+      },
+      "body": "`experimental.collapseAdapterRoutes` now defaults to `false`, so a build keeps one entry per route unless the project opts in. The changes below it in this stack stay as they are, and a project that sets the option to `true` gets the route table that they produce.\r\n\r\nThe default starts off so that we can dogfood the behavior on selected apps before every build gets it. The default moves back to `true` once enough apps have run with it.\r\n\r\nThe four fixtures under `test/production/app-dir/adapter-dynamic-routes` set the option, because their snapshots pin the collapsed table. A build of the Cache Components fixture without the option emits the 27 entries that the first commit in this stack recorded, which is what the option now turns off."
+    },
+    {
+      "number": 85741,
+      "title": "Sync devFallbackParams when generateStaticParams change",
+      "url": "https://github.com/vercel/next.js/pull/85741",
+      "isDraft": false,
+      "createdAt": "2025-11-03T16:32:57Z",
+      "updatedAt": "2025-11-20T00:05:39Z",
+      "additions": 35,
+      "deletions": 10,
+      "changedFiles": 5,
+      "mergeable": "UNKNOWN",
+      "baseRefName": "canary",
+      "headRefName": "jiwon/11-03-sync_devfallbackparams_when_generatestaticparams_change",
+      "isCrossRepository": false,
+      "repository": {
+        "nameWithOwner": "vercel/next.js"
+      },
+      "author": {
+        "__typename": "User",
+        "login": "devjiwonchoi"
+      },
+      "labels": {
+        "nodes": [
+          {
+            "name": "type: next"
+          },
+          {
+            "name": "created-by: Next.js team"
+          },
+          {
+            "name": "locked"
+          }
+        ]
+      },
+      "files": {
+        "nodes": [
+          {
+            "path": "packages/next/src/server/app-render/app-render.tsx",
+            "additions": 6,
+            "deletions": 7
+          },
+          {
+            "path": "packages/next/src/server/base-server.ts",
+            "additions": 1,
+            "deletions": 1
+          },
+          {
+            "path": "packages/next/src/server/dev/next-dev-server.ts",
+            "additions": 19,
+            "deletions": 0
+          },
+          {
+            "path": "packages/next/src/server/lib/dev-bundler-service.ts",
+            "additions": 8,
+            "deletions": 1
+          },
+          {
+            "path": "packages/next/src/server/request-meta.ts",
+            "additions": 1,
+            "deletions": 1
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false
+        }
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "reviews": {
+        "nodes": [
+          {
+            "author": {
+              "login": "gnoff"
+            },
+            "state": "APPROVED",
+            "submittedAt": "2025-11-05T17:53:46Z"
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "statusCheckRollup": {
+                "state": "SUCCESS"
+              }
+            }
+          }
+        ]
+      },
+      "timelineItems": {
+        "nodes": [
+          {
+            "createdAt": "2025-11-04T14:39:11Z",
+            "requestedReviewer": {
+              "__typename": "User",
+              "login": "gnoff"
+            }
+          }
+        ]
+      },
+      "body": "Since `generateStaticParams` runs in the background, when accessing the `devFallbackParams` during the render, it is still set to the previous result from the cache. Therefore, when the result has changed, re-render the RSC to sync the `devFallbackParams` with the new result.\r\n\r\nCloses NAR-491"
+    }
+  ]
+}

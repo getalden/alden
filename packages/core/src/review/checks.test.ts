@@ -317,19 +317,20 @@ describe("runChecks", () => {
 
 describe("buildBriefing on every recorded real PR", () => {
   const FIXTURES = join(import.meta.dirname, "../github/__fixtures__");
+  // Each fixture names its diffs: diffs/<fixture name>-<number>.json.
   const prs = readdirSync(FIXTURES)
     .filter((f) => f.endsWith(".json"))
-    .flatMap(
-      (f) => (JSON.parse(readFileSync(join(FIXTURES, f), "utf8")) as { pullRequests: RawPullRequest[] }).pullRequests,
-    );
+    .flatMap((f) => {
+      const fixture = JSON.parse(readFileSync(join(FIXTURES, f), "utf8")) as {
+        name: string;
+        pullRequests: RawPullRequest[];
+      };
+      return fixture.pullRequests.map((raw) => ({ name: fixture.name, raw }));
+    });
 
-  it.each(prs.map((raw) => [`${raw.repository.nameWithOwner}#${raw.number}`, raw] as const))(
+  it.each(prs.map(({ name, raw }) => [`${raw.repository.nameWithOwner}#${raw.number}`, name, raw] as const))(
     "%s produces a valid briefing",
-    (_label, raw) => {
-      const name = raw.repository.nameWithOwner
-        .split("/")[1]
-        ?.replace("next.js", "nextjs")
-        .replace("framework", "laravel");
+    (_label, name, raw) => {
       const diffPath = join(FIXTURES, "diffs", `${name}-${raw.number}.json`);
       const files = (JSON.parse(readFileSync(diffPath, "utf8")) as Parameters<typeof fromRestFile>[0][]).map(
         fromRestFile,
