@@ -12,6 +12,7 @@ import {
   buildBriefing,
   fromRestFile,
   loadConfig,
+  mergeLookHere,
   type RawPullRequest,
   rankQueue,
   toFacts,
@@ -72,8 +73,17 @@ function briefingFor(repo: string, number: number): Briefing {
   const first = files.find((f) => f.hunks.length > 0);
   const line = first?.hunks[0]?.lines.find((l) => l.kind === "add")?.newLine;
   if (number % 2 === 1 && first && line) {
+    const findings = [
+      {
+        title: "Example model finding",
+        detail: "Model findings appear with their severity and every place they point at.",
+        severity: "medium" as const,
+        anchors: [{ path: first.path, line }],
+      },
+    ];
     return {
       ...briefing,
+      needsYourEyes: mergeLookHere(briefing.needsYourEyes, briefing.checks, findings),
       llm: {
         status: "ok",
         provider: "anthropic",
@@ -81,14 +91,7 @@ function briefingFor(repo: string, number: number): Briefing {
         effort: "medium",
         summary: `(Invented for the demo.) ${pr.title}. The change touches ${files.length} files; this paragraph shows where the model's summary appears.`,
         matchesTitle: { verdict: "partly", reason: "An example verdict, so the styling can be seen." },
-        findings: [
-          {
-            title: "Example model finding",
-            detail: "Model findings appear with their severity and every place they point at.",
-            severity: "medium",
-            anchors: [{ path: first.path, line }],
-          },
-        ],
+        findings,
         droppedFindings: 1,
         omittedFiles: [],
         usd: 0.0412,

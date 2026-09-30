@@ -127,8 +127,11 @@ export function renderBriefing(briefing: Briefing, options: RenderOptions): stri
 
   out.push(paint("Needs your eyes", "bold", color));
   if (briefing.needsYourEyes.length === 0) {
-    const who = briefing.llm?.status === "ok" ? "Neither the checks nor the model" : "The checks below";
-    out.push(...wrap(`Nothing flagged. ${who} found nothing that needs a closer look.`, width, "  "));
+    const text =
+      briefing.llm?.status === "ok"
+        ? "Nothing flagged. Neither the checks nor the model found anything that needs a closer look."
+        : "Nothing flagged. The checks below found nothing that needs a closer look.";
+    out.push(...wrap(text, width, "  "));
   }
   briefing.needsYourEyes.forEach((item, i) => {
     if (item.source === "llm") {
