@@ -1,3 +1,4 @@
+import type { FeedbackSummary } from "@alden/schema";
 import { type FormEvent, useEffect, useState } from "react";
 import type { Api, Session, SpendReport } from "../api";
 import { formatUsd, plural } from "../format";
@@ -5,6 +6,7 @@ import { formatUsd, plural } from "../format";
 /** Defaults for every review (saved to your user config, like `alden config set`) and what you've spent. */
 export function SettingsView({ api, session, onSaved }: { api: Api; session: Session; onSaved: () => void }) {
   const [spend, setSpend] = useState<SpendReport>();
+  const [feedback, setFeedback] = useState<FeedbackSummary>();
   const [model, setModel] = useState(session.model.name);
   const [effort, setEffort] = useState(session.model.effort ?? "");
   const [perReview, setPerReview] = useState(String(session.budget.perReviewUsd));
@@ -14,6 +16,7 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
 
   useEffect(() => {
     api.spend().then(setSpend, () => setSpend(undefined));
+    api.feedbackSummary().then(setFeedback, () => setFeedback(undefined));
   }, [api]);
 
   const models =
@@ -98,6 +101,53 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
           overrides them there. Providers and endpoints are set with <code>alden config</code>; see the docs.
         </p>
       </form>
+
+      <div className="card">
+        <h2>Your feedback</h2>
+        {!feedback ? (
+          <p className="muted">Loading…</p>
+        ) : feedback.briefings === 0 ? (
+          <p className="muted">
+            None yet. Mark flags as <strong>Agree</strong> or <strong>Not needed</strong> in a briefing, and use{" "}
+            <strong>You missed something</strong> when Alden missed what mattered.
+          </p>
+        ) : (
+          <>
+            <p>
+              You agreed with{" "}
+              <strong>{feedback.eyesAgreeRate === null ? "—" : `${Math.round(feedback.eyesAgreeRate * 100)}%`}</strong>{" "}
+              of "needs your eyes" flags ({feedback.eyes.agree} of {feedback.eyes.agree + feedback.eyes.notNeeded})
+              {feedback.modelFindings.agree + feedback.modelFindings.notNeeded > 0 &&
+                `, and ${feedback.modelFindings.agree} of ${feedback.modelFindings.agree + feedback.modelFindings.notNeeded} of the model's other findings`}
+              . {plural(feedback.missed, "miss", "misses")} reported across {plural(feedback.briefings, "briefing")}.
+            </p>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Check</th>
+                  <th scope="col">Agreed</th>
+                  <th scope="col">Not needed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(feedback.byCheck)
+                  .sort(([, a], [, b]) => b.agree + b.notNeeded - (a.agree + a.notNeeded))
+                  .map(([check, c]) => (
+                    <tr key={check}>
+                      <td className="mono">{check}</td>
+                      <td>{c.agree}</td>
+                      <td>{c.notNeeded}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </>
+        )}
+        <p className="faint small">
+          Feedback stays on this machine. To share it, run <code>alden feedback --export feedback.json</code>, which
+          leaves out repo names, paths and notes.
+        </p>
+      </div>
 
       <div className="card">
         <h2>Spend</h2>

@@ -1,4 +1,4 @@
-import type { Briefing, RankedQueue } from "@alden/schema";
+import type { Briefing, FeedbackInput, FeedbackSummary, RankedQueue } from "@alden/schema";
 
 const TOKEN_KEY = "alden.token";
 
@@ -96,6 +96,11 @@ export class Api {
   queue = (refresh = false) => this.request<RankedQueue>(`/api/queue${refresh ? "?refresh=1" : ""}`);
 
   spend = () => this.request<SpendReport>("/api/spend");
+
+  addFeedback = (input: FeedbackInput) =>
+    this.request<unknown>("/api/feedback", { method: "POST", body: JSON.stringify(input) });
+
+  feedbackSummary = () => this.request<FeedbackSummary>("/api/feedback");
 
   /** `null` removes the setting, so its default applies again. */
   setConfig = (key: string, value: string | null) =>

@@ -1,6 +1,7 @@
-import type { RankedPullRequest } from "@alden/schema";
+import type { Briefing, RankedPullRequest } from "@alden/schema";
 import { type ReactNode, useEffect, useState } from "react";
 import type { ReviewRequest } from "../api";
+import type { BriefingFeedback } from "../feedback";
 import { plural } from "../format";
 import type { ReviewRun } from "../reviews";
 import { onLinkClick } from "../router";
@@ -51,6 +52,7 @@ interface ReviewPaneProps {
   backToQueue?: boolean;
   /** Something to know before running it, e.g. why callers won't be found. */
   note?: ReactNode;
+  feedbackFor?: ((briefing: Briefing) => BriefingFeedback) | undefined;
 }
 
 /** A PR (or your local changes) and its briefing: run it, watch it, read it. */
@@ -66,6 +68,7 @@ export function ReviewPane({
   emptyHint,
   backToQueue = false,
   note,
+  feedbackFor,
 }: ReviewPaneProps) {
   return (
     <section className="review-pane" aria-labelledby="review-title">
@@ -100,7 +103,7 @@ export function ReviewPane({
 
       {run && (run.running || run.stages.length > 0) && !run.briefing && <Progress run={run} />}
       {run?.error && <p className="banner error">{run.error}</p>}
-      {run?.briefing && <BriefingView briefing={run.briefing} />}
+      {run?.briefing && <BriefingView briefing={run.briefing} feedback={feedbackFor?.(run.briefing)} />}
       {!run && <p className="muted pad">{emptyHint}</p>}
     </section>
   );

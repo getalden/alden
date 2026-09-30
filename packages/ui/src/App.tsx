@@ -6,6 +6,7 @@ import { type Choices, initialChoices, ReviewOptions, toRequest } from "./compon
 import { ReviewPane } from "./components/ReviewPane";
 import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
+import { useFeedback } from "./feedback";
 import { useReviews } from "./reviews";
 import { navigate, useRoute } from "./router";
 
@@ -38,6 +39,7 @@ export function App({ api }: { api: Api | undefined }) {
 
   useEffect(loadSession, [loadSession]);
   const reviews = useReviews(api, loadSession);
+  const feedbackFor = useFeedback(api, session?.repo?.repos[0] ?? null);
 
   const loadQueue = useCallback(
     (refresh: boolean) => {
@@ -117,6 +119,7 @@ export function App({ api }: { api: Api | undefined }) {
                   choices={choices ?? initialChoices(session)}
                   onChoices={setChoices}
                   reviews={reviews}
+                  feedbackFor={feedbackFor}
                 />
               ) : (
                 <div className="state">
@@ -139,6 +142,7 @@ export function App({ api }: { api: Api | undefined }) {
                 )
               }
               run={reviews.runs.local}
+              feedbackFor={feedbackFor}
               request={toRequest(choices ?? initialChoices(session), session)}
               onStart={(request) => reviews.start("local", request)}
               onCancel={() => reviews.cancel("local")}
@@ -177,6 +181,7 @@ function PrPane(props: {
   choices: Choices;
   onChoices: (choices: Choices) => void;
   reviews: ReturnType<typeof useReviews>;
+  feedbackFor: ReturnType<typeof useFeedback>;
 }) {
   const { prRef, row, reviews } = props;
   const key = `${prRef.repo}#${prRef.number}`;
@@ -199,6 +204,7 @@ function PrPane(props: {
         </>
       }
       row={row}
+      feedbackFor={props.feedbackFor}
       backToQueue
       note={
         props.choices.graph && props.session && !props.session.repo?.repos.includes(prRef.repo.toLowerCase()) ? (

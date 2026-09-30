@@ -5,11 +5,13 @@
  * PRs (with their wait times moved to recent hours so the ranking looks lived-in), reviews are the offline
  * deterministic briefings, and one PR gets an invented model section so its styling can be seen.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startUiServer, type UiApi } from "../packages/cli/src/ui/server.js";
 import {
   buildBriefing,
+  FeedbackLog,
   fromRestFile,
   loadConfig,
   mergeLookHere,
@@ -102,6 +104,8 @@ function briefingFor(repo: string, number: number): Briefing {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// Feedback given in the demo goes to a throwaway folder, never your real log.
+const feedback = new FeedbackLog(mkdtempSync(join(tmpdir(), "alden-demo-feedback-")));
 
 const api: UiApi = {
   session: async () => ({
@@ -149,6 +153,8 @@ const api: UiApi = {
     byModel: [{ model: "claude-sonnet-5", calls: 8, usd: 0.37 }],
     lastDays: [],
   }),
+  addFeedback: (input) => feedback.add(input),
+  feedbackSummary: () => feedback.summary(),
   config: async () => ({ path: "(demo)", config }),
   setConfig: async () => ({ path: "(demo)", config }),
 };

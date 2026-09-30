@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import type { Briefing, CheckResult, RankedPullRequest, RankedQueue } from "@alden/schema";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Session } from "../api";
+import type { BriefingFeedback, Verdict } from "../feedback";
 import { BriefingView } from "./BriefingView";
 import { QueueView } from "./QueueView";
 import { effortSupported, initialChoices, toRequest } from "./ReviewOptions";
@@ -207,6 +208,38 @@ describe("BriefingView", () => {
     expect(
       screen.getByText("Nothing flagged. Neither the checks nor the model found anything that needs a closer look."),
     ).toBeTruthy();
+  });
+});
+
+describe("feedback in a briefing", () => {
+  it("records agree and not needed on flags, taking a verdict back when pressed again, and reports misses", async () => {
+    const verdicts = new Map<string, Verdict>();
+    const calls: string[] = [];
+    const feedback: BriefingFeedback = {
+      verdictOf: (item) => verdicts.get(item.title),
+      toggle(item, verdict) {
+        calls.push(`${item.placement}:${item.checkId}:${verdict}`);
+        if (verdicts.get(item.title) === verdict) verdicts.delete(item.title);
+        else verdicts.set(item.title, verdict);
+      },
+      reportMissed: async (note, anchor) => {
+        calls.push(`missed:${note}:${anchor?.path}:${anchor?.line}`);
+      },
+      missedCount: 0,
+      error: undefined,
+    };
+    const { rerender } = render(<BriefingView briefing={briefing} feedback={feedback} />);
+    fireEvent.click(screen.getByRole("button", { name: "Agree" }));
+    rerender(<BriefingView briefing={briefing} feedback={feedback} />);
+    expect(screen.getByRole("button", { name: "Agree" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Agree" }));
+    expect(calls).toEqual(["eyes:callers.outside:agree", "eyes:callers.outside:agree"]);
+
+    fireEvent.change(screen.getByLabelText("What should Alden have flagged?"), { target: { value: "The retry loop" } });
+    fireEvent.change(screen.getByLabelText("File (optional)"), { target: { value: "src/charge.ts" } });
+    fireEvent.change(screen.getByLabelText("Line"), { target: { value: "12" } });
+    fireEvent.click(screen.getByRole("button", { name: "Report it" }));
+    await waitFor(() => expect(calls.at(-1)).toBe("missed:The retry loop:src/charge.ts:12"));
   });
 });
 

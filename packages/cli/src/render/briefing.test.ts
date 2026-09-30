@@ -50,7 +50,7 @@ function briefing(overrides: Partial<Briefing> = {}): Briefing {
     ],
     checks: [check()],
     needsYourEyes: [],
-    notChecked: ["Callers and code outside the diff (the code graph is coming)"],
+    notChecked: ["Callers and code outside the diff (the code graph didn't run)"],
     ...overrides,
   };
 }

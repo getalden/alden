@@ -853,3 +853,65 @@ kbd {
   background: var(--surface);
   color: var(--text-2);
 }
+
+/* ─── Feedback ──────────────────────────────────────────────────────────── */
+
+.verdicts {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.finding .verdicts {
+  margin-top: 6px;
+}
+.btn.verdict {
+  color: var(--text-2);
+}
+.btn.verdict.on.agree {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--ok);
+  font-weight: 550;
+}
+.btn.verdict.on.not-needed {
+  background: var(--surface-2);
+  border-color: var(--text-3);
+  color: var(--text);
+  font-weight: 550;
+}
+.missed summary {
+  cursor: pointer;
+}
+.missed-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.missed-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.missed-form textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+.missed-where {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px;
+  gap: 10px;
+}
+.missed-where select,
+.missed-where input {
+  color: var(--text);
+  min-width: 0;
+}

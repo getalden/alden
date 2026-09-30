@@ -1,5 +1,15 @@
-import type { Anchor, Briefing, CheckResult, LlmFinding, LlmSection, Severity } from "@alden/schema";
-import { useEffect, useState } from "react";
+import type {
+  Anchor,
+  Briefing,
+  CheckResult,
+  FeedbackItem,
+  LlmFinding,
+  LlmSection,
+  LookHere,
+  Severity,
+} from "@alden/schema";
+import { type FormEvent, useEffect, useState } from "react";
+import type { BriefingFeedback } from "../feedback";
 import { formatUsd, plural, prFileUrl } from "../format";
 
 const anchorKey = (a: Anchor) => `${a.path}:${a.line ?? ""}`;
@@ -53,8 +63,140 @@ const STATUS_ICON: Record<CheckResult["status"], { icon: string; label: string }
   skipped: { icon: "–", label: "Skipped" },
 };
 
+function eyesItem(item: LookHere, checks: CheckResult[]): FeedbackItem {
+  const severity = checks.find((c) => c.id === item.checkId)?.severity;
+  return {
+    source: item.source ?? "check",
+    ...(item.checkId ? { checkId: item.checkId } : {}),
+    title: item.title,
+    ...(severity ? { severity } : {}),
+    ...(item.anchor ? { anchor: item.anchor } : {}),
+    placement: "eyes",
+  };
+}
+
+function findingItem(finding: LlmFinding): FeedbackItem {
+  return {
+    source: "llm",
+    title: finding.title,
+    severity: finding.severity,
+    ...(finding.anchors[0] ? { anchor: finding.anchors[0] } : {}),
+    placement: "finding",
+  };
+}
+
+/** Agree or "not needed" on one flag. Pressing the chosen one again takes it back. */
+function VerdictButtons({ item, feedback }: { item: FeedbackItem; feedback: BriefingFeedback }) {
+  const current = feedback.verdictOf(item);
+  return (
+    <fieldset className="verdicts" aria-label={`Was this worth a look? ${item.title}`}>
+      <button
+        type="button"
+        className={`btn small verdict${current === "agree" ? " on agree" : ""}`}
+        aria-pressed={current === "agree"}
+        onClick={() => feedback.toggle(item, "agree")}
+      >
+        Agree
+      </button>
+      <button
+        type="button"
+        className={`btn small verdict${current === "not_needed" ? " on not-needed" : ""}`}
+        aria-pressed={current === "not_needed"}
+        onClick={() => feedback.toggle(item, "not_needed")}
+      >
+        Not needed
+      </button>
+    </fieldset>
+  );
+}
+
+/** "You missed something": what, and optionally where. */
+function MissedForm({ briefing, feedback }: { briefing: Briefing; feedback: BriefingFeedback }) {
+  const [note, setNote] = useState("");
+  const [path, setPath] = useState("");
+  const [line, setLine] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!note.trim()) return;
+    setSaving(true);
+    try {
+      const lineNumber = Number.parseInt(line, 10);
+      await feedback.reportMissed(
+        note.trim(),
+        path ? { path, ...(Number.isInteger(lineNumber) && lineNumber > 0 ? { line: lineNumber } : {}) } : undefined,
+      );
+      setNote("");
+      setPath("");
+      setLine("");
+      setSaved(true);
+    } catch {
+      // the error shows above the form
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <details className="card missed">
+      <summary>
+        <strong>You missed something</strong>{" "}
+        <span className="faint">
+          {feedback.missedCount > 0 ? `· ${feedback.missedCount} reported` : "· tell Alden what it should have flagged"}
+        </span>
+      </summary>
+      <form onSubmit={submit} className="missed-form">
+        <label>
+          What should Alden have flagged?
+          <textarea
+            value={note}
+            onChange={(e) => {
+              setNote(e.target.value);
+              setSaved(false);
+            }}
+            rows={3}
+            maxLength={2000}
+            required
+          />
+        </label>
+        <div className="missed-where">
+          <label>
+            File (optional)
+            <select value={path} onChange={(e) => setPath(e.target.value)}>
+              <option value="">Anywhere</option>
+              {briefing.files.map((f) => (
+                <option key={f.path} value={f.path}>
+                  {f.path}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Line
+            <input
+              type="text"
+              inputMode="numeric"
+              value={line}
+              onChange={(e) => setLine(e.target.value)}
+              disabled={!path}
+            />
+          </label>
+        </div>
+        <div className="form-actions">
+          <button type="submit" className="btn primary small" disabled={saving || !note.trim()}>
+            {saving ? "Saving…" : "Report it"}
+          </button>
+          {saved && <span className="muted small">Recorded. It stays on this machine.</span>}
+        </div>
+      </form>
+    </details>
+  );
+}
+
 /** The briefing, in the same order as the CLI: where to look, what the change does, what was checked, what wasn't. */
-export function BriefingView({ briefing }: { briefing: Briefing }) {
+export function BriefingView({ briefing, feedback }: { briefing: Briefing; feedback?: BriefingFeedback | undefined }) {
   const links = useAnchorLinks(briefing);
   const { llm } = briefing;
   const picked = new Set(briefing.needsYourEyes.flatMap((i) => (i.anchor ? [anchorKey(i.anchor)] : [])));
@@ -104,6 +246,7 @@ export function BriefingView({ briefing }: { briefing: Briefing }) {
                 </div>
                 {item.anchor && <Place anchor={item.anchor} links={links} />}
                 <p className="muted">{item.reason}</p>
+                {feedback && <VerdictButtons item={eyesItem(item, briefing.checks)} feedback={feedback} />}
               </li>
             ))}
           </ol>
@@ -128,6 +271,7 @@ export function BriefingView({ briefing }: { briefing: Briefing }) {
                   ))}
                 </div>
                 <p className="muted">{f.detail}</p>
+                {feedback && <VerdictButtons item={findingItem(f)} feedback={feedback} />}
               </li>
             ))}
           </ul>
@@ -186,6 +330,9 @@ export function BriefingView({ briefing }: { briefing: Briefing }) {
           ))}
         </ul>
       </details>
+
+      {feedback?.error && <p className="banner error">{feedback.error}</p>}
+      {feedback && <MissedForm briefing={briefing} feedback={feedback} />}
 
       {llm && <ModelFooter llm={llm} />}
     </article>

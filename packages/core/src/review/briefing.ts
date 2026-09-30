@@ -11,13 +11,19 @@ import type { Check, ReviewContext } from "./types.js";
  */
 export const NOT_CHECKED = [
   "Whether the change does what its title says (only the model can judge that; see `alden review --help`)",
-  "Callers and code outside the diff (the code graph is coming)",
+  "Callers and code outside the diff (the code graph didn't run)",
 ];
 
 /** What the code graph couldn't cover in this review, in place of the generic "callers" line when it ran. */
 function notCheckedFor(context: ReviewContext): string[] {
   const [titleLine, callersLine] = NOT_CHECKED as [string, string];
-  if (!context.graph) return [titleLine, callersLine];
+  if (!context.graph) {
+    // The reason (no clone, --no-graph, a failure) is on the "Callers outside the diff" check itself.
+    return [
+      titleLine,
+      context.graphUnavailable ? "Callers and code outside the diff (why is under Checked, above)" : callersLine,
+    ];
+  }
   const outside = filesOutsideGraph(context.files);
   const more = outside.length > 3 ? ` and ${outside.length - 3} more` : "";
   return [
