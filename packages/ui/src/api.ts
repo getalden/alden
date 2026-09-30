@@ -1,4 +1,4 @@
-import type { Briefing, FeedbackInput, FeedbackSummary, RankedQueue } from "@alden/schema";
+import type { Briefing, FeedbackInput, FeedbackSummary, RankedQueue, RepoStats } from "@alden/schema";
 
 const TOKEN_KEY = "alden.token";
 
@@ -101,6 +101,13 @@ export class Api {
     this.request<unknown>("/api/feedback", { method: "POST", body: JSON.stringify(input) });
 
   feedbackSummary = () => this.request<FeedbackSummary>("/api/feedback");
+
+  stats = (options: { repo: string; days: number; since?: string; refresh?: boolean }) => {
+    const params = new URLSearchParams({ repo: options.repo, days: String(options.days) });
+    if (options.since) params.set("since", options.since);
+    if (options.refresh) params.set("refresh", "1");
+    return this.request<RepoStats>(`/api/stats?${params}`);
+  };
 
   /** `null` removes the setting, so its default applies again. */
   setConfig = (key: string, value: string | null) =>

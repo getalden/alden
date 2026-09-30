@@ -73,7 +73,7 @@ describe("Api.review", () => {
 
 describe("routes", () => {
   it("round-trips PRs, local changes and settings", () => {
-    for (const path of ["/", "/pr/getalden/alden/12", "/local", "/settings"]) {
+    for (const path of ["/", "/pr/getalden/alden/12", "/local", "/stats", "/settings"]) {
       expect(routePath(parseRoute(path))).toBe(path);
     }
     expect(parseRoute("/pr/a/b/not-a-number")).toEqual({ view: "queue" });

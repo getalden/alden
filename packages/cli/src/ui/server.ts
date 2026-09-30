@@ -34,6 +34,7 @@ export interface UiApi {
   /** Records a verdict or a miss; returns the stored event. */
   addFeedback(input: unknown): Promise<unknown>;
   feedbackSummary(): Promise<unknown>;
+  stats(options: { repo?: string; days: number; since?: string; refresh: boolean }): Promise<unknown>;
 }
 
 /** An error the UI should show as is, with an HTTP status. */
@@ -190,6 +191,22 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
           throw new ApiError(400, "Send { key, value }: value a string, or null to remove the setting.");
         }
         send(res, 200, await api.setConfig(body.key, body.value));
+        return;
+      }
+      case "GET /api/stats": {
+        const days = Number(url.searchParams.get("days") ?? 90);
+        const repo = url.searchParams.get("repo") ?? undefined;
+        const since = url.searchParams.get("since") ?? undefined;
+        send(
+          res,
+          200,
+          await api.stats({
+            days,
+            refresh: url.searchParams.get("refresh") === "1",
+            ...(repo ? { repo } : {}),
+            ...(since ? { since } : {}),
+          }),
+        );
         return;
       }
       case "GET /api/feedback":

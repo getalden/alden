@@ -30,6 +30,10 @@ const api: UiApi = {
     return { id: "1" };
   },
   feedbackSummary: async () => ({ verdicts: 0 }),
+  stats: async (options) => {
+    calls.push({ method: "stats", args: options });
+    return { repo: options.repo };
+  },
   setConfig: async (key, value) => {
     if (key === "nope") throw new ApiError(400, "Unknown config key: nope");
     calls.push({ method: "setConfig", args: { key, value } });
@@ -145,6 +149,15 @@ describe("alden ui server", () => {
     expect([bad.status, JSON.parse(bad.text)]).toEqual([400, { error: "Unknown config key: nope" }]);
     await call("/api/config", { method: "PUT", headers: authed, body: { key: "model.name", value: "opus" } });
     expect(calls).toEqual([{ method: "setConfig", args: { key: "model.name", value: "opus" } }]);
+  });
+
+  it("passes stats options through", async () => {
+    await call("/api/stats?repo=a/b&days=30&since=2026-09-01&refresh=1", { headers: authed });
+    await call("/api/stats", { headers: authed });
+    expect(calls).toEqual([
+      { method: "stats", args: { repo: "a/b", days: 30, since: "2026-09-01", refresh: true } },
+      { method: "stats", args: { days: 90, refresh: false } },
+    ]);
   });
 
   it("records feedback and returns the summary", async () => {

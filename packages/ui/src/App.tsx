@@ -5,6 +5,7 @@ import { QueueView } from "./components/QueueView";
 import { type Choices, initialChoices, ReviewOptions, toRequest } from "./components/ReviewOptions";
 import { ReviewPane } from "./components/ReviewPane";
 import { SettingsView } from "./components/SettingsView";
+import { StatsView } from "./components/StatsView";
 import { TopBar } from "./components/TopBar";
 import { useFeedback } from "./feedback";
 import { useReviews } from "./reviews";
@@ -151,6 +152,11 @@ export function App({ api }: { api: Api | undefined }) {
               }
               emptyHint="Review your uncommitted changes (staged, unstaged and untracked) before you open a PR."
             />
+          </div>
+        )}
+        {route.view === "stats" && (
+          <div className="pane">
+            {session ? <StatsView api={api} session={session} /> : <p className="state">Loading…</p>}
           </div>
         )}
         {route.view === "settings" && (

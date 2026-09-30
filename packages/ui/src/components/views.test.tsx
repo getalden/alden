@@ -7,6 +7,7 @@ import type { BriefingFeedback, Verdict } from "../feedback";
 import { BriefingView } from "./BriefingView";
 import { QueueView } from "./QueueView";
 import { effortSupported, initialChoices, toRequest } from "./ReviewOptions";
+import { formatHours, StatsView } from "./StatsView";
 
 afterEach(cleanup);
 
@@ -255,5 +256,46 @@ describe("review options", () => {
     expect(toRequest({ ...choices, model: "haiku" }, session)).toEqual({ llm: true, graph: true, model: "haiku" });
     expect(toRequest({ ...choices, llm: false }, session)).toEqual({ llm: false, graph: true });
     expect(effortSupported(session, "haiku")).toBe(false);
+  });
+});
+
+describe("StatsView", () => {
+  const dist = (count: number, medianHours: number | null, p90Hours: number | null) => ({
+    count,
+    medianHours,
+    p90Hours,
+  });
+  const stats = {
+    schemaVersion: 1,
+    repo: "acme/api",
+    fetchedAt: "2026-09-30T10:00:00.000Z",
+    window: { from: "2026-07-02T10:00:00.000Z", to: "2026-09-30T10:00:00.000Z" },
+    split: { at: "2026-09-01T00:00:00.000Z", source: "first-use" },
+    prs: 40,
+    horizonHours: 336,
+    timeToFirstReview: { all: dist(30, 20, 336), before: dist(20, 30, 336), after: dist(10, 12, 100) },
+    cycleTime: { all: dist(28, 60, 336), before: dist(19, 50, 336), after: dist(9, 110, 336) },
+    weeks: [
+      { week: "2026-08-24", prs: 5, timeToFirstReviewMedianHours: 336, cycleTimeMedianHours: 336 },
+      { week: "2026-09-07", prs: 6, timeToFirstReviewMedianHours: 10, cycleTimeMedianHours: 40 },
+    ],
+    excluded: { bots: 3, drafts: 1, tooRecent: 6, noReview: 2, noApproval: 4 },
+    stillWaiting: { review: 1, approval: 2 },
+    truncated: false,
+  };
+  const session = { repo: { root: "/r", repos: ["acme/api"] } } as unknown as Session;
+
+  it("shows after-split medians with the change in words, and a labelled column per week", async () => {
+    const api = { stats: async () => stats } as unknown as import("../api").Api;
+    render(<StatsView api={api} session={session} />);
+    expect(await screen.findByText("12h")).toBeTruthy();
+    expect(screen.getByText(/60% faster/)).toBeTruthy();
+    expect(screen.getByText(/2.2× slower/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Week of 24 Aug: 14d+ median, 5 PRs" })).toBeTruthy();
+    expect(screen.getByText("Alden from 1 Sep")).toBeTruthy();
+  });
+
+  it("formats waits with the horizon as a floor", () => {
+    expect([0.5, 30, 60, 336].map((h) => formatHours(h, 336))).toEqual(["30m", "30h", "2d 12h", "14d+"]);
   });
 });

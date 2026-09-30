@@ -5,6 +5,7 @@ import { onLinkClick, type Route, routePath } from "../router";
 const TABS: { label: string; route: Route }[] = [
   { label: "Queue", route: { view: "queue" } },
   { label: "My changes", route: { view: "local" } },
+  { label: "Stats", route: { view: "stats" } },
   { label: "Settings", route: { view: "settings" } },
 ];
 

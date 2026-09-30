@@ -17,6 +17,8 @@ import {
   mergeLookHere,
   type RawPullRequest,
   rankQueue,
+  type StatsPullRequest,
+  summarizeStats,
   toFacts,
 } from "../packages/core/src/index.js";
 import type { Briefing, PullRequestFacts } from "../packages/schema/src/index.js";
@@ -155,6 +157,41 @@ const api: UiApi = {
   }),
   addFeedback: (input) => feedback.add(input),
   feedbackSummary: () => feedback.summary(),
+  // Invented PRs, so the Stats view has a before and after to show: waits drift down after the split.
+  stats: async ({ repo, days }) => {
+    const now = new Date();
+    const split = new Date(now.getTime() - 45 * 24 * hour);
+    const prs: StatsPullRequest[] = Array.from({ length: 160 }, (_, i) => {
+      const opened = new Date(now.getTime() - ((i * 13.7) % days) * 24 * hour);
+      const after = opened >= split;
+      const wait = ((i * 37) % 97) * (after ? 0.6 : 1.4) + 2;
+      const at = (h: number) => new Date(opened.getTime() + h * hour).toISOString();
+      return {
+        number: i + 1,
+        createdAt: opened.toISOString(),
+        state: i % 11 === 0 ? "OPEN" : "MERGED",
+        isDraft: false,
+        author: { login: `dev${i % 7}`, __typename: "User" },
+        readyEvents: [],
+        reviews:
+          i % 11 === 0
+            ? []
+            : [
+                { author: { login: "you", __typename: "User" }, state: "COMMENTED", submittedAt: at(wait) },
+                { author: { login: "kim", __typename: "User" }, state: "APPROVED", submittedAt: at(wait * 2.5) },
+              ],
+      };
+    });
+    return summarizeStats({
+      repo: repo ?? "getalden/alden",
+      prs,
+      from: new Date(now.getTime() - days * 24 * hour),
+      to: now,
+      split: { at: split.toISOString(), source: "first-use" },
+      truncated: false,
+      now,
+    });
+  },
   config: async () => ({ path: "(demo)", config }),
   setConfig: async () => ({ path: "(demo)", config }),
 };

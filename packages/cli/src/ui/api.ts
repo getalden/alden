@@ -27,6 +27,7 @@ import {
 import type { Briefing } from "@alden/schema";
 import { LAST_QUEUE_KEY, type LastQueue } from "../commands/open.js";
 import { spendReport } from "../commands/spend.js";
+import { loadRepoStats } from "../commands/stats.js";
 import { describeGitHubError } from "../github-errors.js";
 import { parsePrRef } from "../pr-ref.js";
 import { ApiError, type UiApi } from "./server.js";
@@ -194,6 +195,25 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
     },
 
     feedbackSummary: () => feedback.summary(),
+
+    async stats({ repo, days, since, refresh }) {
+      const target = repo ?? (await repoOf(options.cwd))?.repos[0];
+      if (!target) throw new ApiError(400, "Which repo? Start alden ui in a clone of it, or pick one.");
+      if (!/^[\w.-]+\/[\w.-]+$/.test(target)) throw new ApiError(400, "A repo is owner/name.");
+      if (!Number.isInteger(days) || days < 15 || days > 365) throw new ApiError(400, "days must be 15 to 365.");
+      const sinceDate = since ? new Date(`${since}T00:00:00Z`) : undefined;
+      if (sinceDate && Number.isNaN(sinceDate.getTime())) throw new ApiError(400, "since must be a date, YYYY-MM-DD.");
+      try {
+        return await loadRepoStats(target, {
+          days,
+          horizonDays: 14,
+          refresh,
+          ...(sinceDate ? { since: sinceDate } : {}),
+        });
+      } catch (error) {
+        throw new ApiError(502, (error as Error).message);
+      }
+    },
 
     async setConfig(key, value) {
       try {
