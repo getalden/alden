@@ -38,6 +38,12 @@ export const AldenConfigSchema = z.object({
       dailyUsd: z.number().positive().default(10),
     })
     .prefault({}),
+  updates: z
+    .object({
+      /** Whether `alden --version` and `alden doctor` say when a newer Alden exists (checked at most once a day). */
+      check: z.boolean().default(true),
+    })
+    .prefault({}),
   queue: z
     .object({
       includeDrafts: z.boolean().default(false),

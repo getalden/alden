@@ -147,3 +147,4 @@ export {
   weekOf,
 } from "./stats/stats.js";
 export { UsageLog } from "./stats/usage.js";
+export { checkForUpdate, newerVersion } from "./updates.js";

@@ -1,0 +1,162 @@
+name: Release
+
+# Runs when a version tag is pushed (see RELEASING.md). Builds the standalone binaries on their own platforms,
+# smoke-tests each, signs and notarizes the macOS ones, publishes the npm package, and publishes the binaries and the
+# Homebrew formula to the public getalden/homebrew-tap repo (this repo stays private during the beta).
+#
+# Secrets (steps that need one are skipped without it, so a dry run works with none):
+#   NPM_TOKEN               npm automation token, to publish `alden`
+#   TAP_TOKEN               fine-grained token with contents read/write on getalden/homebrew-tap
+#   APPLE_CERT_P12_BASE64   Developer ID Application certificate (.p12), base64
+#   APPLE_CERT_PASSWORD     its password
+#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD   for notarization (an app-specific password)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  binaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: darwin-arm64, os: macos-15 }
+          - { target: darwin-x64, os: macos-15-intel }
+          - { target: linux-x64, os: ubuntu-24.04 }
+          - { target: linux-arm64, os: ubuntu-24.04-arm }
+          - { target: windows-x64, os: windows-2025 }
+    runs-on: ${{ matrix.os }}
+    env:
+      # Secrets can't be read in `if:`, so whether one is set travels as a flag.
+      CAN_SIGN: ${{ secrets.APPLE_CERT_P12_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm build:binary
+      - name: Smoke test
+        shell: bash
+        run: pnpm smoke:binary "dist-bin/alden-${{ matrix.target }}$([ "${{ runner.os }}" = Windows ] && echo .exe)"
+
+      - name: Sign and notarize (macOS)
+        if: runner.os == 'macOS' && env.CAN_SIGN == 'true'
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p "$RUNNER_TEMP" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$RUNNER_TEMP" "$KEYCHAIN"
+          echo "$APPLE_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$RUNNER_TEMP" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+          BIN="dist-bin/alden-${{ matrix.target }}"
+          codesign --force --timestamp --options runtime --entitlements scripts/macos-entitlements.plist \
+            --keychain "$KEYCHAIN" --sign "Developer ID Application" "$BIN"
+          codesign --verify --strict --verbose=2 "$BIN"
+          ditto -c -k "$BIN" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" --wait
+          # A signed binary must still run.
+          ALDEN_NO_UPDATE_CHECK=1 "$BIN" --version
+
+      - name: Package
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
+          cd dist-bin
+          if [ "${{ runner.os }}" = Windows ]; then
+            mv "alden-${{ matrix.target }}.exe" alden.exe
+            7z a "alden-$VERSION-${{ matrix.target }}.zip" alden.exe
+          else
+            mv "alden-${{ matrix.target }}" alden
+            tar -czf "alden-$VERSION-${{ matrix.target }}.tar.gz" alden
+          fi
+      - uses: actions/upload-artifact@v5
+        with:
+          name: alden-${{ matrix.target }}
+          path: dist-bin/alden-*-${{ matrix.target }}.*
+          if-no-files-found: error
+
+  npm:
+    needs: binaries
+    runs-on: ubuntu-24.04
+    env:
+      CAN_PUBLISH: ${{ secrets.NPM_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Publish to npm (next)
+        if: env.CAN_PUBLISH == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: packages/cli
+        # Prereleases and the beta both go to `next`; `latest` waits for the public release.
+        run: pnpm publish --tag next --no-git-checks --access public
+
+  tap:
+    needs: binaries
+    runs-on: ubuntu-24.04
+    env:
+      CAN_RELEASE: ${{ secrets.TAP_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v5
+        with:
+          path: release
+          merge-multiple: true
+      - name: Checksums and formula
+        run: |
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          (cd release && shasum -a 256 alden-* > SHA256SUMS)
+          cat release/SHA256SUMS
+          pnpm -s homebrew:formula "$VERSION" release/SHA256SUMS > release/alden.rb
+      - name: Release in getalden/homebrew-tap
+        if: env.CAN_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          gh release create "v$VERSION" release/alden-* release/SHA256SUMS --repo getalden/homebrew-tap \
+            --title "Alden $VERSION" --notes "Standalone binaries for Alden $VERSION. Install with \`brew install getalden/tap/alden\`." \
+            --prerelease
+          git clone "https://x-access-token:$GH_TOKEN@github.com/getalden/homebrew-tap.git" tap
+          mkdir -p tap/Formula && cp release/alden.rb tap/Formula/alden.rb
+          cd tap
+          git config user.name "alden-release"
+          git config user.email "release@getalden.dev"
+          git add Formula/alden.rb
+          git commit -m "alden $VERSION"
+          git push
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release
+          path: release/

@@ -9,6 +9,7 @@ import { registerReviewCommand } from "./commands/review.js";
 import { registerSpendCommand } from "./commands/spend.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerUiCommand } from "./commands/ui.js";
+import { updateNotice } from "./version.js";
 
 const program = new Command()
   .name("alden")
@@ -24,5 +25,14 @@ registerSpendCommand(program);
 registerFeedbackCommand(program);
 registerStatsCommand(program);
 registerUiCommand(program, pkg.version);
+
+// `alden --version` also says when a newer Alden exists (on stderr, so scripts reading the version aren't affected).
+const args = process.argv.slice(2);
+if (args.length === 1 && (args[0] === "--version" || args[0] === "-V")) {
+  console.log(pkg.version);
+  const notice = await updateNotice(pkg.version);
+  if (notice) console.error(notice);
+  process.exit(0);
+}
 
 await program.parseAsync();

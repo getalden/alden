@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Entry } from "@napi-rs/keyring";
+import type { Entry } from "@napi-rs/keyring";
 import { aldenHome } from "../config.js";
 
 const SERVICE = "alden";
@@ -38,19 +38,28 @@ export class FileCredentialStore implements CredentialStore {
   }
 }
 
+/**
+ * The OS keychain, loaded on first use: the native module may not load at all (an unusual Linux, a container), and
+ * that should mean "no keychain", handled like any other keychain failure, rather than Alden failing to start.
+ */
 export class KeychainCredentialStore implements CredentialStore {
-  private readonly entry = new Entry(SERVICE, ACCOUNT);
+  private entry: Promise<Entry> | undefined;
+
+  private open(): Promise<Entry> {
+    this.entry ??= import("@napi-rs/keyring").then(({ Entry }) => new Entry(SERVICE, ACCOUNT));
+    return this.entry;
+  }
 
   async get(): Promise<string | undefined> {
-    return this.entry.getPassword() ?? undefined;
+    return (await this.open()).getPassword() ?? undefined;
   }
 
   async set(token: string): Promise<void> {
-    this.entry.setPassword(token);
+    (await this.open()).setPassword(token);
   }
 
   async delete(): Promise<void> {
-    this.entry.deletePassword();
+    (await this.open()).deletePassword();
   }
 }
 

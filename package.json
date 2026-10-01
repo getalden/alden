@@ -22,7 +22,8 @@
     "ui:demo": "tsx scripts/ui-demo.ts",
     "regressions:find": "tsx scripts/find-regressions.ts",
     "build:binary": "tsx scripts/build-binary.ts",
-    "smoke:binary": "tsx scripts/smoke-binary.ts"
+    "smoke:binary": "tsx scripts/smoke-binary.ts",
+    "homebrew:formula": "tsx scripts/homebrew-formula.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
