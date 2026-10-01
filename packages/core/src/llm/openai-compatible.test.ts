@@ -131,6 +131,7 @@ describe("platforms", () => {
 
   it("explains missing Google Cloud credentials for Vertex instead of failing later", async () => {
     vi.stubEnv("GOOGLE_APPLICATION_CREDENTIALS", join(tmpdir(), "alden-no-such-credentials.json"));
+    vi.stubEnv("METADATA_SERVER_DETECTION", "none");
     await expect(
       createPlatformClient("vertex", { provider: "vertex", name: "sonnet", region: "global", projectId: "p" }),
     ).rejects.toMatchObject({
@@ -152,6 +153,8 @@ describe("platforms", () => {
         JSON.stringify({ type: "authorized_user", client_id: "id", client_secret: "not-a-secret", refresh_token: "r" }),
       );
       vi.stubEnv("GOOGLE_APPLICATION_CREDENTIALS", credentials);
+      // Google's auth library can probe the cloud metadata server, which hangs on some CI hosts. It isn't needed here.
+      vi.stubEnv("METADATA_SERVER_DETECTION", "none");
       const client = await createPlatformClient(platform, {
         provider: platform,
         name: "sonnet",
@@ -162,5 +165,6 @@ describe("platforms", () => {
       expect(typeof client.messages.stream).toBe("function");
       expect(typeof client.messages.countTokens).toBe("function");
     },
+    15_000,
   );
 });
