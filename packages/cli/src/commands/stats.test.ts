@@ -58,6 +58,15 @@ describe("alden stats rendering", () => {
     expect(text).toContain("40 PRs opened: 6 too recent to judge, 1 still waiting for a review (counted as 14d+)");
   });
 
+  it("says when comparing can start if nothing after the split is old enough yet", () => {
+    const text = renderStats(
+      { ...stats, timeToFirstReview: { ...stats.timeToFirstReview, after: dist(0, null, null) } },
+      false,
+    );
+    expect(text).toContain("Too soon to compare: PRs ready from 1 Sep can be judged from 15 Sep");
+    expect(text).toMatch(/Time to first review\s+20h median/);
+  });
+
   it("explains how to get a before and after when there's no split", () => {
     expect(renderStats({ ...stats, split: null }, false)).toContain("Pass --since YYYY-MM-DD");
   });

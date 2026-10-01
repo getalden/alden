@@ -57,11 +57,25 @@ export function renderStats(stats: RepoStats, color: boolean): string {
   ];
 
   const row = (label: string, metric: Metric) => {
-    if (!stats.split) return `  ${label.padEnd(22)}${dist(metric.all)}`;
+    if (!stats.split || (stats.timeToFirstReview.after?.count ?? 0) === 0)
+      return `  ${label.padEnd(22)}${dist(metric.all)}`;
     const moved = change(metric.before, metric.after);
     return `  ${label.padEnd(22)}${dist(metric.before).padEnd(34)}${dist(metric.after).padEnd(34)}${moved ? paint(moved, "bold", color) : ""}`;
   };
-  if (stats.split) {
+  // Split, but nothing after it is old enough to judge yet: show the overall numbers and when comparing can start.
+  const tooSoon = stats.split !== null && (stats.timeToFirstReview.after?.count ?? 0) === 0;
+  if (stats.split && tooSoon) {
+    const ready = new Date(Date.parse(stats.split.at) + h * 3_600_000).toISOString();
+    out.push(row("Time to first review", stats.timeToFirstReview), row("Review cycle time", stats.cycleTime));
+    out.push(
+      "",
+      paint(
+        `  Too soon to compare: PRs ready from ${shortDate(stats.split.at)} can be judged from ${shortDate(ready)}, once they've had ${Math.round(h / 24)} days.`,
+        "dim",
+        color,
+      ),
+    );
+  } else if (stats.split) {
     const since = shortDate(stats.split.at);
     const why = stats.split.source === "since" ? "--since" : "your first review with Alden here";
     out.push(

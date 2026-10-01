@@ -245,9 +245,11 @@ export function StatsView({ api, session }: { api: Api; session: Session }) {
         <>
           <p className="muted small">
             {stats.repo} · PRs ready for review, each judged over {Math.round(stats.horizonHours / 24)} days.{" "}
-            {stats.split
-              ? `Before and after ${shortDate(stats.split.at)}, ${stats.split.source === "since" ? "the date you picked" : "your first review with Alden here"}.`
-              : "No before and after yet: Alden starts the clock the first time you review a PR here, or pick a date."}
+            {stats.split && (stats.timeToFirstReview.after?.count ?? 0) === 0
+              ? `Too soon to compare: PRs ready from ${shortDate(stats.split.at)} can be judged from ${shortDate(new Date(Date.parse(stats.split.at) + stats.horizonHours * 3_600_000).toISOString())}.`
+              : stats.split
+                ? `Before and after ${shortDate(stats.split.at)}, ${stats.split.source === "since" ? "the date you picked" : "your first review with Alden here"}.`
+                : "No before and after yet: Alden starts the clock the first time you review a PR here, or pick a date."}
           </p>
           <div className="tiles">
             <Tile stats={stats} metric="timeToFirstReview" />
