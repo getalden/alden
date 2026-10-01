@@ -1,5 +1,8 @@
 # Troubleshooting
 
+Start with `alden doctor`: it checks your sign-in, model, this clone and the code graph, and says how to fix what's
+wrong.
+
 ## GitHub
 
 **"Bad credentials" or "GitHub rejected the token".** The token Alden is using was revoked or expired. Run
@@ -51,3 +54,12 @@ worktree next time.
 **"EPERM: operation not permitted, uv_cwd".** Your terminal app isn't allowed to read the folder you're in, usually
 Desktop, Documents or Downloads. Allow it in System Settings → Privacy & Security → Files and Folders, or run Alden
 from another terminal or folder.
+
+## The standalone binary
+
+**macOS asks whether `alden` may use your keychain.** The binary is a different program from the npm version, so
+macOS asks once before it reads the sign-in Alden stored. Choose Always Allow.
+
+**"The standalone alden binary doesn't include the bedrock SDK."** The binary bundles the Anthropic API and local
+models, but not the AWS, Google Cloud or Azure SDKs. To use Bedrock, Vertex or Foundry, install Alden from npm with
+the SDK beside it, e.g. `npm install -g alden @anthropic-ai/bedrock-sdk`.

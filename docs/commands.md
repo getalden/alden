@@ -70,6 +70,32 @@ Opens the queue and briefings in your browser, served on 127.0.0.1 only until yo
 | `--port <n>` | Serve on this port instead of a free one. |
 | `--no-open` | Print the link instead of opening a browser. |
 
+## alden doctor
+
+Checks your setup here: the Alden version (and whether a newer one exists), where Alden keeps files, your settings,
+the GitHub sign-in and its scopes, the model and today's budget, whether this folder is a clone (and of which repo),
+and which languages the code graph reads in it. Every problem comes with its fix. `--json` prints the findings as
+data. Exits with 1 when something fails.
+
+## alden stats
+
+Shows a repo's time to first review and review cycle time, before and after Alden.
+
+| Flag | What it does |
+| --- | --- |
+| `--repo <owner/name>` | The repo (default: the one this clone's `origin` points at). |
+| `--days <n>` | Look at PRs opened in the last n days. Default 90. |
+| `--since <date>` | Compare before and after this date (YYYY-MM-DD), instead of your first use of Alden. |
+| `--horizon <days>` | Judge each wait over this many days. Default 14. |
+| `--refresh` | Ignore the hour-long cache. |
+| `--json` | Print the stats as JSON. Schema: `packages/schema/json/repo-stats.v1.json`. |
+
+## alden feedback
+
+Shows how often you agreed with Alden's flags, and what it missed. `--json` prints the summary. `--export <file>`
+writes your feedback to a file you can share, with repo names, titles, paths and notes removed; add `--full` to keep
+them.
+
 ## alden spend
 
 Shows what Alden has spent on models today and over recent days, against your caps. `--json` prints the report as

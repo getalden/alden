@@ -43,7 +43,7 @@ describe("findSecrets", () => {
     ["a template variable", "DATABASE_URL=postgres://app:${DB_PASSWORD}@db:5432/app"],
     ["an example password", "postgres://user:password@localhost/db"],
     ["an ordinary word", 'passwordResetRoute = "/account/password-reset"'],
-    ["an author field", 'author = "Shelton Wilson 2026"'],
+    ["an author field", 'author = "Jane Developer 2026"'],
     ["a lookup of a secret by name", "token = get_secret('PAYMENTS_WEBHOOK_TOKEN')"],
   ])("ignores %s", (_label, line) => {
     expect(findSecrets(line)).toEqual([]);

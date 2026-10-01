@@ -1,9 +1,9 @@
 import { formatAge, type RankedPullRequest, type RankedQueue } from "@alden/core";
-import { fit, paint, type RenderOptions, type Style } from "./style.js";
+import { fit, paint, type RenderOptions, type Style, stripControlDeep } from "./style.js";
 
 export { type RenderOptions, shouldColor } from "./style.js";
 
-/** Shortens the repo, never the PR number: "acme/react-apollo-c…#25". */
+/** Shortens the repo, never the PR number: "octocat/react-apollo-c…#25". */
 function fitPr(repo: string, number: number, width: number): string {
   const label = `${repo}#${number}`;
   if (label.length <= width) return label.padEnd(width);
@@ -25,7 +25,9 @@ interface Row {
 }
 
 /** The two-group queue table: a row per PR, and a dimmed line under it saying why it ranks where it does. */
-export function renderQueue(ranked: RankedQueue, options: RenderOptions): string {
+export function renderQueue(untrusted: RankedQueue, options: RenderOptions): string {
+  // Titles, authors, labels and repos come from GitHub users: no control characters reach the terminal.
+  const ranked = stripControlDeep(untrusted);
   const { color } = options;
   const rows: Row[] = [...ranked.needsYou, ...ranked.fastTrack].map((item, i) => ({ rank: i + 1, item }));
   if (rows.length === 0) return `Nothing is waiting on @${ranked.viewer}'s review.\n`;

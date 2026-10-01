@@ -2,6 +2,7 @@ import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { registerAuthCommand } from "./commands/auth.js";
 import { registerConfigCommand } from "./commands/config.js";
+import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerFeedbackCommand } from "./commands/feedback.js";
 import { registerOpenCommand } from "./commands/open.js";
 import { registerQueueCommand } from "./commands/queue.js";
@@ -24,6 +25,7 @@ registerReviewCommand(program);
 registerSpendCommand(program);
 registerFeedbackCommand(program);
 registerStatsCommand(program);
+registerDoctorCommand(program, pkg.version);
 registerUiCommand(program, pkg.version);
 
 // `alden --version` also says when a newer Alden exists (on stderr, so scripts reading the version aren't affected).

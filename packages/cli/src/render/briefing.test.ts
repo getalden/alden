@@ -228,3 +228,22 @@ describe("renderBriefing", () => {
     expect(plain(briefing({ files: [], checks: [] }))).toContain("Nothing has changed, so there's nothing to review.");
   });
 });
+
+describe("untrusted text", () => {
+  it("never passes terminal control sequences through from titles, paths or model text", () => {
+    const evil = "\u001b]52;c;cGF3bmVk\u0007\u001b[2JFix it\rnow";
+    const out = renderBriefing(
+      briefing({
+        target: { ...briefing().target, title: evil } as Briefing["target"],
+        needsYourEyes: [{ title: evil, reason: `${evil} reason`, anchor: { path: `src/${evil}.ts`, line: 1 } }],
+      }),
+      { width: 100, color: false },
+    );
+    const control = [...out].filter((c) => {
+      const code = c.charCodeAt(0);
+      return (code < 32 && c !== "\n" && c !== "\t") || (code >= 0x7f && code <= 0x9f);
+    });
+    expect(control).toEqual([]);
+    expect(out).toContain("]52;c;cGF3bmVk[2JFix itnow");
+  });
+});

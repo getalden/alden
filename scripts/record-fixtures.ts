@@ -2,7 +2,7 @@
  * Records real GitHub responses as test fixtures: `pnpm fixtures:record`.
  *
  * Public repos only. Fixtures are committed and the repo will be public, so never
- * record private repos (your own included) here. Descriptions are recorded too, for the eval. PR numbers are pinned so re-recording refreshes the same PRs that
+ * record private repos here. Descriptions are recorded too, for the eval. PR numbers are pinned so re-recording refreshes the same PRs that
  * tests name; to add a PR, add its number.
  */
 import { mkdir, writeFile } from "node:fs/promises";

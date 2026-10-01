@@ -51,3 +51,23 @@ export function shouldColor(stream: NodeJS.WriteStream, env: NodeJS.ProcessEnv =
   if (env.FORCE_COLOR && env.FORCE_COLOR !== "0") return true;
   return stream.isTTY === true && env.TERM !== "dumb";
 }
+
+/**
+ * Removes terminal control characters (escape sequences, carriage returns, bells…) from text that came from someone
+ * else: PR titles, branch names, file paths, model output. Printed raw, an escape sequence in a PR title could rewrite
+ * the screen, plant a link, or in some terminals write to the clipboard. Newlines and tabs stay.
+ */
+export function stripControl(text: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
+  return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
+}
+
+/** `stripControl` on every string in a value (a briefing, a queue), returning a copy. */
+export function stripControlDeep<T>(value: T): T {
+  if (typeof value === "string") return stripControl(value) as T;
+  if (Array.isArray(value)) return value.map(stripControlDeep) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, stripControlDeep(v)])) as T;
+  }
+  return value;
+}

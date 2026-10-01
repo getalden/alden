@@ -1,0 +1,20 @@
+name: Briefing missed something (or flagged noise)
+description: A briefing missed what mattered, or flagged something that didn't.
+labels: [briefing-quality]
+body:
+  - type: input
+    id: pr
+    attributes:
+      label: Which PR? (public PRs only)
+      placeholder: owner/repo#123
+  - type: textarea
+    id: what
+    attributes:
+      label: What should the briefing have said, or not said?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Alden version and model
+      placeholder: "0.2.0, sonnet at medium effort"

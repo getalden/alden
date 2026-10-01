@@ -1,0 +1,29 @@
+name: Bug
+description: Something Alden did wrong or couldn't do.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problems go to security@getalden.dev, not here (see SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce it
+      description: The command you ran, and a public PR or a small example if you can share one.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `alden doctor`
+      description: It shows your Alden version, setup and this folder. Remove anything you'd rather not share.
+      render: text
+    validations:
+      required: true

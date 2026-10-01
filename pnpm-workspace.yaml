@@ -3,3 +3,8 @@ packages:
 onlyBuiltDependencies:
   - bun
   - esbuild
+
+# tsup pins an esbuild with a Windows dev-server advisory (GHSA-g7r4-m6w7-qqqr). Alden never runs esbuild's server,
+# but the patched version builds the same.
+overrides:
+  esbuild: ">=0.28.1"

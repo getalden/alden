@@ -77,12 +77,12 @@ describe("renderQueue", () => {
   });
 
   it("shortens long repo names but always keeps the PR number", () => {
-    const out = renderQueue(queue([item(25, {}, { repo: "acme/react-apollo-client-with-a-long-name" })]), {
+    const out = renderQueue(queue([item(25, {}, { repo: "octocat/react-apollo-client-with-a-long-name" })]), {
       width: 120,
       color: false,
     });
     const row = out.split("\n")[2] ?? "";
-    expect(row).toMatch(/sheltonwlsn\/react-apollo-c\S*…#25 /);
+    expect(row).toMatch(/octocat\/react-apollo-c\S*…#25 /);
   });
 
   it("fits long titles into the terminal width", () => {

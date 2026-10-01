@@ -1,5 +1,5 @@
 import type { Anchor, Briefing, CheckResult, LlmSection } from "@alden/schema";
-import { fit, paint, type RenderOptions, type Style, wrap } from "./style.js";
+import { fit, paint, type RenderOptions, type Style, stripControlDeep, wrap } from "./style.js";
 
 const MARK: Record<CheckResult["status"], { symbol: string; style: Style }> = {
   passed: { symbol: "✓", style: "green" },
@@ -114,7 +114,9 @@ function modelFooter(llm: LlmSection | undefined, options: RenderOptions): strin
 }
 
 /** The terminal briefing: where to look first, what was checked with evidence, and what wasn't checked. */
-export function renderBriefing(briefing: Briefing, options: RenderOptions): string {
+export function renderBriefing(untrusted: Briefing, options: RenderOptions): string {
+  // Titles, paths, evidence and model text come from PR authors and the model: no control characters reach the terminal.
+  const briefing = stripControlDeep(untrusted);
   const { color, width } = options;
   const out: string[] = [...header(briefing, options), ""];
 

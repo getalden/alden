@@ -15,7 +15,8 @@ export function openInBrowser(url: string, fallback = `Couldn't open a browser. 
     process.platform === "darwin"
       ? ["open", [url]]
       : process.platform === "win32"
-        ? ["cmd", ["/c", "start", '""', url]]
+        ? // Not `cmd /c start`: cmd would treat & or | in the URL as its own syntax.
+          ["rundll32", ["url.dll,FileProtocolHandler", url]]
         : ["xdg-open", [url]];
   const child = spawn(command, args, { detached: true, stdio: "ignore" });
   child.on("error", () => console.log(fallback));

@@ -17,7 +17,8 @@ sign-in and your own model account.
 - [Models, providers and budgets](models.md): choosing a model, cloud platforms, local models, caps and spend.
 - [Configuration](configuration.md): every setting, and where settings live.
 - [Privacy and data](privacy.md): what leaves your machine, and what Alden stores.
-- [Troubleshooting](troubleshooting.md): common errors and their fixes.
+- [Security model](security.md): what Alden protects, from whom, and how.
+- [Troubleshooting](troubleshooting.md): common errors and their fixes. Start with `alden doctor`.
 
 ## Working on Alden
 
