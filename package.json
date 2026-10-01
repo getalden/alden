@@ -20,13 +20,16 @@
     "schema:generate": "tsx scripts/generate-schemas.ts",
     "eval": "tsx scripts/eval.ts",
     "ui:demo": "tsx scripts/ui-demo.ts",
-    "regressions:find": "tsx scripts/find-regressions.ts"
+    "regressions:find": "tsx scripts/find-regressions.ts",
+    "build:binary": "tsx scripts/build-binary.ts",
+    "smoke:binary": "tsx scripts/smoke-binary.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
     "@changesets/cli": "^3.0.3",
     "@types/node": "^26.6.3",
     "@types/picomatch": "^4.0.3",
+    "bun": "^1.4.2",
     "picomatch": "^4.0.7",
     "tsup": "^8.5.1",
     "tsx": "^4.23.15",

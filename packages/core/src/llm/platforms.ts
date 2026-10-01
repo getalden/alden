@@ -1,4 +1,5 @@
 import type { AldenConfig } from "@alden/schema";
+import { isStandaloneBinary } from "../embedded.js";
 import type { MessagesClient } from "./anthropic.js";
 import { LlmError } from "./provider.js";
 
@@ -23,6 +24,13 @@ async function load<T>(platform: Platform, importer: () => Promise<T>): Promise<
   try {
     return await importer();
   } catch (error) {
+    if (isStandaloneBinary()) {
+      throw new LlmError(
+        "setup",
+        `The standalone alden binary doesn't include the ${platform} SDK. Install Alden from npm to use ${platform}: npm install -g alden ${PACKAGES[platform]}`,
+        error,
+      );
+    }
     if ((error as { code?: string }).code === "ERR_MODULE_NOT_FOUND") {
       throw new LlmError(
         "setup",

@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { embeddedFilesUnder } from "@alden/core";
 import type { Command } from "commander";
 import { createUiApi } from "../ui/api.js";
 import { startUiServer } from "../ui/server.js";
@@ -25,7 +26,13 @@ export function registerUiCommand(program: Command, version: string): void {
       const staticDir = join(dirname(fileURLToPath(import.meta.url)), "ui");
       let ui: Awaited<ReturnType<typeof startUiServer>>;
       try {
-        ui = await startUiServer({ api: createUiApi({ version, cwd: process.cwd() }), staticDir, port });
+        // A standalone binary carries the UI inside it.
+        const embedded = embeddedFilesUnder("ui/");
+        ui = await startUiServer({
+          api: createUiApi({ version, cwd: process.cwd() }),
+          ...(embedded.size > 0 ? { files: embedded } : { staticDir }),
+          port,
+        });
       } catch (error) {
         const code = (error as { code?: string }).code;
         program.error(

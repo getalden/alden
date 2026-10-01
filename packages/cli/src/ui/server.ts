@@ -1,5 +1,4 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -51,6 +50,8 @@ export interface UiServerOptions {
   api: UiApi;
   /** The built UI (index.html and assets). Missing: a page that says how to build it. */
   staticDir?: string;
+  /** The built UI's files by relative path, for a standalone binary; used instead of `staticDir`. */
+  files?: Map<string, Uint8Array>;
   port?: number;
   /** Fixed in tests; random otherwise. */
   token?: string;
@@ -240,33 +241,43 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
     res.end();
   }
 
-  async function serveStatic(pathname: string, res: ServerResponse): Promise<void> {
+  /** The built UI's files: in memory for a standalone binary, or from the UI directory. */
+  async function readUiFile(relative: string): Promise<Uint8Array | undefined> {
+    if (options.files) return options.files.get(relative);
     const dir = options.staticDir;
-    if (!dir || !existsSync(join(dir, "index.html"))) {
+    if (!dir) return undefined;
+    const file = join(dir, relative);
+    // Only files inside the UI directory.
+    if (!file.startsWith(dir + sep)) return undefined;
+    try {
+      return await readFile(file);
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function serveStatic(pathname: string, res: ServerResponse): Promise<void> {
+    const index = await readUiFile("index.html");
+    if (!index) {
       res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": "text/html; charset=utf-8" });
       res.end(
         "<!doctype html><meta charset=utf-8><title>Alden</title><p>The Alden UI isn't built. Run <code>pnpm --filter @alden/ui build</code>, then <code>pnpm build</code>.</p>",
       );
       return;
     }
-    // Only files inside the UI directory; anything that isn't a file is the app (it routes on the client).
-    const relative = normalize(decodeURIComponent(pathname)).replace(/^([/\\])+/, "");
-    let file = join(dir, relative);
-    if (!file.startsWith(dir + sep) || !extname(file)) file = join(dir, "index.html");
-    let content: Buffer;
-    try {
-      content = await readFile(file);
-    } catch {
-      content = await readFile(join(dir, "index.html"));
-      file = join(dir, "index.html");
-    }
-    const immutable = file.includes(`${sep}assets${sep}`);
+    // Anything that isn't a file is the app (it routes on the client).
+    const relative = normalize(decodeURIComponent(pathname))
+      .replace(/^([/\\])+/, "")
+      .split(sep)
+      .join("/");
+    const asset = !relative.startsWith("..") && extname(relative) ? await readUiFile(relative) : undefined;
+    const name = asset ? relative : "index.html";
     res.writeHead(200, {
       ...SECURITY_HEADERS,
-      "Content-Type": TYPES[extname(file)] ?? "application/octet-stream",
-      ...(immutable ? { "Cache-Control": "public, max-age=31536000, immutable" } : {}),
+      "Content-Type": TYPES[extname(name)] ?? "application/octet-stream",
+      ...(name.startsWith("assets/") ? { "Cache-Control": "public, max-age=31536000, immutable" } : {}),
     });
-    res.end(content);
+    res.end(asset ?? index);
   }
 
   await new Promise<void>((resolve, reject) => {

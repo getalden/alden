@@ -178,6 +178,35 @@ describe("alden ui server", () => {
     expect((await call("/%2e%2e/%2e%2e/etc/hosts")).text).toContain("<title>Alden</title>");
   });
 
+  it("serves the UI from memory, as a standalone binary does", async () => {
+    const files = new Map([
+      ["index.html", new TextEncoder().encode("<title>embedded</title>")],
+      ["assets/app.js", new TextEncoder().encode("1")],
+    ]);
+    const embedded = await startUiServer({ api, files, token: TOKEN });
+    try {
+      const get = (path: string) =>
+        new Promise<string>((resolve) => {
+          request(
+            { host: "127.0.0.1", port: embedded.port, path, headers: { Host: `127.0.0.1:${embedded.port}` } },
+            (r) => {
+              let text = "";
+              r.on("data", (c) => {
+                text += c;
+              });
+              r.on("end", () => resolve(text));
+            },
+          ).end();
+        });
+      expect(await get("/")).toBe("<title>embedded</title>");
+      expect(await get("/assets/app.js")).toBe("1");
+      expect(await get("/stats")).toBe("<title>embedded</title>");
+      expect(await get("/../../etc/passwd")).toBe("<title>embedded</title>");
+    } finally {
+      await embedded.close();
+    }
+  });
+
   it("says how to build the UI when it isn't built", async () => {
     const bare = await startUiServer({ api, token: TOKEN });
     try {

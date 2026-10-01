@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Language, Parser } from "web-tree-sitter";
+import { embeddedFile } from "../embedded.js";
 
 export type GraphLanguage = "typescript" | "tsx" | "python" | "go" | "php";
 
@@ -46,11 +47,13 @@ const languages = new Map<GraphLanguage, Promise<Language>>();
 
 /** A parser for one language. The runtime and each grammar load once per process. */
 export async function parserFor(language: GraphLanguage): Promise<{ parser: Parser; language: Language }> {
-  init ??= Parser.init();
+  // A standalone binary carries the runtime and grammars inside it rather than as files.
+  const runtime = embeddedFile("grammars/web-tree-sitter.wasm");
+  init ??= runtime ? Parser.init({ wasmBinary: runtime }) : Parser.init();
   await init;
   let loaded = languages.get(language);
   if (!loaded) {
-    loaded = Language.load(grammarPath(language));
+    loaded = Language.load(embeddedFile(`grammars/${GRAMMAR_FILES[language].file}`) ?? grammarPath(language));
     languages.set(language, loaded);
   }
   const lang = await loaded;

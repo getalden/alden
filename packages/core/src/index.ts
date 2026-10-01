@@ -19,6 +19,7 @@ export {
   parseUnifiedDiff,
 } from "./diff/parse.js";
 export { fetchPullRequestDiff, fromRestFile, type LocalDiff, readLocalDiff } from "./diff/sources.js";
+export { embeddedFile, embeddedFilesUnder, isStandaloneBinary, registerEmbeddedFiles } from "./embedded.js";
 export { FeedbackLog, feedbackItemKey, redactFeedback, summarizeFeedback } from "./feedback/log.js";
 export * from "./github/index.js";
 export {
