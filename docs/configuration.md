@@ -81,6 +81,8 @@ Everything is under `~/.alden` (or `ALDEN_HOME`):
 | `cache/` | GitHub responses, cached briefly, and your last queue (for `alden open` and `alden review <#>`). |
 | `index/` | The code graph's per-file cache. Around 100 MB for a repo the size of Kubernetes. |
 | `worktrees/` | Checkouts of PRs for the code graph, one per repo. |
-| `spend/` | The model spend ledger, one file per day. |
+| `alden.db` | The local database: feedback, the PRs you open, your notes, model spending, first use per repo. See [Learning and memory](memory.md). |
+| `legacy/` | Files from before the database, kept after their one-time import. Safe to delete. |
 
-Deleting any of these is safe. Alden rebuilds them as needed; deleting `spend/` resets today's daily cap.
+Deleting any of these is safe, but deleting `alden.db` also deletes your feedback, notes and what Alden learned, and
+resets today's daily cap. Alden rebuilds everything else as needed.

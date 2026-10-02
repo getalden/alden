@@ -1,6 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
 import {
   FEEDBACK_SCHEMA_VERSION,
   type FeedbackEvent,
@@ -11,7 +9,7 @@ import {
   type FeedbackSummary,
   type FeedbackTarget,
 } from "@alden/schema";
-import { aldenHome } from "../config.js";
+import { type StoreSource, storeFrom } from "../store/source.js";
 
 const targetKey = (t: FeedbackTarget) => (t.kind === "pr" ? `${t.repo}#${t.number}` : `local:${t.repo ?? ""}`);
 
@@ -24,11 +22,11 @@ export function feedbackItemKey(item: FeedbackItem): string {
 const briefingKey = (e: FeedbackEvent) => `${targetKey(e.target)}@${e.briefingAt}`;
 
 /**
- * Feedback, one append-only JSON-lines file per month in `~/.alden/feedback`. Nothing is sent anywhere; a design
- * partner shares it with `alden feedback --export`.
+ * Feedback, as append-only events in Alden's local database. Nothing is sent anywhere; a design partner shares it
+ * with `alden feedback --export`.
  */
 export class FeedbackLog {
-  constructor(private readonly dir: string = join(aldenHome(), "feedback")) {}
+  constructor(private readonly source?: StoreSource) {}
 
   /** Records an event from a front end, after checking its shape. */
   async add(input: FeedbackInput | unknown, now: Date = new Date()): Promise<FeedbackEvent> {
@@ -39,33 +37,24 @@ export class FeedbackLog {
       id: randomUUID(),
       at: now.toISOString(),
     });
-    await mkdir(this.dir, { recursive: true });
-    await appendFile(join(this.dir, `${event.at.slice(0, 7)}.jsonl`), `${JSON.stringify(event)}\n`, "utf8");
+    storeFrom(this.source).addEvent({
+      id: event.id,
+      at: event.at,
+      type: "feedback",
+      repo: event.target.repo,
+      body: event,
+    });
     return event;
   }
 
-  /** Every event, oldest first. Lines that don't parse, or fail the schema, are skipped. */
-  async events(): Promise<FeedbackEvent[]> {
-    let files: string[];
-    try {
-      files = (await readdir(this.dir)).filter((f) => f.endsWith(".jsonl")).sort();
-    } catch {
-      return [];
-    }
-    const out: FeedbackEvent[] = [];
-    for (const file of files) {
-      const text = await readFile(join(this.dir, file), "utf8");
-      for (const line of text.split("\n")) {
-        if (!line.trim()) continue;
-        try {
-          const parsed = FeedbackEventSchema.safeParse(JSON.parse(line));
-          if (parsed.success) out.push(parsed.data);
-        } catch {
-          // a line cut short by a crash
-        }
-      }
-    }
-    return out.sort((a, b) => a.at.localeCompare(b.at));
+  /** Every event, oldest first, optionally for one repo. Events that fail the schema are skipped. */
+  async events(repo?: string): Promise<FeedbackEvent[]> {
+    return storeFrom(this.source)
+      .events<unknown>("feedback", repo === undefined ? {} : { repo })
+      .flatMap((raw) => {
+        const parsed = FeedbackEventSchema.safeParse(raw);
+        return parsed.success ? [parsed.data] : [];
+      });
   }
 
   async summary(): Promise<FeedbackSummary> {

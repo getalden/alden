@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -62,7 +62,7 @@ describe("SpendLedger", () => {
   const usage = { inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
   it("appends entries per local day and totals known spending", async () => {
-    const ledger = new SpendLedger(dir);
+    const ledger = new SpendLedger(join(dir, "alden.db"));
     const at = new Date(2026, 8, 29, 23, 30).toISOString();
     await ledger.record({ at, provider: "anthropic", model: "claude-sonnet-5", usd: 0.12, usage, purpose: "a#1" });
     await ledger.record({ at, provider: "anthropic", model: "claude-sonnet-5", usd: 0.03, usage, purpose: "a#2" });
@@ -74,9 +74,13 @@ describe("SpendLedger", () => {
     expect(await ledger.days()).toEqual(["2026-09-29"]);
   });
 
-  it("skips a half-written line instead of failing", async () => {
-    await writeFile(join(dir, "2026-09-29.jsonl"), '{"usd":0.5,"model":"m"}\n{"usd":0.2,"mod');
-    expect(await new SpendLedger(dir).spentOn("2026-09-29")).toBe(0.5);
+  it("imports the old JSON-lines ledger, skipping a half-written line", async () => {
+    await mkdir(join(dir, "spend"));
+    await writeFile(
+      join(dir, "spend", "2026-09-29.jsonl"),
+      '{"at":"2026-09-29T12:00:00","usd":0.5,"model":"m","usage":{}}\n{"usd":0.2,"mod',
+    );
+    expect(await new SpendLedger(join(dir, "alden.db")).spentOn("2026-09-29")).toBe(0.5);
   });
 
   it("formats local days", () => {
@@ -120,7 +124,7 @@ describe("budgetedGenerate", () => {
   }
 
   it("calls the model and records what it actually cost", async () => {
-    const ledger = new SpendLedger(dir);
+    const ledger = new SpendLedger(join(dir, "alden.db"));
     const { p } = provider({ inputTokens: 20_000 });
     const result = await budgetedGenerate(p, request, { limits, ledger, purpose: "getalden/alden#12" });
 
@@ -134,14 +138,14 @@ describe("budgetedGenerate", () => {
 
   it("refuses before sending when the worst case breaks the per-review cap", async () => {
     const { p, calls } = provider({ inputTokens: 300_000 });
-    await expect(budgetedGenerate(p, request, { limits, ledger: new SpendLedger(dir), purpose: "x" })).rejects.toThrow(
-      BudgetExceededError,
-    );
+    await expect(
+      budgetedGenerate(p, request, { limits, ledger: new SpendLedger(join(dir, "alden.db")), purpose: "x" }),
+    ).rejects.toThrow(BudgetExceededError);
     expect(calls()).toBe(0);
   });
 
   it("refuses before sending when today's spend would pass the daily cap", async () => {
-    const ledger = new SpendLedger(dir);
+    const ledger = new SpendLedger(join(dir, "alden.db"));
     const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
     await ledger.record({
       at: new Date().toISOString(),
@@ -157,16 +161,16 @@ describe("budgetedGenerate", () => {
   });
 
   it("estimates input when the provider can't count, and records unknown prices without a cost", async () => {
-    const ledger = new SpendLedger(dir);
+    const ledger = new SpendLedger(join(dir, "alden.db"));
     const { p } = provider({ inputTokens: undefined, model: "llama3" });
     const result = await budgetedGenerate(p, request, { limits, ledger, purpose: "local changes" });
     expect(result.usd).toBeUndefined();
-    const raw = await readFile(join(dir, `${localDay()}.jsonl`), "utf8");
-    expect(JSON.parse(raw.trim())).not.toHaveProperty("usd");
+    const [entry] = await ledger.entries();
+    expect(entry).not.toHaveProperty("usd");
   });
 
   it("records refusals, since they can be billed", async () => {
-    const ledger = new SpendLedger(dir);
+    const ledger = new SpendLedger(join(dir, "alden.db"));
     const { p } = provider({ inputTokens: 1000, result: { output: null, stopReason: "refusal" } });
     await budgetedGenerate(p, request, { limits, ledger, purpose: "x" });
     expect(await ledger.entries()).toHaveLength(1);

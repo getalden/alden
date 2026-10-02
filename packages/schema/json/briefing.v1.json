@@ -316,6 +316,10 @@
               "check",
               "llm"
             ]
+          },
+          "learned": {
+            "description": "why your feedback put it here, e.g. 'you usually agree with migration flags'",
+            "type": "string"
           }
         },
         "required": [
@@ -470,6 +474,61 @@
         "findings",
         "droppedFindings",
         "omittedFiles"
+      ],
+      "additionalProperties": false
+    },
+    "learning": {
+      "description": "what your feedback and memory changed; absent when nothing",
+      "type": "object",
+      "properties": {
+        "hidden": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "anchor": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "line in the new file; absent for whole-file findings",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "title",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          "description": "places that would have been picked, left out because of your feedback"
+        },
+        "memory": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "description": "notes about you that were given to the model"
+        }
+      },
+      "required": [
+        "hidden",
+        "memory"
       ],
       "additionalProperties": false
     }

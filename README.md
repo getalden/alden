@@ -1,12 +1,12 @@
 # Alden
 
-A code review companion. Alden triages the PRs waiting on you, briefs you on what each one touches and what it already checked, and points you at the few places that need your eyes.
+The review companion that knows what you look for. Alden ranks the PRs waiting on you, shows what the diff doesn't (who calls the changed code), and points you at the few places that need your eyes. It learns from your feedback as you go, and it runs on your machine.
 
 > **Status: pre-alpha.** Phase 1 is being built. `alden queue` and `alden review` (with or without a model) work today.
 
 ## Quickstart
 
-Requires Node 22+.
+Requires Node 22.13+.
 
 ```sh
 npx alden@next auth login   # reuses your GitHub CLI sign-in if you have one
@@ -60,14 +60,32 @@ alden config set queue.fastTrackMaxLines 100
 alden config set queue.includeDrafts true
 ```
 
+## It learns what you look for
+
+Mark a flag "agree" or "not needed" (in `alden ui`), and open the PRs you care about. After a few one-sided verdicts on
+a check, Alden puts its flags first, or leaves them out (never secrets, never high severity). After you open a kind of
+PR ahead of its rank a few times, those rank higher. A place you dismissed stays down when you re-review that PR. Every
+change says why, in the briefing or the queue row, and nothing is hidden silently.
+
+Add notes the model gets with every review of a repo, and see or forget anything Alden knows:
+
+```sh
+alden memory add "Money is in cents, never floats"
+alden memory
+alden memory forget check:tests.missing:down
+```
+
+It all stays in `~/.alden/alden.db` on your machine; only your notes go to the model. See
+[Learning and memory](docs/memory.md).
+
 ## Documentation
 
 See [docs/](docs/README.md): getting started, every command and setting, how the queue and checks work, the code
-graph, models and budgets, privacy, and troubleshooting.
+graph, learning and memory, models and budgets, privacy, and troubleshooting.
 
-## What's coming in phase 1
+## Also in phase 1
 
-- `alden stats` shows your repo's time to first review and review cycle time.
+- `alden stats` shows your repo's time to first review and review cycle time, before and after Alden.
 
 Alden is GitHub-only for now and supports TypeScript/JavaScript, Python, PHP (Laravel, Symfony) and Go.
 
@@ -86,7 +104,7 @@ Settings live in `~/.alden/config.toml`. A repo can override them in `.alden.tom
 
 ## Development
 
-Requires Node 22+ and pnpm 10.
+Requires Node 22.13+ and pnpm 10.
 
 ```sh
 pnpm install

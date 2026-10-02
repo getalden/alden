@@ -13,6 +13,7 @@ sign-in and your own model account.
 - [The web UI](web-ui.md): `alden ui`, its views, keyboard and security.
 - [The review queue](queue.md): how PRs are ranked, and what "fast-track" means.
 - [Briefings and checks](checks.md): what `alden review` checks, and how it picks where to look.
+- [Learning and memory](memory.md): what Alden learns from your feedback, your notes, and how to forget.
 - [The code graph](code-graph.md): callers outside the diff, languages, and PR checkouts.
 - [Models, providers and budgets](models.md): choosing a model, cloud platforms, local models, caps and spend.
 - [Configuration](configuration.md): every setting, and where settings live.

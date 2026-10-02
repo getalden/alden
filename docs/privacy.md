@@ -7,7 +7,7 @@ Alden runs on your machine. There is no Alden server, and nothing is sent to Ald
 | Goes to | What | When |
 | --- | --- | --- |
 | GitHub | API requests with your token: review requests, PR details, diffs, CI status, CODEOWNERS. Git fetches of PRs for the code graph. | `alden queue`, `alden review <pr>` |
-| Your model provider | The PR's title and description, the diff, and a few lines around callers outside the diff. | `alden review`, unless `--no-llm` |
+| Your model provider | The PR's title and description, the diff, a few lines around callers outside the diff, and your [notes](memory.md#your-notes) for the repo. | `alden review`, unless `--no-llm` |
 
 Nothing goes to a model when no provider is configured or you pass `--no-llm`. With a local model (Ollama, LM Studio),
 nothing leaves your machine at all.
@@ -27,7 +27,8 @@ API data by default.
 
 ## What stays on your machine
 
-See [Files Alden keeps](configuration.md#files-alden-keeps). Your GitHub token is stored in the OS keychain, or, where
+Feedback, the PRs you open and what Alden learns from them stay in `~/.alden/alden.db` ([Learning and
+memory](memory.md)). See [Files Alden keeps](configuration.md#files-alden-keeps). Your GitHub token is stored in the OS keychain, or, where
 there's no keychain, in a file only your user can read. `alden auth logout` removes it.
 
 ## Telemetry

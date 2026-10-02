@@ -8,6 +8,7 @@ import {
   isStandaloneBinary,
   languageOf,
   loadConfig,
+  openStore,
   repoConfigPath,
   repoFromRemote,
   resolveModel,
@@ -80,6 +81,26 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
       status: "fail",
       detail: `${home} isn't writable`,
       fix: "Fix its permissions, or set ALDEN_HOME to a folder you own.",
+    });
+  }
+
+  // The local database: feedback, what was learned, memory, spending.
+  try {
+    const store = openStore();
+    const count = (type: string) =>
+      Number(store.get<{ n: number }>("SELECT COUNT(*) AS n FROM events WHERE type = ?", type)?.n ?? 0);
+    const [feedback, opens, memory] = [count("feedback"), count("open"), count("memory")];
+    add({
+      area: "Database",
+      status: "ok",
+      detail: `${store.path} (${feedback} feedback, ${opens} opens, ${memory} memory events)`,
+    });
+  } catch (error) {
+    add({
+      area: "Database",
+      status: "fail",
+      detail: `couldn't open ${home}/alden.db: ${(error as Error).message.slice(0, 160)}`,
+      fix: "Alden needs Node 22.13 or later (or the standalone binary). If the file is damaged, move it aside; Alden starts a new one.",
     });
   }
 

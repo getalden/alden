@@ -9,6 +9,7 @@ import {
 } from "@alden/schema";
 import type { PullRequestFacts } from "../github/pull-requests.js";
 import type { ReviewQueue } from "../github/queue.js";
+import { type Learning, openBoost, prFeatures, type QueueRow, sensitiveDir } from "../learn/learn.js";
 import { fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./files.js";
 
 export type { FastTrackKind, Lane, RankedPullRequest, RankedQueue, Score };
@@ -26,16 +27,6 @@ export function formatAge(hours: number): string {
   if (hours < 1) return "<1h";
   if (hours < 48) return `${Math.floor(hours)}h`;
   return `${Math.floor(hours / 24)}d`;
-}
-
-function topDir(path: string, matches: (p: string) => boolean): string {
-  // Name the shortest leading directory that is itself sensitive, e.g. "db/migrations/" not the full file path.
-  const parts = path.split("/");
-  for (let i = 1; i < parts.length; i++) {
-    const dir = `${parts.slice(0, i).join("/")}/`;
-    if (matches(`${dir}x`)) return dir;
-  }
-  return path;
 }
 
 /** Lines a reviewer actually reads: everything except lockfiles, unless the file list was cut short. */
@@ -60,7 +51,7 @@ function fastTrackKind(pr: PullRequestFacts): FastTrackKind | undefined {
 export function rankPullRequest(
   pr: PullRequestFacts,
   config: AldenConfig["queue"],
-  context: { now: number; authorQueueSize: number },
+  context: { now: number; authorQueueSize: number; learning?: Learning | undefined },
 ): RankedPullRequest {
   const reasons: { weight: number; text: string }[] = [];
   const add = (weight: number, text: string) => reasons.push({ weight, text });
@@ -83,7 +74,7 @@ export function rankPullRequest(
   const sensitive = pr.files.map((f) => f.path).filter(isSensitive);
   if (sensitive.length > 0) {
     risk += 2;
-    const dirs = [...new Set(sensitive.map((p) => topDir(p, isSensitive)))];
+    const dirs = [...new Set(sensitive.map((p) => sensitiveDir(p, isSensitive)))];
     add(2 * WEIGHTS.risk, `touches ${dirs.slice(0, 2).join(", ")}${dirs.length > 2 ? ` +${dirs.length - 2}` : ""}`);
   }
 
@@ -137,12 +128,16 @@ export function rankPullRequest(
     pr.mergeable !== "conflicting" &&
     !pr.isDraft;
 
-  const total = risk * WEIGHTS.risk + wait * WEIGHTS.wait + blocking * WEIGHTS.blocking;
+  // What you usually open first, from your own history in this repo. Shown, never silent.
+  const learned = openBoost(context.learning, prFeatures(pr, config.sensitivePaths));
+  if (learned.reason) add(learned.points, learned.reason);
+
+  const total = risk * WEIGHTS.risk + wait * WEIGHTS.wait + blocking * WEIGHTS.blocking + learned.points;
   return {
     pr,
     lane: fastTrack ? "fast-track" : "needs-you",
     ...(fastTrack ? { fastTrack: kind } : {}),
-    score: { risk, wait, blocking, total },
+    score: { risk, wait, blocking, ...(learned.points > 0 ? { learned: learned.points } : {}), total },
     reasons: reasons.sort((a, b) => b.weight - a.weight).map((r) => r.text),
     waitingHours,
     waitingOnAuthor,
@@ -153,14 +148,23 @@ export function rankPullRequest(
  * Splits the queue into "needs you" (highest score first, PRs waiting on their author last) and "fast-track"
  * (longest waiting first). Ranking only orders the queue; nothing is ever approved.
  */
-export function rankQueue(queue: ReviewQueue, config: AldenConfig["queue"], now: number = Date.now()): RankedQueue {
+export function rankQueue(
+  queue: ReviewQueue,
+  config: AldenConfig["queue"],
+  now: number = Date.now(),
+  learning: (repo: string) => Learning | undefined = () => undefined,
+): RankedQueue {
   const perAuthor = new Map<string, number>();
   for (const pr of queue.pullRequests) {
     if (pr.author && !pr.authorIsBot) perAuthor.set(pr.author, (perAuthor.get(pr.author) ?? 0) + 1);
   }
 
   const ranked = queue.pullRequests.map((pr) =>
-    rankPullRequest(pr, config, { now, authorQueueSize: pr.author ? (perAuthor.get(pr.author) ?? 0) : 0 }),
+    rankPullRequest(pr, config, {
+      now,
+      authorQueueSize: pr.author ? (perAuthor.get(pr.author) ?? 0) : 0,
+      learning: learning(pr.repo),
+    }),
   );
 
   const byScore = (a: RankedPullRequest, b: RankedPullRequest) =>
@@ -177,4 +181,24 @@ export function rankQueue(queue: ReviewQueue, config: AldenConfig["queue"], now:
     fastTrack: ranked.filter((r) => r.lane === "fast-track").sort(byWait),
     warnings: queue.warnings,
   };
+}
+
+/**
+ * The queue's rows as learning sees them: each PR's features and its place in "needs you" ranked without anything
+ * learned, so opening a PR that learning lifted doesn't count as jumping ahead (which would feed on itself).
+ */
+export function queueRows(ranked: RankedQueue, config: AldenConfig["queue"]): QueueRow[] {
+  const base = [...ranked.needsYou].sort(
+    (a, b) =>
+      Number(a.waitingOnAuthor) - Number(b.waitingOnAuthor) ||
+      b.score.total - (b.score.learned ?? 0) - (a.score.total - (a.score.learned ?? 0)) ||
+      b.waitingHours - a.waitingHours,
+  );
+  return [...ranked.needsYou, ...ranked.fastTrack].map((r) => ({
+    url: r.pr.url,
+    repo: r.pr.repo,
+    number: r.pr.number,
+    features: prFeatures(r.pr, config.sensitivePaths),
+    base: r.lane === "needs-you" ? base.indexOf(r) : -1,
+  }));
 }

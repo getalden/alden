@@ -102,7 +102,7 @@ describe("addModelReview on a real PR", () => {
         ],
       },
     });
-    const ledger = new SpendLedger(dir);
+    const ledger = new SpendLedger(join(dir, "alden.db"));
     const result = await addModelReview(briefing, {
       provider,
       config,
@@ -142,7 +142,7 @@ describe("addModelReview on a real PR", () => {
       },
     };
     const withConfig = { ...config, model: { ...config.model, effort: "medium" as const } };
-    const ledger = new SpendLedger(dir);
+    const ledger = new SpendLedger(join(dir, "alden.db"));
     const fromConfig = await addModelReview(briefing, { provider: spy, config: withConfig, ledger, files });
     const overridden = await addModelReview(briefing, {
       provider: spy,
@@ -172,7 +172,7 @@ describe("addModelReview on a real PR", () => {
     const result = await addModelReview(briefing, {
       provider: model(behaviour).provider,
       config,
-      ledger: new SpendLedger(dir),
+      ledger: new SpendLedger(join(dir, "alden.db")),
       files,
     });
     expect(result.llm?.status).toBe(status);
@@ -184,14 +184,19 @@ describe("addModelReview on a real PR", () => {
   it("stops before calling when the budget can't cover the review", async () => {
     const { briefing, files } = recorded("django", 22041);
     const { provider, sent } = model({}, 400_000);
-    const result = await addModelReview(briefing, { provider, config, ledger: new SpendLedger(dir), files });
+    const result = await addModelReview(briefing, {
+      provider,
+      config,
+      ledger: new SpendLedger(join(dir, "alden.db")),
+      files,
+    });
     expect(result.llm).toMatchObject({ status: "over_budget", note: expect.stringMatching(/per-review cap/) });
     expect(sent).toHaveLength(0);
   });
 
   it("says so when today's budget is nearly gone", async () => {
     const { briefing, files } = recorded("django", 22041);
-    const ledger = new SpendLedger(dir);
+    const ledger = new SpendLedger(join(dir, "alden.db"));
     const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
     await ledger.record({
       at: new Date().toISOString(),

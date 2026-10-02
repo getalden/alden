@@ -1,8 +1,8 @@
-import { BRIEFING_SCHEMA_VERSION, type Briefing, type CheckResult } from "@alden/schema";
+import { BRIEFING_SCHEMA_VERSION, type Briefing, type BriefingTarget, type CheckResult } from "@alden/schema";
 import { fileKind, isLockfile } from "../queue/files.js";
 import { CHECKS } from "./checks.js";
 import { filesOutsideGraph } from "./graph-context.js";
-import { pickLookHere } from "./pick.js";
+import { pickWithLearning } from "./pick.js";
 import type { Check, ReviewContext } from "./types.js";
 
 /**
@@ -56,9 +56,14 @@ export function runChecks(context: ReviewContext, checks: Check[] = CHECKS): Che
   });
 }
 
+/** Which PR (or "local") a briefing is for, as learning keys feedback. */
+export const learningTarget = (target: BriefingTarget) =>
+  target.kind === "pr" ? `${target.repo.toLowerCase()}#${target.number}` : "local";
+
 export function buildBriefing(context: ReviewContext, now: Date = new Date()): Briefing {
   const reviewable = context.files.filter((f) => !isLockfile(f.path));
   const checks = runChecks(context);
+  const { eyes, hidden } = pickWithLearning(checks, context.learning, learningTarget(context.target));
   return {
     schemaVersion: BRIEFING_SCHEMA_VERSION,
     target: context.target,
@@ -81,10 +86,11 @@ export function buildBriefing(context: ReviewContext, now: Date = new Date()): B
       patchMissing: f.patchMissing,
     })),
     checks,
-    needsYourEyes: pickLookHere(checks),
+    needsYourEyes: eyes,
     notChecked: [
       ...notCheckedFor(context),
       ...context.files.filter((f) => f.patchMissing).map((f) => `${f.path}: too large for GitHub to send its diff`),
     ],
+    ...(hidden.length > 0 ? { learning: { hidden, memory: 0 } } : {}),
   };
 }

@@ -6,6 +6,7 @@ const TABS: { label: string; route: Route }[] = [
   { label: "Queue", route: { view: "queue" } },
   { label: "My changes", route: { view: "local" } },
   { label: "Stats", route: { view: "stats" } },
+  { label: "Memory", route: { view: "memory" } },
   { label: "Settings", route: { view: "settings" } },
 ];
 

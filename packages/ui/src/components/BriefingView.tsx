@@ -63,6 +63,15 @@ const STATUS_ICON: Record<CheckResult["status"], { icon: string; label: string }
   skipped: { icon: "–", label: "Skipped" },
 };
 
+type Hidden = NonNullable<Briefing["learning"]>["hidden"];
+
+/** Places left out for the same reason, together: three untested files are one line, not three. */
+export function groupHidden(hidden: Hidden): { reason: string; items: Hidden }[] {
+  const groups = new Map<string, Hidden>();
+  for (const item of hidden) groups.set(item.reason, [...(groups.get(item.reason) ?? []), item]);
+  return [...groups].map(([reason, items]) => ({ reason, items }));
+}
+
 function eyesItem(item: LookHere, checks: CheckResult[]): FeedbackItem {
   const severity = checks.find((c) => c.id === item.checkId)?.severity;
   return {
@@ -246,10 +255,41 @@ export function BriefingView({ briefing, feedback }: { briefing: Briefing; feedb
                 </div>
                 {item.anchor && <Place anchor={item.anchor} links={links} />}
                 <p className="muted">{item.reason}</p>
+                {item.learned && <p className="learned-why">↑ {item.learned}</p>}
                 {feedback && <VerdictButtons item={eyesItem(item, briefing.checks)} feedback={feedback} />}
               </li>
             ))}
           </ol>
+        )}
+        {briefing.learning && (briefing.learning.hidden.length > 0 || briefing.learning.memory > 0) && (
+          <ul className="learned-hidden muted" aria-label="What your feedback changed">
+            {groupHidden(briefing.learning.hidden).map(({ reason, items }) => (
+              <li key={reason}>
+                {items.length === 1 ? (
+                  <>
+                    Hidden: {items[0]?.title}. {reason}.
+                  </>
+                ) : (
+                  <details>
+                    <summary>
+                      Hidden {items.length} places. {reason}.
+                    </summary>
+                    <ul className="plain-list">
+                      {items.map((h) => (
+                        <li key={`${h.title}${h.anchor ? anchorKey(h.anchor) : ""}`}>{h.title}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </li>
+            ))}
+            {briefing.learning.memory > 0 && (
+              <li>
+                The model was given {briefing.learning.memory} note{briefing.learning.memory === 1 ? "" : "s"} on what
+                you care about here (see Memory).
+              </li>
+            )}
+          </ul>
         )}
       </section>
 

@@ -30,6 +30,18 @@ const api: UiApi = {
     return { id: "1" };
   },
   feedbackSummary: async () => ({ verdicts: 0 }),
+  memory: async (repo) => {
+    calls.push({ method: "memory", args: repo });
+    return { repo: repo ?? "acme/shop", items: [] };
+  },
+  addMemory: async (input) => {
+    calls.push({ method: "addMemory", args: input });
+    return { items: [] };
+  },
+  forgetMemory: async (input) => {
+    calls.push({ method: "forgetMemory", args: input });
+    return { items: [] };
+  },
   stats: async (options) => {
     calls.push({ method: "stats", args: options });
     return { repo: options.repo };
@@ -166,6 +178,19 @@ describe("alden ui server", () => {
     expect([res.status, JSON.parse(res.text)]).toEqual([200, { id: "1" }]);
     expect(calls).toEqual([{ method: "addFeedback", args: body }]);
     expect(JSON.parse((await call("/api/feedback", { headers: authed })).text)).toEqual({ verdicts: 0 });
+  });
+
+  it("lists, adds and forgets memory, and checks the body", async () => {
+    await call("/api/memory?repo=a/b", { headers: authed });
+    await call("/api/memory", { method: "POST", headers: authed, body: { text: "Cents, not floats" } });
+    await call("/api/memory/forget", { method: "POST", headers: authed, body: { repo: "a/b", id: "note:1" } });
+    expect(calls).toEqual([
+      { method: "memory", args: "a/b" },
+      { method: "addMemory", args: { text: "Cents, not floats" } },
+      { method: "forgetMemory", args: { repo: "a/b", id: "note:1" } },
+    ]);
+    expect((await call("/api/memory", { method: "POST", headers: authed, body: { note: 1 } })).status).toBe(400);
+    expect((await call("/api/memory/forget", { method: "POST", headers: authed, body: {} })).status).toBe(400);
   });
 
   it("serves the UI without a token, the app for unknown paths, and nothing outside its folder", async () => {

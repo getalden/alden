@@ -1089,3 +1089,51 @@ kbd {
   cursor: pointer;
   color: var(--text-2);
 }
+
+/* Memory */
+.memory-repo {
+  display: grid;
+  gap: 4px;
+  max-width: 320px;
+}
+.memory-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.memory-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.memory-list li:first-child {
+  border-top: 0;
+}
+.memory-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.memory-add input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* What learning changed in a briefing */
+.learned-why {
+  color: var(--accent);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.learned-hidden {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}

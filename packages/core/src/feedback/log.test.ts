@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FeedbackInput } from "@alden/schema";
@@ -9,7 +9,7 @@ let dir: string;
 let log: FeedbackLog;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "alden-feedback-"));
-  log = new FeedbackLog(dir);
+  log = new FeedbackLog(join(dir, "alden.db"));
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -80,13 +80,28 @@ describe("FeedbackLog", () => {
     expect([summary.briefings, summary.agree, summary.notNeeded]).toEqual([2, 1, 1]);
   });
 
-  it("refuses malformed input and skips broken lines when reading", async () => {
+  it("refuses malformed input", async () => {
     await expect(log.add({ kind: "verdict", target, briefingAt, verdict: "maybe" })).rejects.toThrow();
     await expect(log.add({ kind: "missed", target, briefingAt, note: "" })).rejects.toThrow();
-    await log.add(verdict(eyes("tests.missing", 9), "agree"), new Date("2026-09-30T10:00:00Z"));
-    const [file] = await readdir(dir);
-    await writeFile(join(dir, file as string), '{"kind":"verdi\nnot json\n{"kind":"missed"}\n', { flag: "a" });
-    expect((await log.events()).length).toBe(1);
+    expect(await log.events()).toEqual([]);
+  });
+
+  it("imports the JSON-lines files Alden kept before the database, skipping broken lines", async () => {
+    const legacy = await mkdtemp(join(tmpdir(), "alden-legacy-"));
+    const kept = await new FeedbackLog(join(dir, "other.db")).add(
+      verdict(eyes("tests.missing", 9), "agree"),
+      new Date("2026-09-30T10:00:00Z"),
+    );
+    await mkdir(join(legacy, "feedback"));
+    await writeFile(
+      join(legacy, "feedback", "2026-09.jsonl"),
+      `${JSON.stringify(kept)}\n{"kind":"verdi\nnot json\n{"kind":"missed"}\n`,
+    );
+    const imported = new FeedbackLog(join(legacy, "alden.db"));
+    expect(await imported.events()).toEqual([kept]);
+    // The old folder moves out of the way, and isn't imported twice.
+    expect(await readdir(join(legacy, "legacy"))).toEqual(["feedback"]);
+    await rm(legacy, { recursive: true, force: true });
   });
 
   it("summarises an empty log", async () => {

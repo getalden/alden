@@ -34,6 +34,10 @@ export interface UiApi {
   addFeedback(input: unknown): Promise<unknown>;
   feedbackSummary(): Promise<unknown>;
   stats(options: { repo?: string; days: number; since?: string; refresh: boolean }): Promise<unknown>;
+  /** What Alden knows about the reviewer in a repo (default: the repo `alden ui` was started in). */
+  memory(repo?: string): Promise<unknown>;
+  addMemory(input: { repo?: string; text: string }): Promise<unknown>;
+  forgetMemory(input: { repo?: string; id: string }): Promise<unknown>;
 }
 
 /** An error the UI should show as is, with an HTTP status. */
@@ -216,6 +220,31 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       case "POST /api/feedback":
         send(res, 200, await api.addFeedback(await readJsonBody(req)));
         return;
+      case "GET /api/memory": {
+        const repo = url.searchParams.get("repo") ?? undefined;
+        send(res, 200, await api.memory(repo));
+        return;
+      }
+      case "POST /api/memory": {
+        const body = await readJsonBody(req);
+        if (typeof body.text !== "string") throw new ApiError(400, "Send { text }, and optionally { repo }.");
+        send(
+          res,
+          200,
+          await api.addMemory({ text: body.text, ...(typeof body.repo === "string" ? { repo: body.repo } : {}) }),
+        );
+        return;
+      }
+      case "POST /api/memory/forget": {
+        const body = await readJsonBody(req);
+        if (typeof body.id !== "string") throw new ApiError(400, "Send { id }, and optionally { repo }.");
+        send(
+          res,
+          200,
+          await api.forgetMemory({ id: body.id, ...(typeof body.repo === "string" ? { repo: body.repo } : {}) }),
+        );
+        return;
+      }
       default:
         send(res, 404, { error: `No such endpoint: ${key}` });
     }

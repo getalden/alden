@@ -96,6 +96,16 @@ Shows how often you agreed with Alden's flags, and what it missed. `--json` prin
 writes your feedback to a file you can share, with repo names, titles, paths and notes removed; add `--full` to keep
 them.
 
+## alden memory
+
+Lists what Alden has learned about you in a repo, and your notes for it: by default the repo of the clone you're in,
+or `--repo owner/name`. `--json` prints the items. See [Learning and memory](memory.md).
+
+| Command | What it does |
+| --- | --- |
+| `alden memory add <text>` | Adds a note; the model gets it with every review of the repo. |
+| `alden memory forget <id>` | Forgets a note or a learned item, by the id `alden memory` shows. |
+
 ## alden spend
 
 Shows what Alden has spent on models today and over recent days, against your caps. `--json` prints the report as

@@ -2,7 +2,7 @@
  * Checks a built `alden` binary works on this machine: `pnpm smoke:binary dist-bin/alden-<target>`.
  *
  * Its version, a local review of a throwaway repo (diff, checks and the code graph with the embedded grammars, no
- * model), and `alden ui` serving the embedded UI. Uses a throwaway ALDEN_HOME and never touches the keychain.
+ * model), the local database, and `alden ui` serving the embedded UI. Uses a throwaway ALDEN_HOME and never touches the keychain.
  */
 import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -48,6 +48,10 @@ try {
   const review = run(["review", "--no-llm"]);
   check("review finds the caller with the code graph", /calls rank \(signature changed\)/.test(review));
   check("review runs every check", /Likely secrets/.test(review) && /Changed public signatures/.test(review));
+
+  // The local database (node:sqlite, as Bun implements it): a note goes in and comes back out.
+  run(["memory", "add", "--repo", "smoke/test", "Money is in cents"]);
+  check("memory keeps a note in the database", run(["memory", "--repo", "smoke/test"]).includes("Money is in cents"));
 
   // The web UI, served from inside the binary.
   const ui = spawn(binary, ["ui", "--no-open", "--port", "0"], { cwd: repo, env });

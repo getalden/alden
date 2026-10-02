@@ -1,14 +1,20 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
+  addNote,
   createGitHubClient,
   type Effort,
   FeedbackLog,
   fetchReviewQueue,
   fetchViewer,
+  forget,
   JsonCache,
   loadConfig,
+  loadLearning,
   MODEL_ALIASES,
+  memoryItems,
+  openStore,
+  queueRows,
   rankQueue,
   repoFromRemote,
   resolveModel,
@@ -29,6 +35,7 @@ import { LAST_QUEUE_KEY, type LastQueue } from "../commands/open.js";
 import { spendReport } from "../commands/spend.js";
 import { loadRepoStats } from "../commands/stats.js";
 import { describeGitHubError } from "../github-errors.js";
+import { learningFor, learningForQueue, noteOpened } from "../learning.js";
 import { parsePrRef } from "../pr-ref.js";
 import { ApiError, type UiApi } from "./server.js";
 
@@ -54,10 +61,20 @@ async function signedIn() {
   return resolved;
 }
 
+const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
+
 /** The engine, as the UI sees it: the same calls the CLI commands make, with errors worded for a person. */
 export function createUiApi(options: { version: string; cwd: string }): UiApi {
   const cache = new JsonCache();
   const feedback = new FeedbackLog();
+  /** The repo memory is about: the one asked for, or the clone `alden ui` was started in. */
+  const memoryRepo = async (repo?: string) => {
+    const target = repo ?? (await repoOf(options.cwd))?.repos[0];
+    if (!target || !REPO_NAME.test(target)) {
+      throw new ApiError(400, "Start `alden ui` in a clone with a GitHub remote, or pick a repo, to see its memory.");
+    }
+    return target;
+  };
 
   return {
     async session() {
@@ -111,9 +128,12 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
           repos,
           orgs,
         });
-        const ranked = rankQueue(queue, config.queue);
+        const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
         // Shared with the CLI, so `alden review 3` means the same PR in both.
-        const last: LastQueue = { urls: [...ranked.needsYou, ...ranked.fastTrack].map((r) => r.pr.url) };
+        const last: LastQueue = {
+          urls: [...ranked.needsYou, ...ranked.fastTrack].map((r) => r.pr.url),
+          rows: queueRows(ranked, config.queue),
+        };
         await cache.set(LAST_QUEUE_KEY, last);
         return ranked;
       } catch (error) {
@@ -138,7 +158,11 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
 
       let briefing: Briefing;
       if (request.pr === undefined) {
-        briefing = await reviewLocalChanges(config, options.cwd, model, graph);
+        const learning = await learningFor((await repoOf(options.cwd))?.repos[0]);
+        briefing = await reviewLocalChanges(config, options.cwd, model, {
+          ...graph,
+          ...(learning ? { learning } : {}),
+        });
       } else {
         const last = await cache.get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
         let ref: ReturnType<typeof parsePrRef>;
@@ -148,18 +172,16 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
           throw new ApiError(400, (error as Error).message);
         }
         const resolved = await signedIn();
+        const learning = await learningFor(ref.repo);
         try {
-          briefing = await reviewPullRequest(
-            createGitHubClient(resolved.token),
-            ref.repo,
-            ref.number,
-            config,
-            model,
-            graph,
-          );
+          briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model, {
+            ...graph,
+            ...(learning ? { learning } : {}),
+          });
         } catch (error) {
           throw new ApiError(502, describeGitHubError(error, resolved.source));
         }
+        if (briefing.target.kind === "pr") noteOpened(last?.rows, briefing.target.url, "ui");
       }
       // `alden stats` splits before and after at the first use on each repo.
       const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : (await repoOf(options.cwd))?.repos[0];
@@ -195,6 +217,27 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
     },
 
     feedbackSummary: () => feedback.summary(),
+
+    async memory(repo) {
+      const target = await memoryRepo(repo);
+      return { repo: target, items: memoryItems(await loadLearning(openStore(), target)) };
+    },
+
+    async addMemory({ repo, text }) {
+      const target = await memoryRepo(repo);
+      try {
+        addNote(openStore(), target, text);
+      } catch (error) {
+        throw new ApiError(400, (error as Error).message);
+      }
+      return { repo: target, items: memoryItems(await loadLearning(openStore(), target)) };
+    },
+
+    async forgetMemory({ repo, id }) {
+      const target = await memoryRepo(repo);
+      if (!(await forget(openStore(), target, id))) throw new ApiError(404, `Nothing called ${id} in ${target}.`);
+      return { repo: target, items: memoryItems(await loadLearning(openStore(), target)) };
+    },
 
     async stats({ repo, days, since, refresh }) {
       const target = repo ?? (await repoOf(options.cwd))?.repos[0];

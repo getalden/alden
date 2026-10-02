@@ -3,25 +3,39 @@
  *
  * For working on the UI and taking screenshots. Nothing is fetched and no model is called: the queue is the recorded
  * PRs (with their wait times moved to recent hours so the ranking looks lived-in), reviews are the offline
- * deterministic briefings, and one PR gets an invented model section so its styling can be seen.
+ * deterministic briefings, and one PR gets an invented model section so its styling can be seen. A throwaway
+ * database is seeded with feedback, opens and notes for vercel/next.js, so learning and the Memory view have
+ * something to show.
  */
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startUiServer, type UiApi } from "../packages/cli/src/ui/server.js";
 import {
+  addNote,
   buildBriefing,
   FeedbackLog,
+  forget,
   fromRestFile,
+  type Learning,
   loadConfig,
+  loadLearning,
+  memoryItems,
   mergeLookHere,
+  openStore,
+  prFeatures,
   type RawPullRequest,
   rankQueue,
   type StatsPullRequest,
   summarizeStats,
   toFacts,
 } from "../packages/core/src/index.js";
-import type { Briefing, PullRequestFacts } from "../packages/schema/src/index.js";
+import {
+  type Briefing,
+  FEEDBACK_SCHEMA_VERSION,
+  MEMORY_SCHEMA_VERSION,
+  type PullRequestFacts,
+} from "../packages/schema/src/index.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const FIXTURES = join(ROOT, "packages/core/src/github/__fixtures__");
@@ -48,7 +62,7 @@ const facts: PullRequestFacts[] = recorded.map(({ raw }, i) => {
   return { ...pr, request: { ...pr.request, direct: i % 3 !== 0, requestedAt: asked } };
 });
 
-function briefingFor(repo: string, number: number): Briefing {
+function briefingFor(repo: string, number: number, learning?: Learning): Briefing {
   const match = recorded.find(({ raw }) => raw.repository.nameWithOwner === repo && raw.number === number);
   if (!match) throw new Error(`${repo}#${number} isn't one of the recorded PRs.`);
   const files = (
@@ -73,6 +87,7 @@ function briefingFor(repo: string, number: number): Briefing {
     config,
     manifests: [],
     graphUnavailable: "Demo mode: the code graph needs a clone of the repo.",
+    ...(learning ? { learning } : {}),
   });
   const first = files.find((f) => f.hunks.length > 0);
   const line = first?.hunks[0]?.lines.find((l) => l.kind === "add")?.newLine;
@@ -106,14 +121,75 @@ function briefingFor(repo: string, number: number): Briefing {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-// Feedback given in the demo goes to a throwaway folder, never your real log.
-const feedback = new FeedbackLog(mkdtempSync(join(tmpdir(), "alden-demo-feedback-")));
+// Feedback and memory in the demo go to a throwaway database, never your real one.
+const store = openStore(join(mkdtempSync(join(tmpdir(), "alden-demo-")), "alden.db"));
+const feedback = new FeedbackLog(store);
+const DEMO_REPO = "vercel/next.js";
+
+// What a reviewer of next.js might have taught Alden over a few weeks.
+const seeded = (day: number) => new Date(Date.now() - day * 24 * hour).toISOString();
+for (const [i, [checkId, verdict]] of (
+  [
+    ["tests.missing", "not_needed"],
+    ["tests.missing", "not_needed"],
+    ["tests.missing", "not_needed"],
+    ["config.changed", "agree"],
+    ["config.changed", "agree"],
+    ["config.changed", "agree"],
+  ] as const
+).entries()) {
+  const at = seeded(20 - i);
+  store.addEvent({
+    id: `seed-feedback-${i}`,
+    at,
+    type: "feedback",
+    repo: DEMO_REPO,
+    body: {
+      schemaVersion: FEEDBACK_SCHEMA_VERSION,
+      id: `seed-feedback-${i}`,
+      at,
+      kind: "verdict",
+      target: { kind: "pr", repo: DEMO_REPO, number: 90_000 + i },
+      briefingAt: at,
+      item: { source: "check", checkId, title: `${checkId} example`, anchor: { path: `x${i}` }, placement: "eyes" },
+      verdict,
+    },
+  });
+}
+const lifted = facts.find((pr) => pr.repo === DEMO_REPO && pr.author);
+if (lifted) {
+  const author = prFeatures(lifted, config.queue.sensitivePaths).find((f) => f.startsWith("author:"));
+  for (const i of [1, 2, 3]) {
+    const at = seeded(10 - i);
+    store.addEvent({
+      id: `seed-open-${i}`,
+      at,
+      type: "open",
+      repo: DEMO_REPO,
+      body: {
+        schemaVersion: MEMORY_SCHEMA_VERSION,
+        id: `seed-open-${i}`,
+        at,
+        repo: DEMO_REPO,
+        number: 80_000 + i,
+        position: 3,
+        features: author ? [author] : [],
+        via: "ui",
+      },
+    });
+  }
+}
+addNote(store, DEMO_REPO, "Server actions must check the session before they touch data.");
+addNote(store, DEMO_REPO, "Changes under examples/ don't ship; a quick look is enough.");
+
+const learningFor = async (repo: string) => (repo.toLowerCase() === DEMO_REPO ? loadLearning(store, repo) : undefined);
+const memoryOf = async (repo = DEMO_REPO) => ({ repo, items: memoryItems(await loadLearning(store, repo)) });
 
 const api: UiApi = {
   session: async () => ({
     version: "demo",
     cwd: ROOT,
-    repo: { root: ROOT, repos: ["getalden/alden"] },
+    repo: { root: ROOT, repos: [DEMO_REPO] },
     user: { login: "you", source: "demo" },
     model: {
       provider: "anthropic",
@@ -127,8 +203,15 @@ const api: UiApi = {
     efforts: ["low", "medium", "high", "xhigh", "max"],
     budget: { perReviewUsd: 0.5, dailyUsd: 10, spentToday: 0.37 },
   }),
-  queue: async () =>
-    rankQueue({ viewer: "you", fetchedAt: new Date().toISOString(), pullRequests: facts, warnings: [] }, config.queue),
+  queue: async () => {
+    const learning = await learningFor(DEMO_REPO);
+    return rankQueue(
+      { viewer: "you", fetchedAt: new Date().toISOString(), pullRequests: facts, warnings: [] },
+      config.queue,
+      Date.now(),
+      (repo) => (repo.toLowerCase() === DEMO_REPO ? learning : undefined),
+    );
+  },
   review: async (request, onStage) => {
     const ref = /^(?:https:\/\/github\.com\/)?([\w.-]+\/[\w.-]+)(?:#|\/pull\/)(\d+)$/.exec(request.pr ?? "");
     if (!ref?.[1] || !ref[2]) throw new Error("Demo mode reviews recorded PRs only (owner/repo#123).");
@@ -144,7 +227,7 @@ const api: UiApi = {
       onStage("model", "Asking claude-sonnet-5");
       await sleep(1_200);
     }
-    const { llm, ...briefing } = briefingFor(ref[1], Number(ref[2]));
+    const { llm, ...briefing } = briefingFor(ref[1], Number(ref[2]), await learningFor(ref[1]));
     return request.llm === false || !llm ? briefing : { ...briefing, llm };
   },
   spend: async () => ({
@@ -157,6 +240,15 @@ const api: UiApi = {
   }),
   addFeedback: (input) => feedback.add(input),
   feedbackSummary: () => feedback.summary(),
+  memory: (repo) => memoryOf(repo),
+  addMemory: async ({ repo, text }) => {
+    addNote(store, repo ?? DEMO_REPO, text);
+    return memoryOf(repo);
+  },
+  forgetMemory: async ({ repo, id }) => {
+    await forget(store, repo ?? DEMO_REPO, id);
+    return memoryOf(repo);
+  },
   // Invented PRs, so the Stats view has a before and after to show: waits drift down after the split.
   stats: async ({ repo, days }) => {
     const now = new Date();

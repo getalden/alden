@@ -5,6 +5,8 @@ export {
   type Briefing,
   type BriefingFile,
   BriefingFileSchema,
+  type BriefingLearning,
+  BriefingLearningSchema,
   BriefingSchema,
   type BriefingTarget,
   BriefingTargetSchema,
@@ -38,6 +40,15 @@ export {
   FeedbackTargetSchema,
 } from "./feedback.js";
 export { jsonSchemas } from "./json-schema.js";
+export {
+  MEMORY_SCHEMA_VERSION,
+  type MemoryEvent,
+  MemoryEventSchema,
+  type MemoryItem,
+  MemoryItemSchema,
+  type OpenEvent,
+  OpenEventSchema,
+} from "./memory.js";
 export {
   type CiState,
   CiStateSchema,

@@ -1,4 +1,5 @@
-import type { CheckResult, Evidence, LookHere, Severity } from "@alden/schema";
+import type { BriefingLearning, CheckResult, Evidence, LookHere, Severity } from "@alden/schema";
+import { checkReason, dismissKey, type Learning } from "../learn/learn.js";
 import { isLockfile } from "../queue/files.js";
 
 export const MAX_LOOK_HERE = 3;
@@ -42,10 +43,16 @@ type Anchored = Evidence & { anchor: NonNullable<Evidence["anchor"]> };
  * rest; a file flagged by two checks takes one slot, and so does a directory of similar flags (except secrets). A
  * low-severity check gets one slot at most: it's worth a look, not the whole list.
  */
-export function pickLookHere(checks: CheckResult[]): LookHere[] {
+export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}): LookHere[] {
+  const preferred = (id: string) => (adjust.prefer?.(id) ? 0 : 1);
   const flagged = checks
     .filter((c) => c.status === "flagged" && !NOT_A_PLACE.has(c.id))
-    .sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] || rank(a.id) - rank(b.id));
+    .sort(
+      (a, b) =>
+        SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] ||
+        preferred(a.id) - preferred(b.id) ||
+        rank(a.id) - rank(b.id),
+    );
 
   const picked: LookHere[] = [];
   const usedPaths = new Set<string>();
@@ -55,6 +62,7 @@ export function pickLookHere(checks: CheckResult[]): LookHere[] {
     const evidence = check.evidence.find(
       (e): e is Anchored =>
         e.anchor !== undefined &&
+        !adjust.skip?.(check, titleOf(check, e.anchor.path), e.anchor.path) &&
         !usedPaths.has(e.anchor.path) &&
         // Nobody reads a lockfile line by line; what changed in it is the dependency check's job.
         (isSecret || !isLockfile(e.anchor.path)) &&
@@ -64,8 +72,15 @@ export function pickLookHere(checks: CheckResult[]): LookHere[] {
     if (!evidence) return false;
     usedPaths.add(evidence.anchor.path);
     if (!isSecret && dirOf(evidence.anchor.path) !== "") usedDirs.add(dirOf(evidence.anchor.path));
-    const title = TITLES[check.id]?.(evidence.anchor.path) ?? `${check.title}: ${evidence.anchor.path}`;
-    picked.push({ title, reason: `${evidence.text}. ${check.summary}`, anchor: evidence.anchor, checkId: check.id });
+    const title = titleOf(check, evidence.anchor.path);
+    const learned = adjust.why?.(check.id);
+    picked.push({
+      title,
+      reason: `${evidence.text}. ${check.summary}`,
+      anchor: evidence.anchor,
+      checkId: check.id,
+      ...(learned ? { learned } : {}),
+    });
     return true;
   };
 
@@ -87,6 +102,53 @@ export function pickLookHere(checks: CheckResult[]): LookHere[] {
     const others = dir ? [...flaggedPaths].filter((p) => p !== item.anchor?.path && dirOf(p) === dir) : [];
     return others.length > 0 ? { ...item, reason: `${item.reason} Other files in ${dir} are flagged too.` } : item;
   });
+}
+
+const titleOf = (check: CheckResult, path: string) => TITLES[check.id]?.(path) ?? `${check.title}: ${path}`;
+
+/** How learning changes the pick: places to leave out, checks to take first, and why. */
+export interface PickAdjustments {
+  skip?: (check: CheckResult, title: string, path: string) => boolean;
+  prefer?: (checkId: string) => boolean;
+  why?: (checkId: string) => string | undefined;
+}
+
+/**
+ * The places to look, with what you've taught Alden: a flag you marked "not needed" on this PR stays down on a
+ * re-review, a check you usually don't need gives up its slots (never a high-severity one), and a check you usually
+ * agree with goes first among equals. What learning left out is returned as hidden, so the briefing can say so.
+ */
+export function pickWithLearning(
+  checks: CheckResult[],
+  learning: Learning | undefined,
+  target: string,
+): { eyes: LookHere[]; hidden: BriefingLearning["hidden"] } {
+  if (!learning) return { eyes: pickLookHere(checks), hidden: [] };
+  const hiddenWhy = (check: CheckResult, title: string, path: string): string | undefined => {
+    const at = learning.dismissed.get(
+      dismissKey(target, { source: "check", checkId: check.id, title, anchor: { path } }),
+    );
+    if (at) return `You marked it not needed on ${at.slice(0, 10)}`;
+    const lesson = learning.checks.get(check.id);
+    if (lesson?.direction === "down" && check.severity !== "high") return checkReason(lesson);
+    return undefined;
+  };
+  const eyes = pickLookHere(checks, {
+    skip: (check, title, path) => hiddenWhy(check, title, path) !== undefined,
+    prefer: (id) => learning.checks.get(id)?.direction === "up",
+    why: (id) => {
+      const lesson = learning.checks.get(id);
+      return lesson?.direction === "up" ? checkReason(lesson) : undefined;
+    },
+  });
+  const shown = new Set(eyes.map((e) => `${e.checkId}|${e.anchor?.path}`));
+  const hidden = pickLookHere(checks).flatMap((item) => {
+    const check = checks.find((c) => c.id === item.checkId);
+    if (!check || !item.anchor || shown.has(`${item.checkId}|${item.anchor.path}`)) return [];
+    const reason = hiddenWhy(check, item.title, item.anchor.path);
+    return reason ? [{ title: item.title, reason, anchor: item.anchor }] : [];
+  });
+  return { eyes, hidden };
 }
 
 /** "a/b/c.ts" → "a/b/"; root-level files have no directory ("") and never share a slot limit. */

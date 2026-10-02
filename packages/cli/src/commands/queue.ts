@@ -1,6 +1,15 @@
-import { createGitHubClient, fetchReviewQueue, JsonCache, loadConfig, rankQueue, resolveToken } from "@alden/core";
+import {
+  createGitHubClient,
+  fetchReviewQueue,
+  JsonCache,
+  loadConfig,
+  queueRows,
+  rankQueue,
+  resolveToken,
+} from "@alden/core";
 import type { Command } from "commander";
 import { describeGitHubError } from "../github-errors.js";
+import { learningForQueue } from "../learning.js";
 import { renderQueue, shouldColor } from "../render/queue.js";
 import { LAST_QUEUE_KEY, type LastQueue } from "./open.js";
 
@@ -47,9 +56,12 @@ export function registerQueueCommand(program: Command): void {
       } catch (error) {
         program.error(describeGitHubError(error, resolved.source));
       }
-      const ranked = rankQueue(queue, config.queue);
+      const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
 
-      const lastQueue: LastQueue = { urls: [...ranked.needsYou, ...ranked.fastTrack].map((r) => r.pr.url) };
+      const lastQueue: LastQueue = {
+        urls: [...ranked.needsYou, ...ranked.fastTrack].map((r) => r.pr.url),
+        rows: queueRows(ranked, config.queue),
+      };
       await cache.set(LAST_QUEUE_KEY, lastQueue);
 
       if (options.json) {

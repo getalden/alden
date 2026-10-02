@@ -157,7 +157,7 @@ describe("UsageLog", () => {
 
   it("keeps the first use of each repo, case-insensitively", async () => {
     dir = await mkdtemp(join(tmpdir(), "alden-usage-"));
-    const usage = new UsageLog(join(dir, "usage.json"));
+    const usage = new UsageLog(join(dir, "alden.db"));
     await usage.markUsed("Acme/API", new Date("2026-09-10T00:00:00Z"));
     await usage.markUsed("acme/api", new Date("2026-09-20T00:00:00Z"));
     expect((await usage.firstUse("acme/api"))?.toISOString()).toBe("2026-09-10T00:00:00.000Z");

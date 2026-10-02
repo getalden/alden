@@ -1,11 +1,12 @@
 import type { AldenConfig, Briefing, LlmSection } from "@alden/schema";
 import type { DiffFile } from "../../diff/parse.js";
+import { dismissKey, type Learning, promptNotes } from "../../learn/learn.js";
 import { supportsEffort } from "../../llm/anthropic.js";
 import { affordableInputTokens } from "../../llm/budget.js";
 import { BudgetExceededError, type BudgetedResult, budgetedGenerate } from "../../llm/budgeted.js";
 import type { SpendLedger } from "../../llm/ledger.js";
 import { type Effort, LlmError, type LlmErrorKind, type LlmProvider } from "../../llm/provider.js";
-import { NOT_CHECKED } from "../briefing.js";
+import { learningTarget, NOT_CHECKED } from "../briefing.js";
 import { mergeLookHere } from "./merge.js";
 import { buildPrompt, type LlmOutput, LlmOutputSchema } from "./prompt.js";
 import { validateFindings } from "./validate.js";
@@ -40,6 +41,8 @@ export interface ModelReviewOptions {
   effort?: Effort;
   /** Call sites of changed code, from the code graph, for the prompt. */
   callerSnippets?: string;
+  /** What Alden knows about this reviewer: notes go to the model, dismissed findings stay down. */
+  learning?: Learning;
 }
 
 function withSection(briefing: Briefing, llm: LlmSection): Briefing {
@@ -77,6 +80,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
     checks: briefing.checks,
     maxInputTokens,
     ...(options.callerSnippets ? { callerSnippets: options.callerSnippets } : {}),
+    reviewerNotes: promptNotes(options.learning),
   });
   if (prompt.includedFiles.length === 0) {
     const note =
@@ -144,9 +148,37 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   }
 
   const shown = options.files.filter((f) => prompt.includedFiles.includes(f.path));
-  const { findings, dropped } = validateFindings(result.output, shown);
+  const validated = validateFindings(result.output, shown);
+  const { dropped } = validated;
+  // A finding you marked "not needed" on this PR stays down when a re-review raises it again.
+  const target = learningTarget(briefing.target);
+  const dismissedOn = (f: (typeof validated.findings)[number]) =>
+    options.learning &&
+    [f.anchors[0]?.path, ...f.anchors.map((a) => a.path)]
+      .map((path) =>
+        options.learning?.dismissed.get(
+          dismissKey(target, { source: "llm", title: f.title, anchor: path ? { path } : undefined }),
+        ),
+      )
+      .find(Boolean);
+  const findings = validated.findings.filter((f) => !dismissedOn(f));
+  const hiddenFindings = validated.findings.flatMap((f) => {
+    const at = dismissedOn(f);
+    return at
+      ? [
+          {
+            title: f.title,
+            reason: `You marked it not needed on ${at.slice(0, 10)}`,
+            ...(f.anchors[0] ? { anchor: f.anchors[0] } : {}),
+          },
+        ]
+      : [];
+  });
+  const notes = prompt.reviewerNotes;
+  const hidden = [...(briefing.learning?.hidden ?? []), ...hiddenFindings];
   return {
     ...briefing,
+    ...(hidden.length > 0 || notes > 0 ? { learning: { hidden, memory: notes } } : {}),
     needsYourEyes: mergeLookHere(briefing.needsYourEyes, briefing.checks, findings),
     notChecked: [
       ...briefing.notChecked.filter((item) => item !== TITLE_CHECK),

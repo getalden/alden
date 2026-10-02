@@ -18,6 +18,7 @@ import {
 import type { Briefing } from "@alden/schema";
 import type { Command } from "commander";
 import { describeGitHubError } from "../github-errors.js";
+import { learningFor, noteOpened } from "../learning.js";
 import { parsePrRef } from "../pr-ref.js";
 import { startProgress } from "../progress.js";
 import { renderBriefing } from "../render/briefing.js";
@@ -77,7 +78,11 @@ export function registerReviewCommand(program: Command): void {
       let source: TokenSource | undefined;
       try {
         if (prArg === undefined) {
-          briefing = await reviewLocalChanges(config, process.cwd(), model, { enabled: options.graph });
+          const learning = await learningFor(await originRepo(process.cwd()));
+          briefing = await reviewLocalChanges(config, process.cwd(), model, {
+            enabled: options.graph,
+            ...(learning ? { learning } : {}),
+          });
         } else {
           const last = await new JsonCache().get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
           const ref = parsePrRef(prArg, last?.urls);
@@ -87,9 +92,12 @@ export function registerReviewCommand(program: Command): void {
             program.error("Not signed in. Run `alden auth login`.");
           }
           source = resolved.source;
+          const learning = await learningFor(ref.repo);
           briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model, {
             enabled: options.graph,
+            ...(learning ? { learning } : {}),
           });
+          if (briefing.target.kind === "pr") noteOpened(last?.rows, briefing.target.url, "cli");
         }
       } catch (error) {
         progress.stop();

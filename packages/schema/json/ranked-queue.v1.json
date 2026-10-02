@@ -278,6 +278,10 @@
               "blocking": {
                 "type": "number"
               },
+              "learned": {
+                "description": "points added because you usually open PRs like this first",
+                "type": "number"
+              },
               "total": {
                 "type": "number"
               }
@@ -577,6 +581,10 @@
                 "type": "number"
               },
               "blocking": {
+                "type": "number"
+              },
+              "learned": {
+                "description": "points added because you usually open PRs like this first",
                 "type": "number"
               },
               "total": {

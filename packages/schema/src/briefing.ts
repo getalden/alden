@@ -37,6 +37,18 @@ export const LookHereSchema = z.object({
   anchor: AnchorSchema.optional(),
   checkId: z.string().optional().describe("the check that raised it, if any"),
   source: z.enum(["check", "llm"]).optional().describe("a deterministic check or the model; absent means check"),
+  learned: z
+    .string()
+    .optional()
+    .describe("why your feedback put it here, e.g. 'you usually agree with migration flags'"),
+});
+
+/** What the reviewer's feedback changed in this briefing, so nothing is hidden silently. */
+export const BriefingLearningSchema = z.object({
+  hidden: z
+    .array(z.object({ title: z.string(), reason: z.string(), anchor: AnchorSchema.optional() }))
+    .describe("places that would have been picked, left out because of your feedback"),
+  memory: z.number().int().describe("notes about you that were given to the model"),
 });
 
 /** What the model found, after Alden has thrown away anything pointing at a line that isn't in the diff. */
@@ -118,6 +130,7 @@ export const BriefingSchema = z.object({
   needsYourEyes: z.array(LookHereSchema).max(3),
   notChecked: z.array(z.string()).describe("what Alden did not check, stated plainly"),
   llm: LlmSectionSchema.optional().describe("the model's view; absent when no model was asked"),
+  learning: BriefingLearningSchema.optional().describe("what your feedback and memory changed; absent when nothing"),
 });
 
 export type Anchor = z.infer<typeof AnchorSchema>;
@@ -126,6 +139,7 @@ export type CheckStatus = z.infer<typeof CheckStatusSchema>;
 export type Severity = z.infer<typeof SeveritySchema>;
 export type CheckResult = z.infer<typeof CheckResultSchema>;
 export type LookHere = z.infer<typeof LookHereSchema>;
+export type BriefingLearning = z.infer<typeof BriefingLearningSchema>;
 export type BriefingFile = z.infer<typeof BriefingFileSchema>;
 export type BriefingTarget = z.infer<typeof BriefingTargetSchema>;
 export type LlmFinding = z.infer<typeof LlmFindingSchema>;

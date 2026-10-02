@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 it("summarises today by model against the caps, and lists recent days", async () => {
-  const ledger = new SpendLedger(dir);
+  const ledger = new SpendLedger(join(dir, "alden.db"));
   const now = new Date().toISOString();
   const yesterday = new Date(Date.now() - 24 * 3_600_000).toISOString();
   await ledger.record({ at: now, provider: "anthropic", model: "claude-sonnet-5", usd: 0.25, usage, purpose: "a#1" });
@@ -48,7 +48,10 @@ it("summarises today by model against the caps, and lists recent days", async ()
 });
 
 it("says so when nothing was spent", async () => {
-  const text = renderSpend(await spendReport(new SpendLedger(dir), { dailyUsd: 10, perReviewUsd: 0.5 }), false);
+  const text = renderSpend(
+    await spendReport(new SpendLedger(join(dir, "alden.db")), { dailyUsd: 10, perReviewUsd: 0.5 }),
+    false,
+  );
   expect(text).toContain("$0.00 of your $10.00 daily cap · $10.00 left");
   expect(text).toContain("No model calls today.");
   expect(text).not.toContain("Last 7 days");

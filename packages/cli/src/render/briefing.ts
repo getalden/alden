@@ -114,6 +114,30 @@ function modelFooter(llm: LlmSection | undefined, options: RenderOptions): strin
 }
 
 /** The terminal briefing: where to look first, what was checked with evidence, and what wasn't checked. */
+/** What your feedback left out, and how many of your notes the model saw: learning is never silent. */
+function learnedNote(briefing: Briefing, { width, color }: RenderOptions): string[] {
+  const learning = briefing.learning;
+  if (!learning) return [];
+  const out: string[] = [];
+  const byReason = new Map<string, typeof learning.hidden>();
+  for (const item of learning.hidden) byReason.set(item.reason, [...(byReason.get(item.reason) ?? []), item]);
+  for (const [reason, items] of byReason) {
+    const what =
+      items.length === 1
+        ? `${items[0]?.title}`
+        : `${items.length} places (${items
+            .slice(0, 2)
+            .map((i) => i.anchor?.path ?? i.title)
+            .join(", ")}${items.length > 2 ? ` +${items.length - 2}` : ""})`;
+    out.push(...wrap(`Hidden: ${what}. ${reason}.`, width, "  ").map((l) => paint(l, "dim", color)));
+  }
+  if (learning.memory > 0) {
+    const notes = `${learning.memory} note${learning.memory === 1 ? "" : "s"}`;
+    out.push(paint(`  The model was given ${notes} on what you care about here (\`alden memory\`).`, "dim", color));
+  }
+  return out;
+}
+
 export function renderBriefing(untrusted: Briefing, options: RenderOptions): string {
   // Titles, paths, evidence and model text come from PR authors and the model: no control characters reach the terminal.
   const briefing = stripControlDeep(untrusted);
@@ -145,7 +169,9 @@ export function renderBriefing(untrusted: Briefing, options: RenderOptions): str
       out.push(`  ${paint(`${i + 1}.`, "bold", color)} ${item.title}${line}`);
     }
     out.push(...wrap(item.reason, width, "     ").map((l) => paint(l, "dim", color)));
+    if (item.learned) out.push(...wrap(`↑ ${item.learned}`, width, "     ").map((l) => paint(l, "cyan", color)));
   });
+  out.push(...learnedNote(briefing, options));
   out.push("");
   out.push(...alsoNoted(briefing, options));
 

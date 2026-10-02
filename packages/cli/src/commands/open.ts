@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import { JsonCache } from "@alden/core";
+import { JsonCache, type QueueRow } from "@alden/core";
 import type { Command } from "commander";
+import { noteOpened } from "../learning.js";
 
 /** What `alden queue` last showed, so `alden open 3` opens the third row. */
 export const LAST_QUEUE_KEY = "last-queue";
@@ -8,6 +9,8 @@ const LAST_QUEUE_MAX_AGE_MS = 24 * 3_600_000;
 
 export interface LastQueue {
   urls: string[];
+  /** Each row's learning features and unlearned rank, so opening one can teach Alden. Absent in older caches. */
+  rows?: QueueRow[];
 }
 
 export function openInBrowser(url: string, fallback = `Couldn't open a browser. The PR is at ${url}`): void {
@@ -50,5 +53,6 @@ export function registerOpenCommand(program: Command): void {
 
       console.log(`Opening ${url}`);
       openInBrowser(url);
+      noteOpened(last.rows, url, "cli");
     });
 }

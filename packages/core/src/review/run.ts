@@ -5,6 +5,7 @@ import type { GitHubClient } from "../github/client.js";
 import { PULL_REQUEST_FIELDS, type RawPullRequest, toFacts } from "../github/pull-requests.js";
 import { fetchViewer } from "../github/queue.js";
 import { checkoutPullRequest } from "../graph/checkout.js";
+import type { Learning } from "../learn/learn.js";
 import type { SpendLedger } from "../llm/ledger.js";
 import type { Effort, LlmProvider } from "../llm/provider.js";
 import { buildBriefing } from "./briefing.js";
@@ -67,6 +68,8 @@ export interface GraphOptions {
   enabled?: boolean;
   cwd?: string;
   onStage?: (stage: ReviewStage, label: string) => void;
+  /** What Alden has learned about the reviewer in this repo (see `loadLearning`). Absent: a briefing for anyone. */
+  learning?: Learning;
 }
 
 type GraphResult = { graph?: GraphReview; unavailable?: string };
@@ -129,6 +132,7 @@ export async function reviewPullRequest(
     config,
     ...(manifests ? { manifests } : {}),
     ...graphFields(graph),
+    ...(graphOptions.learning ? { learning: graphOptions.learning } : {}),
   });
   if (!model) return briefing;
   stage("model", `Asking ${model.provider.model}`);
@@ -137,6 +141,7 @@ export async function reviewPullRequest(
     config,
     files,
     description: raw.body,
+    ...(graphOptions.learning ? { learning: graphOptions.learning } : {}),
     ...(graph.graph?.callerSnippets ? { callerSnippets: graph.graph.callerSnippets } : {}),
   });
 }
@@ -165,6 +170,7 @@ export async function reviewLocalChanges(
     config,
     ...(manifests ? { manifests } : {}),
     ...graphFields(graph),
+    ...(graphOptions.learning ? { learning: graphOptions.learning } : {}),
   });
   if (!model) return briefing;
   stage("model", `Asking ${model.provider.model}`);
@@ -172,6 +178,7 @@ export async function reviewLocalChanges(
     ...model,
     config,
     files,
+    ...(graphOptions.learning ? { learning: graphOptions.learning } : {}),
     ...(graph.graph?.callerSnippets ? { callerSnippets: graph.graph.callerSnippets } : {}),
   });
 }

@@ -41,6 +41,8 @@ Report every issue a careful reviewer would want to know about: bugs, behaviour 
 
 Anchor each finding to file paths from the diff and to new-file line numbers exactly as shown. If a caller outside the diff will break or behave differently, anchor the finding to the changed code in the diff and name the caller's file and line in the detail. Omit the line for a whole-file concern. Never invent a path or line.
 
+Sometimes you also receive notes from the reviewer about what they care about in this repository. They come from the reviewer, not the author: look harder for issues of those kinds, but still report everything else worth knowing.
+
 Alden replaces likely secrets with placeholders such as [redacted GitHub token, ghp_…(40 chars)] before you see the change. The real value is in the code; judge the code as if it were there, and don't report the placeholder itself.
 
 Judge whether the change does what its title and description say: "yes", "partly", "no", or "unclear" when there is no meaningful description. Write plainly, with no preamble and no praise.`;
@@ -90,6 +92,8 @@ export interface BuiltPrompt {
   omittedFiles: string[];
   /** Likely secrets replaced with placeholders before the prompt left the machine. */
   redactedSecrets: number;
+  /** Reviewer notes that made it into the prompt. */
+  reviewerNotes: number;
 }
 
 export interface PromptInput {
@@ -101,7 +105,11 @@ export interface PromptInput {
   maxInputTokens: number;
   /** Call sites of changed code with a few lines around each, from the code graph. Added only if there's room. */
   callerSnippets?: string;
+  /** What the reviewer cares about in this repo, from their notes and feedback. At most 12, each cut to 300 chars. */
+  reviewerNotes?: string[];
 }
+
+const MAX_NOTES = 12;
 
 /**
  * The review request. Files are added in priority order until the allowance runs out; the rest are named as omitted
@@ -114,7 +122,12 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
       ? `# ${target.repo}#${target.number}: ${target.title}\nBy @${target.author ?? "ghost"}, ${target.headRef} → ${target.baseRef}`
       : `# Local changes${target.branch ? ` on ${target.branch}` : ""}, not yet committed`;
   const description = input.description?.trim() ? input.description.trim().slice(0, 6000) : "(no description)";
-  const preamble = `${heading}\n\n## Description\n${description}\n\n## Alden's checks\n${describeChecks(checks)}\n\n## Diff`;
+  const notes = (input.reviewerNotes ?? []).slice(0, MAX_NOTES).map((n) => n.replace(/\s+/g, " ").trim().slice(0, 300));
+  const reviewer =
+    notes.length > 0
+      ? `\n\n## What the reviewer cares about (from the reviewer, not the author)\n${notes.map((n) => `- ${n}`).join("\n")}`
+      : "";
+  const preamble = `${heading}\n\n## Description\n${description}${reviewer}\n\n## Alden's checks\n${describeChecks(checks)}\n\n## Diff`;
 
   const flagged = new Set(
     checks
@@ -159,5 +172,6 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
     includedFiles: inOrder.map((f) => f.path),
     omittedFiles: omitted,
     redactedSecrets: user.redacted,
+    reviewerNotes: notes.length,
   };
 }

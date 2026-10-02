@@ -42,6 +42,19 @@ export { EXTRACTOR_VERSION, type IndexOptions, indexCachePath, indexRepo, type R
 export { type GraphLanguage, grammarPath, languageOf, parserFor } from "./graph/parser.js";
 export { type CallSite, CodeGraph, type SymbolRef } from "./graph/query.js";
 export { createResolver, loadResolverConfig, type Resolver, type ResolverConfig } from "./graph/resolve.js";
+export {
+  addNote,
+  checkReason,
+  describeFeature,
+  forget,
+  type Learning,
+  learn,
+  loadLearning,
+  memoryItems,
+  prFeatures,
+  type QueueRow,
+  recordOpen,
+} from "./learn/learn.js";
 export { AnthropicProvider, type MessagesClient, supportsEffort, toLlmError } from "./llm/anthropic.js";
 export {
   affordableInputTokens,
@@ -79,6 +92,7 @@ export {
   type FastTrackKind,
   formatAge,
   type Lane,
+  queueRows,
   type RankedPullRequest,
   type RankedQueue,
   rankPullRequest,
@@ -123,7 +137,7 @@ export {
 export { addModelReview, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, type ModelReviewOptions } from "./review/llm/run.js";
 export { type ValidatedFindings, validateFindings } from "./review/llm/validate.js";
 export { loadLocalManifests, loadPullRequestManifests, reverseApply } from "./review/manifests.js";
-export { MAX_LOOK_HERE, pickLookHere } from "./review/pick.js";
+export { MAX_LOOK_HERE, pickLookHere, pickWithLearning } from "./review/pick.js";
 export {
   fetchPullRequest,
   type GraphOptions,
@@ -147,4 +161,5 @@ export {
   weekOf,
 } from "./stats/stats.js";
 export { UsageLog } from "./stats/usage.js";
+export { AldenStore, openStore } from "./store/db.js";
 export { checkForUpdate, newerVersion } from "./updates.js";

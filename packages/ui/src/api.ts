@@ -1,4 +1,9 @@
-import type { Briefing, FeedbackInput, FeedbackSummary, RankedQueue, RepoStats } from "@alden/schema";
+import type { Briefing, FeedbackInput, FeedbackSummary, MemoryItem, RankedQueue, RepoStats } from "@alden/schema";
+
+export interface Memory {
+  repo: string;
+  items: MemoryItem[];
+}
 
 const TOKEN_KEY = "alden.token";
 
@@ -101,6 +106,17 @@ export class Api {
     this.request<unknown>("/api/feedback", { method: "POST", body: JSON.stringify(input) });
 
   feedbackSummary = () => this.request<FeedbackSummary>("/api/feedback");
+
+  memory = (repo?: string) => this.request<Memory>(`/api/memory${repo ? `?repo=${encodeURIComponent(repo)}` : ""}`);
+
+  addMemory = (text: string, repo?: string) =>
+    this.request<Memory>("/api/memory", { method: "POST", body: JSON.stringify({ text, ...(repo ? { repo } : {}) }) });
+
+  forgetMemory = (id: string, repo?: string) =>
+    this.request<Memory>("/api/memory/forget", {
+      method: "POST",
+      body: JSON.stringify({ id, ...(repo ? { repo } : {}) }),
+    });
 
   stats = (options: { repo: string; days: number; since?: string; refresh?: boolean }) => {
     const params = new URLSearchParams({ repo: options.repo, days: String(options.days) });

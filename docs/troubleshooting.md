@@ -49,6 +49,15 @@ parsed files are cached, so the next run gets further.
 **A stale PR worktree.** Delete `~/.alden/worktrees` and run `git worktree prune` in your clone. Alden recreates the
 worktree next time.
 
+## The database
+
+**`alden doctor` says it couldn't open `alden.db`.** Alden's database needs Node 22.13 or later; check `node
+--version`, or use the standalone binary. If the file is damaged, move `~/.alden/alden.db` aside: Alden starts a new
+one (your feedback and notes stay in the old file).
+
+**A flag you expected is missing.** If your feedback hid it, the briefing says so under the places to look ("Hidden:
+…"). `alden memory` lists what Alden learned; `alden memory forget <id>` undoes it.
+
 ## macOS
 
 **"EPERM: operation not permitted, uv_cwd".** Your terminal app isn't allowed to read the folder you're in, usually

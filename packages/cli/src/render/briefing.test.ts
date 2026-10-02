@@ -84,6 +84,35 @@ describe("renderBriefing", () => {
     expect(plain(briefing())).toContain("Nothing flagged. The checks below found nothing that needs a closer look.");
   });
 
+  it("says why learning picked a place, what it hid (grouped), and how many notes the model saw", () => {
+    const out = plain(
+      briefing({
+        needsYourEyes: [
+          {
+            title: "Migration in db/1.sql",
+            reason: "Adds a column. Migrations changed.",
+            anchor: { path: "db/1.sql" },
+            checkId: "migrations.changed",
+            learned: "You usually agree with migration flags (4 of 4)",
+          },
+        ],
+        learning: {
+          hidden: ["a.ts", "b.ts", "c.ts"].map((path) => ({
+            title: `Untested change in ${path}`,
+            reason: "You usually mark untested-change flags not needed (3 of 3)",
+            anchor: { path },
+          })),
+          memory: 1,
+        },
+      }),
+    );
+    expect(out).toContain("     ↑ You usually agree with migration flags (4 of 4)");
+    expect(out).toContain(
+      "  Hidden: 3 places (a.ts, b.ts +1). You usually mark untested-change flags not needed (3 of 3).",
+    );
+    expect(out).toContain("  The model was given 1 note on what you care about here (`alden memory`).");
+  });
+
   it("numbers the places to look, with their lines and reasons", () => {
     const out = plain(
       briefing({

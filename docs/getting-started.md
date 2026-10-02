@@ -2,7 +2,7 @@
 
 ## Install
 
-Alden needs Node 22 or later. Run it with `npx`, or install it globally:
+Alden needs Node 22.13 or later (or the standalone binary, which needs nothing). Run it with `npx`, or install it globally:
 
 ```sh
 npx alden@next --help

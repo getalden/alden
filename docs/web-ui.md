@@ -24,8 +24,13 @@ Stop it with Ctrl+C.
   Filter by repo, refresh, and pick a PR to see its briefing beside the list.
 - **A PR.** "Brief me" runs the review and shows each stage as it goes (fetching, finding callers, checks, the
   model). The briefing follows the CLI's order. Every place links into the PR's "Files changed" view at that line.
-  A review keeps running if you look at another PR, and its briefing is there when you come back.
+  A review keeps running if you look at another PR, and its briefing is there when you come back. "Agree" and "Not
+  needed" on each place teach Alden; what your feedback changed shows under the places to look. Briefing a PR from
+  the queue counts as opening it, for learning.
 - **My changes.** Your uncommitted changes in the repo `alden ui` started in, before you open a PR.
+- **Stats.** Time to first review and cycle time for a repo, before and after you started using Alden.
+- **Memory.** What Alden has learned about you in a repo, with what each item was learned from and what it changes,
+  your notes (add them here), and a Forget button on each. See [Learning and memory](memory.md).
 - **Settings.** The default model, effort and caps, saved to your user config as `alden config set` does, and what
   you've spent today.
 

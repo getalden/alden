@@ -1,37 +1,26 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { aldenHome } from "../config.js";
-
-type Usage = { repos: Record<string, string> };
+import { type StoreSource, storeFrom } from "../store/source.js";
 
 /**
- * When Alden was first used on each repo, so `alden stats` can split before from after. Kept in ~/.alden/usage.json;
- * only the first date per repo is ever written.
+ * When Alden was first used on each repo, so `alden stats` can split before from after. Only the first date per
+ * repo is ever written.
  */
 export class UsageLog {
-  constructor(private readonly path: string = join(aldenHome(), "usage.json")) {}
-
-  private async read(): Promise<Usage> {
-    try {
-      const parsed = JSON.parse(await readFile(this.path, "utf8")) as Partial<Usage>;
-      return { repos: parsed.repos && typeof parsed.repos === "object" ? parsed.repos : {} };
-    } catch {
-      return { repos: {} };
-    }
-  }
+  constructor(private readonly source?: StoreSource) {}
 
   /** Notes a use of `repo` ("owner/name"), keeping the earliest. */
   async markUsed(repo: string, at: Date = new Date()): Promise<void> {
-    const key = repo.toLowerCase();
-    const usage = await this.read();
-    if (usage.repos[key]) return;
-    usage.repos[key] = at.toISOString();
-    await mkdir(dirname(this.path), { recursive: true });
-    await writeFile(this.path, `${JSON.stringify(usage, null, 2)}\n`, "utf8");
+    storeFrom(this.source).run(
+      "INSERT OR IGNORE INTO repos (repo, first_used_at) VALUES (?, ?)",
+      repo.toLowerCase(),
+      at.toISOString(),
+    );
   }
 
   async firstUse(repo: string): Promise<Date | undefined> {
-    const at = (await this.read()).repos[repo.toLowerCase()];
-    return at ? new Date(at) : undefined;
+    const row = storeFrom(this.source).get<{ first_used_at: string }>(
+      "SELECT first_used_at FROM repos WHERE repo = ?",
+      repo.toLowerCase(),
+    );
+    return row ? new Date(row.first_used_at) : undefined;
   }
 }

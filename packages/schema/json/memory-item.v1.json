@@ -1,0 +1,57 @@
+{
+  "$id": "https://getalden.dev/schema/memory-item.v1.json",
+  "title": "Alden memory item",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "stable: notes have their own, learned items are named after what they're about"
+    },
+    "repo": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "you",
+        "learned"
+      ],
+      "description": "you wrote it, or Alden learned it from your feedback"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "note",
+        "check",
+        "open"
+      ]
+    },
+    "text": {
+      "type": "string",
+      "description": "what Alden knows, in one sentence"
+    },
+    "evidence": {
+      "description": "for learned items: what it was learned from, e.g. 'agreed 5 of 5 times'",
+      "type": "string"
+    },
+    "effect": {
+      "description": "what it changes, e.g. 'ranks these PRs higher'",
+      "type": "string"
+    },
+    "since": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    }
+  },
+  "required": [
+    "id",
+    "repo",
+    "source",
+    "kind",
+    "text",
+    "since"
+  ],
+  "additionalProperties": false
+}

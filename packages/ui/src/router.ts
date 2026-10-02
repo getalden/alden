@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 
-/** Where the UI is: the queue (optionally with a PR open beside it), local changes, or settings. */
+/** Where the UI is: the queue (optionally with a PR open beside it), local changes, stats, memory or settings. */
 export type Route =
   | { view: "queue"; pr?: { repo: string; number: number } }
   | { view: "local" }
   | { view: "stats" }
+  | { view: "memory" }
   | { view: "settings" };
 
 export function parseRoute(pathname: string): Route {
@@ -13,6 +14,7 @@ export function parseRoute(pathname: string): Route {
   if (/^\/local\/?$/.test(pathname)) return { view: "local" };
   if (/^\/settings\/?$/.test(pathname)) return { view: "settings" };
   if (/^\/stats\/?$/.test(pathname)) return { view: "stats" };
+  if (/^\/memory\/?$/.test(pathname)) return { view: "memory" };
   return { view: "queue" };
 }
 
@@ -20,6 +22,7 @@ export function routePath(route: Route): string {
   if (route.view === "local") return "/local";
   if (route.view === "settings") return "/settings";
   if (route.view === "stats") return "/stats";
+  if (route.view === "memory") return "/memory";
   return route.pr ? `/pr/${route.pr.repo}/${route.pr.number}` : "/";
 }
 

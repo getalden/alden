@@ -41,7 +41,7 @@ Policy (only Alden's own scripts, styles and images, plus GitHub avatars), can't
 that keeps only its kind and length (see [Privacy and data](privacy.md)). Detection is heuristic, so use `--no-llm`
 for changes you know contain secrets, and rotate any secret that was committed.
 
-**Your data.** Nothing goes to Alden's developers. Feedback, spend and settings stay in `~/.alden`;
+**Your data.** Nothing goes to Alden's developers. Feedback, memory, spend and settings stay in `~/.alden`;
 `alden feedback --export` leaves out repo names, paths and notes unless you pass `--full`.
 
 **Supply chain.** Dependencies are audited before each release (`pnpm audit`), lockfiles are committed, and

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BRIEFING_SCHEMA_VERSION, BriefingSchema } from "./briefing.js";
 import { FEEDBACK_SCHEMA_VERSION, FeedbackEventSchema } from "./feedback.js";
+import { MEMORY_SCHEMA_VERSION, MemoryItemSchema } from "./memory.js";
 import { QUEUE_SCHEMA_VERSION, RankedQueueSchema } from "./queue.js";
 import { RepoStatsSchema, STATS_SCHEMA_VERSION } from "./stats.js";
 
@@ -21,6 +22,11 @@ export function jsonSchemas(): Record<string, unknown> {
       $id: `https://getalden.dev/schema/feedback-event.v${FEEDBACK_SCHEMA_VERSION}.json`,
       title: "Alden feedback event",
       ...z.toJSONSchema(FeedbackEventSchema, { target: "draft-2020-12" }),
+    },
+    [`memory-item.v${MEMORY_SCHEMA_VERSION}.json`]: {
+      $id: `https://getalden.dev/schema/memory-item.v${MEMORY_SCHEMA_VERSION}.json`,
+      title: "Alden memory item",
+      ...z.toJSONSchema(MemoryItemSchema, { target: "draft-2020-12" }),
     },
     [`repo-stats.v${STATS_SCHEMA_VERSION}.json`]: {
       $id: `https://getalden.dev/schema/repo-stats.v${STATS_SCHEMA_VERSION}.json`,

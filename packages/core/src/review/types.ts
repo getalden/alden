@@ -3,6 +3,7 @@ import type { DiffFile } from "../diff/parse.js";
 import type { PullRequestFacts } from "../github/pull-requests.js";
 import type { ChangedSymbol } from "../graph/changes.js";
 import type { CallSite } from "../graph/query.js";
+import type { Learning } from "../learn/learn.js";
 import type { ManifestSnapshot } from "./dependencies.js";
 
 /** Everything a check may look at. Checks are pure: same context, same result. */
@@ -21,6 +22,8 @@ export interface ReviewContext {
   graph?: GraphContext;
   /** Why there's no graph (e.g. not run from a clone of the PR's repo), shown by the callers check. */
   graphUnavailable?: string;
+  /** What Alden has learned about this reviewer in this repo. Not seen by checks, only by the picker. */
+  learning?: Learning;
 }
 
 /** Changed public symbols and who calls them, worked out before the checks run. */

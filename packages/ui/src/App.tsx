@@ -1,6 +1,7 @@
 import type { RankedPullRequest, RankedQueue } from "@alden/schema";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Api, ApiError, type Session } from "./api";
+import { MemoryView } from "./components/MemoryView";
 import { QueueView } from "./components/QueueView";
 import { type Choices, initialChoices, ReviewOptions, toRequest } from "./components/ReviewOptions";
 import { ReviewPane } from "./components/ReviewPane";
@@ -157,6 +158,11 @@ export function App({ api }: { api: Api | undefined }) {
         {route.view === "stats" && (
           <div className="pane">
             {session ? <StatsView api={api} session={session} /> : <p className="state">Loading…</p>}
+          </div>
+        )}
+        {route.view === "memory" && (
+          <div className="pane">
+            {session ? <MemoryView api={api} session={session} /> : <p className="state">Loading…</p>}
           </div>
         )}
         {route.view === "settings" && (

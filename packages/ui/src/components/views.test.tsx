@@ -4,7 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it } from "vitest";
 import type { Session } from "../api";
 import type { BriefingFeedback, Verdict } from "../feedback";
-import { BriefingView } from "./BriefingView";
+import { BriefingView, groupHidden } from "./BriefingView";
+import { MemoryView } from "./MemoryView";
 import { QueueView } from "./QueueView";
 import { effortSupported, initialChoices, toRequest } from "./ReviewOptions";
 import { formatHours, StatsView } from "./StatsView";
@@ -209,6 +210,79 @@ describe("BriefingView", () => {
     expect(
       screen.getByText("Nothing flagged. Neither the checks nor the model found anything that needs a closer look."),
     ).toBeTruthy();
+  });
+});
+
+describe("what learning changed in a briefing", () => {
+  it("says why a place was picked, groups what was hidden by reason, and counts notes the model saw", () => {
+    const learned: Briefing = {
+      ...briefing,
+      needsYourEyes: [
+        {
+          ...(briefing.needsYourEyes[0] as Briefing["needsYourEyes"][0]),
+          learned: "You usually agree with flags about callers outside the diff (4 of 4)",
+        },
+      ],
+      learning: {
+        hidden: [
+          { title: "Untested change in a.ts", reason: "You usually mark untested-change flags not needed (3 of 3)" },
+          { title: "Untested change in b.ts", reason: "You usually mark untested-change flags not needed (3 of 3)" },
+          { title: "Config change in .env", reason: "You marked it not needed on 2026-09-27" },
+        ],
+        memory: 2,
+      },
+    };
+    render(<BriefingView briefing={learned} />);
+    expect(screen.getByText(/↑ You usually agree with flags about callers/)).toBeTruthy();
+    expect(
+      screen.getByText("Hidden 2 places. You usually mark untested-change flags not needed (3 of 3)."),
+    ).toBeTruthy();
+    expect(screen.getByText(/Hidden: Config change in \.env\. You marked it not needed on 2026-09-27\./)).toBeTruthy();
+    expect(screen.getByText(/The model was given 2 notes on what you care about here/)).toBeTruthy();
+    expect(groupHidden(learned.learning?.hidden ?? []).map((g) => g.items.length)).toEqual([2, 1]);
+  });
+});
+
+describe("MemoryView", () => {
+  it("lists notes and learned items, adds a note and forgets an item", async () => {
+    const item = (id: string, source: "you" | "learned", text: string) => ({
+      id,
+      repo: "acme/api",
+      source,
+      kind: source === "you" ? ("note" as const) : ("check" as const),
+      text,
+      ...(source === "learned" ? { evidence: "agreed 3 of 3 times", effect: "picked first among places to look" } : {}),
+      since: "2026-09-20T10:00:00.000Z",
+    });
+    let items = [
+      item("note:1", "you", "Cents, not floats"),
+      item("check:x:up", "learned", "You care about migration flags"),
+    ];
+    const calls: string[] = [];
+    const api = {
+      memory: async () => ({ repo: "acme/api", items }),
+      addMemory: async (text: string) => {
+        calls.push(`add ${text}`);
+        items = [...items, item("note:2", "you", text)];
+        return { repo: "acme/api", items };
+      },
+      forgetMemory: async (id: string) => {
+        calls.push(`forget ${id}`);
+        items = items.filter((i) => i.id !== id);
+        return { repo: "acme/api", items };
+      },
+    } as unknown as import("../api").Api;
+    render(<MemoryView api={api} session={{ repo: { root: "/r", repos: ["acme/api"] } } as unknown as Session} />);
+    expect(await screen.findByText("Cents, not floats")).toBeTruthy();
+    expect(screen.getByText(/agreed 3 of 3 times · picked first among places to look · since 2026-09-20/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("New note"), { target: { value: "Check auth on new routes" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+    expect(await screen.findByText("Check auth on new routes")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Forget: You care about migration flags" }));
+    await waitFor(() => expect(screen.queryByText("You care about migration flags")).toBeNull());
+    expect(calls).toEqual(["add Check auth on new routes", "forget check:x:up"]);
   });
 });
 
