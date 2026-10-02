@@ -2,7 +2,8 @@ import type { Anchor, Briefing, FeedbackInput, FeedbackItem, FeedbackTarget } fr
 import { useCallback, useState } from "react";
 import type { Api } from "./api";
 
-export type Verdict = "agree" | "not_needed";
+/** Useful, not useful (both teach Alden about this kind of flag), or dismiss (only hides it on this PR). */
+export type Verdict = "agree" | "not_needed" | "dismiss";
 
 /** One flag in one briefing, as the UI tracks it. (The log keys verdicts the same way.) */
 export function itemKey(item: FeedbackItem): string {

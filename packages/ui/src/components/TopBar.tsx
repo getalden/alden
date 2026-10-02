@@ -1,25 +1,33 @@
 import type { Session } from "../api";
 import { formatUsd } from "../format";
 import { onLinkClick, type Route, routePath } from "../router";
+import { Mark } from "./Mark";
 
-const TABS: { label: string; route: Route }[] = [
-  { label: "Queue", route: { view: "queue" } },
-  { label: "My changes", route: { view: "local" } },
-  { label: "Stats", route: { view: "stats" } },
-  { label: "Memory", route: { view: "memory" } },
-  { label: "Settings", route: { view: "settings" } },
+const TABS: { label: string; route: Route; view: Route["view"] }[] = [
+  { label: "Queue", route: { view: "queue" }, view: "queue" },
+  { label: "My changes", route: { view: "local" }, view: "local" },
+  { label: "Memory", route: { view: "memory" }, view: "memory" },
+  { label: "Stats", route: { view: "stats" }, view: "stats" },
+  { label: "Settings", route: { view: "settings" }, view: "settings" },
 ];
 
-/** Who you are, which repo Alden runs in, and what the model will cost today. */
-export function TopBar({ session, route }: { session: Session | undefined; route: Route }) {
+/** The mark, the views (with how many PRs wait), today's spend and who you're signed in as. */
+export function TopBar({
+  session,
+  route,
+  queueCount,
+}: {
+  session: Session | undefined;
+  route: Route;
+  queueCount?: number | undefined;
+}) {
   const user = session?.user;
+  const login = user && "login" in user ? user.login : undefined;
   return (
     <header className="topbar">
-      <a className="brand" href="/" onClick={onLinkClick({ view: "queue" })}>
-        <span className="brand-mark" aria-hidden="true">
-          A
-        </span>
-        Alden
+      <a className="brand" href="/" onClick={onLinkClick({ view: "queue" })} aria-label="Alden, your queue">
+        <Mark />
+        alden
       </a>
       <nav className="nav" aria-label="Views">
         {TABS.map((tab) => (
@@ -27,39 +35,33 @@ export function TopBar({ session, route }: { session: Session | undefined; route
             key={tab.label}
             href={routePath(tab.route)}
             onClick={onLinkClick(tab.route)}
-            aria-current={tab.route.view === route.view ? "page" : undefined}
+            aria-current={tab.view === route.view ? "page" : undefined}
           >
             {tab.label}
+            {tab.view === "queue" && queueCount !== undefined && <span className="count">{queueCount}</span>}
           </a>
         ))}
       </nav>
       {session && (
         <div className="topbar-meta">
-          {session.repo?.repos[0] && (
-            <span title={session.repo.root}>
-              in <span className="mono">{session.repo.repos[0]}</span>
-            </span>
-          )}
-          {session.model.available ? (
-            <span className="badge accent" title={session.model.id}>
-              {session.model.name}
-              {session.model.effort ? ` · ${session.model.effort}` : ""}
-            </span>
-          ) : (
-            <span className="badge" title={session.model.reason}>
-              No model
-            </span>
-          )}
-          <span title="Model spend today against your daily cap">
-            {formatUsd(session.budget.spentToday)} of {formatUsd(session.budget.dailyUsd)} today
+          <span className="spend" title="Model spend today against your daily cap">
+            today {formatUsd(session.budget.spentToday)} of {formatUsd(session.budget.dailyUsd)}
           </span>
-          {user && "login" in user && <span>@{user.login}</span>}
-          {user && "error" in user && (
-            <span className="badge high" title={user.error}>
-              GitHub sign-in problem
+          {login && (
+            <span className="avatar" title={`Signed in as @${login}`}>
+              {login.slice(0, 2)}
             </span>
           )}
-          {!user && <span className="badge high">Not signed in</span>}
+          {user && "error" in user && (
+            <span className="avatar problem" title={`GitHub sign-in problem: ${user.error}`}>
+              !
+            </span>
+          )}
+          {!user && (
+            <span className="avatar problem" title="Not signed in to GitHub">
+              ?
+            </span>
+          )}
         </div>
       )}
     </header>

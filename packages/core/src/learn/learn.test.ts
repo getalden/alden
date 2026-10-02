@@ -18,15 +18,20 @@ import { AldenStore, openStore } from "../store/db.js";
 import {
   addNote,
   describeFeature,
+  editNote,
   forget,
+  forgetAll,
   learn,
   loadLearning,
   memoryItems,
   OPEN_BOOST,
-  openBoost,
   prFeatures,
   promptNotes,
+  queueBoost,
   recordOpen,
+  recordReaction,
+  restore,
+  setLearning,
 } from "./learn.js";
 
 const REPO = "acme/shop";
@@ -36,7 +41,7 @@ const at = (day: number) => new Date(Date.UTC(2026, 8, day, 12)).toISOString();
 
 function verdict(
   checkId: string,
-  v: "agree" | "not_needed" | "clear",
+  v: "agree" | "not_needed" | "dismiss" | "clear",
   options: { pr?: number; day?: number; title?: string; path?: string } = {},
 ): FeedbackEvent {
   const day = options.day ?? 20;
@@ -122,10 +127,13 @@ describe("learn: checks", () => {
     expect(learn({ repo: REPO, feedback, opens: [], memory: [], now: NOW }).checks.size).toBe(0);
   });
 
-  it("remembers a flag you dismissed on a PR, whatever its line", () => {
+  it("remembers a flag you dismissed on a PR, whatever its line; not useful doesn't hide it", () => {
     const learning = learn({
       repo: REPO,
-      feedback: [verdict("config.changed", "not_needed", { pr: 7, title: "Config change in .env", path: ".env" })],
+      feedback: [
+        verdict("config.changed", "dismiss", { pr: 7, title: "Config change in .env", path: ".env" }),
+        verdict("tests.missing", "not_needed", { pr: 7 }),
+      ],
       opens: [],
       memory: [],
       now: NOW,
@@ -138,13 +146,15 @@ describe("learn: opens", () => {
   it("boosts PRs you open ahead of their rank, with the reason shown", () => {
     const opens = [1, 2, 3].map(() => open(["path:db/migrations/", "author:sam"], 2));
     const learning = learn({ repo: REPO, feedback: [], opens, memory: [], now: NOW });
-    expect(learning.opens.map((o) => o.feature)).toEqual(["author:sam", "path:db/migrations/"]);
-    expect(openBoost(learning, ["path:db/migrations/"])).toEqual({
+    expect(learning.queue.map((o) => o.feature)).toEqual(["author:sam", "path:db/migrations/"]);
+    expect(queueBoost(learning, ["path:db/migrations/"])).toEqual({
       points: OPEN_BOOST,
       reason: "ranked higher: you usually open PRs touching db/migrations/ first",
     });
     // Two learned features add up, to a cap.
-    expect(openBoost(learning, ["author:sam", "path:db/migrations/"]).points).toBe(3);
+    expect(queueBoost(learning, ["author:sam", "path:db/migrations/"]).points).toBe(3);
+    // Paused: kept, not applied.
+    expect(queueBoost({ ...learning, paused: true }, ["author:sam"]).points).toBe(0);
   });
 
   it("ignores working down the list in order, opens outside the lane, and old opens", () => {
@@ -152,11 +162,11 @@ describe("learn: opens", () => {
     const fastTrack = [1, 2, 3].map(() => open(["author:sam"], -1));
     const old = [1, 2, 3].map(() => open(["author:sam"], 3, 1));
     const learning = learn({ repo: REPO, feedback: [], opens: [...inOrder, ...fastTrack], memory: [], now: NOW });
-    expect(learning.opens).toEqual([]);
+    expect(learning.queue).toEqual([]);
     // Opened on 1 September; by 20 December they're outside the 90 days that count.
-    expect(learn({ repo: REPO, feedback: [], opens: old, memory: [], now: NOW }).opens).toHaveLength(1);
+    expect(learn({ repo: REPO, feedback: [], opens: old, memory: [], now: NOW }).queue).toHaveLength(1);
     expect(
-      learn({ repo: REPO, feedback: [], opens: old, memory: [], now: new Date(Date.UTC(2026, 11, 20)) }).opens,
+      learn({ repo: REPO, feedback: [], opens: old, memory: [], now: new Date(Date.UTC(2026, 11, 20)) }).queue,
     ).toEqual([]);
   });
 
@@ -224,7 +234,12 @@ describe("the store, memory and opens", () => {
       ["you", "Check that new endpoints have auth"],
       ["learned", "You usually don't need untested-change flags"],
     ]);
-    expect(items[1]).toMatchObject({ id: "check:tests.missing:down", evidence: "marked not needed 3 of 3 times" });
+    expect(items[1]).toMatchObject({
+      id: "check:tests.missing:down",
+      group: "skip",
+      evidence: "you marked 3 of 3 not useful",
+      examples: 3,
+    });
 
     expect(await forget(store, REPO, "nope", NOW)).toBe(false);
     expect(await forget(store, REPO, "check:tests.missing:down", NOW)).toBe(true);
@@ -238,6 +253,67 @@ describe("the store, memory and opens", () => {
       store.addEvent({ id: e.id, at: e.at, type: "feedback", repo: REPO, body: e });
     }
     expect((await loadLearning(store, REPO, later)).checks.get("tests.missing")?.notNeeded).toBe(3);
+  });
+
+  it("edits notes, restores what was forgotten, pauses learning and forgets everything", async () => {
+    for (const e of [1, 2, 3].map(() => verdict("migrations.changed", "agree"))) {
+      store.addEvent({ id: e.id, at: e.at, type: "feedback", repo: REPO, body: e });
+    }
+    const note = addNote(store, REPO, "Cents, not floats", NOW);
+    const id = note.action === "add" ? note.item : "";
+    expect(await editNote(store, REPO, id, "Money is in cents, never floats", NOW)).toBe(true);
+    expect(await editNote(store, REPO, "note:nope", "x", NOW)).toBe(false);
+    expect((await loadLearning(store, REPO, NOW)).notes.map((n) => n.text)).toEqual([
+      "Money is in cents, never floats",
+    ]);
+
+    await forget(store, REPO, id, NOW);
+    await forget(store, REPO, "check:migrations.changed:up", NOW);
+    expect(memoryItems(await loadLearning(store, REPO, NOW))).toEqual([]);
+    const later = new Date(NOW.getTime() + 1000);
+    expect(restore(store, REPO, id, later)).toBe(true);
+    expect(restore(store, REPO, "check:migrations.changed:up", later)).toBe(true);
+    expect(restore(store, REPO, "never-forgotten", later)).toBe(false);
+    expect(memoryItems(await loadLearning(store, REPO, later)).map((i) => i.id)).toEqual([
+      id,
+      "check:migrations.changed:up",
+    ]);
+
+    setLearning(store, REPO, false, later);
+    const paused = await loadLearning(store, REPO, later);
+    expect(paused.paused).toBe(true);
+    // Paused: listed, notes still go to the model, learned preferences don't.
+    expect(memoryItems(paused)).toHaveLength(2);
+    expect(promptNotes(paused)).toEqual(["Money is in cents, never floats"]);
+    setLearning(store, REPO, true, new Date(later.getTime() + 1));
+    expect((await loadLearning(store, REPO, new Date(later.getTime() + 2))).paused).toBe(false);
+
+    expect(await forgetAll(store, REPO, new Date(later.getTime() + 3))).toBe(2);
+    expect(memoryItems(await loadLearning(store, REPO, new Date(later.getTime() + 4)))).toEqual([]);
+  });
+
+  it("learns from row reactions: up and down move PRs like it, dismiss hides a PR until it changes", async () => {
+    const row = (number: number, features: string[]) => ({ repo: REPO, number, features });
+    for (const i of [1, 2, 3]) recordReaction(store, row(i, ["label:docs"]), "down", at(1), NOW);
+    for (const i of [4, 5, 6]) recordReaction(store, row(i, ["path:db/"]), "up", at(1), NOW);
+    recordReaction(store, row(7, ["label:x"]), "dismiss", at(10), NOW);
+    recordReaction(store, row(8, ["label:x"]), "dismiss", at(10), NOW);
+    recordReaction(store, row(8, ["label:x"]), "clear", at(10), new Date(NOW.getTime() + 1));
+    const learning = await loadLearning(store, REPO, new Date(NOW.getTime() + 2));
+    expect(learning.queue.map((l) => [l.feature, l.direction])).toEqual([
+      ["label:docs", "down"],
+      ["path:db/", "up"],
+    ]);
+    expect(queueBoost(learning, ["label:docs"])).toEqual({
+      points: -OPEN_BOOST,
+      reason: "ranked lower: you marked 3 PRs labelled docs not useful",
+    });
+    expect(queueBoost(learning, ["path:db/"]).reason).toBe("ranked higher: you marked 3 PRs touching db/ useful");
+    expect([...learning.dismissedPrs]).toEqual([[`${REPO}#7`, at(10)]]);
+    expect(memoryItems(learning).map((i) => [i.group, i.text])).toEqual([
+      ["skip", "You skip PRs labelled docs"],
+      ["look", "You look at PRs touching db/ first"],
+    ]);
   });
 
   it("refuses an empty or very long note", () => {
@@ -315,7 +391,7 @@ describe("using what was learned", () => {
     const learning = learn({
       repo: REPO,
       feedback: [
-        verdict("config.changed", "not_needed", {
+        verdict("config.changed", "dismiss", {
           pr: 9,
           title: "Config change in config/app.php",
           path: "config/app.php",
@@ -326,7 +402,7 @@ describe("using what was learned", () => {
       now: NOW,
     });
     expect(pickWithLearning(checks, learning, "acme/shop#9").hidden.map((h) => h.reason)).toEqual([
-      "You marked it not needed on 2026-09-20",
+      "You dismissed it on 2026-09-20",
     ]);
     expect(pickWithLearning(checks, learning, "acme/shop#10").hidden).toEqual([]);
   });

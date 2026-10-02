@@ -21,8 +21,11 @@ export const FeedbackItemSchema = z.object({
   title: z.string(),
   severity: SeveritySchema.optional(),
   anchor: AnchorSchema.optional(),
-  /** "eyes" when it was one of the (at most three) places to look; "finding" for the model's other findings. */
-  placement: z.enum(["eyes", "finding"]),
+  /**
+   * "eyes" when it was one of the (at most three) places to look, "finding" for the model's other findings, "check"
+   * for a check's own row ("worth flagging?").
+   */
+  placement: z.enum(["eyes", "finding", "check"]),
 });
 
 const common = {
@@ -39,8 +42,11 @@ export const FeedbackEventSchema = z.discriminatedUnion("kind", [
     ...common,
     kind: z.literal("verdict"),
     item: FeedbackItemSchema,
-    /** "clear" takes a verdict back. The latest verdict on an item wins. */
-    verdict: z.enum(["agree", "not_needed", "clear"]),
+    /**
+     * "agree" (useful) and "not_needed" (not useful) teach Alden about the kind of flag; "dismiss" only hides this one
+     * on this PR. "clear" takes a verdict back. The latest verdict on an item wins.
+     */
+    verdict: z.enum(["agree", "not_needed", "dismiss", "clear"]),
   }),
   z.object({
     ...common,
@@ -69,6 +75,7 @@ export const FeedbackSummarySchema = z.object({
   modelFindings: counts,
   bySource: z.object({ check: counts, llm: counts }),
   byCheck: z.record(z.string(), counts),
+  dismissed: z.number().int().describe("places dismissed on one PR; not counted as agree or not needed"),
   missed: z.number().int(),
   briefings: z.number().int().describe("briefings with any feedback"),
   since: z.iso.datetime().nullable(),

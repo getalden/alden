@@ -68,9 +68,17 @@ const noop = () => {};
 
 describe("QueueView", () => {
   it("shows both lanes, numbered in order, with reasons that aren't already on the row", () => {
-    render(
+    const { container } = render(
       <QueueView
-        queue={queue}
+        queue={{
+          ...queue,
+          needsYou: [
+            row("acme/api", 1, {
+              reasons: ["waiting 3d", "touches migrations/", "ranked higher: you usually open PRs touching db/ first"],
+            }),
+            ...queue.needsYou.slice(1),
+          ],
+        }}
         error={undefined}
         loading={false}
         repoFilter=""
@@ -79,19 +87,64 @@ describe("QueueView", () => {
         selected="acme/api#1"
       />,
     );
-    const rows = screen.getAllByRole("link").filter((a) => a.getAttribute("data-pr"));
+    const rows = [...container.querySelectorAll("[data-pr]")] as HTMLElement[];
     expect(rows.map((r) => r.getAttribute("data-pr"))).toEqual(["acme/api#1", "acme/web#2", "acme/api#3"]);
-    expect(rows[0]?.getAttribute("aria-current")).toBe("true");
+    expect(
+      within(rows[0] as HTMLElement)
+        .getByRole("link")
+        .getAttribute("aria-current"),
+    ).toBe("true");
+    expect(within(rows[0] as HTMLElement).getByText("01")).toBeTruthy();
     expect(within(rows[0] as HTMLElement).getByText("touches migrations/")).toBeTruthy();
-    // The wait and the failing CI have their own places, so their reasons aren't repeated as chips.
+    // The wait has its own place, and a learned reason its own line, so neither is repeated as a chip.
     expect(within(rows[0] as HTMLElement).queryByText("waiting 3d")).toBeNull();
-    expect(within(rows[1] as HTMLElement).getByText("Ping @sam")).toBeTruthy();
-    expect(within(rows[1] as HTMLElement).queryByText("CI failing: ping @sam")).toBeNull();
-    expect(within(rows[2] as HTMLElement).getByText("docs only")).toBeTruthy();
+    expect(
+      within(rows[0] as HTMLElement).getByText("ranked higher: you usually open PRs touching db/ first"),
+    ).toBeTruthy();
+    expect(within(rows[1] as HTMLElement).getByText("CI failing: ping @sam")).toBeTruthy();
+    expect(within(rows[2] as HTMLElement).getByText(/docs only/)).toBeTruthy();
+    expect(screen.getByText("Needs you · 2")).toBeTruthy();
+  });
+
+  it("takes Useful, Not useful and Dismiss on the selected row, and says what each does", () => {
+    const reactions: string[] = [];
+    const { rerender } = render(
+      <QueueView
+        queue={queue}
+        error={undefined}
+        loading={false}
+        repoFilter=""
+        onRepoFilter={noop}
+        onRefresh={noop}
+        selected="acme/api#1"
+        onReact={(key, r) => reactions.push(`${key}:${r}`)}
+      />,
+    );
+    // Only the selected row shows the buttons.
+    expect(screen.getAllByRole("button", { name: "↑ Useful" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "× Dismiss" }));
+    expect(reactions).toEqual(["acme/api#1:dismiss"]);
+    rerender(
+      <QueueView
+        queue={{ ...queue, dismissed: [row("acme/old", 9)] }}
+        error={undefined}
+        loading={false}
+        repoFilter=""
+        onRepoFilter={noop}
+        onRefresh={noop}
+        selected="acme/api#1"
+        reactions={{ "acme/api#1": "dismiss" }}
+        onReact={(key, r) => reactions.push(`${key}:${r}`)}
+      />,
+    );
+    expect(screen.getByText("Hidden until it changes")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "show" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(reactions.at(-1)).toBe("acme/old#9:dismiss");
   });
 
   it("filters by repo", () => {
-    render(
+    const { container } = render(
       <QueueView
         queue={queue}
         error={undefined}
@@ -102,7 +155,7 @@ describe("QueueView", () => {
         selected={undefined}
       />,
     );
-    expect(screen.getAllByRole("link").filter((a) => a.getAttribute("data-pr")).length).toBe(1);
+    expect(container.querySelectorAll("[data-pr]").length).toBe(1);
   });
 
   it("says how to sign in instead of showing an error", () => {
@@ -191,14 +244,22 @@ const briefing: Briefing = {
 
 describe("BriefingView", () => {
   it("shows where to look, the checks with flagged ones open, and the model's footer", async () => {
-    const { container } = render(<BriefingView briefing={briefing} />);
+    const { container } = render(<BriefingView briefing={briefing} perReviewUsd={0.5} />);
     expect(screen.getByText("Adds a currency to charge().")).toBeTruthy();
-    expect(screen.getByText("Caller of changed code in src/api.ts")).toBeTruthy();
-    const details = [...container.querySelectorAll("details.check")] as HTMLDetailsElement[];
-    expect(details.map((d) => d.open)).toEqual([true]);
-    expect(screen.getByText(/claude-sonnet-5 via anthropic · effort medium · \$0\.04 ·/)).toBeTruthy();
-    expect(screen.getByText(/2 likely secrets hidden from the model/)).toBeTruthy();
+    expect(screen.getByText("Caller of changed code in src/api.ts.")).toBeTruthy();
+    // Flagged checks start open, passed ones closed; a click toggles.
+    const rows = screen.getAllByRole("button", { expanded: true });
+    expect(rows.map((r) => r.textContent)).toEqual([expect.stringContaining("Callers outside the diff")]);
+    expect(screen.getByText("calls charge (signature changed)")).toBeTruthy();
+    fireEvent.click(rows[0] as HTMLElement);
+    expect(screen.queryByText("calls charge (signature changed)")).toBeNull();
+    expect(screen.getByText("claude-sonnet-5")).toBeTruthy();
+    expect(screen.getByText("effort medium")).toBeTruthy();
+    expect(screen.getByText("$0.04 of $0.50")).toBeTruthy();
+    expect(screen.getByText("2 secrets hidden before sending")).toBeTruthy();
+    expect(container.textContent).toContain("✓ 1 passed");
     // Places link into the PR's diff at the line.
+    fireEvent.click(rows[0] as HTMLElement);
     await waitFor(() => {
       const link = container.querySelector("a.place") as HTMLAnchorElement | null;
       expect(link?.href).toMatch(/^https:\/\/github\.com\/acme\/api\/pull\/1\/files#diff-[0-9a-f]{64}R9$/);
@@ -227,67 +288,110 @@ describe("what learning changed in a briefing", () => {
         hidden: [
           { title: "Untested change in a.ts", reason: "You usually mark untested-change flags not needed (3 of 3)" },
           { title: "Untested change in b.ts", reason: "You usually mark untested-change flags not needed (3 of 3)" },
-          { title: "Config change in .env", reason: "You marked it not needed on 2026-09-27" },
+          { title: "Config change in .env", reason: "You dismissed it on 2026-09-27" },
         ],
         memory: 2,
       },
     };
-    render(<BriefingView briefing={learned} />);
+    const { container } = render(<BriefingView briefing={learned} />);
     expect(screen.getByText(/↑ You usually agree with flags about callers/)).toBeTruthy();
-    expect(
-      screen.getByText("Hidden 2 places. You usually mark untested-change flags not needed (3 of 3)."),
-    ).toBeTruthy();
-    expect(screen.getByText(/Hidden: Config change in \.env\. You marked it not needed on 2026-09-27\./)).toBeTruthy();
-    expect(screen.getByText(/The model was given 2 notes on what you care about here/)).toBeTruthy();
+    const shaped = container.querySelector(".shaped")?.textContent ?? "";
+    expect(shaped).toContain("Shaped by your feedback.");
+    expect(shaped).toContain(
+      "#1 is here because you usually agree with flags about callers outside the diff (4 of 4).",
+    );
+    expect(shaped).toContain("2 places are hidden: you usually mark untested-change flags not needed (3 of 3).");
+    expect(shaped).toContain("1 place is hidden: you dismissed it on 2026-09-27.");
+    expect(shaped).toContain("The model had 2 of your notes for this repo.");
+    fireEvent.click(screen.getByRole("button", { name: /3 hidden by your feedback/ }));
+    expect(screen.getByText("Config change in .env")).toBeTruthy();
     expect(groupHidden(learned.learning?.hidden ?? []).map((g) => g.items.length)).toEqual([2, 1]);
   });
 });
 
 describe("MemoryView", () => {
-  it("lists notes and learned items, adds a note and forgets an item", async () => {
-    const item = (id: string, source: "you" | "learned", text: string) => ({
+  it("groups what you look for and skip, adds, edits, forgets and undoes, and pauses learning", async () => {
+    const item = (id: string, source: "you" | "learned", group: "look" | "skip", text: string) => ({
       id,
       repo: "acme/api",
       source,
       kind: source === "you" ? ("note" as const) : ("check" as const),
+      group,
       text,
-      ...(source === "learned" ? { evidence: "agreed 3 of 3 times", effect: "picked first among places to look" } : {}),
+      ...(source === "learned"
+        ? { evidence: "you marked 3 of 3 useful", examples: 3, effect: "Picked first among the places to look." }
+        : { effect: "Given to the model with every review of this repo." }),
       since: "2026-09-20T10:00:00.000Z",
     });
     let items = [
-      item("note:1", "you", "Cents, not floats"),
-      item("check:x:up", "learned", "You care about migration flags"),
+      item("note:1", "you", "look", "Cents, not floats"),
+      item("check:x:up", "learned", "look", "You care about migration flags"),
+      item("check:y:down", "learned", "skip", "You usually don't need untested-change flags"),
     ];
+    let paused = false;
     const calls: string[] = [];
+    const memory = () => ({ repo: "acme/api", items, paused, path: "/home/.alden/alden.db" });
     const api = {
-      memory: async () => ({ repo: "acme/api", items }),
+      memoryRepos: async () => [
+        { repo: "acme/api", items: items.length, lastChange: new Date().toISOString(), paused },
+      ],
+      memory: async () => memory(),
       addMemory: async (text: string) => {
         calls.push(`add ${text}`);
-        items = [...items, item("note:2", "you", text)];
-        return { repo: "acme/api", items };
+        items = [...items, item("note:2", "you", "look", text)];
+        return memory();
       },
       forgetMemory: async (id: string) => {
         calls.push(`forget ${id}`);
         items = items.filter((i) => i.id !== id);
-        return { repo: "acme/api", items };
+        return memory();
+      },
+      changeMemory: async (change: { action: string; id?: string; text?: string; on?: boolean }) => {
+        calls.push(`${change.action} ${change.id ?? change.on ?? ""}`.trim());
+        if (change.action === "learning") paused = !change.on;
+        if (change.action === "edit")
+          items = items.map((i) => (i.id === change.id ? { ...i, text: change.text as string } : i));
+        if (change.action === "restore")
+          items = [...items, item("check:x:up", "learned", "look", "You care about migration flags")];
+        return memory();
       },
     } as unknown as import("../api").Api;
     render(<MemoryView api={api} session={{ repo: { root: "/r", repos: ["acme/api"] } } as unknown as Session} />);
     expect(await screen.findByText("Cents, not floats")).toBeTruthy();
-    expect(screen.getByText(/agreed 3 of 3 times · picked first among places to look · since 2026-09-20/)).toBeTruthy();
+    expect(screen.getByText("What you look for")).toBeTruthy();
+    expect(screen.getByText("What you skip")).toBeTruthy();
+    expect(screen.getAllByText(/you marked 3 of 3 useful · since/)).toHaveLength(2);
 
     fireEvent.change(screen.getByLabelText("New note"), { target: { value: "Check auth on new routes" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remember" }));
     expect(await screen.findByText("Check auth on new routes")).toBeTruthy();
 
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0] as HTMLElement);
+    fireEvent.change(screen.getByLabelText("Edit note"), { target: { value: "Money is in cents" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Money is in cents")).toBeTruthy();
+
     fireEvent.click(screen.getByRole("button", { name: "Forget: You care about migration flags" }));
-    await waitFor(() => expect(screen.queryByText("You care about migration flags")).toBeNull());
-    expect(calls).toEqual(["add Check auth on new routes", "forget check:x:up"]);
+    expect(await screen.findByText("Forgotten. Alden stops using this from the next briefing.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Undo forgetting: You care about migration flags" }));
+    await waitFor(() =>
+      expect(screen.queryByText("Forgotten. Alden stops using this from the next briefing.")).toBeNull(),
+    );
+
+    fireEvent.click(screen.getByRole("switch", { name: "Learning from your reactions" }));
+    expect(await screen.findByRole("switch", { name: "Learning paused" })).toBeTruthy();
+    expect(calls).toEqual([
+      "add Check auth on new routes",
+      "edit note:1",
+      "forget check:x:up",
+      "restore check:x:up",
+      "learning false",
+    ]);
   });
 });
 
 describe("feedback in a briefing", () => {
-  it("records agree and not needed on flags, taking a verdict back when pressed again, and reports misses", async () => {
+  it("records useful, not useful and dismiss, takes a verdict back when pressed again, and reports misses", async () => {
     const verdicts = new Map<string, Verdict>();
     const calls: string[] = [];
     const feedback: BriefingFeedback = {
@@ -304,16 +408,24 @@ describe("feedback in a briefing", () => {
       error: undefined,
     };
     const { rerender } = render(<BriefingView briefing={briefing} feedback={feedback} />);
-    fireEvent.click(screen.getByRole("button", { name: "Agree" }));
+    fireEvent.click(screen.getByRole("button", { name: "Useful" }));
     rerender(<BriefingView briefing={briefing} feedback={feedback} />);
-    expect(screen.getByRole("button", { name: "Agree" }).getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "Agree" }));
-    expect(calls).toEqual(["eyes:callers.outside:agree", "eyes:callers.outside:agree"]);
+    expect(screen.getByRole("button", { name: "✓ Useful" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("Noted. Alden will look for more like this.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "✓ Useful" }));
+    fireEvent.click(screen.getByRole("button", { name: "× Dismiss" }));
+    // A flagged check takes its own verdict ("worth flagging?").
+    fireEvent.click(screen.getByRole("button", { name: "↓ Not useful" }));
+    expect(calls).toEqual([
+      "eyes:callers.outside:agree",
+      "eyes:callers.outside:agree",
+      "eyes:callers.outside:dismiss",
+      "check:callers.outside:not_needed",
+    ]);
 
-    fireEvent.change(screen.getByLabelText("What should Alden have flagged?"), { target: { value: "The retry loop" } });
-    fireEvent.change(screen.getByLabelText("File (optional)"), { target: { value: "src/charge.ts" } });
-    fireEvent.change(screen.getByLabelText("Line"), { target: { value: "12" } });
-    fireEvent.click(screen.getByRole("button", { name: "Report it" }));
+    fireEvent.change(screen.getByLabelText("What should it have flagged?"), { target: { value: "The retry loop" } });
+    fireEvent.change(screen.getByLabelText("File and line (optional)"), { target: { value: "src/charge.ts:12" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(calls.at(-1)).toBe("missed:The retry loop:src/charge.ts:12"));
   });
 });

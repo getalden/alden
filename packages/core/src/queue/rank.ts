@@ -9,7 +9,7 @@ import {
 } from "@alden/schema";
 import type { PullRequestFacts } from "../github/pull-requests.js";
 import type { ReviewQueue } from "../github/queue.js";
-import { type Learning, openBoost, prFeatures, type QueueRow, sensitiveDir } from "../learn/learn.js";
+import { type Learning, prFeatures, type QueueRow, queueBoost, sensitiveDir } from "../learn/learn.js";
 import { fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./files.js";
 
 export type { FastTrackKind, Lane, RankedPullRequest, RankedQueue, Score };
@@ -128,16 +128,16 @@ export function rankPullRequest(
     pr.mergeable !== "conflicting" &&
     !pr.isDraft;
 
-  // What you usually open first, from your own history in this repo. Shown, never silent.
-  const learned = openBoost(context.learning, prFeatures(pr, config.sensitivePaths));
-  if (learned.reason) add(learned.points, learned.reason);
+  // How you treat PRs like this one, from your own history in this repo. Shown, never silent.
+  const learned = queueBoost(context.learning, prFeatures(pr, config.sensitivePaths));
+  if (learned.reason) add(Math.abs(learned.points), learned.reason);
 
   const total = risk * WEIGHTS.risk + wait * WEIGHTS.wait + blocking * WEIGHTS.blocking + learned.points;
   return {
     pr,
     lane: fastTrack ? "fast-track" : "needs-you",
     ...(fastTrack ? { fastTrack: kind } : {}),
-    score: { risk, wait, blocking, ...(learned.points > 0 ? { learned: learned.points } : {}), total },
+    score: { risk, wait, blocking, ...(learned.points !== 0 ? { learned: learned.points } : {}), total },
     reasons: reasons.sort((a, b) => b.weight - a.weight).map((r) => r.text),
     waitingHours,
     waitingOnAuthor,
@@ -173,12 +173,20 @@ export function rankQueue(
     b.waitingHours - a.waitingHours;
   const byWait = (a: RankedPullRequest, b: RankedPullRequest) => b.waitingHours - a.waitingHours;
 
+  // PRs you dismissed stay out of both lanes until they change.
+  const isDismissed = (r: RankedPullRequest) => {
+    const at = learning(r.pr.repo)?.dismissedPrs.get(`${r.pr.repo.toLowerCase()}#${r.pr.number}`);
+    return at !== undefined && at >= r.pr.updatedAt;
+  };
+  const shown = ranked.filter((r) => !isDismissed(r));
+  const dismissed = ranked.filter(isDismissed).sort(byWait);
   return {
     schemaVersion: QUEUE_SCHEMA_VERSION,
     viewer: queue.viewer,
     fetchedAt: queue.fetchedAt,
-    needsYou: ranked.filter((r) => r.lane === "needs-you").sort(byScore),
-    fastTrack: ranked.filter((r) => r.lane === "fast-track").sort(byWait),
+    needsYou: shown.filter((r) => r.lane === "needs-you").sort(byScore),
+    fastTrack: shown.filter((r) => r.lane === "fast-track").sort(byWait),
+    ...(dismissed.length > 0 ? { dismissed } : {}),
     warnings: queue.warnings,
   };
 }
@@ -194,11 +202,12 @@ export function queueRows(ranked: RankedQueue, config: AldenConfig["queue"]): Qu
       b.score.total - (b.score.learned ?? 0) - (a.score.total - (a.score.learned ?? 0)) ||
       b.waitingHours - a.waitingHours,
   );
-  return [...ranked.needsYou, ...ranked.fastTrack].map((r) => ({
+  return [...ranked.needsYou, ...ranked.fastTrack, ...(ranked.dismissed ?? [])].map((r) => ({
     url: r.pr.url,
     repo: r.pr.repo,
     number: r.pr.number,
     features: prFeatures(r.pr, config.sensitivePaths),
-    base: r.lane === "needs-you" ? base.indexOf(r) : -1,
+    base: r.lane === "needs-you" && base.includes(r) ? base.indexOf(r) : -1,
+    updatedAt: r.pr.updatedAt,
   }));
 }

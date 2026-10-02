@@ -3,7 +3,24 @@ import type { Briefing, FeedbackInput, FeedbackSummary, MemoryItem, RankedQueue,
 export interface Memory {
   repo: string;
   items: MemoryItem[];
+  paused: boolean;
+  /** Where it's kept, e.g. ~/.alden/alden.db. */
+  path: string;
 }
+
+export interface MemoryRepo {
+  repo: string;
+  items: number;
+  /** ISO time of the last change; "" when nothing is known yet. */
+  lastChange: string;
+  paused: boolean;
+}
+
+export type MemoryChange =
+  | { action: "edit"; id: string; text: string }
+  | { action: "restore"; id: string }
+  | { action: "learning"; on: boolean }
+  | { action: "forget-all" };
 
 const TOKEN_KEY = "alden.token";
 
@@ -55,6 +72,7 @@ export interface SpendReport {
   perReviewUsd: number;
   byModel: { model: string; calls: number; usd: number | null }[];
   lastDays: { day: string; calls: number; usd: number; unpriced: number }[];
+  todayByPurpose?: { purpose: string; usd: number }[];
 }
 
 export interface ReviewRequest {
@@ -111,6 +129,19 @@ export class Api {
 
   addMemory = (text: string, repo?: string) =>
     this.request<Memory>("/api/memory", { method: "POST", body: JSON.stringify({ text, ...(repo ? { repo } : {}) }) });
+
+  memoryRepos = () => this.request<MemoryRepo[]>("/api/memory/repos");
+
+  changeMemory = (change: MemoryChange, repo?: string) =>
+    this.request<Memory>("/api/memory/change", {
+      method: "POST",
+      body: JSON.stringify({ ...change, ...(repo ? { repo } : {}) }),
+    });
+
+  react = (pr: string, reaction: "up" | "down" | "dismiss" | "clear") =>
+    this.request<unknown>("/api/reaction", { method: "POST", body: JSON.stringify({ pr, reaction }) });
+
+  exportFeedback = () => this.request<unknown[]>("/api/feedback/export");
 
   forgetMemory = (id: string, repo?: string) =>
     this.request<Memory>("/api/memory/forget", {

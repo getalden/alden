@@ -65,6 +65,10 @@ export const RankedQueueSchema = z.object({
   fetchedAt: z.iso.datetime(),
   needsYou: z.array(RankedPullRequestSchema),
   fastTrack: z.array(RankedPullRequestSchema),
+  dismissed: z
+    .array(RankedPullRequestSchema)
+    .optional()
+    .describe("PRs you dismissed from the queue; they come back when they change"),
   warnings: z.array(z.string()),
 });
 

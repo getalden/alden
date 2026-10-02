@@ -38,7 +38,21 @@ export interface UiApi {
   memory(repo?: string): Promise<unknown>;
   addMemory(input: { repo?: string; text: string }): Promise<unknown>;
   forgetMemory(input: { repo?: string; id: string }): Promise<unknown>;
+  /** The rest of the Memory view: edit a note, undo a forget, pause or resume learning, forget everything. */
+  changeMemory(input: MemoryChange): Promise<unknown>;
+  /** Repos Alden knows something about, for the Memory view's list. */
+  memoryRepos(): Promise<unknown>;
+  /** A reaction to a PR in the last queue: "owner/repo#12". */
+  react(input: { pr: string; reaction: "up" | "down" | "dismiss" | "clear" }): Promise<unknown>;
+  /** Feedback events with repo names, titles, paths and notes removed, as `alden feedback --export` writes them. */
+  exportFeedback(): Promise<unknown>;
 }
+
+export type MemoryChange =
+  | { repo?: string; action: "edit"; id: string; text: string }
+  | { repo?: string; action: "restore"; id: string }
+  | { repo?: string; action: "learning"; on: boolean }
+  | { repo?: string; action: "forget-all" };
 
 /** An error the UI should show as is, with an HTTP status. */
 export class ApiError extends Error {
@@ -235,6 +249,39 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         );
         return;
       }
+      case "GET /api/memory/repos":
+        send(res, 200, await api.memoryRepos());
+        return;
+      case "POST /api/memory/change": {
+        const body = await readJsonBody(req);
+        const repo = typeof body.repo === "string" ? { repo: body.repo } : {};
+        const change: MemoryChange | undefined =
+          body.action === "edit" && typeof body.id === "string" && typeof body.text === "string"
+            ? { ...repo, action: "edit", id: body.id, text: body.text }
+            : body.action === "restore" && typeof body.id === "string"
+              ? { ...repo, action: "restore", id: body.id }
+              : body.action === "learning" && typeof body.on === "boolean"
+                ? { ...repo, action: "learning", on: body.on }
+                : body.action === "forget-all"
+                  ? { ...repo, action: "forget-all" }
+                  : undefined;
+        if (!change) throw new ApiError(400, "Send { action: edit | restore | learning | forget-all, … }.");
+        send(res, 200, await api.changeMemory(change));
+        return;
+      }
+      case "POST /api/reaction": {
+        const body = await readJsonBody(req);
+        const reactions = ["up", "down", "dismiss", "clear"] as const;
+        const reaction = reactions.find((r) => r === body.reaction);
+        if (typeof body.pr !== "string" || !reaction) {
+          throw new ApiError(400, "Send { pr: owner/repo#12, reaction: up | down | dismiss | clear }.");
+        }
+        send(res, 200, await api.react({ pr: body.pr, reaction }));
+        return;
+      }
+      case "GET /api/feedback/export":
+        send(res, 200, await api.exportFeedback());
+        return;
       case "POST /api/memory/forget": {
         const body = await readJsonBody(req);
         if (typeof body.id !== "string") throw new ApiError(400, "Send { id }, and optionally { repo }.");

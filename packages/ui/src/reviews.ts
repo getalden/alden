@@ -4,9 +4,10 @@ import type { Api, ReviewEvent, ReviewRequest } from "./api";
 
 export interface ReviewRun {
   /** Stages seen so far, in order; the last is the current one while running. */
-  stages: { stage: string; label: string }[];
+  stages: { stage: string; label: string; at: number }[];
   running: boolean;
   startedAt: number;
+  finishedAt?: number;
   error?: string;
   briefing?: Briefing;
   request: ReviewRequest;
@@ -36,12 +37,15 @@ export function useReviews(api: Api | undefined, onDone?: () => void) {
       setRuns((all) => ({ ...all, [key]: { stages: [], running: true, startedAt: Date.now(), request } }));
       const onEvent = (event: ReviewEvent) => {
         if (event.type === "stage") {
-          update(key, (run) => ({ ...run, stages: [...run.stages, { stage: event.stage, label: event.label }] }));
+          update(key, (run) => ({
+            ...run,
+            stages: [...run.stages, { stage: event.stage, label: event.label, at: Date.now() }],
+          }));
         }
       };
       api
         .review(request, onEvent, controller.signal)
-        .then((briefing) => update(key, (run) => ({ ...run, running: false, briefing })))
+        .then((briefing) => update(key, (run) => ({ ...run, running: false, finishedAt: Date.now(), briefing })))
         .catch((error: unknown) => {
           if (controller.signal.aborted) return;
           update(key, (run) => ({ ...run, running: false, error: (error as Error).message }));

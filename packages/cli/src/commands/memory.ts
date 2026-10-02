@@ -1,6 +1,17 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { addNote, forget, loadLearning, memoryItems, openStore, repoFromRemote } from "@alden/core";
+import {
+  addNote,
+  editNote,
+  forget,
+  forgetAll,
+  loadLearning,
+  memoryItems,
+  openStore,
+  repoFromRemote,
+  restore,
+  setLearning,
+} from "@alden/core";
 import type { MemoryItem } from "@alden/schema";
 import type { Command } from "commander";
 import { paint, shouldColor, stripControlDeep } from "../render/style.js";
@@ -15,12 +26,17 @@ export async function originOf(cwd: string = process.cwd()): Promise<string | un
   }
 }
 
-export function renderMemory(repo: string, untrusted: MemoryItem[], color: boolean): string {
+export function renderMemory(repo: string, untrusted: MemoryItem[], color: boolean, paused = false): string {
   const items = stripControlDeep(untrusted);
   const out = [paint(`What Alden knows about you in ${repo}`, "bold", color), ""];
+  if (paused)
+    out.push(
+      paint("Learning is paused here: this is kept but not applied. `alden memory resume`", "yellow", color),
+      "",
+    );
   if (items.length === 0) {
     out.push(
-      "Nothing yet. Alden learns from the flags you agree with or mark not needed, and from the PRs you open first.",
+      "Nothing yet. Alden learns from what you mark useful or not useful, and from the PRs you open first.",
       'Add a note yourself: alden memory add "Check that new endpoints have auth"',
     );
     return `${out.join("\n")}\n`;
@@ -30,7 +46,9 @@ export function renderMemory(repo: string, untrusted: MemoryItem[], color: boole
     out.push(paint(title, "bold", color));
     for (const item of list) {
       out.push(`  ${item.text}`);
-      const detail = [item.evidence, item.effect].filter(Boolean).join("; ");
+      const detail = [item.source === "you" ? "you said" : item.evidence, item.effect?.replace(/\.$/, "")]
+        .filter(Boolean)
+        .join("; ");
       out.push(
         paint(`    ${detail ? `${detail} · ` : ""}since ${item.since.slice(0, 10)} · id ${item.id}`, "dim", color),
       );
@@ -38,12 +56,12 @@ export function renderMemory(repo: string, untrusted: MemoryItem[], color: boole
     out.push("");
   };
   section(
-    "Your notes",
-    items.filter((i) => i.source === "you"),
+    "What you look for",
+    items.filter((i) => i.group === "look"),
   );
   section(
-    "Learned from your feedback",
-    items.filter((i) => i.source === "learned"),
+    "What you skip",
+    items.filter((i) => i.group === "skip"),
   );
   out.push(
     paint("Forget any of these with `alden memory forget <id>`. Nothing here leaves your machine.", "dim", color),
@@ -68,9 +86,10 @@ export function registerMemoryCommand(program: Command): void {
 
   memory.action(async (options: { repo?: string; json?: boolean }) => {
     const repo = await repoFrom(options);
-    const items = memoryItems(await loadLearning(openStore(), repo));
+    const learning = await loadLearning(openStore(), repo);
+    const items = memoryItems(learning);
     if (options.json) console.log(JSON.stringify(items, null, 2));
-    else process.stdout.write(renderMemory(repo, items, shouldColor(process.stdout)));
+    else process.stdout.write(renderMemory(repo, items, shouldColor(process.stdout), learning.paused));
   });
 
   memory
@@ -91,15 +110,70 @@ export function registerMemoryCommand(program: Command): void {
     });
 
   memory
+    .command("edit")
+    .description("Rewrite one of your notes.")
+    .argument("<id>", "the note's id, from `alden memory`")
+    .argument("<text...>", "the new text")
+    .option("--repo <owner/name>", "the repo (default: this clone's origin)")
+    .action(async (id: string, words: string[], options: { repo?: string }) => {
+      const repo = await repoFrom({ ...memory.opts(), ...options });
+      try {
+        if (!(await editNote(openStore(), repo, id, words.join(" ")))) {
+          program.error(`No note called ${id} in ${repo}. \`alden memory\` lists the ids.`);
+        }
+      } catch (error) {
+        program.error((error as Error).message);
+      }
+      console.log(`Updated ${id}.`);
+    });
+
+  memory
     .command("forget")
     .description("Forget a note, or something Alden learned (it starts learning that again from scratch).")
-    .argument("<id>", "the id `alden memory` shows")
+    .argument("[id]", "the id `alden memory` shows")
+    .option("--all", "forget everything in this repo")
     .option("--repo <owner/name>", "the repo (default: this clone's origin)")
-    .action(async (id: string, options: { repo?: string }) => {
+    .action(async (id: string | undefined, options: { repo?: string; all?: boolean }) => {
       const repo = await repoFrom({ ...memory.opts(), ...options });
+      if (options.all) {
+        const n = await forgetAll(openStore(), repo);
+        console.log(`Forgot ${n} item${n === 1 ? "" : "s"} in ${repo}. \`alden memory restore <id>\` brings one back.`);
+        return;
+      }
+      if (!id) program.error("Name an id from `alden memory`, or pass --all.");
       if (!(await forget(openStore(), repo, id))) {
         program.error(`Nothing called ${id} in ${repo}. \`alden memory\` lists the ids.`);
       }
-      console.log(`Forgotten: ${id}.`);
+      console.log(`Forgotten: ${id}. \`alden memory restore ${id}\` takes it back.`);
     });
+
+  memory
+    .command("restore")
+    .description("Take back a forget.")
+    .argument("<id>", "the id you forgot")
+    .option("--repo <owner/name>", "the repo (default: this clone's origin)")
+    .action(async (id: string, options: { repo?: string }) => {
+      const repo = await repoFrom({ ...memory.opts(), ...options });
+      if (!restore(openStore(), repo, id)) program.error(`Nothing called ${id} was forgotten in ${repo}.`);
+      console.log(`Restored: ${id}.`);
+    });
+
+  for (const [name, on] of [
+    ["pause", false],
+    ["resume", true],
+  ] as const) {
+    memory
+      .command(name)
+      .description(
+        on
+          ? "Apply what Alden learned in this repo again."
+          : "Stop applying what Alden learned in this repo; your reactions are still saved, and notes still apply.",
+      )
+      .option("--repo <owner/name>", "the repo (default: this clone's origin)")
+      .action(async (options: { repo?: string }) => {
+        const repo = await repoFrom({ ...memory.opts(), ...options });
+        setLearning(openStore(), repo, on);
+        console.log(on ? `Learning resumed in ${repo}.` : `Learning paused in ${repo}.`);
+      });
+  }
 }

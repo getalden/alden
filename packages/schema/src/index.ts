@@ -48,6 +48,8 @@ export {
   MemoryItemSchema,
   type OpenEvent,
   OpenEventSchema,
+  type ReactionEvent,
+  ReactionEventSchema,
 } from "./memory.js";
 export {
   type CiState,

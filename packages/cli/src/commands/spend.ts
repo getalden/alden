@@ -18,6 +18,8 @@ export interface SpendReport {
   perReviewUsd: number;
   byModel: { model: string; calls: number; usd: number | null }[];
   lastDays: DaySummary[];
+  /** Today's spending by what it was for ("owner/repo#12", "local changes"), most first. */
+  todayByPurpose: { purpose: string; usd: number }[];
 }
 
 function summarise(day: string, entries: SpendEntry[]): DaySummary {
@@ -42,6 +44,8 @@ export async function spendReport(
     row.usd = entry.usd === undefined || row.usd === null ? null : row.usd + entry.usd;
     models.set(entry.model, row);
   }
+  const purposes = new Map<string, number>();
+  for (const entry of todays) purposes.set(entry.purpose, (purposes.get(entry.purpose) ?? 0) + (entry.usd ?? 0));
   const days = (await ledger.days()).slice(0, 7);
   return {
     today,
@@ -50,6 +54,7 @@ export async function spendReport(
     perReviewUsd: limits.perReviewUsd,
     byModel: [...models].map(([model, row]) => ({ model, ...row })).sort((a, b) => (b.usd ?? 0) - (a.usd ?? 0)),
     lastDays: await Promise.all(days.map(async (day) => summarise(day, await ledger.entries(day)))),
+    todayByPurpose: [...purposes].map(([purpose, usd]) => ({ purpose, usd })).sort((a, b) => b.usd - a.usd),
   };
 }
 

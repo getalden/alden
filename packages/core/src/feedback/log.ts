@@ -83,16 +83,21 @@ export function summarizeFeedback(events: FeedbackEvent[]): FeedbackSummary {
     modelFindings: counts(),
     bySource: { check: counts(), llm: counts() },
     byCheck: {},
+    dismissed: 0,
     missed,
     briefings: briefings.size,
     since: events[0]?.at ?? null,
   };
   for (const { item, verdict } of latest.values()) {
     if (verdict === "clear") continue;
+    if (verdict === "dismiss") {
+      summary.dismissed++;
+      continue;
+    }
     const field = verdict === "agree" ? "agree" : "notNeeded";
     summary.verdicts++;
     summary[field]++;
-    summary[item.placement === "eyes" ? "eyes" : "modelFindings"][field]++;
+    if (item.placement !== "check") summary[item.placement === "eyes" ? "eyes" : "modelFindings"][field]++;
     summary.bySource[item.source][field]++;
     const byCheck = item.checkId ?? (item.source === "llm" ? "model" : "other");
     summary.byCheck[byCheck] ??= counts();

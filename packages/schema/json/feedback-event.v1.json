@@ -128,7 +128,8 @@
               "type": "string",
               "enum": [
                 "eyes",
-                "finding"
+                "finding",
+                "check"
               ]
             }
           },
@@ -144,6 +145,7 @@
           "enum": [
             "agree",
             "not_needed",
+            "dismiss",
             "clear"
           ]
         }

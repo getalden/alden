@@ -2,8 +2,19 @@ import type { FeedbackSummary } from "@alden/schema";
 import { type FormEvent, useEffect, useState } from "react";
 import type { Api, Session, SpendReport } from "../api";
 import { formatUsd, plural } from "../format";
+import { applyTheme, readTheme, type Theme } from "../theme";
 
-/** Defaults for every review (saved to your user config, like `alden config set`) and what you've spent. */
+/** Saves `data` as a file the browser downloads, without a server round trip. */
+function download(name: string, data: unknown) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+/** Defaults for every review (saved to your user config, like `alden config set`), your feedback, and today's spend. */
 export function SettingsView({ api, session, onSaved }: { api: Api; session: Session; onSaved: () => void }) {
   const [spend, setSpend] = useState<SpendReport>();
   const [feedback, setFeedback] = useState<FeedbackSummary>();
@@ -13,6 +24,8 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
   const [daily, setDaily] = useState(String(session.budget.dailyUsd));
   const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string }>();
   const [saving, setSaving] = useState(false);
+  const [theme, setTheme] = useState<Theme>(readTheme);
+  const [exportStatus, setExportStatus] = useState<string>();
 
   useEffect(() => {
     api.spend().then(setSpend, () => setSpend(undefined));
@@ -44,154 +57,203 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
     }
   }
 
+  async function exportFeedback() {
+    setExportStatus(undefined);
+    try {
+      const events = await api.exportFeedback();
+      download(`alden-feedback-${new Date().toISOString().slice(0, 10)}.json`, events);
+      setExportStatus(`Saved ${plural(events.length, "event")}.`);
+    } catch (error) {
+      setExportStatus((error as Error).message);
+    }
+  }
+
+  const verdicts = feedback ? feedback.agree + feedback.notNeeded : 0;
+  const pct = (n: number) => (verdicts === 0 ? 0 : Math.round((n / verdicts) * 100));
+  const spent = spend?.spentToday ?? session.budget.spentToday;
+  const cap = spend?.dailyUsd ?? session.budget.dailyUsd;
+
   return (
-    <section className="settings" aria-labelledby="settings-title">
-      <h1 id="settings-title">Settings</h1>
+    <section className="page-inner" aria-labelledby="settings-title">
+      <div className="settings-grid">
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <h1 className="page-title" id="settings-title">
+            Settings
+          </h1>
 
-      <form className="card form" onSubmit={save}>
-        <h2>Model</h2>
-        <p className="muted small">
-          {session.model.available ? (
-            <>
-              Using <span className="mono">{session.model.id}</span> via {session.model.provider}.
-            </>
-          ) : (
-            session.model.reason
-          )}
-        </p>
-        <div className="form-grid">
-          <label>
-            Default model
-            <select value={model} onChange={(e) => setModel(e.target.value)}>
-              {models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Default effort
-            <select value={effort} onChange={(e) => setEffort(e.target.value)}>
-              <option value="">The model's own (high)</option>
-              {session.efforts.map((e) => (
-                <option key={e} value={e}>
-                  {e}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Cap per review (USD)
-            <input type="text" inputMode="decimal" value={perReview} onChange={(e) => setPerReview(e.target.value)} />
-          </label>
-          <label>
-            Cap per day (USD)
-            <input type="text" inputMode="decimal" value={daily} onChange={(e) => setDaily(e.target.value)} />
-          </label>
-        </div>
-        <div className="form-actions">
-          <button type="submit" className="btn primary" disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-          {status && <span className={status.tone === "error" ? "error-text" : "muted"}>{status.text}</span>}
-        </div>
-        <p className="faint small">
-          Changes go to your user config, like <code>alden config set</code>. A repo's <code>.alden.toml</code> still
-          overrides them there. Providers and endpoints are set with <code>alden config</code>; see the docs.
-        </p>
-      </form>
-
-      <div className="card">
-        <h2>Your feedback</h2>
-        {!feedback ? (
-          <p className="muted">Loading…</p>
-        ) : feedback.briefings === 0 ? (
-          <p className="muted">
-            None yet. Mark flags as <strong>Agree</strong> or <strong>Not needed</strong> in a briefing, and use{" "}
-            <strong>You missed something</strong> when Alden missed what mattered.
-          </p>
-        ) : (
-          <>
-            <p>
-              You agreed with{" "}
-              <strong>{feedback.eyesAgreeRate === null ? "—" : `${Math.round(feedback.eyesAgreeRate * 100)}%`}</strong>{" "}
-              of "needs your eyes" flags ({feedback.eyes.agree} of {feedback.eyes.agree + feedback.eyes.notNeeded})
-              {feedback.modelFindings.agree + feedback.modelFindings.notNeeded > 0 &&
-                `, and ${feedback.modelFindings.agree} of ${feedback.modelFindings.agree + feedback.modelFindings.notNeeded} of the model's other findings`}
-              . {plural(feedback.missed, "miss", "misses")} reported across {plural(feedback.briefings, "briefing")}.
-            </p>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Check</th>
-                  <th scope="col">Agreed</th>
-                  <th scope="col">Not needed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(feedback.byCheck)
-                  .sort(([, a], [, b]) => b.agree + b.notNeeded - (a.agree + a.notNeeded))
-                  .map(([check, c]) => (
-                    <tr key={check}>
-                      <td className="mono">{check}</td>
-                      <td>{c.agree}</td>
-                      <td>{c.notNeeded}</td>
-                    </tr>
+          <form className="card panel" onSubmit={save}>
+            <h2 className="label">Model</h2>
+            <div className="two">
+              <label className="field">
+                Default model
+                <select className="input mono" value={model} onChange={(e) => setModel(e.target.value)}>
+                  {models.map((m) => (
+                    <option key={m} value={m}>
+                      {session.aliases[m] ?? m}
+                    </option>
                   ))}
-              </tbody>
-            </table>
-          </>
-        )}
-        <p className="faint small">
-          Feedback stays on this machine. To share it, run <code>alden feedback --export feedback.json</code>, which
-          leaves out repo names, paths and notes.
-        </p>
-      </div>
-
-      <div className="card">
-        <h2>Spend</h2>
-        {spend ? (
-          <>
-            <p>
-              <strong>{formatUsd(spend.spentToday)}</strong> of your {formatUsd(spend.dailyUsd)} daily cap today ·{" "}
-              {formatUsd(Math.max(0, spend.dailyUsd - spend.spentToday))} left. Each review is capped at{" "}
-              {formatUsd(spend.perReviewUsd)}.
-            </p>
-            {spend.byModel.length > 0 && (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th scope="col">Model today</th>
-                    <th scope="col">Calls</th>
-                    <th scope="col">Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {spend.byModel.map((row) => (
-                    <tr key={row.model}>
-                      <td className="mono">{row.model}</td>
-                      <td>{row.calls}</td>
-                      <td>{row.usd === null ? "not priced" : formatUsd(row.usd)}</td>
-                    </tr>
+                </select>
+                <span className="help">
+                  {session.model.available ? `via ${session.model.provider}` : session.model.reason}
+                </span>
+              </label>
+              <div className="field">
+                Default effort
+                <fieldset className="segmented" aria-label="Default effort" style={{ margin: 0, height: 34 }}>
+                  <button type="button" aria-pressed={effort === ""} onClick={() => setEffort("")}>
+                    Auto
+                  </button>
+                  {session.efforts.map((e) => (
+                    <button key={e} type="button" aria-pressed={effort === e} onClick={() => setEffort(e)}>
+                      {e.charAt(0).toUpperCase() + e.slice(1)}
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            )}
-            {spend.lastDays.length > 1 && (
-              <p className="muted small">
-                Recent days:{" "}
-                {spend.lastDays
-                  .slice(1)
-                  .map((d) => `${d.day} ${formatUsd(d.usd)} (${plural(d.calls, "call")})`)
-                  .join(" · ")}
+                </fieldset>
+              </div>
+            </div>
+            <h2 className="label sep">Spend caps</h2>
+            <div className="two">
+              <label className="field">
+                Per briefing
+                <span className="money">
+                  <span className="faint mono">$</span>
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    value={perReview}
+                    onChange={(e) => setPerReview(e.target.value)}
+                  />
+                </span>
+              </label>
+              <label className="field">
+                Per day
+                <span className="money">
+                  <span className="faint mono">$</span>
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    value={daily}
+                    onChange={(e) => setDaily(e.target.value)}
+                  />
+                </span>
+              </label>
+            </div>
+            <p className="muted small">
+              When a briefing would pass its cap, Alden doesn't ask the model and shows the checks. Changes go to your
+              user config, like <code>alden config set</code>; a repo's <code>.alden.toml</code> still overrides them
+              there.
+            </p>
+            <div className="form-actions">
+              <button type="submit" className="btn primary" disabled={saving}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+              {status && <span className={status.tone === "error" ? "error-text" : "muted"}>{status.text}</span>}
+            </div>
+          </form>
+
+          <div className="card panel">
+            <div className="section-head">
+              <h2 className="label">Your feedback</h2>
+              {feedback?.since && <span className="faint mono small">since {feedback.since.slice(0, 10)}</span>}
+            </div>
+            {!feedback ? (
+              <p className="muted">Loading…</p>
+            ) : feedback.briefings === 0 ? (
+              <p className="muted">
+                None yet. Mark places <strong>Useful</strong> or <strong>Not useful</strong> in a briefing, and use{" "}
+                <strong>You missed something</strong> when Alden missed what mattered.
               </p>
+            ) : (
+              <>
+                <div className="stack-bar" aria-hidden="true">
+                  <span className="a" style={{ width: `${pct(feedback.agree)}%` }} />
+                  <span className="n" style={{ width: `${pct(feedback.notNeeded)}%` }} />
+                </div>
+                <div className="two" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                  <span>
+                    <b className="big-num">{pct(feedback.agree)}%</b>
+                    <br />
+                    <span className="muted small">You found useful</span>
+                  </span>
+                  <span>
+                    <b className="big-num">{pct(feedback.notNeeded)}%</b>
+                    <br />
+                    <span className="muted small">Not useful</span>
+                  </span>
+                  <span>
+                    <b className="big-num">{feedback.missed}</b>
+                    <br />
+                    <span className="muted small">Things Alden missed</span>
+                  </span>
+                </div>
+                <p className="muted small">
+                  On "needs your eyes": {feedback.eyes.agree} of {feedback.eyes.agree + feedback.eyes.notNeeded} useful
+                  {feedback.eyesAgreeRate !== null && ` (${Math.round(feedback.eyesAgreeRate * 100)}%)`}. Across{" "}
+                  {plural(feedback.briefings, "briefing")}, {plural(feedback.dismissed, "place")} dismissed.
+                </p>
+              </>
             )}
-            <p className="faint small">Anthropic list prices. Local models aren't priced or capped.</p>
-          </>
-        ) : (
-          <p className="muted">Loading…</p>
-        )}
+            <div className="form-actions" style={{ paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+              <button type="button" className="btn sm" onClick={exportFeedback}>
+                Export redacted feedback
+              </button>
+              <span className="faint small">{exportStatus ?? "Repo names, paths, titles and notes are removed."}</span>
+            </div>
+          </div>
+
+          <div className="card panel">
+            <h2 className="label">Appearance</h2>
+            <fieldset className="segmented" aria-label="Theme" style={{ margin: 0, alignSelf: "flex-start" }}>
+              {(["system", "light", "dark"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed={theme === t}
+                  onClick={() => {
+                    setTheme(t);
+                    applyTheme(t);
+                  }}
+                >
+                  {t === "system" ? "Match system" : t === "light" ? "Light" : "Dark"}
+                </button>
+              ))}
+            </fieldset>
+          </div>
+        </div>
+
+        <aside className="card panel" style={{ marginTop: 54 }} aria-labelledby="today">
+          <h2 className="label" id="today">
+            Today
+          </h2>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span className="today-num">{formatUsd(spent)}</span>
+            <span className="faint mono small">of {formatUsd(cap)}</span>
+          </div>
+          <div className={`meter${spent >= cap ? " over" : ""}`} aria-hidden="true">
+            <span style={{ width: `${Math.min(100, cap > 0 ? (spent / cap) * 100 : 0)}%` }} />
+          </div>
+          {spend?.todayByPurpose && spend.todayByPurpose.length > 0 ? (
+            <ul className="spend-list">
+              {spend.todayByPurpose.map((p) => (
+                <li key={p.purpose}>
+                  <span title={p.purpose}>{p.purpose}</span>
+                  <span>{formatUsd(p.usd)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted small">No model calls today.</p>
+          )}
+          {spend && spend.lastDays.length > 1 && (
+            <p className="faint small">
+              {spend.lastDays
+                .slice(1, 4)
+                .map((d) => `${d.day.slice(5)} ${formatUsd(d.usd)}`)
+                .join(" · ")}
+            </p>
+          )}
+          <p className="faint small">Anthropic list prices. Local models aren't priced or capped.</p>
+        </aside>
       </div>
     </section>
   );

@@ -4,26 +4,33 @@ import {
   addNote,
   createGitHubClient,
   type Effort,
+  editNote,
   FeedbackLog,
   fetchReviewQueue,
   fetchViewer,
   forget,
+  forgetAll,
   JsonCache,
   loadConfig,
   loadLearning,
   MODEL_ALIASES,
   memoryItems,
+  memoryRepos,
   openStore,
   queueRows,
   rankQueue,
+  recordReaction,
+  redactFeedback,
   repoFromRemote,
   resolveModel,
   resolveToken,
+  restore,
   reviewLocalChanges,
   reviewPullRequest,
   SpendLedger,
   selectProvider,
   setConfigValue,
+  setLearning,
   supportsEffort,
   UsageLog,
   unsetConfigValue,
@@ -74,6 +81,12 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
       throw new ApiError(400, "Start `alden ui` in a clone with a GitHub remote, or pick a repo, to see its memory.");
     }
     return target;
+  };
+  const memoryOf = async (repo?: string) => {
+    const target = await memoryRepo(repo);
+    const store = openStore();
+    const learning = await loadLearning(store, target);
+    return { repo: target, items: memoryItems(learning), paused: learning.paused, path: store.path };
   };
 
   return {
@@ -218,9 +231,46 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
 
     feedbackSummary: () => feedback.summary(),
 
-    async memory(repo) {
-      const target = await memoryRepo(repo);
-      return { repo: target, items: memoryItems(await loadLearning(openStore(), target)) };
+    memory: (repo) => memoryOf(repo),
+
+    async memoryRepos() {
+      const repos = await memoryRepos(openStore());
+      const here = (await repoOf(options.cwd))?.repos[0]?.toLowerCase();
+      // The repo alden ui runs in is always listed, even before Alden knows anything there.
+      if (here && !repos.some((r) => r.repo === here)) {
+        repos.unshift({ repo: here, items: 0, lastChange: "", paused: false });
+      }
+      return repos;
+    },
+
+    async changeMemory(change) {
+      const target = await memoryRepo(change.repo);
+      const store = openStore();
+      try {
+        if (change.action === "edit" && !(await editNote(store, target, change.id, change.text))) {
+          throw new ApiError(404, `No note called ${change.id} in ${target}.`);
+        }
+        if (change.action === "restore" && !restore(store, target, change.id)) {
+          throw new ApiError(404, `Nothing called ${change.id} was forgotten in ${target}.`);
+        }
+        if (change.action === "learning") setLearning(store, target, change.on);
+        if (change.action === "forget-all") await forgetAll(store, target);
+      } catch (error) {
+        throw error instanceof ApiError ? error : new ApiError(400, (error as Error).message);
+      }
+      return memoryOf(target);
+    },
+
+    async react({ pr, reaction }) {
+      const last = await cache.get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
+      const row = last?.rows?.find((r) => `${r.repo}#${r.number}`.toLowerCase() === pr.toLowerCase());
+      if (!row) throw new ApiError(404, `${pr} isn't in your last queue. Refresh the queue and try again.`);
+      recordReaction(openStore(), row, reaction, row.updatedAt ?? new Date().toISOString());
+      return { pr, reaction };
+    },
+
+    async exportFeedback() {
+      return redactFeedback(await feedback.events());
     },
 
     async addMemory({ repo, text }) {
@@ -230,13 +280,13 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
       } catch (error) {
         throw new ApiError(400, (error as Error).message);
       }
-      return { repo: target, items: memoryItems(await loadLearning(openStore(), target)) };
+      return memoryOf(target);
     },
 
     async forgetMemory({ repo, id }) {
       const target = await memoryRepo(repo);
       if (!(await forget(openStore(), target, id))) throw new ApiError(404, `Nothing called ${id} in ${target}.`);
-      return { repo: target, items: memoryItems(await loadLearning(openStore(), target)) };
+      return memoryOf(target);
     },
 
     async stats({ repo, days, since, refresh }) {

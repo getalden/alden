@@ -57,7 +57,7 @@ function briefing(name: string, number: number, learning?: Learning): Briefing {
 
 let n = 0;
 /** "Not needed" (or agree) on the place a briefing showed, as the UI sends it. */
-function verdictOn(b: Briefing, index: number, verdict: "agree" | "not_needed"): FeedbackEvent {
+function verdictOn(b: Briefing, index: number, verdict: "agree" | "not_needed" | "dismiss"): FeedbackEvent {
   const item = b.needsYourEyes[index];
   if (!item || b.target.kind !== "pr") throw new Error("no such place");
   return {
@@ -98,16 +98,16 @@ describe("replaying feedback on recorded PRs", () => {
     expect(after.checks.find((c) => c.id === "tests.missing")?.status).toBe("flagged");
   });
 
-  it("laravel/framework: a flag dismissed on a PR stays down on its re-review, and the next flagged file takes its slot", () => {
+  it("laravel/framework: a place dismissed on a PR stays down on its re-review, and the next flagged file takes its slot", () => {
     const before = briefing("laravel", 60005);
     expect(before.needsYourEyes.map((e) => e.checkId)).toEqual(["config.changed"]);
-    const after = briefing("laravel", 60005, learned("laravel/framework", [verdictOn(before, 0, "not_needed")]));
+    const after = briefing("laravel", 60005, learned("laravel/framework", [verdictOn(before, 0, "dismiss")]));
     // Only that place is dismissed: another file the same check flagged takes the slot.
     const dismissed = before.needsYourEyes[0]?.anchor?.path;
     expect(after.needsYourEyes.map((e) => e.anchor?.path)).not.toContain(dismissed);
     expect(after.needsYourEyes).toHaveLength(1);
     expect(after.learning?.hidden.map((h) => [h.title, h.reason])).toEqual([
-      [before.needsYourEyes[0]?.title, "You marked it not needed on 2026-09-27"],
+      [before.needsYourEyes[0]?.title, "You dismissed it on 2026-09-27"],
     ]);
   });
 

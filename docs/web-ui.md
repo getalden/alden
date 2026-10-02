@@ -20,19 +20,22 @@ Stop it with Ctrl+C.
 
 ## Views
 
-- **Queue.** "Needs you" and "Fast-track", with each PR's wait, size, CI and the reasons it ranks where it does.
-  Filter by repo, refresh, and pick a PR to see its briefing beside the list.
+- **Queue.** "Needs you" and "Fast-track", with each PR's wait, size, CI and the reasons it ranks where it does (a
+  line marked ↑ or ↓ when your own feedback moved it). The selected row takes **Useful**, **Not useful** and
+  **Dismiss** (hidden until it changes). Filter by repo, refresh, and pick a PR to see its briefing beside the list.
 - **A PR.** "Brief me" runs the review and shows each stage as it goes (fetching, finding callers, checks, the
   model). The briefing follows the CLI's order. Every place links into the PR's "Files changed" view at that line.
-  A review keeps running if you look at another PR, and its briefing is there when you come back. "Agree" and "Not
-  needed" on each place teach Alden; what your feedback changed shows under the places to look. Briefing a PR from
+  A review keeps running if you look at another PR, and its briefing is there when you come back. **Useful** and
+  **Not useful** on each place, finding and flagged check teach Alden; **Dismiss** hides one place on this PR. "Shaped
+  by your feedback" says what your feedback changed. Briefing a PR from
   the queue counts as opening it, for learning.
 - **My changes.** Your uncommitted changes in the repo `alden ui` started in, before you open a PR.
 - **Stats.** Time to first review and cycle time for a repo, before and after you started using Alden.
-- **Memory.** What Alden has learned about you in a repo, with what each item was learned from and what it changes,
-  your notes (add them here), and a Forget button on each. See [Learning and memory](memory.md).
-- **Settings.** The default model, effort and caps, saved to your user config as `alden config set` does, and what
-  you've spent today.
+- **Memory.** Each repo Alden knows about, then what you look for and what you skip there: where each item came from,
+  what it changes, Edit (notes), Forget and Undo, a switch to pause learning, and "Tell Alden something" to add a note.
+  See [Learning and memory](memory.md).
+- **Settings.** The default model, effort and caps (saved to your user config), your feedback with a redacted export,
+  today's spend by PR, and light, dark or system appearance.
 
 Each review has its own options: ask the model or not, which model, which effort, and whether to find callers. The
 line beside them shows the per-review cap and what's left of today's budget. These choices last until you close the
@@ -46,6 +49,14 @@ tab; Settings changes the defaults.
 | `k` or `↑` | Previous PR |
 | `b` | Brief me on this PR |
 | `o` | Open this PR on GitHub |
+| `+` `−` `x` | Useful, Not useful, Dismiss on this PR |
+| `r` | Refresh the queue |
+| `Esc` | Stop a running briefing; in a narrow window, back to the list |
+
+Below 960px wide the list and the briefing take turns: pick a PR to open its briefing, and "← Queue" or `Esc` goes back.
+
+The look comes from the "Alden App v2" Claude Design project: light and dark (following the system unless Settings
+picks one), Geist and Geist Mono, served from Alden itself (the fonts are bundled under the SIL Open Font License).
 
 ## Security
 

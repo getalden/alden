@@ -150,7 +150,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   const shown = options.files.filter((f) => prompt.includedFiles.includes(f.path));
   const validated = validateFindings(result.output, shown);
   const { dropped } = validated;
-  // A finding you marked "not needed" on this PR stays down when a re-review raises it again.
+  // A finding you dismissed on this PR stays down when a re-review raises it again.
   const target = learningTarget(briefing.target);
   const dismissedOn = (f: (typeof validated.findings)[number]) =>
     options.learning &&
@@ -168,7 +168,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
       ? [
           {
             title: f.title,
-            reason: `You marked it not needed on ${at.slice(0, 10)}`,
+            reason: `You dismissed it on ${at.slice(0, 10)}`,
             ...(f.anchors[0] ? { anchor: f.anchors[0] } : {}),
           },
         ]

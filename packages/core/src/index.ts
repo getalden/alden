@@ -46,14 +46,21 @@ export {
   addNote,
   checkReason,
   describeFeature,
+  editNote,
   forget,
+  forgetAll,
   type Learning,
   learn,
   loadLearning,
   memoryItems,
+  memoryRepos,
   prFeatures,
   type QueueRow,
+  queueBoost,
   recordOpen,
+  recordReaction,
+  restore,
+  setLearning,
 } from "./learn/learn.js";
 export { AnthropicProvider, type MessagesClient, supportsEffort, toLlmError } from "./llm/anthropic.js";
 export {

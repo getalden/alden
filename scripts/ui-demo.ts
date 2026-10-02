@@ -14,19 +14,27 @@ import { startUiServer, type UiApi } from "../packages/cli/src/ui/server.js";
 import {
   addNote,
   buildBriefing,
+  editNote,
   FeedbackLog,
   forget,
+  forgetAll,
   fromRestFile,
   type Learning,
   loadConfig,
   loadLearning,
   memoryItems,
+  memoryRepos,
   mergeLookHere,
   openStore,
   prFeatures,
+  queueRows,
   type RawPullRequest,
   rankQueue,
+  recordReaction,
+  redactFeedback,
+  restore,
   type StatsPullRequest,
+  setLearning,
   summarizeStats,
   toFacts,
 } from "../packages/core/src/index.js";
@@ -182,8 +190,13 @@ if (lifted) {
 addNote(store, DEMO_REPO, "Server actions must check the session before they touch data.");
 addNote(store, DEMO_REPO, "Changes under examples/ don't ship; a quick look is enough.");
 
-const learningFor = async (repo: string) => (repo.toLowerCase() === DEMO_REPO ? loadLearning(store, repo) : undefined);
-const memoryOf = async (repo = DEMO_REPO) => ({ repo, items: memoryItems(await loadLearning(store, repo)) });
+const learningFor = (repo: string) => loadLearning(store, repo);
+const memoryOf = async (repo = DEMO_REPO) => {
+  const learning = await loadLearning(store, repo);
+  return { repo, items: memoryItems(learning), paused: learning.paused, path: "~/.alden/alden.db (demo)" };
+};
+// What the queue last showed, so reactions find their row as the real API does.
+let lastRows: ReturnType<typeof queueRows> = [];
 
 const api: UiApi = {
   session: async () => ({
@@ -204,13 +217,16 @@ const api: UiApi = {
     budget: { perReviewUsd: 0.5, dailyUsd: 10, spentToday: 0.37 },
   }),
   queue: async () => {
-    const learning = await learningFor(DEMO_REPO);
-    return rankQueue(
+    const learned = new Map<string, Learning>();
+    for (const repo of new Set(facts.map((f) => f.repo.toLowerCase()))) learned.set(repo, await learningFor(repo));
+    const ranked = rankQueue(
       { viewer: "you", fetchedAt: new Date().toISOString(), pullRequests: facts, warnings: [] },
       config.queue,
       Date.now(),
-      (repo) => (repo.toLowerCase() === DEMO_REPO ? learning : undefined),
+      (repo) => learned.get(repo.toLowerCase()),
     );
+    lastRows = queueRows(ranked, config.queue);
+    return ranked;
   },
   review: async (request, onStage) => {
     const ref = /^(?:https:\/\/github\.com\/)?([\w.-]+\/[\w.-]+)(?:#|\/pull\/)(\d+)$/.exec(request.pr ?? "");
@@ -237,6 +253,12 @@ const api: UiApi = {
     perReviewUsd: 0.5,
     byModel: [{ model: "claude-sonnet-5", calls: 8, usd: 0.37 }],
     lastDays: [],
+    todayByPurpose: [
+      { purpose: "vercel/next.js#99367", usd: 0.12 },
+      { purpose: "django/django#19057", usd: 0.11 },
+      { purpose: "grafana/grafana#133736", usd: 0.09 },
+      { purpose: "local changes", usd: 0.05 },
+    ],
   }),
   addFeedback: (input) => feedback.add(input),
   feedbackSummary: () => feedback.summary(),
@@ -249,6 +271,22 @@ const api: UiApi = {
     await forget(store, repo ?? DEMO_REPO, id);
     return memoryOf(repo);
   },
+  changeMemory: async (change) => {
+    const repo = change.repo ?? DEMO_REPO;
+    if (change.action === "edit") await editNote(store, repo, change.id, change.text);
+    if (change.action === "restore") restore(store, repo, change.id);
+    if (change.action === "learning") setLearning(store, repo, change.on);
+    if (change.action === "forget-all") await forgetAll(store, repo);
+    return memoryOf(repo);
+  },
+  memoryRepos: () => memoryRepos(store),
+  react: async ({ pr, reaction }) => {
+    const row = lastRows.find((r) => `${r.repo}#${r.number}`.toLowerCase() === pr.toLowerCase());
+    if (!row) throw new Error(`${pr} isn't in the demo queue.`);
+    recordReaction(store, row, reaction, row.updatedAt ?? new Date().toISOString());
+    return { pr, reaction };
+  },
+  exportFeedback: async () => redactFeedback(await feedback.events()),
   // Invented PRs, so the Stats view has a before and after to show: waits drift down after the split.
   stats: async ({ repo, days }) => {
     const now = new Date();

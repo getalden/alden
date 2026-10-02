@@ -48,17 +48,16 @@ function Tile({ stats, metric }: { stats: RepoStats; metric: MetricKey }) {
   return (
     <div className="card tile">
       <div className="tile-label">{METRICS[metric].label}</div>
-      <div className="tile-value">{formatHours(now.medianHours, h)}</div>
-      <div className="tile-sub muted">
+      <div className="tile-row">
+        <span className="tile-value">{formatHours(now.medianHours, h)}</span>
+        {delta && <span className="tile-was">was {formatHours(before?.medianHours ?? null, h)}</span>}
+      </div>
+      {delta && <div className={`tile-delta ${delta.tone}`}>{delta.text}</div>}
+      <div className="tile-sub">
         median of {plural(now.count, "PR")}
         {stats.split && m.after && m.after.count > 0 ? ` since ${shortDate(stats.split.at)}` : ""} · p90{" "}
         {formatHours(now.p90Hours, h)}
       </div>
-      {delta && (
-        <div className={`tile-delta ${delta.tone}`}>
-          {delta.text} <span className="muted">than before ({formatHours(before?.medianHours ?? null, h)})</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -87,10 +86,24 @@ function WeeklyChart({ stats, metric }: { stats: RepoStats; metric: MetricKey })
   const tip = active === undefined ? undefined : weeks[active];
 
   return (
-    <figure className="chart" aria-labelledby={titleId}>
-      <figcaption id={titleId} className="chart-title">
-        Weekly median {METRICS[metric].label.toLowerCase()}, by the week PRs were ready for review
-      </figcaption>
+    <figure className="chart card chart-card" aria-labelledby={titleId}>
+      <div className="section-head">
+        <figcaption id={titleId} className="tile-label" style={{ color: "var(--ink)" }}>
+          Weekly median {METRICS[metric].label.toLowerCase()}, by the week PRs were ready for review
+        </figcaption>
+        {splitIndex > 0 && (
+          <span className="legend">
+            <span>
+              <i />
+              Before
+            </span>
+            <span>
+              <i className="acc" />
+              With Alden
+            </span>
+          </span>
+        )}
+      </div>
       <div className="chart-frame">
         <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Weekly median ${METRICS[metric].label}`}>
           {ticks.map((t) => (
@@ -115,12 +128,16 @@ function WeeklyChart({ stats, metric }: { stats: RepoStats; metric: MetricKey })
               </text>
             </g>
           )}
+          <line className="base" x1={pad.left} x2={width - pad.right} y1={pad.top + plotH} y2={pad.top + plotH} />
           {weeks.map((w, i) => {
             const value = w[METRICS[metric].week];
             const x = pad.left + band * i + (band - barW) / 2;
+            const after = splitIndex > 0 ? i >= splitIndex : true;
             return (
               <g key={w.week} className={`bar-group${active === i ? " active" : ""}`}>
-                {value !== null && value > 0 && <path className="bar" d={column(x, y(value), barW, pad.top + plotH)} />}
+                {value !== null && value > 0 && (
+                  <path className={after ? "bar-after" : "bar-before"} d={column(x, y(value), barW, pad.top + plotH)} />
+                )}
                 {(i % labelEvery === 0 || i === weeks.length - 1) && (
                   <text className="tick" x={pad.left + band * i + band / 2} y={height - 8} textAnchor="middle">
                     {shortDate(w.week)}
@@ -206,16 +223,31 @@ export function StatsView({ api, session }: { api: Api; session: Session }) {
   }
 
   return (
-    <section className="stats" aria-labelledby="stats-title">
-      <h1 id="stats-title">Review speed</h1>
+    <section className="page-inner" aria-labelledby="stats-title">
+      <div className="section-head">
+        <h1 className="page-title" id="stats-title">
+          Review speed
+        </h1>
+        {stats && (
+          <span className="faint mono small">
+            {stats.repo} · each PR judged over {Math.round(stats.horizonHours / 24)} days
+          </span>
+        )}
+      </div>
       <form className="filters" onSubmit={submit}>
-        <label>
+        <label className="field">
           Repo
-          <input type="text" value={repo} placeholder="owner/name" onChange={(e) => setRepo(e.target.value)} />
+          <input
+            className="input mono"
+            type="text"
+            value={repo}
+            placeholder="owner/name"
+            onChange={(e) => setRepo(e.target.value)}
+          />
         </label>
-        <label>
+        <label className="field">
           PRs opened in the last
-          <select value={days} onChange={(e) => setDays(e.target.value)}>
+          <select className="input" value={days} onChange={(e) => setDays(e.target.value)}>
             {["30", "60", "90", "180", "365"].map((d) => (
               <option key={d} value={d}>
                 {d} days
@@ -223,15 +255,15 @@ export function StatsView({ api, session }: { api: Api; session: Session }) {
             ))}
           </select>
         </label>
-        <label>
+        <label className="field">
           Compare from
-          <input type="date" value={since} onChange={(e) => setSince(e.target.value)} />
+          <input className="input" type="date" value={since} onChange={(e) => setSince(e.target.value)} />
         </label>
-        <button type="submit" className="btn primary small" disabled={loading || !repo}>
+        <button type="submit" className="btn primary" disabled={loading || !repo}>
           {loading ? "Loading…" : "Show"}
         </button>
         {stats && (
-          <button type="button" className="btn small" onClick={() => load(true)} disabled={loading}>
+          <button type="button" className="btn" onClick={() => load(true)} disabled={loading}>
             Refresh
           </button>
         )}
@@ -239,7 +271,7 @@ export function StatsView({ api, session }: { api: Api; session: Session }) {
 
       {!repo && <p className="muted">Start alden ui in a clone of a repo, or type one above.</p>}
       {error && <p className="banner error">{error}</p>}
-      {loading && !stats && <div className="skeleton" style={{ height: 220 }} />}
+      {loading && !stats && <div className="card skeleton" style={{ height: 220 }} />}
 
       {stats && (
         <>
@@ -256,15 +288,9 @@ export function StatsView({ api, session }: { api: Api; session: Session }) {
             <Tile stats={stats} metric="cycleTime" />
           </div>
 
-          <fieldset className="segmented" aria-label="Chart">
+          <fieldset className="segmented" aria-label="Chart" style={{ margin: 0, alignSelf: "flex-start" }}>
             {(Object.keys(METRICS) as MetricKey[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                className={`btn small${metric === key ? " on" : ""}`}
-                aria-pressed={metric === key}
-                onClick={() => setMetric(key)}
-              >
+              <button key={key} type="button" aria-pressed={metric === key} onClick={() => setMetric(key)}>
                 {METRICS[key].label}
               </button>
             ))}
@@ -276,7 +302,7 @@ export function StatsView({ api, session }: { api: Api; session: Session }) {
           )}
 
           <details className="table-view">
-            <summary className="small">Table</summary>
+            <summary className="small muted">Table</summary>
             <table className="table">
               <thead>
                 <tr>

@@ -128,16 +128,16 @@ export function pickWithLearning(
     const at = learning.dismissed.get(
       dismissKey(target, { source: "check", checkId: check.id, title, anchor: { path } }),
     );
-    if (at) return `You marked it not needed on ${at.slice(0, 10)}`;
-    const lesson = learning.checks.get(check.id);
+    if (at) return `You dismissed it on ${at.slice(0, 10)}`;
+    const lesson = learning.paused ? undefined : learning.checks.get(check.id);
     if (lesson?.direction === "down" && check.severity !== "high") return checkReason(lesson);
     return undefined;
   };
   const eyes = pickLookHere(checks, {
     skip: (check, title, path) => hiddenWhy(check, title, path) !== undefined,
-    prefer: (id) => learning.checks.get(id)?.direction === "up",
+    prefer: (id) => !learning.paused && learning.checks.get(id)?.direction === "up",
     why: (id) => {
-      const lesson = learning.checks.get(id);
+      const lesson = learning.paused ? undefined : learning.checks.get(id);
       return lesson?.direction === "up" ? checkReason(lesson) : undefined;
     },
   });

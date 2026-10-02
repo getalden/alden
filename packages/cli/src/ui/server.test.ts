@@ -42,6 +42,16 @@ const api: UiApi = {
     calls.push({ method: "forgetMemory", args: input });
     return { items: [] };
   },
+  changeMemory: async (input) => {
+    calls.push({ method: "changeMemory", args: input });
+    return { items: [] };
+  },
+  memoryRepos: async () => [{ repo: "acme/shop", items: 2 }],
+  react: async (input) => {
+    calls.push({ method: "react", args: input });
+    return input;
+  },
+  exportFeedback: async () => [],
   stats: async (options) => {
     calls.push({ method: "stats", args: options });
     return { repo: options.repo };
@@ -191,6 +201,26 @@ describe("alden ui server", () => {
     ]);
     expect((await call("/api/memory", { method: "POST", headers: authed, body: { note: 1 } })).status).toBe(400);
     expect((await call("/api/memory/forget", { method: "POST", headers: authed, body: {} })).status).toBe(400);
+  });
+
+  it("passes memory changes and reactions through, and checks their bodies", async () => {
+    const post = (path: string, body: unknown) => call(path, { method: "POST", headers: authed, body });
+    await post("/api/memory/change", { action: "edit", id: "note:1", text: "x" });
+    await post("/api/memory/change", { repo: "a/b", action: "learning", on: false });
+    await post("/api/memory/change", { action: "forget-all" });
+    await post("/api/reaction", { pr: "a/b#1", reaction: "dismiss" });
+    expect(calls).toEqual([
+      { method: "changeMemory", args: { action: "edit", id: "note:1", text: "x" } },
+      { method: "changeMemory", args: { repo: "a/b", action: "learning", on: false } },
+      { method: "changeMemory", args: { action: "forget-all" } },
+      { method: "react", args: { pr: "a/b#1", reaction: "dismiss" } },
+    ]);
+    expect((await post("/api/memory/change", { action: "edit", id: "note:1" })).status).toBe(400);
+    expect((await post("/api/reaction", { pr: "a/b#1", reaction: "love" })).status).toBe(400);
+    expect(JSON.parse((await call("/api/memory/repos", { headers: authed })).text)).toEqual([
+      { repo: "acme/shop", items: 2 },
+    ]);
+    expect((await call("/api/feedback/export", { headers: authed })).status).toBe(200);
   });
 
   it("serves the UI without a token, the app for unknown paths, and nothing outside its folder", async () => {

@@ -35,7 +35,32 @@ export function toRequest(choices: Choices, session: Session | undefined): Revie
   };
 }
 
-/** The model, effort and code graph for the next review, with what it may cost. */
+export function Switch(props: {
+  on: boolean;
+  label: string;
+  onChange: (on: boolean) => void;
+  disabled?: boolean;
+  title?: string | undefined;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      className="switch"
+      aria-checked={props.on}
+      disabled={props.disabled}
+      title={props.title}
+      onClick={() => props.onChange(!props.on)}
+    >
+      <span className="track" aria-hidden="true">
+        <span className="knob" />
+      </span>
+      {props.label}
+    </button>
+  );
+}
+
+/** The model, effort and callers for the next review, and what it may cost. Sits in the briefing's toolbar. */
 export function ReviewOptions({
   session,
   choices,
@@ -53,72 +78,66 @@ export function ReviewOptions({
       : [...new Set([session.model.name, ...Object.keys(session.aliases)])];
   const left = Math.max(0, session.budget.dailyUsd - session.budget.spentToday);
   const canEffort = effortSupported(session, choices.model);
+  const modelOn = choices.llm && available;
 
   return (
-    <fieldset className="options" aria-label="Review options">
-      <label className="check-label" title={available ? undefined : session.model.reason}>
-        <input
-          type="checkbox"
-          checked={choices.llm && available}
-          disabled={!available}
-          onChange={(e) => onChange({ ...choices, llm: e.target.checked })}
-        />
-        Ask the model
-      </label>
-      <label>
-        <span className="visually-hidden">Model</span>
-        <select
-          value={choices.model}
-          disabled={!available || !choices.llm}
-          onChange={(e) => onChange({ ...choices, model: e.target.value })}
-        >
-          {models.map((m) => (
-            <option key={m} value={m}>
-              {m}
-              {m === session.model.name ? " (default)" : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label
+    <>
+      <button
+        type="button"
+        className={`btn${modelOn ? " on neutral" : ""}`}
+        aria-pressed={modelOn}
+        disabled={!available}
+        title={available ? "Ask the model as well as running the checks" : session.model.reason}
+        onClick={() => onChange({ ...choices, llm: !choices.llm })}
+      >
+        {available ? "Ask the model" : "No model set up"}
+      </button>
+      <span className="divider" aria-hidden="true" />
+      <select
+        className="input mono"
+        aria-label="Model"
+        value={choices.model}
+        disabled={!modelOn}
+        onChange={(e) => onChange({ ...choices, model: e.target.value })}
+      >
+        {models.map((m) => (
+          <option key={m} value={m}>
+            {session.aliases[m] ?? m}
+            {m === session.model.name ? " (default)" : ""}
+          </option>
+        ))}
+      </select>
+      <fieldset
+        className="segmented"
+        aria-label="Effort"
         title={
           canEffort
             ? "How hard the model thinks: more effort, more time and cost"
             : "This model doesn't take an effort setting"
         }
+        style={{ margin: 0 }}
       >
-        <span className="visually-hidden">Effort</span>
-        <select
-          value={canEffort ? choices.effort : ""}
-          disabled={!available || !choices.llm || !canEffort}
-          onChange={(e) => onChange({ ...choices, effort: e.target.value })}
-        >
-          <option value="">Default effort</option>
-          {session.efforts.map((e) => (
-            <option key={e} value={e}>
-              {e} effort
-            </option>
-          ))}
-        </select>
-      </label>
-      <label
-        className="check-label"
+        {session.efforts.map((e) => (
+          <button
+            key={e}
+            type="button"
+            aria-pressed={canEffort && choices.effort === e}
+            disabled={!modelOn || !canEffort}
+            onClick={() => onChange({ ...choices, effort: choices.effort === e ? "" : e })}
+          >
+            {e.charAt(0).toUpperCase() + e.slice(1)}
+          </button>
+        ))}
+      </fieldset>
+      <Switch
+        on={choices.graph}
+        label="Callers"
         title="Find who calls the changed code. PRs need alden ui started in a clone of their repo."
-      >
-        <input
-          type="checkbox"
-          checked={choices.graph}
-          onChange={(e) => onChange({ ...choices, graph: e.target.checked })}
-        />
-        Callers
-      </label>
-      <span className="faint small cap">
-        {available && choices.llm
-          ? `Capped at ${formatUsd(session.budget.perReviewUsd)} · ${formatUsd(left)} left today`
-          : available
-            ? "Checks only: no model cost"
-            : "No model set up: checks only"}
+        onChange={(graph) => onChange({ ...choices, graph })}
+      />
+      <span className="cap" title={`${formatUsd(left)} left of today's ${formatUsd(session.budget.dailyUsd)}`}>
+        {modelOn ? `cap ${formatUsd(session.budget.perReviewUsd)}` : "checks only"}
       </span>
-    </fieldset>
+    </>
   );
 }

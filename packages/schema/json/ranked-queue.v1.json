@@ -626,6 +626,312 @@
         "additionalProperties": false
       }
     },
+    "dismissed": {
+      "description": "PRs you dismissed from the queue; they come back when they change",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pr": {
+            "type": "object",
+            "properties": {
+              "repo": {
+                "type": "string",
+                "description": "owner/name"
+              },
+              "number": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "title": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "author": {
+                "description": "null when the account was deleted",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "authorIsBot": {
+                "type": "boolean",
+                "description": "the author is a bot account, e.g. Dependabot"
+              },
+              "isDraft": {
+                "type": "boolean"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "baseRef": {
+                "type": "string"
+              },
+              "headRef": {
+                "type": "string"
+              },
+              "additions": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "deletions": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "changedFiles": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "additions": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "deletions": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "additions",
+                    "deletions"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "filesTruncated": {
+                "type": "boolean",
+                "description": "true when the PR has more files than Alden fetched"
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "ci": {
+                "type": "string",
+                "enum": [
+                  "success",
+                  "failure",
+                  "pending",
+                  "none"
+                ]
+              },
+              "mergeable": {
+                "type": "string",
+                "enum": [
+                  "mergeable",
+                  "conflicting",
+                  "unknown"
+                ]
+              },
+              "reviews": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "author": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "author",
+                    "state",
+                    "submittedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "request": {
+                "type": "object",
+                "properties": {
+                  "direct": {
+                    "type": "boolean",
+                    "description": "the viewer was asked by name"
+                  },
+                  "teams": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "the viewer's teams that were asked, as org/slug"
+                  },
+                  "requestedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "when the viewer or one of their teams was most recently asked"
+                  }
+                },
+                "required": [
+                  "direct",
+                  "teams",
+                  "requestedAt"
+                ],
+                "additionalProperties": false
+              },
+              "codeownedFiles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "changed files the viewer owns through CODEOWNERS"
+              },
+              "stackedPrs": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "open PRs built on top of this one"
+              }
+            },
+            "required": [
+              "repo",
+              "number",
+              "title",
+              "url",
+              "author",
+              "authorIsBot",
+              "isDraft",
+              "createdAt",
+              "updatedAt",
+              "baseRef",
+              "headRef",
+              "additions",
+              "deletions",
+              "changedFiles",
+              "files",
+              "filesTruncated",
+              "labels",
+              "ci",
+              "mergeable",
+              "reviews",
+              "request",
+              "codeownedFiles",
+              "stackedPrs"
+            ],
+            "additionalProperties": false
+          },
+          "lane": {
+            "type": "string",
+            "enum": [
+              "needs-you",
+              "fast-track"
+            ]
+          },
+          "fastTrack": {
+            "description": "why it qualified for fast-track; only set in that lane",
+            "type": "string",
+            "enum": [
+              "docs only",
+              "tests only",
+              "dependency patch bump"
+            ]
+          },
+          "score": {
+            "type": "object",
+            "properties": {
+              "risk": {
+                "type": "number"
+              },
+              "wait": {
+                "type": "number"
+              },
+              "blocking": {
+                "type": "number"
+              },
+              "learned": {
+                "description": "points added because you usually open PRs like this first",
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "risk",
+              "wait",
+              "blocking",
+              "total"
+            ],
+            "additionalProperties": false
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "short human reasons, heaviest first"
+          },
+          "waitingHours": {
+            "type": "number",
+            "description": "hours since the viewer was asked, or since the PR opened"
+          },
+          "waitingOnAuthor": {
+            "type": "boolean",
+            "description": "CI is failing, so the author has to act before a review is worth it"
+          }
+        },
+        "required": [
+          "pr",
+          "lane",
+          "score",
+          "reasons",
+          "waitingHours",
+          "waitingOnAuthor"
+        ],
+        "additionalProperties": false
+      }
+    },
     "warnings": {
       "type": "array",
       "items": {

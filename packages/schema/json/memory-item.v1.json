@@ -24,8 +24,23 @@
       "enum": [
         "note",
         "check",
-        "open"
-      ]
+        "queue"
+      ],
+      "description": "a note, a check's flags, or how PRs rank in the queue"
+    },
+    "group": {
+      "type": "string",
+      "enum": [
+        "look",
+        "skip"
+      ],
+      "description": "what you look for (ranked higher, shown) or what you skip"
+    },
+    "examples": {
+      "description": "for learned items: how many reactions it was learned from",
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
     },
     "text": {
       "type": "string",
@@ -50,6 +65,7 @@
     "repo",
     "source",
     "kind",
+    "group",
     "text",
     "since"
   ],

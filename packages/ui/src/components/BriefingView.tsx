@@ -9,8 +9,10 @@ import type {
   Severity,
 } from "@alden/schema";
 import { type FormEvent, useEffect, useState } from "react";
-import type { BriefingFeedback } from "../feedback";
+import type { BriefingFeedback, Verdict } from "../feedback";
 import { formatUsd, plural, prFileUrl } from "../format";
+import { onLinkClick, routePath } from "../router";
+import { Mark } from "./Mark";
 
 const anchorKey = (a: Anchor) => `${a.path}:${a.line ?? ""}`;
 
@@ -39,28 +41,24 @@ function useAnchorLinks(briefing: Briefing): Map<string, string> {
   return links;
 }
 
-function Place({ anchor, links }: { anchor: Anchor; links: Map<string, string> }) {
+function Place({ anchor, links, arrow = false }: { anchor: Anchor; links: Map<string, string>; arrow?: boolean }) {
   const text = `${anchor.path}${anchor.line ? `:${anchor.line}` : ""}`;
   const href = links.get(anchorKey(anchor));
   return href ? (
-    <a className="place mono" href={href} target="_blank" rel="noreferrer">
+    <a className="place" href={href} target="_blank" rel="noreferrer">
       {text}
+      {arrow ? " ↗" : ""}
     </a>
   ) : (
-    <span className="place mono">{text}</span>
+    <span className="place">{text}</span>
   );
 }
 
-const SEVERITY_LABEL: Record<Severity, string> = { high: "High", medium: "Medium", low: "Low", info: "" };
-
-function SeverityBadge({ severity }: { severity: Severity }) {
-  return severity === "info" ? null : <span className={`badge ${severity}`}>{SEVERITY_LABEL[severity]}</span>;
-}
-
-const STATUS_ICON: Record<CheckResult["status"], { icon: string; label: string }> = {
-  passed: { icon: "✓", label: "Passed" },
-  flagged: { icon: "!", label: "Flagged" },
-  skipped: { icon: "–", label: "Skipped" },
+const SEVERITY: Record<Severity, string> = { high: "high", medium: "med", low: "low", info: "—" };
+const STATUS: Record<CheckResult["status"], { glyph: string; label: string }> = {
+  passed: { glyph: "✓", label: "Passed" },
+  flagged: { glyph: "!", label: "Flagged" },
+  skipped: { glyph: "", label: "Skipped" },
 };
 
 type Hidden = NonNullable<Briefing["learning"]>["hidden"];
@@ -94,36 +92,79 @@ function findingItem(finding: LlmFinding): FeedbackItem {
   };
 }
 
-/** Agree or "not needed" on one flag. Pressing the chosen one again takes it back. */
-function VerdictButtons({ item, feedback }: { item: FeedbackItem; feedback: BriefingFeedback }) {
+function checkItem(check: CheckResult): FeedbackItem {
+  return { source: "check", checkId: check.id, title: check.title, severity: check.severity, placement: "check" };
+}
+
+const NOTES: Record<Verdict, string> = {
+  agree: "Noted. Alden will look for more like this.",
+  not_needed: "Noted. Fewer like this here.",
+  dismiss: "Dismissed for this PR",
+};
+
+/** Useful, not useful, or dismiss. Pressing the chosen one again takes it back. */
+function Verdicts({ item, feedback }: { item: FeedbackItem; feedback: BriefingFeedback }) {
   const current = feedback.verdictOf(item);
+  const button = (verdict: Verdict, label: string, onLabel: string, className = "") => (
+    <button
+      type="button"
+      className={`btn sm ${className}${current === verdict ? (verdict === "agree" ? " on" : " on neutral") : ""}`}
+      aria-pressed={current === verdict}
+      onClick={() => feedback.toggle(item, verdict)}
+    >
+      {current === verdict ? onLabel : label}
+    </button>
+  );
   return (
     <fieldset className="verdicts" aria-label={`Was this worth a look? ${item.title}`}>
-      <button
-        type="button"
-        className={`btn small verdict${current === "agree" ? " on agree" : ""}`}
-        aria-pressed={current === "agree"}
-        onClick={() => feedback.toggle(item, "agree")}
-      >
-        Agree
-      </button>
-      <button
-        type="button"
-        className={`btn small verdict${current === "not_needed" ? " on not-needed" : ""}`}
-        aria-pressed={current === "not_needed"}
-        onClick={() => feedback.toggle(item, "not_needed")}
-      >
-        Not needed
-      </button>
+      {button("agree", "Useful", "✓ Useful")}
+      {button("not_needed", "Not useful", "✓ Not useful")}
+      {button("dismiss", "× Dismiss", "Undo", "quiet")}
+      {current && (
+        <span className="verdict-note" role="status">
+          {NOTES[current]}
+        </span>
+      )}
     </fieldset>
   );
 }
 
+/** The compact ↑ ↓ × for the model's other findings and for checks. */
+function SmallVerdicts({
+  item,
+  feedback,
+  dismiss = true,
+}: {
+  item: FeedbackItem;
+  feedback: BriefingFeedback;
+  dismiss?: boolean;
+}) {
+  const current = feedback.verdictOf(item);
+  const icon = (verdict: Verdict, glyph: string, label: string) => (
+    <button
+      type="button"
+      className={`btn xs icon${current === verdict ? " on" : ""}`}
+      title={label}
+      aria-label={label}
+      aria-pressed={current === verdict}
+      onClick={() => feedback.toggle(item, verdict)}
+    >
+      {glyph}
+    </button>
+  );
+  return (
+    <>
+      {icon("agree", "↑", "Useful")}
+      {icon("not_needed", "↓", "Not useful")}
+      {dismiss && icon("dismiss", "×", "Dismiss")}
+    </>
+  );
+}
+
 /** "You missed something": what, and optionally where. */
-function MissedForm({ briefing, feedback }: { briefing: Briefing; feedback: BriefingFeedback }) {
+function MissedForm({ feedback }: { feedback: BriefingFeedback }) {
   const [note, setNote] = useState("");
-  const [path, setPath] = useState("");
-  const [line, setLine] = useState("");
+  const [where, setWhere] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -132,14 +173,13 @@ function MissedForm({ briefing, feedback }: { briefing: Briefing; feedback: Brie
     if (!note.trim()) return;
     setSaving(true);
     try {
-      const lineNumber = Number.parseInt(line, 10);
-      await feedback.reportMissed(
-        note.trim(),
-        path ? { path, ...(Number.isInteger(lineNumber) && lineNumber > 0 ? { line: lineNumber } : {}) } : undefined,
-      );
+      const match = /^(.+?)(?::(\d+))?$/.exec(where.trim());
+      const anchor = match?.[1]
+        ? { path: match[1], ...(match[2] && Number(match[2]) > 0 ? { line: Number(match[2]) } : {}) }
+        : undefined;
+      await feedback.reportMissed(note.trim(), anchor);
       setNote("");
-      setPath("");
-      setLine("");
+      setWhere("");
       setSaved(true);
     } catch {
       // the error shows above the form
@@ -149,64 +189,97 @@ function MissedForm({ briefing, feedback }: { briefing: Briefing; feedback: Brie
   }
 
   return (
-    <details className="card missed">
-      <summary>
-        <strong>You missed something</strong>{" "}
-        <span className="faint">
-          {feedback.missedCount > 0 ? `· ${feedback.missedCount} reported` : "· tell Alden what it should have flagged"}
-        </span>
-      </summary>
-      <form onSubmit={submit} className="missed-form">
-        <label>
-          What should Alden have flagged?
-          <textarea
-            value={note}
-            onChange={(e) => {
-              setNote(e.target.value);
-              setSaved(false);
-            }}
-            rows={3}
-            maxLength={2000}
-            required
-          />
-        </label>
-        <div className="missed-where">
-          <label>
-            File (optional)
-            <select value={path} onChange={(e) => setPath(e.target.value)}>
-              <option value="">Anywhere</option>
-              {briefing.files.map((f) => (
-                <option key={f.path} value={f.path}>
-                  {f.path}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Line
-            <input
-              type="text"
-              inputMode="numeric"
-              value={line}
-              onChange={(e) => setLine(e.target.value)}
-              disabled={!path}
-            />
-          </label>
-        </div>
-        <div className="form-actions">
-          <button type="submit" className="btn primary small" disabled={saving || !note.trim()}>
-            {saving ? "Saving…" : "Report it"}
-          </button>
-          {saved && <span className="muted small">Recorded. It stays on this machine.</span>}
-        </div>
+    <section className="section missed" aria-labelledby="missed-title">
+      <div>
+        <h2 className="h3" id="missed-title">
+          You missed something
+        </h2>
+        <p className="muted small">
+          Tell Alden what it should have caught. Saved on this machine only.
+          {feedback.missedCount > 0 ? ` ${plural(feedback.missedCount, "miss", "misses")} reported here.` : ""}
+        </p>
+      </div>
+      <form className="missed-form" onSubmit={submit}>
+        <input
+          className="input mono"
+          aria-label="File and line (optional)"
+          placeholder="file:line (optional)"
+          value={where}
+          onChange={(e) => setWhere(e.target.value)}
+        />
+        <input
+          className="input"
+          aria-label="What should it have flagged?"
+          placeholder="What should it have flagged?"
+          maxLength={2000}
+          value={note}
+          onChange={(e) => {
+            setNote(e.target.value);
+            setSaved(false);
+          }}
+        />
+        <button type="submit" className="btn" disabled={saving || !note.trim()}>
+          {saving ? "Saving…" : "Save"}
+        </button>
       </form>
-    </details>
+      {saved && <p className="muted small">Recorded. It stays on this machine.</p>}
+    </section>
   );
 }
 
-/** The briefing, in the same order as the CLI: where to look, what the change does, what was checked, what wasn't. */
-export function BriefingView({ briefing, feedback }: { briefing: Briefing; feedback?: BriefingFeedback | undefined }) {
+/** What the model's section says when it didn't run: over budget, failed, refused, skipped. */
+function ModelState({ llm, perReviewUsd }: { llm: LlmSection; perReviewUsd?: number | undefined }) {
+  if (llm.status === "ok") return null;
+  const title =
+    llm.status === "over_budget"
+      ? perReviewUsd !== undefined
+        ? `Stopped at your ${formatUsd(perReviewUsd)} cap`
+        : "Stopped at your spend cap"
+      : llm.status === "failed"
+        ? "The model returned an error"
+        : llm.status === "refused"
+          ? "The model declined this one"
+          : llm.status === "truncated"
+            ? "The model's answer was cut off"
+            : "Checks only";
+  const tone = llm.status === "failed" ? "bad" : llm.status === "skipped" ? "neutral" : "warn";
+  return (
+    <div
+      className="shaped"
+      style={{ background: tone === "bad" ? "var(--bad-soft)" : tone === "warn" ? "var(--warn-soft)" : "var(--sunk)" }}
+    >
+      <span className="text">
+        <strong>{title}.</strong> {llm.note} The checks below still apply.
+      </span>
+    </div>
+  );
+}
+
+const MATCH: Record<NonNullable<LlmSection["matchesTitle"]>["verdict"], { text: string; tone: string }> = {
+  yes: { text: "✓ Matches its title", tone: "" },
+  partly: { text: "Partly matches its title", tone: "warn" },
+  no: { text: "✕ Doesn't match its title", tone: "bad" },
+  unclear: { text: "No description to compare", tone: "neutral" },
+};
+
+/**
+ * The briefing, in the order a reviewer reads it: what it does, the few places that need your eyes (and how your
+ * feedback shaped them), the model's other notes, every check with evidence, what wasn't checked, the files.
+ */
+export function BriefingView({
+  briefing,
+  feedback,
+  perReviewUsd,
+}: {
+  briefing: Briefing;
+  feedback?: BriefingFeedback | undefined;
+  perReviewUsd?: number | undefined;
+}) {
   const links = useAnchorLinks(briefing);
+  const [open, setOpen] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(briefing.checks.filter((c) => c.status === "flagged").map((c) => [c.id, true])),
+  );
+  const [showHidden, setShowHidden] = useState(false);
   const { llm } = briefing;
   const picked = new Set(briefing.needsYourEyes.flatMap((i) => (i.anchor ? [anchorKey(i.anchor)] : [])));
   const moreFindings: LlmFinding[] =
@@ -214,31 +287,70 @@ export function BriefingView({ briefing, feedback }: { briefing: Briefing; feedb
 
   if (briefing.files.length === 0) {
     return (
-      <div className="state">
-        <h2>Nothing has changed</h2>
-        <p>There's nothing to review.</p>
+      <div className="state center">
+        <Mark size={40} outline />
+        <h2 className="title">Nothing has changed</h2>
+        <p className="body">There's nothing to review.</p>
       </div>
     );
   }
 
+  const counts = {
+    passed: briefing.checks.filter((c) => c.status === "passed").length,
+    flagged: briefing.checks.filter((c) => c.status === "flagged").length,
+    skipped: briefing.checks.filter((c) => c.status === "skipped").length,
+  };
+  const hidden = briefing.learning?.hidden ?? [];
+  const shapedBy = briefing.needsYourEyes
+    .map((item, i) => (item.learned ? `#${i + 1} is here because ${lowerFirst(item.learned)}.` : ""))
+    .filter(Boolean);
+  const hiddenLines = groupHidden(hidden).map(
+    ({ reason, items }) =>
+      `${items.length === 1 ? "1 place is" : `${items.length} places are`} hidden: ${lowerFirst(reason)}.`,
+  );
+  const memory = briefing.learning?.memory ?? 0;
+  const shaped = shapedBy.length > 0 || hiddenLines.length > 0 || memory > 0;
+  const heuristic = new Set(briefing.checks.filter((c) => c.heuristic).map((c) => c.id));
+  const totalLines = Math.max(...briefing.files.map((f) => f.additions + f.deletions), 1);
+
   return (
-    <article className="briefing">
+    <article className="brief-body">
       {llm?.status === "ok" && llm.summary && (
-        <section className="card" aria-labelledby="what-it-does">
-          <h2 id="what-it-does">What it does</h2>
-          <p>{llm.summary}</p>
-          {llm.matchesTitle && (
-            <p className="muted">
-              Matches its title: <strong>{llm.matchesTitle.verdict}</strong> · {llm.matchesTitle.reason}
-            </p>
-          )}
+        <section className="section" aria-labelledby="what-it-does" style={{ gap: 10 }}>
+          <div className="section-head" style={{ justifyContent: "flex-start", gap: 10 }}>
+            <h2 className="label" id="what-it-does">
+              What it does
+            </h2>
+            {llm.matchesTitle && (
+              <span className={`pill ${MATCH[llm.matchesTitle.verdict].tone}`} title={llm.matchesTitle.reason}>
+                {MATCH[llm.matchesTitle.verdict].text}
+              </span>
+            )}
+          </div>
+          <p className="summary-text">{llm.summary}</p>
         </section>
       )}
+      {llm && llm.status !== "ok" && <ModelState llm={llm} perReviewUsd={perReviewUsd} />}
 
-      <section aria-labelledby="needs-your-eyes">
-        <h2 id="needs-your-eyes" className="section-title">
-          Needs your eyes
-        </h2>
+      <section className="section" aria-labelledby="needs-your-eyes">
+        <div className="section-head">
+          <h2 className="h2" id="needs-your-eyes">
+            Needs your eyes
+          </h2>
+          <span className="faint small mono">{plural(briefing.needsYourEyes.length, "place")}</span>
+        </div>
+        {shaped && (
+          <div className="shaped">
+            <Mark size={16} />
+            <span className="text">
+              <strong>Shaped by your feedback.</strong> {[...shapedBy, ...hiddenLines].join(" ")}
+              {memory > 0 && ` The model had ${plural(memory, "of your notes", "of your notes")} for this repo.`}
+            </span>
+            <a href={routePath({ view: "memory" })} onClick={onLinkClick({ view: "memory" })}>
+              What Alden knows ↗
+            </a>
+          </div>
+        )}
         {briefing.needsYourEyes.length === 0 ? (
           <p className="muted">
             {llm?.status === "ok"
@@ -246,191 +358,277 @@ export function BriefingView({ briefing, feedback }: { briefing: Briefing; feedb
               : "Nothing flagged. The checks below found nothing that needs a closer look."}
           </p>
         ) : (
-          <ol className="eyes">
-            {briefing.needsYourEyes.map((item) => (
-              <li key={`${item.title}${item.anchor ? anchorKey(item.anchor) : ""}`} className="card eye">
-                <div className="eye-head">
-                  <strong>{item.title}</strong>
-                  {item.source === "llm" && <span className="badge accent">model</span>}
-                </div>
-                {item.anchor && <Place anchor={item.anchor} links={links} />}
-                <p className="muted">{item.reason}</p>
-                {item.learned && <p className="learned-why">↑ {item.learned}</p>}
-                {feedback && <VerdictButtons item={eyesItem(item, briefing.checks)} feedback={feedback} />}
-              </li>
-            ))}
+          <ol className="visually-plain section" style={{ gap: 12 }}>
+            {briefing.needsYourEyes.map((item, i) => {
+              const fbItem = eyesItem(item, briefing.checks);
+              const verdict = feedback?.verdictOf(fbItem);
+              const guess = item.checkId !== undefined && heuristic.has(item.checkId);
+              return (
+                <li
+                  key={`${item.title}${item.anchor ? anchorKey(item.anchor) : ""}`}
+                  className={`card eye${guess ? " guess" : ""}${verdict === "agree" ? " agreed" : ""}${verdict === "dismiss" ? " dismissed" : ""}`}
+                >
+                  <span className="eye-n">{i + 1}</span>
+                  <div className="eye-body">
+                    {item.anchor && <Place anchor={item.anchor} links={links} arrow />}
+                    <p className="eye-text">
+                      <strong>{item.title}.</strong> {item.reason}
+                      {item.source === "llm" && (
+                        <span className="chip" style={{ marginLeft: 6 }}>
+                          model
+                        </span>
+                      )}
+                    </p>
+                    {guess && (
+                      <span className="guess-line">
+                        <span className="q" aria-hidden="true">
+                          ?
+                        </span>
+                        Inferred from the diff, so it can be wrong.
+                      </span>
+                    )}
+                    {item.learned && <span className="learned-why">↑ {item.learned}</span>}
+                    {feedback && <Verdicts item={fbItem} feedback={feedback} />}
+                  </div>
+                </li>
+              );
+            })}
           </ol>
-        )}
-        {briefing.learning && (briefing.learning.hidden.length > 0 || briefing.learning.memory > 0) && (
-          <ul className="learned-hidden muted" aria-label="What your feedback changed">
-            {groupHidden(briefing.learning.hidden).map(({ reason, items }) => (
-              <li key={reason}>
-                {items.length === 1 ? (
-                  <>
-                    Hidden: {items[0]?.title}. {reason}.
-                  </>
-                ) : (
-                  <details>
-                    <summary>
-                      Hidden {items.length} places. {reason}.
-                    </summary>
-                    <ul className="plain-list">
-                      {items.map((h) => (
-                        <li key={`${h.title}${h.anchor ? anchorKey(h.anchor) : ""}`}>{h.title}</li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-              </li>
-            ))}
-            {briefing.learning.memory > 0 && (
-              <li>
-                The model was given {briefing.learning.memory} note{briefing.learning.memory === 1 ? "" : "s"} on what
-                you care about here (see Memory).
-              </li>
-            )}
-          </ul>
         )}
       </section>
 
       {moreFindings.length > 0 && (
-        <section aria-labelledby="also-noted">
-          <h2 id="also-noted" className="section-title">
-            Also noted by the model
+        <section className="section" aria-labelledby="also-noted" style={{ gap: 10 }}>
+          <h2 className="label" id="also-noted">
+            The model also noticed · {moreFindings.length}
           </h2>
-          <ul className="plain-list">
-            {moreFindings.map((f) => (
-              <li key={`${f.title}${f.anchors.map(anchorKey).join()}`} className="finding">
-                <div className="eye-head">
-                  <SeverityBadge severity={f.severity} />
-                  <strong>{f.title}</strong>
-                </div>
-                <div className="places">
-                  {f.anchors.map((a) => (
-                    <Place key={anchorKey(a)} anchor={a} links={links} />
-                  ))}
-                </div>
-                <p className="muted">{f.detail}</p>
-                {feedback && <VerdictButtons item={findingItem(f)} feedback={feedback} />}
-              </li>
-            ))}
+          <ul className="visually-plain">
+            {moreFindings.map((f) => {
+              const verdict = feedback?.verdictOf(findingItem(f));
+              return (
+                <li
+                  key={`${f.title}${f.anchors.map(anchorKey).join()}`}
+                  className={`finding${verdict === "dismiss" ? " dismissed" : ""}`}
+                >
+                  <div className="what">
+                    <span>
+                      <strong>{f.title}.</strong> <span className="muted">{f.detail}</span>
+                    </span>
+                    {f.anchors.map((a) => (
+                      <Place key={anchorKey(a)} anchor={a} links={links} />
+                    ))}
+                  </div>
+                  <div className="acts">
+                    <span className="sev">{SEVERITY[f.severity]}</span>
+                    {feedback && <SmallVerdicts item={findingItem(f)} feedback={feedback} />}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
 
-      <section aria-labelledby="checked">
-        <h2 id="checked" className="section-title">
-          Checked
-        </h2>
-        <ul className="checks">
-          {briefing.checks.map((check) => (
-            <li key={check.id} className="check-item">
-              <CheckRow check={check} links={links} />
-            </li>
-          ))}
-        </ul>
+      <section className="section" aria-labelledby="checks">
+        <div className="section-head">
+          <h2 className="h2" id="checks">
+            Checks
+          </h2>
+          <span className="checks-count">
+            <span className="ok-text">✓ {counts.passed} passed</span>
+            <span style={{ color: "var(--warn)" }}>! {counts.flagged} flagged</span>
+            <span className="faint">– {counts.skipped} skipped</span>
+            {hidden.length > 0 && (
+              <button type="button" className="link-button faint mono" onClick={() => setShowHidden((v) => !v)}>
+                {hidden.length} hidden by your feedback · {showHidden ? "hide" : "show"}
+              </button>
+            )}
+          </span>
+        </div>
+        {showHidden && (
+          <ul className="note-box visually-plain" aria-label="Hidden by your feedback">
+            {hidden.map((h) => (
+              <li key={`${h.title}${h.anchor ? anchorKey(h.anchor) : ""}`}>
+                <strong>{h.title}</strong> · {h.reason}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="card checks">
+          {briefing.checks.map((check) => {
+            const isOpen = !!open[check.id];
+            const status = STATUS[check.status];
+            const canOpen = check.evidence.length > 0 || check.status === "flagged";
+            return (
+              <div key={check.id} className="check">
+                <button
+                  type="button"
+                  className="check-row"
+                  aria-expanded={canOpen ? isOpen : undefined}
+                  disabled={!canOpen}
+                  onClick={() => setOpen((o) => ({ ...o, [check.id]: !o[check.id] }))}
+                >
+                  <span className={`dot ${check.status}`} aria-hidden="true">
+                    {status.glyph}
+                  </span>
+                  <span
+                    className="check-name"
+                    style={{ color: check.status === "skipped" ? "var(--ink2)" : undefined }}
+                  >
+                    {check.title}
+                    {check.heuristic && (
+                      <span className="faint" title="Inferred from the diff and the code graph, so it can be wrong">
+                        {" "}
+                        ~
+                      </span>
+                    )}
+                  </span>
+                  <span className="sev">{check.status === "flagged" ? SEVERITY[check.severity] : "—"}</span>
+                  <span className={`status ${check.status}`}>
+                    {status.label} {canOpen ? (isOpen ? "▾" : "▸") : ""}
+                  </span>
+                </button>
+                {isOpen && (
+                  <div className="check-detail">
+                    <span className="muted small" style={{ fontSize: 13 }}>
+                      {check.summary}
+                    </span>
+                    {check.evidence.length > 0 && (
+                      <ul className="evidence">
+                        {check.evidence.map((e) => (
+                          <li key={`${e.text}${e.anchor ? anchorKey(e.anchor) : ""}`}>
+                            {e.anchor && <Place anchor={e.anchor} links={links} />}
+                            <span className="text">{e.text}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {check.status === "flagged" && feedback && (
+                      <div className="verdicts">
+                        <span className="faint small">Worth flagging?</span>
+                        <CheckVerdicts check={check} feedback={feedback} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
         {briefing.checks.some((c) => c.heuristic) && (
           <p className="faint small">~ inferred from the diff and the code graph, so it can be wrong.</p>
         )}
       </section>
 
       {briefing.notChecked.length > 0 && (
-        <section aria-labelledby="not-checked">
-          <h2 id="not-checked" className="section-title">
+        <section className="section" aria-labelledby="not-checked" style={{ gap: 10 }}>
+          <h2 className="label" id="not-checked">
             Not checked
           </h2>
-          <ul className="bullets muted">
+          <ul className="not-checked">
             {briefing.notChecked.map((n) => (
-              <li key={n}>{n}</li>
+              <li key={n}>
+                <span>{n}</span>
+              </li>
             ))}
           </ul>
         </section>
       )}
 
-      <details className="files">
-        <summary className="section-title">
-          {plural(briefing.summary.files, "file")} changed{" "}
-          <span className="size mono">
-            <span className="add">+{briefing.summary.additions}</span>{" "}
-            <span className="del">−{briefing.summary.deletions}</span>
-          </span>
-        </summary>
-        <ul className="plain-list file-list">
-          {briefing.files.map((f) => (
-            <li key={f.path} className="file-item">
-              <Place anchor={{ path: f.path }} links={links} />
-              <span className="faint">
-                {f.status !== "modified" ? `${f.status} · ` : ""}
-                {f.kind}
-              </span>
-              <span className="size mono">
-                <span className="add">+{f.additions}</span> <span className="del">−{f.deletions}</span>
-              </span>
-            </li>
-          ))}
+      <section className="section" aria-labelledby="files" style={{ gap: 10 }}>
+        <h2 className="label" id="files">
+          Files changed · {briefing.summary.files}
+        </h2>
+        <ul className="card files">
+          {briefing.files.map((f) => {
+            const total = f.additions + f.deletions;
+            const scale = Math.min(1, total / Math.min(totalLines, 60)) * 100;
+            return (
+              <li key={f.path} className="file">
+                <span className="path" title={f.path}>
+                  <Place anchor={{ path: f.path }} links={links} />
+                </span>
+                <span>
+                  <span className="add">+{f.additions}</span> <span className="del">−{f.deletions}</span>
+                </span>
+                <span className="bar" aria-hidden="true">
+                  <span className="a" style={{ width: `${total ? (f.additions / total) * scale : 0}%` }} />
+                  <span className="d" style={{ width: `${total ? (f.deletions / total) * scale : 0}%` }} />
+                </span>
+              </li>
+            );
+          })}
         </ul>
-      </details>
+      </section>
+
+      <Footer briefing={briefing} perReviewUsd={perReviewUsd} />
 
       {feedback?.error && <p className="banner error">{feedback.error}</p>}
-      {feedback && <MissedForm briefing={briefing} feedback={feedback} />}
-
-      {llm && <ModelFooter llm={llm} />}
+      {feedback && <MissedForm feedback={feedback} />}
     </article>
   );
 }
 
-function CheckRow({ check, links }: { check: CheckResult; links: Map<string, string> }) {
-  const status = STATUS_ICON[check.status];
-  const head = (
-    <>
-      <span className={`check-icon ${check.status}`} role="img" aria-label={status.label}>
-        {status.icon}
-      </span>
-      <span className="check-title">
-        {check.title}
-        {check.heuristic && (
-          <span className="faint" title="Inferred from the diff and the code graph, so it can be wrong">
-            {" "}
-            ~
-          </span>
-        )}
-      </span>
-      <SeverityBadge severity={check.status === "flagged" ? check.severity : "info"} />
-      <span className="check-summary muted">{check.summary}</span>
-    </>
-  );
-  if (check.evidence.length === 0) return <div className="check">{head}</div>;
+function CheckVerdicts({ check, feedback }: { check: CheckResult; feedback: BriefingFeedback }) {
+  const item = checkItem(check);
+  const current = feedback.verdictOf(item);
+  const notes: Partial<Record<Verdict, string>> = {
+    agree: "Noted. Kept high.",
+    not_needed: "Noted. Ranked lower next time.",
+  };
   return (
-    <details className="check" open={check.status === "flagged"}>
-      <summary>{head}</summary>
-      <ul className="evidence">
-        {check.evidence.map((e) => (
-          <li key={`${e.text}${e.anchor ? anchorKey(e.anchor) : ""}`} className="evidence-item">
-            {e.anchor && <Place anchor={e.anchor} links={links} />}
-            <span>{e.text}</span>
-          </li>
-        ))}
-      </ul>
-    </details>
+    <>
+      <button
+        type="button"
+        className={`btn xs${current === "agree" ? " on" : ""}`}
+        aria-pressed={current === "agree"}
+        onClick={() => feedback.toggle(item, "agree")}
+      >
+        ↑ Useful
+      </button>
+      <button
+        type="button"
+        className={`btn xs${current === "not_needed" ? " on" : ""}`}
+        aria-pressed={current === "not_needed"}
+        onClick={() => feedback.toggle(item, "not_needed")}
+      >
+        ↓ Not useful
+      </button>
+      {current && <span className="react-note">{notes[current]}</span>}
+    </>
   );
 }
 
-function ModelFooter({ llm }: { llm: LlmSection }) {
-  if (llm.status !== "ok") {
-    const label = llm.status === "skipped" ? "Model not used" : `Model ${llm.status.replace("_", " ")}`;
-    return (
-      <p className="footer muted">
-        <strong>{label}.</strong> {llm.note}
-      </p>
+function Footer({ briefing, perReviewUsd }: { briefing: Briefing; perReviewUsd?: number | undefined }) {
+  const { llm } = briefing;
+  const time = new Date(briefing.generatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const parts: string[] = [];
+  if (llm?.status === "ok") {
+    parts.push(llm.model ?? "unknown model");
+    if (llm.effort) parts.push(`effort ${llm.effort}`);
+    parts.push(
+      llm.usd === undefined
+        ? "cost unknown"
+        : perReviewUsd !== undefined
+          ? `${formatUsd(llm.usd)} of ${formatUsd(perReviewUsd)}`
+          : formatUsd(llm.usd),
     );
+    if (llm.droppedFindings > 0)
+      parts.push(`${plural(llm.droppedFindings, "finding")} dropped for pointing outside the diff`);
+    if (llm.redactedSecrets) parts.push(`${plural(llm.redactedSecrets, "secret")} hidden before sending`);
+    if (llm.omittedFiles.length > 0)
+      parts.push(`${plural(llm.omittedFiles.length, "file")} left out to fit the budget`);
+  } else {
+    parts.push("checks only, no model");
   }
-  const parts = [
-    `${llm.model ?? "unknown model"}${llm.provider ? ` via ${llm.provider}` : ""}${llm.effort ? ` · effort ${llm.effort}` : ""}`,
-    llm.usd === undefined ? "cost unknown" : formatUsd(llm.usd),
-    llm.droppedFindings > 0 &&
-      `${plural(llm.droppedFindings, "finding")} dropped for pointing at lines not in the diff`,
-    llm.redactedSecrets && `${plural(llm.redactedSecrets, "likely secret")} hidden from the model`,
-    llm.omittedFiles.length > 0 && `${plural(llm.omittedFiles.length, "file")} left out to fit the budget`,
-  ].filter(Boolean);
-  return <p className="footer faint">{parts.join(" · ")}</p>;
+  return (
+    <footer className="brief-footer">
+      {parts.map((p) => (
+        <span key={p}>{p}</span>
+      ))}
+      <span className="end">briefed {time}</span>
+    </footer>
+  );
 }
+
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);

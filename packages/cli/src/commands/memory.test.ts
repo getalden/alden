@@ -3,10 +3,10 @@ import { renderMemory } from "./memory.js";
 
 describe("renderMemory", () => {
   it("says how Alden learns when it knows nothing yet", () => {
-    expect(renderMemory("acme/shop", [], false)).toContain("Nothing yet. Alden learns from the flags you agree with");
+    expect(renderMemory("acme/shop", [], false)).toContain("Nothing yet. Alden learns from what you mark useful");
   });
 
-  it("lists notes, then learned items with evidence, effect, date and id", () => {
+  it("lists what you look for, then what you skip, with evidence, effect, date and id", () => {
     const out = renderMemory(
       "acme/shop",
       [
@@ -15,18 +15,20 @@ describe("renderMemory", () => {
           repo: "acme/shop",
           source: "you",
           kind: "note",
+          group: "look",
           text: "Cents, not floats",
           effect: "given to the model with every review",
           since: "2026-09-20T10:00:00.000Z",
         },
         {
-          id: "open:path:db/",
+          id: "queue:path:db/:down",
           repo: "acme/shop",
           source: "learned",
-          kind: "open",
-          text: "You open PRs touching db/ first\u001b[31m",
-          evidence: "opened ahead of their rank 3 of 4 times",
-          effect: "ranked higher in your queue",
+          kind: "queue",
+          group: "skip",
+          text: "You skip PRs touching db/\u001b[31m",
+          evidence: "marked not useful 3 times",
+          effect: "Ranked lower in your queue.",
           since: "2026-09-21T10:00:00.000Z",
         },
       ],
@@ -36,13 +38,13 @@ describe("renderMemory", () => {
       [
         "What Alden knows about you in acme/shop",
         "",
-        "Your notes",
+        "What you look for",
         "  Cents, not floats",
-        "    given to the model with every review · since 2026-09-20 · id note:1",
+        "    you said; given to the model with every review · since 2026-09-20 · id note:1",
         "",
-        "Learned from your feedback",
-        "  You open PRs touching db/ first[31m",
-        "    opened ahead of their rank 3 of 4 times; ranked higher in your queue · since 2026-09-21 · id open:path:db/",
+        "What you skip",
+        "  You skip PRs touching db/[31m",
+        "    marked not useful 3 times; Ranked lower in your queue · since 2026-09-21 · id queue:path:db/:down",
         "",
         "Forget any of these with `alden memory forget <id>`. Nothing here leaves your machine.",
         "",
