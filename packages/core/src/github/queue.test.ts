@@ -87,6 +87,10 @@ describe("fetchReviewQueue", () => {
     const queue = await fetchReviewQueue(client, { limit: 28 });
     expect(queue.pullRequests).toHaveLength(28);
     expect(calls.searches.map((s) => s.first)).toEqual([25, 3]);
+    // More were waiting than the limit: the queue says so instead of dropping them quietly.
+    expect(queue.warnings.join(" ")).toContain("More than 28 PRs are waiting on you");
+    const all = await fetchReviewQueue(fakeClient(many).client, { limit: 30 });
+    expect(all.warnings.join(" ")).not.toContain("More than");
   });
 
   it("reads CODEOWNERS once per repo and branch, and applies the viewer's teams", async () => {

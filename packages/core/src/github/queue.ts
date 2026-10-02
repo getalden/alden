@@ -51,8 +51,13 @@ interface SearchResult {
 }
 
 /** Runs a GitHub issue search for PRs and returns up to `limit` raw PR nodes. */
-export async function searchPullRequests(client: GitHubClient, q: string, limit: number): Promise<RawPullRequest[]> {
-  const results: RawPullRequest[] = [];
+/** Up to `limit` PRs; `more` when GitHub has others past it. */
+export async function searchPullRequests(
+  client: GitHubClient,
+  q: string,
+  limit: number,
+): Promise<RawPullRequest[] & { more?: boolean }> {
+  const results: RawPullRequest[] & { more?: boolean } = [];
   let after: string | null = null;
   while (results.length < limit) {
     const page: SearchResult = await client.graphql<SearchResult>(SEARCH_QUERY, {
@@ -61,6 +66,7 @@ export async function searchPullRequests(client: GitHubClient, q: string, limit:
       after,
     });
     results.push(...page.search.nodes.filter((n) => n && "number" in n));
+    results.more = page.search.pageInfo.hasNextPage;
     if (!page.search.pageInfo.hasNextPage) break;
     after = page.search.pageInfo.endCursor;
   }
@@ -154,6 +160,11 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
   if (cached) return cached;
 
   const raw = await searchPullRequests(client, q, limit);
+  if (raw.more) {
+    warnings.push(
+      `More than ${limit} PRs are waiting on you; Alden ranked the ${limit} GitHub returned first. Narrow it with --repo or --org, or raise --limit.`,
+    );
+  }
 
   // One CODEOWNERS lookup per repo and base branch.
   const codeowners = new Map<string, Promise<CodeownersRule[]>>();
