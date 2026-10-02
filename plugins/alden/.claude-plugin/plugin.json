@@ -5,7 +5,7 @@
   "description": "Your code review companion in Claude Code: the PRs waiting on you, ranked, and reviews that use Alden's checks, the callers outside the diff and what you look for, and learn from your reactions.",
   "author": { "name": "Alden", "url": "https://getalden.dev" },
   "homepage": "https://getalden.dev/docs/claude-code/",
-  "repository": "https://github.com/getalden/alden",
+  "repository": "https://github.com/getalden/claude-plugin",
   "license": "Apache-2.0",
   "keywords": ["code-review", "pull-requests", "github", "review-queue"]
 }

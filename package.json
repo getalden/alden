@@ -26,6 +26,7 @@
     "smoke:binary": "tsx scripts/smoke-binary.ts",
     "homebrew:formula": "tsx scripts/homebrew-formula.ts",
     "homebrew:cask": "tsx scripts/homebrew-cask.ts",
+    "plugin:repo": "tsx scripts/plugin-repo.ts",
     "release:dry-run": "tsx scripts/release-dry-run.ts",
     "release:verify": "tsx scripts/release-verify.ts",
     "desktop:sidecar": "tsx scripts/desktop-sidecar.ts",

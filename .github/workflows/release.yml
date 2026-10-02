@@ -2,12 +2,13 @@ name: Release
 
 # Runs when a version tag is pushed (see RELEASING.md). Builds the standalone binaries on their own platforms,
 # smoke-tests each, signs and notarizes the macOS ones, builds the universal desktop app around them, publishes the npm
-# package, and publishes the binaries, the app, the Homebrew formula and the cask to the public getalden/homebrew-tap
-# repo (this repo stays private during the beta).
+# package, publishes the binaries, the app, the Homebrew formula and the cask to the public getalden/homebrew-tap
+# repo, and the Claude Code plugin to the public getalden/claude-plugin repo (this repo stays private during the beta).
 #
 # Secrets (steps that need one are skipped without it, so a dry run works with none):
 #   NPM_TOKEN               npm automation token, to publish `alden`
-#   TAP_TOKEN               fine-grained token with contents read/write on getalden/homebrew-tap
+#   TAP_TOKEN               fine-grained token with contents read/write on getalden/homebrew-tap and
+#                           getalden/claude-plugin
 #   APPLE_CERT_P12_BASE64   Developer ID Application certificate (.p12), base64
 #   APPLE_CERT_PASSWORD     its password
 #   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD   for notarization (an app-specific password)
@@ -243,3 +244,33 @@ jobs:
         with:
           name: release
           path: release/
+
+  plugin:
+    # The Claude Code marketplace, published once the alden it runs is out.
+    needs: [npm, tap]
+    runs-on: ubuntu-24.04
+    env:
+      CAN_RELEASE: ${{ secrets.TAP_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Publish to getalden/claude-plugin
+        if: env.CAN_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
+          git clone "https://x-access-token:$GH_TOKEN@github.com/getalden/claude-plugin.git" claude-plugin
+          pnpm -s plugin:repo claude-plugin
+          cd claude-plugin
+          git config user.name "alden-release"
+          git config user.email "release@getalden.dev"
+          git add -A
+          if git diff --cached --quiet; then echo "The plugin hasn't changed."; exit 0; fi
+          git commit -m "Alden $VERSION for Claude Code"
+          git push

@@ -17,7 +17,7 @@ Alden itself must be installed and signed in first ([Getting started](getting-st
 `alden mcp`. Then:
 
 ```sh
-claude plugin marketplace add getalden/alden
+claude plugin marketplace add getalden/claude-plugin
 claude plugin install alden@getalden
 ```
 

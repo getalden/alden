@@ -6,13 +6,14 @@ stays private.
 
 ## Once: set up
 
-1. The public repo `getalden/homebrew-tap` exists (created 2 Oct 2026, with a README and an empty `Formula/`).
+1. The public repos exist: `getalden/homebrew-tap` (created 2 Oct 2026, with a README and an empty `Formula/`) and
+   `getalden/claude-plugin` (created 3 Oct 2026, the Claude Code marketplace, with the 0.2.0 plugin).
 2. Add these GitHub Actions secrets to this repo:
 
    | Secret | What |
    | --- | --- |
    | `NPM_TOKEN` | An npm automation token for the `alden` package. |
-   | `TAP_TOKEN` | A fine-grained GitHub token with contents read and write on `getalden/homebrew-tap` only. |
+   | `TAP_TOKEN` | A fine-grained GitHub token with contents read and write on `getalden/homebrew-tap` and `getalden/claude-plugin` only. |
    | `APPLE_CERT_P12_BASE64` | Your Developer ID Application certificate, exported as .p12, then `base64 -i cert.p12`. |
    | `APPLE_CERT_PASSWORD` | The .p12's password. |
    | `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` | For notarization; the password is an app-specific password from appleid.apple.com. |
@@ -37,7 +38,8 @@ stays private.
 4. The Release workflow builds the five binaries on their own runners, smoke-tests each (`pnpm smoke:binary`),
    signs and notarizes the macOS ones, builds the universal desktop app around them (Tauri signs, notarizes and staples
    it with the same Apple secrets), publishes `alden@<version>` to npm under `next`, and creates the release and
-   updates the formula (`Formula/alden.rb`) and the cask (`Casks/alden-desktop.rb`) in `getalden/homebrew-tap`.
+   updates the formula (`Formula/alden.rb`) and the cask (`Casks/alden-desktop.rb`) in `getalden/homebrew-tap`. Then
+   it publishes the Claude Code plugin and its marketplace to `getalden/claude-plugin` (`pnpm plugin:repo` writes it).
 5. Check: `pnpm release:verify` (see below), then by hand: `brew install getalden/tap/alden` and
    `npm i -g alden@next`, then `alden --version` and `alden doctor`; `brew install --cask getalden/tap/alden-desktop`
    and open Alden from Applications (no Gatekeeper warning, the menu bar shows your queue).

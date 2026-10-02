@@ -4,7 +4,8 @@
 
 ### Minor Changes
 
-- The second beta: Alden learns from you, has a new look and a desktop app.
+- The second beta: Alden learns from you, has a new look and a desktop app, and works inside Claude Code and other AI
+  coding tools.
   
   - **Learns from you.** Mark places useful or not useful, react to queue rows, and dismiss what you don't need: after
     three one-sided reactions Alden gives that kind of flag more or less weight, and ranks PRs like the ones you open
@@ -15,6 +16,11 @@
   - **New look.** The web UI is redesigned, with light and dark themes, a two-pane workspace and keyboard reactions
     (`+`, `−`, `x`).
   - **Desktop app.** Alden in a window and the menu bar on macOS, with the queue count, a reminder for PRs that have
-    waited three days and ⌘⇧A to open it.
+    waited three days and ⌘⇧A to open it. While your Mac is idle it briefs the top PRs waiting on you (checks and
+    callers only, unless you allow the model in Settings) and tells you when one is ready.
+  - **In your AI coding tool.** `alden mcp` gives Claude Code, Cursor, Claude Desktop and other MCP clients Alden's
+    queue, briefings, feedback and memory as tools. The Claude Code plugin adds `/alden:review`, `/alden:queue` and
+    `/alden:remember`: `claude plugin marketplace add getalden/claude-plugin`, then
+    `claude plugin install alden@getalden`.
   - **Opt-in usage stats.** Alden asks once whether to send anonymous usage counts (never code, names or repos) to help
     us improve it. Off unless you say yes; `alden telemetry show` lists exactly what would be sent.
