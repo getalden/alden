@@ -168,6 +168,18 @@ export function ReviewPane(props: ReviewPaneProps) {
           }
         />
       )}
+      {run?.briefing && !run.running && run.prepared && (
+        <div className="notice note-box">
+          <span className="q" aria-hidden="true">
+            ✓
+          </span>
+          <span className="text">
+            Prepared while you were away, at{" "}
+            {new Date(run.prepared).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            {run.briefing.llm?.status === "ok" ? ", with the model" : ", checks only"}. Brief again for a fresh one.
+          </span>
+        </div>
+      )}
       {run?.briefing && !run.running && (
         <BriefingView
           briefing={run.briefing}

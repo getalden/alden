@@ -47,6 +47,17 @@ export const AldenConfigSchema = z.object({
       enabled: z.boolean().optional(),
     })
     .prefault({}),
+  background: z
+    .object({
+      /** The desktop app briefs the top PRs waiting on you while you're away, so they're ready when you're back. */
+      enabled: z.boolean().default(true),
+      /**
+       * Whether those briefings also ask the model, which spends within your caps. Read only from your user config,
+       * never from a repo's .alden.toml, so a repo can't make you spend.
+       */
+      model: z.boolean().default(false),
+    })
+    .prefault({}),
   updates: z
     .object({
       /** Whether `alden --version` and `alden doctor` say when a newer Alden exists (checked at most once a day). */

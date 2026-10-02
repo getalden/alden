@@ -69,6 +69,15 @@ export interface Session {
   aliases: Record<string, string>;
   efforts: string[];
   budget: { perReviewUsd: number; dailyUsd: number; spentToday: number };
+  /** Running inside the desktop app, which can prepare briefings while you're away. */
+  desktop?: boolean;
+  background?: { enabled: boolean; model: boolean };
+}
+
+/** A briefing the desktop app made in the background, and when. */
+export interface Prepared {
+  briefing: Briefing;
+  at: string;
 }
 
 export interface SpendReport {
@@ -148,6 +157,12 @@ export class Api {
     this.request<unknown>("/api/reaction", { method: "POST", body: JSON.stringify({ pr, reaction }) });
 
   exportFeedback = () => this.request<unknown[]>("/api/feedback/export");
+
+  /** PRs ("owner/repo#12") with a briefing ready from the background. */
+  preparedList = () => this.request<{ pr: string; at: string }[]>("/api/prepared");
+
+  /** That PR's background briefing, or null when there's none or the PR has changed since. */
+  prepared = (pr: string) => this.request<Prepared | null>(`/api/prepared?pr=${encodeURIComponent(pr)}`);
 
   telemetry = () => this.request<Telemetry>("/api/telemetry");
 

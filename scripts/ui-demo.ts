@@ -196,6 +196,10 @@ const memoryOf = async (repo = DEMO_REPO) => {
   return { repo, items: memoryItems(learning), paused: learning.paused, path: "~/.alden/alden.db (demo)" };
 };
 let demoConsent: "on" | "off" | "unset" = "unset";
+// ALDEN_DEMO_DESKTOP=1 shows the desktop app's extras: Django's briefing was "prepared in the background".
+const DEMO_DESKTOP = process.env.ALDEN_DEMO_DESKTOP === "1";
+let demoBackground = { enabled: true, model: false };
+const preparedAt = new Date(Date.now() - 25 * 60_000).toISOString();
 // What the queue last showed, so reactions find their row as the real API does.
 let lastRows: ReturnType<typeof queueRows> = [];
 
@@ -216,7 +220,16 @@ const api: UiApi = {
     aliases: { sonnet: "claude-sonnet-5", opus: "claude-opus-5", haiku: "claude-haiku-4-5", fable: "claude-fable-5-1" },
     efforts: ["low", "medium", "high", "xhigh", "max"],
     budget: { perReviewUsd: 0.5, dailyUsd: 10, spentToday: 0.37 },
+    desktop: DEMO_DESKTOP,
+    background: demoBackground,
   }),
+  prepareNext: async () => ({ prepared: null, reason: "demo" }),
+  prepared: async (pr) => {
+    if (!DEMO_DESKTOP) return pr ? null : [];
+    if (pr === undefined) return [{ pr: "django/django#19057", updatedAt: "", at: preparedAt }];
+    if (pr.toLowerCase() !== "django/django#19057") return null;
+    return { briefing: briefingFor("django/django", 19057, await learningFor("django/django"), false), at: preparedAt };
+  },
   queue: async () => {
     const learned = new Map<string, Learning>();
     for (const repo of new Set(facts.map((f) => f.repo.toLowerCase()))) learned.set(repo, await learningFor(repo));
@@ -329,7 +342,11 @@ const api: UiApi = {
     });
   },
   config: async () => ({ path: "(demo)", config }),
-  setConfig: async () => ({ path: "(demo)", config }),
+  setConfig: async (key, value) => {
+    if (key === "background.enabled") demoBackground = { ...demoBackground, enabled: value === "true" };
+    if (key === "background.model") demoBackground = { ...demoBackground, model: value === "true" };
+    return { path: "(demo)", config };
+  },
 };
 
 const ui = await startUiServer({ api, staticDir: join(ROOT, "packages/ui/dist"), port, token: "demo" });

@@ -37,6 +37,8 @@ interface QueueViewProps {
   signedOut?: boolean;
   reactions?: Record<string, Reaction | undefined>;
   onReact?: (key: string, reaction: Reaction) => void;
+  /** PRs (lowercased "owner/repo#12") with a briefing ready from the desktop app's background run. */
+  ready?: Set<string>;
 }
 
 /** The PRs waiting on you: "Needs you", ranked, then "Fast-track". Every row says why it ranks where it does. */
@@ -51,6 +53,7 @@ export function QueueView({
   signedOut = false,
   reactions = {},
   onReact,
+  ready,
 }: QueueViewProps) {
   const [showDismissed, setShowDismissed] = useState(false);
   const repos = useMemo(
@@ -169,6 +172,7 @@ export function QueueView({
                   selected={selected === prKey(row.pr)}
                   reaction={reactions[prKey(row.pr)]}
                   onReact={onReact}
+                  ready={ready?.has(prKey(row.pr).toLowerCase()) ?? false}
                 />
               </li>
             ))}
@@ -253,8 +257,9 @@ function PrRow(props: {
   selected: boolean;
   reaction: Reaction | undefined;
   onReact: ((key: string, reaction: Reaction) => void) | undefined;
+  ready?: boolean;
 }) {
-  const { row, rank, selected, reaction, onReact } = props;
+  const { row, rank, selected, reaction, onReact, ready = false } = props;
   const { pr } = row;
   const key = prKey(pr);
   const route = { view: "queue" as const, pr: { repo: pr.repo, number: pr.number } };
@@ -284,8 +289,9 @@ function PrRow(props: {
             <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
           </span>
         </span>
-        {(reasons.length > 0 || row.waitingOnAuthor) && (
+        {(reasons.length > 0 || row.waitingOnAuthor || ready) && (
           <span className="pr-chips">
+            {ready && <span className="chip ready">✓ Briefing ready</span>}
             {row.waitingOnAuthor && pr.author && <span className="chip">CI failing: ping @{pr.author}</span>}
             {reasons.map((reason) => (
               <span key={reason} className="chip">

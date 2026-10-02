@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
   addNote,
+  backgroundModelAllowed,
   createGitHubClient,
   type Effort,
   editNote,
@@ -43,14 +44,14 @@ import {
   userConfigPath,
   type WithModel,
 } from "@alden/core";
-import type { Briefing } from "@alden/schema";
+import type { Briefing, RankedQueue } from "@alden/schema";
 import { LAST_QUEUE_KEY, type LastQueue } from "../commands/open.js";
 import { spendReport } from "../commands/spend.js";
 import { loadRepoStats } from "../commands/stats.js";
 import { describeGitHubError } from "../github-errors.js";
 import { learningFor, learningForQueue, noteOpened } from "../learning.js";
 import { parsePrRef } from "../pr-ref.js";
-import { ApiError, type UiApi } from "./server.js";
+import { ApiError, type ReviewRequest, type UiApi } from "./server.js";
 
 const run = promisify(execFile);
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -76,10 +77,40 @@ async function signedIn() {
 
 const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
 
-/** The engine, as the UI sees it: the same calls the CLI commands make, with errors worded for a person. */
-export function createUiApi(options: { version: string; cwd: string }): UiApi {
+/** A briefing made in the background, and the PR's last update it was made from (newer pushes make it stale). */
+interface Prepared {
+  briefing: Briefing;
+  updatedAt: string;
+  at: string;
+}
+
+/** How many of the top "needs you" PRs the desktop app prepares briefings for. */
+const PREPARE_TOP = 3;
+
+/**
+ * The PR to brief in the background next: the first of the top "needs you" PRs that's ready for review (not a draft,
+ * not waiting on its author) and has no briefing for its latest update.
+ */
+export function nextToPrepare(
+  queue: RankedQueue,
+  preparedFor: (repo: string, number: number) => string | undefined,
+): RankedQueue["needsYou"][number] | undefined {
+  return queue.needsYou
+    .slice(0, PREPARE_TOP)
+    .find(
+      (row) => !row.waitingOnAuthor && !row.pr.isDraft && preparedFor(row.pr.repo, row.pr.number) !== row.pr.updatedAt,
+    );
+}
+
+/**
+ * The engine, as the UI sees it: the same calls the CLI commands make, with errors worded for a person. `desktop` is
+ * set when the desktop app runs it, which turns on background briefings.
+ */
+export function createUiApi(options: { version: string; cwd: string; desktop?: boolean }): UiApi {
   const cache = new JsonCache();
   const feedback = new FeedbackLog();
+  const prepared = new Map<string, Prepared>();
+  const keyOf = (repo: string, number: number) => `${repo}#${number}`.toLowerCase();
   /** The repo memory is about: the one asked for, or the clone `alden ui` was started in. */
   const memoryRepo = async (repo?: string) => {
     const target = repo ?? (await repoOf(options.cwd))?.repos[0];
@@ -95,7 +126,7 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
     return { repo: target, items: memoryItems(learning), paused: learning.paused, path: store.path };
   };
 
-  return {
+  const api: UiApi = {
     async session() {
       const config = await loadConfig(options.cwd);
       const resolved = await resolveToken();
@@ -114,6 +145,8 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
       return {
         version: options.version,
         cwd: options.cwd,
+        desktop: options.desktop === true,
+        background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
         repo: (await repoOf(options.cwd)) ?? null,
         user,
         model: {
@@ -161,64 +194,54 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
       }
     },
 
-    async review(request, onStage): Promise<Briefing> {
-      const startedAt = Date.now();
+    review: (request, onStage) => runReview(request, onStage, false),
+
+    async prepareNext() {
       const config = await loadConfig(options.cwd);
-      const effort = request.effort as Effort | undefined;
-      if (effort !== undefined && !EFFORTS.includes(effort)) {
-        throw new ApiError(400, `effort must be one of ${EFFORTS.join(", ")}.`);
-      }
-      let model: WithModel | undefined;
-      let unavailable: string | undefined;
-      if (request.llm !== false) {
-        const choice = selectProvider(config, request.model);
-        if (choice.ok) model = { provider: choice.provider, ledger: new SpendLedger(), ...(effort ? { effort } : {}) };
-        else unavailable = choice.reason;
-      }
-      const graph = { enabled: request.graph !== false, cwd: options.cwd, onStage };
+      if (!options.desktop || !config.background.enabled) return { prepared: null, reason: "off" };
+      const queue = (await api.queue({ refresh: false, repos: [], orgs: [] })) as RankedQueue;
+      const next = nextToPrepare(queue, (repo, number) => prepared.get(keyOf(repo, number))?.updatedAt);
+      if (!next) return { prepared: null, reason: "up to date" };
+      const { pr } = next;
+      const llm = await backgroundModelAllowed();
+      const briefing = await runReview({ pr: `${pr.repo}#${pr.number}`, llm, graph: true }, () => {}, true);
+      const entry = { briefing, updatedAt: pr.updatedAt, at: new Date().toISOString() };
+      prepared.set(keyOf(pr.repo, pr.number), entry);
+      return {
+        prepared: {
+          pr: `${pr.repo}#${pr.number}`,
+          title: pr.title,
+          places: briefing.needsYourEyes.length,
+          model: briefing.llm?.status === "ok",
+          at: entry.at,
+        },
+      };
+    },
 
-      let briefing: Briefing;
-      if (request.pr === undefined) {
-        const learning = await learningFor((await repoOf(options.cwd))?.repos[0]);
-        briefing = await reviewLocalChanges(config, options.cwd, model, {
-          ...graph,
-          ...(learning ? { learning } : {}),
-        });
-      } else {
-        const last = await cache.get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
-        let ref: ReturnType<typeof parsePrRef>;
-        try {
-          ref = parsePrRef(request.pr, last?.urls);
-        } catch (error) {
-          throw new ApiError(400, (error as Error).message);
-        }
-        const resolved = await signedIn();
-        const learning = await learningFor(ref.repo);
-        try {
-          briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model, {
-            ...graph,
-            ...(learning ? { learning } : {}),
-          });
-        } catch (error) {
-          throw new ApiError(502, describeGitHubError(error, resolved.source));
-        }
-        if (briefing.target.kind === "pr") noteOpened(last?.rows, briefing.target.url, "ui");
+    async prepared(pr) {
+      if (pr === undefined) {
+        return [...prepared.values()].flatMap(({ briefing, updatedAt, at }) =>
+          briefing.target.kind === "pr"
+            ? [{ pr: `${briefing.target.repo}#${briefing.target.number}`, updatedAt, at }]
+            : [],
+        );
       }
-      // `alden stats` splits before and after at the first use on each repo.
-      const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : (await repoOf(options.cwd))?.repos[0];
-      if (usedOn) await new UsageLog().markUsed(usedOn).catch(() => {});
-      void track(
-        "review_completed",
-        reviewEvent(briefing, { durationMs: Date.now() - startedAt, repo: usedOn, graph: request.graph !== false }),
-      );
-
-      if (unavailable && briefing.files.length > 0 && !briefing.llm) {
-        briefing = {
-          ...briefing,
-          llm: { status: "skipped", note: unavailable, findings: [], droppedFindings: 0, omittedFiles: [] },
-        };
+      const entry = prepared.get(pr.toLowerCase());
+      if (!entry) return null;
+      // Stale once the PR has changed since: the last queue knows its latest update.
+      const last = await cache.get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
+      const row = last?.rows?.find((r) => keyOf(r.repo, r.number) === pr.toLowerCase());
+      if (row?.updatedAt && row.updatedAt !== entry.updatedAt) {
+        prepared.delete(pr.toLowerCase());
+        return null;
       }
-      return briefing;
+      // Reading it is using Alden on that repo, for `alden stats`, and opening that PR, for learning.
+      const target = entry.briefing.target;
+      if (target.kind === "pr") {
+        await new UsageLog().markUsed(target.repo).catch(() => {});
+        noteOpened(last?.rows, target.url, "ui");
+      }
+      return { briefing: entry.briefing, at: entry.at };
     },
 
     async spend() {
@@ -361,4 +384,71 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
       return { path: userConfigPath(), config: await loadConfig(options.cwd) };
     },
   };
+
+  /** One review, for the UI or (background) for the desktop app ahead of time, which isn't you opening the PR. */
+  async function runReview(
+    request: ReviewRequest,
+    onStage: Parameters<UiApi["review"]>[1],
+    background: boolean,
+  ): Promise<Briefing> {
+    const startedAt = Date.now();
+    const config = await loadConfig(options.cwd);
+    const effort = request.effort as Effort | undefined;
+    if (effort !== undefined && !EFFORTS.includes(effort)) {
+      throw new ApiError(400, `effort must be one of ${EFFORTS.join(", ")}.`);
+    }
+    let model: WithModel | undefined;
+    let unavailable: string | undefined;
+    if (request.llm !== false) {
+      const choice = selectProvider(config, request.model);
+      if (choice.ok) model = { provider: choice.provider, ledger: new SpendLedger(), ...(effort ? { effort } : {}) };
+      else unavailable = choice.reason;
+    }
+    const graph = { enabled: request.graph !== false, cwd: options.cwd, onStage };
+
+    let briefing: Briefing;
+    if (request.pr === undefined) {
+      const learning = await learningFor((await repoOf(options.cwd))?.repos[0]);
+      briefing = await reviewLocalChanges(config, options.cwd, model, {
+        ...graph,
+        ...(learning ? { learning } : {}),
+      });
+    } else {
+      const last = await cache.get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
+      let ref: ReturnType<typeof parsePrRef>;
+      try {
+        ref = parsePrRef(request.pr, last?.urls);
+      } catch (error) {
+        throw new ApiError(400, (error as Error).message);
+      }
+      const resolved = await signedIn();
+      const learning = await learningFor(ref.repo);
+      try {
+        briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model, {
+          ...graph,
+          ...(learning ? { learning } : {}),
+        });
+      } catch (error) {
+        throw new ApiError(502, describeGitHubError(error, resolved.source));
+      }
+      if (!background && briefing.target.kind === "pr") noteOpened(last?.rows, briefing.target.url, "ui");
+    }
+    // `alden stats` splits before and after at the first use on each repo (a background briefing counts when read).
+    const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : (await repoOf(options.cwd))?.repos[0];
+    if (usedOn && !background) await new UsageLog().markUsed(usedOn).catch(() => {});
+    void track(
+      "review_completed",
+      reviewEvent(briefing, { durationMs: Date.now() - startedAt, repo: usedOn, graph: request.graph !== false }),
+    );
+
+    if (unavailable && briefing.files.length > 0 && !briefing.llm) {
+      briefing = {
+        ...briefing,
+        llm: { status: "skipped", note: unavailable, findings: [], droppedFindings: 0, omittedFiles: [] },
+      };
+    }
+    return briefing;
+  }
+
+  return api;
 }

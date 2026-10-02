@@ -26,6 +26,13 @@ export interface UiApi {
   session(): Promise<unknown>;
   queue(options: { refresh: boolean; repos: string[]; orgs: string[] }): Promise<unknown>;
   review(request: ReviewRequest, onStage: (stage: ReviewStage, label: string) => void): Promise<Briefing>;
+  /**
+   * The desktop app, while you're away: briefs the first of the top PRs waiting on you that has no briefing for its
+   * latest push. `{ prepared: null }` when there's nothing to do (or it's off).
+   */
+  prepareNext(): Promise<unknown>;
+  /** Without a PR, which briefings are ready; with one ("owner/repo#12"), that briefing, or null if none or stale. */
+  prepared(pr?: string): Promise<unknown>;
   spend(): Promise<unknown>;
   config(): Promise<unknown>;
   /** `null` removes the setting, so its default applies again. */
@@ -201,6 +208,14 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       case "POST /api/review":
         await streamReview(await readJsonBody(req), res);
         return;
+      case "POST /api/prepare":
+        send(res, 200, await api.prepareNext());
+        return;
+      case "GET /api/prepared": {
+        const pr = url.searchParams.get("pr") ?? undefined;
+        send(res, 200, await api.prepared(pr));
+        return;
+      }
       case "GET /api/spend":
         send(res, 200, await api.spend());
         return;

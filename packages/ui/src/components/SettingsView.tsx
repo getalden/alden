@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import type { Api, Session, SpendReport } from "../api";
 import { formatUsd, plural } from "../format";
 import { applyTheme, readTheme, type Theme } from "../theme";
+import { Switch } from "./ReviewOptions";
 import { TelemetrySettings } from "./TelemetryCard";
 
 /** Saves `data` as a file the browser downloads, without a server round trip. */
@@ -202,6 +203,10 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
             </div>
           </div>
 
+          {session.desktop && session.background && (
+            <BackgroundSettings api={api} initial={session.background} onSaved={onSaved} />
+          )}
+
           <TelemetrySettings api={api} />
 
           <div className="card panel">
@@ -259,5 +264,42 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
         </aside>
       </div>
     </section>
+  );
+}
+
+/** The desktop app's background briefings: on or off, and whether they may ask the model (and so spend). */
+function BackgroundSettings(props: { api: Api; initial: { enabled: boolean; model: boolean }; onSaved: () => void }) {
+  const [state, setState] = useState(props.initial);
+  const [error, setError] = useState<string>();
+  const change = (key: "enabled" | "model", on: boolean) => {
+    const before = state;
+    setState({ ...state, [key]: on });
+    setError(undefined);
+    props.api.setConfig(`background.${key}`, on ? "true" : "false").then(props.onSaved, (e: Error) => {
+      setState(before);
+      setError(e.message);
+    });
+  };
+  return (
+    <div className="card panel">
+      <h2 className="label">While you're away</h2>
+      <p className="muted small">
+        When your Mac has been idle for a few minutes, Alden briefs the top PRs waiting on you, one at a time, and tells
+        you when one is ready. It briefs a PR again only after it changes.
+      </p>
+      <Switch on={state.enabled} label="Prepare briefings in the background" onChange={(on) => change("enabled", on)} />
+      <Switch
+        on={state.model}
+        disabled={!state.enabled}
+        label="Ask the model too"
+        title="Spends within your caps, like any briefing"
+        onChange={(on) => change("model", on)}
+      />
+      <p className="faint small">
+        Without the model they're checks and callers only, which costs nothing. With it, each counts against your
+        per-briefing and daily caps. This setting lives in your user config only, so a repo can't turn it on.
+      </p>
+      {error && <p className="error-text small">{error}</p>}
+    </div>
   );
 }

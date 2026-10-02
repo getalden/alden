@@ -62,6 +62,15 @@ Default sensitive paths:
 **/composer.lock      **/go.sum          **/poetry.lock
 ```
 
+## background
+
+For the [desktop app](desktop.md#while-youre-away), which briefs your top PRs while you're away.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `background.enabled` | `true` | Prepare briefings in the background. A repo's `.alden.toml` can turn it off there. |
+| `background.model` | `false` | Ask the model for them too, within your caps. Read from your user config only, so a repo can't make you spend. |
+
 ## Environment variables
 
 | Variable | What it does |

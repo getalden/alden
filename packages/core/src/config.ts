@@ -117,3 +117,16 @@ export function isKnownKey(key: string): boolean {
   }
   return true;
 }
+
+/**
+ * Whether background briefings may ask the model. Read from the user config only: a repo's .alden.toml must never
+ * make its contributors spend.
+ */
+export async function backgroundModelAllowed(): Promise<boolean> {
+  try {
+    const user = await readToml(userConfigPath());
+    return (user.background as { model?: unknown } | undefined)?.model === true;
+  } catch {
+    return false;
+  }
+}

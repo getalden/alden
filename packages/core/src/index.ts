@@ -1,6 +1,7 @@
 export { JsonCache } from "./cache.js";
 export {
   aldenHome,
+  backgroundModelAllowed,
   getConfigValue,
   isKnownKey,
   loadConfig,

@@ -23,6 +23,14 @@ const api: UiApi = {
     onStage("checks", "Running checks");
     return briefing;
   },
+  prepareNext: async () => {
+    calls.push({ method: "prepareNext", args: undefined });
+    return { prepared: { pr: "a/b#1" } };
+  },
+  prepared: async (pr) => {
+    calls.push({ method: "prepared", args: pr });
+    return pr ? null : [];
+  },
   spend: async () => ({ spentToday: 0.12 }),
   config: async () => ({ config: {} }),
   addFeedback: async (input) => {
@@ -138,6 +146,18 @@ describe("alden ui server", () => {
         })
       ).status,
     ).toBe(200);
+  });
+
+  it("prepares the next briefing, and lists or gets prepared ones", async () => {
+    const post = await call("/api/prepare", { method: "POST", headers: authed });
+    expect(JSON.parse(post.text)).toEqual({ prepared: { pr: "a/b#1" } });
+    expect((await call("/api/prepared", { headers: authed })).text).toBe("[]");
+    expect((await call("/api/prepared?pr=a%2Fb%231", { headers: authed })).text).toBe("null");
+    expect(calls).toEqual([
+      { method: "prepareNext", args: undefined },
+      { method: "prepared", args: undefined },
+      { method: "prepared", args: "a/b#1" },
+    ]);
   });
 
   it("passes queue filters through", async () => {

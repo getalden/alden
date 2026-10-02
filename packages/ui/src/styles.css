@@ -344,6 +344,10 @@ textarea.input {
   background: var(--sunk);
   border-radius: var(--r-sm);
 }
+.chip.ready {
+  color: var(--ok);
+  background: var(--ok-soft);
+}
 .sev {
   font: 500 11px var(--font-mono);
   color: var(--ink3);
@@ -1777,6 +1781,9 @@ details > summary {
 }
 .pr-row.selected .chip {
   background: var(--panel);
+}
+.pr-row.selected .chip.ready {
+  background: var(--ok-soft);
 }
 .mem-item.gone .text {
   text-decoration: line-through;

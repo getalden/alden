@@ -31,7 +31,7 @@ export function registerUiCommand(program: Command, version: string): void {
         // A standalone binary carries the UI inside it.
         const embedded = embeddedFilesUnder("ui/");
         ui = await startUiServer({
-          api: createUiApi({ version, cwd: process.cwd() }),
+          api: createUiApi({ version, cwd: process.cwd(), desktop: options.json === true }),
           ...(embedded.size > 0 ? { files: embedded } : { staticDir }),
           port,
         });

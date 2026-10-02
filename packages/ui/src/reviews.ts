@@ -11,6 +11,8 @@ export interface ReviewRun {
   error?: string;
   briefing?: Briefing;
   request: ReviewRequest;
+  /** When the desktop app prepared this briefing in the background, if it did. */
+  prepared?: string;
 }
 
 /**
@@ -68,5 +70,18 @@ export function useReviews(api: Api | undefined, onDone?: () => void) {
     [update],
   );
 
-  return { runs, start, cancel };
+  /** A briefing prepared in the background, shown as a finished run unless one has started meanwhile. */
+  const seed = useCallback((key: string, briefing: Briefing, at: string, request: ReviewRequest) => {
+    const time = Date.parse(at);
+    setRuns((all) =>
+      all[key]
+        ? all
+        : {
+            ...all,
+            [key]: { stages: [], running: false, startedAt: time, finishedAt: time, briefing, request, prepared: at },
+          },
+    );
+  }, []);
+
+  return { runs, start, cancel, seed };
 }

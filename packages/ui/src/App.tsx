@@ -63,6 +63,21 @@ export function App({ api }: { api: Api | undefined }) {
 
   useEffect(() => loadQueue(false), [loadQueue]);
 
+  // In the desktop app, which briefings are ready from the background: checked with the queue and every minute.
+  const [ready, setReady] = useState<Set<string>>(new Set());
+  const desktop = session?.desktop === true;
+  useEffect(() => {
+    if (!api || !desktop || !queue) return;
+    const check = () =>
+      api.preparedList().then(
+        (items) => setReady(new Set(items.map((i) => i.pr.toLowerCase()))),
+        () => {},
+      );
+    check();
+    const timer = setInterval(check, 60_000);
+    return () => clearInterval(timer);
+  }, [api, desktop, queue]);
+
   const react = useCallback(
     (key: string, reaction: Reaction) => {
       if (!api) return;
@@ -134,6 +149,7 @@ export function App({ api }: { api: Api | undefined }) {
               signedOut={session !== undefined && session.user === null}
               reactions={reactions}
               onReact={react}
+              ready={ready}
             />
           </aside>
           <main className="main-pane detail">
@@ -146,6 +162,7 @@ export function App({ api }: { api: Api | undefined }) {
                 onChoices={setChoices}
                 reviews={reviews}
                 feedbackFor={feedbackFor}
+                api={desktop ? api : undefined}
               />
             ) : (
               <p className="faint" style={{ margin: "auto", padding: "120px 0", fontSize: 13 }}>
@@ -236,10 +253,31 @@ function PrPane(props: {
   onChoices: (choices: Choices) => void;
   reviews: ReturnType<typeof useReviews>;
   feedbackFor: ReturnType<typeof useFeedback>;
+  /** Only in the desktop app: where briefings prepared in the background come from. */
+  api?: Api | undefined;
 }) {
-  const { prRef, row, reviews, session } = props;
+  const { prRef, row, reviews, session, api } = props;
   const key = `${prRef.repo}#${prRef.number}`;
   const pr = row?.pr;
+  const hasRun = reviews.runs[key] !== undefined;
+  const request = { pr: key, ...toRequest(props.choices, session) };
+  const requestRef = useRef(request);
+  requestRef.current = request;
+  const { seed } = reviews;
+  // A briefing the desktop app prepared while you were away shows at once.
+  useEffect(() => {
+    if (!api || hasRun) return;
+    let live = true;
+    api.prepared(key).then(
+      (found) => {
+        if (live && found) seed(key, found.briefing, found.at, requestRef.current);
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [api, key, hasRun, seed]);
   const noClone = props.choices.graph && session && !session.repo?.repos.includes(prRef.repo.toLowerCase());
   return (
     <ReviewPane
@@ -274,7 +312,7 @@ function PrPane(props: {
         ) : undefined
       }
       run={reviews.runs[key]}
-      request={{ pr: key, ...toRequest(props.choices, session) }}
+      request={request}
       onStart={(request) => reviews.start(key, request)}
       onCancel={() => reviews.cancel(key)}
       controls={<ReviewOptions session={session} choices={props.choices} onChange={props.onChoices} />}

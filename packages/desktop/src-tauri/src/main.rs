@@ -2,7 +2,8 @@
 //!
 //! It runs the bundled `alden` binary as `alden ui --json` in the folder you chose (your home folder until you pick a
 //! repo clone, which is what finding callers needs), shows its UI in the window, and polls the local API for the
-//! menu bar: how many PRs wait on you, the top three, and a notification when someone has waited three days. Closing
+//! menu bar: how many PRs wait on you, the top three, and a notification when someone has waited three days. While
+//! you're away from the Mac, it asks the server to brief the top PRs ahead of time and says when one is ready. Closing
 //! the window keeps Alden in the menu bar; Quit stops it and the server with it (the server also exits on its own when
 //! this app's end of its stdin closes, so a crash can't leave it running).
 
@@ -29,6 +30,9 @@ use tauri_plugin_shell::{
 const WAITED_TOO_LONG_HOURS: f64 = 72.0;
 /// How often the menu bar refreshes. The server caches GitHub for a minute, so this is cheap.
 const POLL_EVERY: Duration = Duration::from_secs(300);
+/// How often to check whether you're away, and how long without a key press or mouse move counts as away.
+const IDLE_CHECK_EVERY: Duration = Duration::from_secs(60);
+const AWAY_AFTER_SECS: f64 = 180.0;
 const TRAY: &str = "main";
 
 #[derive(Default)]
@@ -39,6 +43,25 @@ struct AppState {
     child: Mutex<Option<CommandChild>>,
     notified: Mutex<HashSet<String>>,
     polling: Mutex<bool>,
+    /// A background briefing is running; don't start another.
+    preparing: Mutex<bool>,
+}
+
+#[derive(Deserialize)]
+struct PrepareResult {
+    prepared: Option<PreparedPr>,
+}
+
+#[derive(Deserialize)]
+struct PreparedPr {
+    pr: String,
+    title: String,
+    places: u32,
+}
+
+#[derive(Deserialize)]
+struct ReadyPr {
+    pr: String,
 }
 
 #[derive(Deserialize)]
@@ -229,10 +252,19 @@ fn on_ready(app: &AppHandle, url: &str) {
     };
     if first {
         let app = app.clone();
+        let idle_app = app.clone();
         tauri::async_runtime::spawn(async move {
             loop {
                 poll(&app).await;
                 tokio::time::sleep(POLL_EVERY).await;
+            }
+        });
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(IDLE_CHECK_EVERY).await;
+                if idle_seconds().is_some_and(|secs| secs >= AWAY_AFTER_SECS) {
+                    prepare_next(&idle_app).await;
+                }
             }
         });
     } else {
@@ -252,7 +284,7 @@ async fn poll(app: &AppHandle) {
     let (Some(base), Some(token)) = (base, token) else { return };
     let response = reqwest::Client::new()
         .get(format!("{base}/api/queue"))
-        .header("X-Alden-Token", token)
+        .header("X-Alden-Token", &token)
         .timeout(Duration::from_secs(60))
         .send()
         .await;
@@ -278,15 +310,30 @@ async fn poll(app: &AppHandle) {
     } else {
         format!("{} need you · {} fast", queue.needs_you.len(), queue.fast_track.len())
     };
+    let ready: HashSet<String> = api_get::<Vec<ReadyPr>>(&base, &token, "/api/prepared")
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| r.pr.to_lowercase())
+        .collect();
     let rows: Vec<(String, String)> = queue
         .needs_you
         .iter()
         .take(3)
         .enumerate()
         .map(|(i, row)| {
+            let key = format!("{}#{}", row.pr.repo, row.pr.number).to_lowercase();
+            let mark = if ready.contains(&key) { "  ✓ ready" } else { "" };
             (
                 format!("pr:{}/pull/{}", row.pr.repo, row.pr.number),
-                format!("{:02}  {}  ·  {} #{} · {}", i + 1, clip(&row.pr.title, 46), row.pr.repo, row.pr.number, wait(row.waiting_hours)),
+                format!(
+                    "{:02}  {}  ·  {} #{} · {}{mark}",
+                    i + 1,
+                    clip(&row.pr.title, 46),
+                    row.pr.repo,
+                    row.pr.number,
+                    wait(row.waiting_hours)
+                ),
             )
         })
         .collect();
@@ -305,6 +352,83 @@ async fn poll(app: &AppHandle) {
             .body(format!("{} · {} #{}", row.pr.title, row.pr.repo, row.pr.number))
             .show();
     }
+}
+
+/// A GET on the local API, parsed; None on any failure (the menu bar just shows less).
+async fn api_get<T: serde::de::DeserializeOwned>(base: &str, token: &str, path: &str) -> Option<T> {
+    let res = reqwest::Client::new()
+        .get(format!("{base}{path}"))
+        .header("X-Alden-Token", token)
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await
+        .ok()?;
+    if !res.status().is_success() {
+        return None;
+    }
+    res.json::<T>().await.ok()
+}
+
+/// While you're away: asks the server to brief the next of your top PRs (it decides which, and whether background
+/// briefings are on), then says so when one is ready.
+async fn prepare_next(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    {
+        let mut preparing = state.preparing.lock().unwrap();
+        if *preparing {
+            return;
+        }
+        *preparing = true;
+    }
+    let (base, token) = (state.base.lock().unwrap().clone(), state.token.lock().unwrap().clone());
+    let result = match (base, token) {
+        (Some(base), Some(token)) => reqwest::Client::new()
+            .post(format!("{base}/api/prepare"))
+            .header("X-Alden-Token", token)
+            // A briefing with the model on a large PR can take a few minutes.
+            .timeout(Duration::from_secs(600))
+            .send()
+            .await
+            .ok()
+            .filter(|res| res.status().is_success()),
+        _ => None,
+    };
+    let prepared = match result {
+        Some(res) => res.json::<PrepareResult>().await.ok().and_then(|r| r.prepared),
+        None => None,
+    };
+    *state.preparing.lock().unwrap() = false;
+    let Some(pr) = prepared else { return };
+
+    let places = match pr.places {
+        0 => "Nothing needs a closer look.".to_string(),
+        1 => "1 place needs your eyes.".to_string(),
+        n => format!("{n} places need your eyes."),
+    };
+    let _ = app
+        .notification()
+        .builder()
+        .title(format!("Briefing ready: {}", pr.pr))
+        .body(format!("{} · {places}", clip(&pr.title, 80)))
+        .show();
+    poll(app).await;
+}
+
+/// Seconds since the last key press, click or mouse move. Only macOS for now; elsewhere nothing runs in the background.
+#[cfg(target_os = "macos")]
+fn idle_seconds() -> Option<f64> {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventSourceSecondsSinceLastEventType(state: i32, event_type: u32) -> f64;
+    }
+    // kCGEventSourceStateCombinedSessionState, kCGAnyInputEventType.
+    let secs = unsafe { CGEventSourceSecondsSinceLastEventType(0, u32::MAX) };
+    secs.is_finite().then_some(secs)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn idle_seconds() -> Option<f64> {
+    None
 }
 
 fn set_tray(app: &AppHandle, header: &str, sub: &str, rows: &[(String, String)], count: Option<usize>) {
@@ -403,5 +527,27 @@ fn wait(hours: f64) -> String {
         format!("{}h", hours.floor())
     } else {
         format!("{} days", (hours / 24.0).floor())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn reads_idle_time_on_macos() {
+        let secs = idle_seconds().expect("CoreGraphics answers");
+        assert!(secs >= 0.0);
+    }
+
+    #[test]
+    fn reads_what_the_server_prepared() {
+        let result: PrepareResult =
+            serde_json::from_str(r#"{"prepared":{"pr":"a/b#1","title":"T","places":2,"model":false,"at":"x"}}"#).unwrap();
+        let pr = result.prepared.unwrap();
+        assert_eq!((pr.pr.as_str(), pr.places), ("a/b#1", 2));
+        let none: PrepareResult = serde_json::from_str(r#"{"prepared":null,"reason":"off"}"#).unwrap();
+        assert!(none.prepared.is_none());
     }
 }
