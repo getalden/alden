@@ -15,3 +15,6 @@ packages/cli/LICENSE
 # Eval runs (real model output; keep locally, share deliberately)
 eval/results/
 site/dist/
+
+# Design partners' feedback exports, for `pnpm gate`: their data, never committed.
+eval/partners/
