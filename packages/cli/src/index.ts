@@ -5,6 +5,7 @@ import { registerAuthCommand } from "./commands/auth.js";
 import { registerConfigCommand } from "./commands/config.js";
 import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerFeedbackCommand } from "./commands/feedback.js";
+import { registerMcpCommand } from "./commands/mcp.js";
 import { registerMemoryCommand } from "./commands/memory.js";
 import { registerOpenCommand } from "./commands/open.js";
 import { registerQueueCommand } from "./commands/queue.js";
@@ -31,6 +32,7 @@ registerMemoryCommand(program);
 registerStatsCommand(program);
 registerDoctorCommand(program, pkg.version);
 registerUiCommand(program, pkg.version);
+registerMcpCommand(program, pkg.version);
 registerTelemetryCommand(program);
 
 configureTelemetry({ version: pkg.version, surface: "cli" });

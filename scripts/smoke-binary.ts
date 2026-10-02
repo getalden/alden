@@ -53,6 +53,30 @@ try {
   run(["memory", "add", "--repo", "smoke/test", "Money is in cents"]);
   check("memory keeps a note in the database", run(["memory", "--repo", "smoke/test"]).includes("Money is in cents"));
 
+  // MCP over stdio: the handshake, the tools, and a local review through one of them.
+  const mcp = execFileSync(binary, ["mcp"], {
+    cwd: repo,
+    env,
+    encoding: "utf8",
+    timeout: 120_000,
+    input: [
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } },
+      { jsonrpc: "2.0", method: "notifications/initialized" },
+      { jsonrpc: "2.0", id: 2, method: "tools/list" },
+      { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "alden_review", arguments: {} } },
+    ]
+      .map((m) => JSON.stringify(m))
+      .join("\n"),
+  });
+  const replies = mcp
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { id: number; result: Record<string, unknown> });
+  const result = (n: number) => replies.find((r) => r.id === n)?.result;
+  check("mcp answers the handshake", result(1)?.protocolVersion === "2025-06-18");
+  check("mcp lists its tools", (result(2)?.tools as unknown[] | undefined)?.length === 6);
+  check("mcp reviews through a tool", JSON.stringify(result(3)).includes("calls rank (signature changed)"));
+
   // The web UI, served from inside the binary.
   const ui = spawn(binary, ["ui", "--no-open", "--port", "0"], { cwd: repo, env });
   const url = await new Promise<string>((done, fail) => {

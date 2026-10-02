@@ -70,6 +70,15 @@ Opens the queue and briefings in your browser, served on 127.0.0.1 only until yo
 | `--port <n>` | Serve on this port instead of a free one. |
 | `--no-open` | Print the link instead of opening a browser. |
 
+## alden mcp
+
+Serves Alden to an AI coding tool (Claude Code, Cursor, Claude Desktop and others) as MCP tools over stdio, until the
+tool closes it. See [Alden in your AI coding tool](mcp.md).
+
+| Flag | What it does |
+| --- | --- |
+| `--dir <path>` | The clone to review local changes and find callers in, instead of the folder it was started in. |
+
 ## alden doctor
 
 Checks your setup here: the Alden version (and whether a newer one exists), where Alden keeps files, your settings,

@@ -39,7 +39,7 @@ dropped.
 | `stats_viewed` | Median time to first review and cycle time, before and after Alden, and how many PRs |
 | `telemetry_enabled` | That you said yes |
 
-Each also carries Alden's version, where it ran (terminal, UI or desktop app), Node or the standalone binary, the OS
+Each also carries Alden's version, where it ran (terminal, UI, desktop app or an AI coding tool through `alden mcp`), Node or the standalone binary, the OS
 and CPU type, and how many days since this install first ran.
 
 **Never sent:** code, diffs, PR titles or descriptions, file paths, repo names, user names, your notes, model output,

@@ -19,9 +19,10 @@
           "enum": [
             "cli",
             "ui",
-            "desktop"
+            "desktop",
+            "mcp"
           ],
-          "description": "where the event happened"
+          "description": "where the event happened; mcp is an AI coding tool"
         },
         "runtime": {
           "type": "string",
@@ -106,6 +107,7 @@
                     "auth",
                     "doctor",
                     "telemetry",
+                    "mcp",
                     "other"
                   ]
                 },

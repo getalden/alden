@@ -56,7 +56,7 @@ const run = promisify(execFile);
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 /** The GitHub repos the directory `alden ui` started in points at: where PR reviews can find callers. */
-async function repoOf(cwd: string): Promise<{ root: string; repos: string[] } | undefined> {
+export async function repoOf(cwd: string): Promise<{ root: string; repos: string[] } | undefined> {
   try {
     const { stdout: root } = await run("git", ["rev-parse", "--show-toplevel"], { cwd });
     const { stdout: remotes } = await run("git", ["remote", "-v"], { cwd });

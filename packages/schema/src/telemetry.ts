@@ -16,7 +16,7 @@ const hours = z.number().min(0).nullable();
 export const TelemetryCommonSchema = z.object({
   schema: z.literal(TELEMETRY_SCHEMA_VERSION),
   app_version: z.string(),
-  surface: z.enum(["cli", "ui", "desktop"]).describe("where the event happened"),
+  surface: z.enum(["cli", "ui", "desktop", "mcp"]).describe("where the event happened; mcp is an AI coding tool"),
   runtime: z.enum(["node", "binary"]),
   os: z.enum(["darwin", "linux", "win32", "other"]),
   arch: z.string(),
@@ -41,6 +41,7 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
         "auth",
         "doctor",
         "telemetry",
+        "mcp",
         "other",
       ]),
       ok: z.boolean(),
