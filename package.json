@@ -23,7 +23,10 @@
     "regressions:find": "tsx scripts/find-regressions.ts",
     "build:binary": "tsx scripts/build-binary.ts",
     "smoke:binary": "tsx scripts/smoke-binary.ts",
-    "homebrew:formula": "tsx scripts/homebrew-formula.ts"
+    "homebrew:formula": "tsx scripts/homebrew-formula.ts",
+    "desktop:sidecar": "tsx scripts/desktop-sidecar.ts",
+    "desktop:dev": "pnpm --filter @alden/desktop app:dev",
+    "desktop:build": "pnpm build && pnpm build:binary && pnpm desktop:sidecar && pnpm --filter @alden/desktop app:build"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The window shows Alden's own local server (http://127.0.0.1) and the bundled loading page. Neither calls the app's commands: the Rust side drives the sidecar, tray and notifications.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

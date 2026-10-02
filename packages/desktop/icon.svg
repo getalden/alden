@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Alden</title>
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="0%" r="80%" fx="50%" fy="0%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".14"/>
+      <stop offset=".6" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- The macOS icon grid: an 824px tile inside the 1024px canvas. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#0f766e"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+  <g transform="translate(512 512) scale(16.9) translate(-16 -16)">
+    <path d="M8 24 L16 8 L24 24" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M8 24 L16 19 L24 24 M16 8 L16 19" fill="none" stroke="#5eead4" stroke-width="1" stroke-dasharray="1.5 2" opacity=".7"/>
+    <circle cx="8" cy="24" r="2.2" fill="#5eead4"/>
+    <circle cx="16" cy="8" r="2.2" fill="#5eead4"/>
+    <circle cx="24" cy="24" r="2.2" fill="#5eead4"/>
+    <circle cx="16" cy="19" r="2.6" fill="#f0fdfa"/>
+  </g>
+</svg>

@@ -10,6 +10,7 @@ interface UiOptions {
   port?: string;
   /** Commander sets this to false for --no-open. */
   open: boolean;
+  json?: boolean;
 }
 
 export function registerUiCommand(program: Command, version: string): void {
@@ -18,6 +19,7 @@ export function registerUiCommand(program: Command, version: string): void {
     .description("Open the queue and briefings in your browser. Serves on 127.0.0.1 only, until you stop it.")
     .option("--port <n>", "port to serve on (default: a free one)")
     .option("--no-open", "print the link instead of opening a browser")
+    .option("--json", "print one JSON line with the link and port, and don't open a browser (for the desktop app)")
     .action(async (options: UiOptions) => {
       const port = options.port === undefined ? 0 : Number.parseInt(options.port, 10);
       if (!Number.isInteger(port) || port < 0 || port > 65_535) program.error("--port must be a port number.");
@@ -40,9 +42,13 @@ export function registerUiCommand(program: Command, version: string): void {
         );
       }
 
-      console.log(`Alden is running at ${ui.url}`);
-      console.log("The link carries a session key; don't share it. Press Ctrl+C to stop.");
-      if (options.open) openInBrowser(ui.url, "Couldn't open a browser. Open the link above.");
+      if (options.json) {
+        console.log(JSON.stringify({ url: ui.url, port: new URL(ui.url).port }));
+      } else {
+        console.log(`Alden is running at ${ui.url}`);
+        console.log("The link carries a session key; don't share it. Press Ctrl+C to stop.");
+        if (options.open) openInBrowser(ui.url, "Couldn't open a browser. Open the link above.");
+      }
 
       const stop = () => {
         void ui.close().then(() => process.exit(0));
@@ -51,5 +57,10 @@ export function registerUiCommand(program: Command, version: string): void {
       };
       process.on("SIGINT", stop);
       process.on("SIGTERM", stop);
+      // Started by the desktop app: stop when it goes away (its end of stdin closes), even if it crashed.
+      if (options.json) {
+        process.stdin.on("end", stop);
+        process.stdin.resume();
+      }
     });
 }

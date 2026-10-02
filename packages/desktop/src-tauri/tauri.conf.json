@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Alden",
+  "version": "0.1.0",
+  "identifier": "dev.getalden.desktop",
+  "build": {
+    "frontendDist": "../loading"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Alden",
+        "url": "index.html",
+        "width": 1280,
+        "height": 840,
+        "minWidth": 420,
+        "minHeight": 560,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "DeveloperTool",
+    "shortDescription": "Code review companion",
+    "copyright": "Alden",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "externalBin": ["binaries/alden"],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+# The sidecar is the standalone alden binary, copied in by `pnpm desktop:sidecar` (or CI) per target.
+src-tauri/binaries/
+src-tauri/target/
+src-tauri/gen/

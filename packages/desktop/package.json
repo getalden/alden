@@ -1,0 +1,14 @@
+{
+  "name": "@alden/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Alden in the menu bar: a Tauri shell around `alden ui`, with the queue count, the top PRs and a nudge when someone has waited too long.",
+  "scripts": {
+    "app:dev": "tauri dev",
+    "app:build": "tauri build",
+    "app:icons": "tauri icon icon-1024.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0"
+  }
+}
