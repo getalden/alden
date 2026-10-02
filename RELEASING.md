@@ -18,10 +18,9 @@ stays private.
    | `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` | For notarization; the password is an app-specific password from appleid.apple.com. |
 
    Without a secret, its step is skipped: with none, a run builds and smoke-tests everything and publishes nothing.
-3. Put the PostHog project's public key (`phc_…`, Project settings → Project API key; EU cloud) in `TELEMETRY_KEY` in
-   `packages/core/src/telemetry/telemetry.ts`. It's public by design, so it lives in the code, not a secret. Until it's
-   set, opted-in installs keep their events locally (up to 5,000) and send them once a release carries the key. In
-   the PostHog project, turn on "Discard client IP data".
+3. The PostHog project (EU cloud) is set up and its public key is in `TELEMETRY_KEY` in
+   `packages/core/src/telemetry/telemetry.ts` (it's public by design: it can only send events). In the PostHog project,
+   keep "Discard client IP data" on.
 
 ## Each release
 

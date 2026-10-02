@@ -20,11 +20,10 @@ import { openStore } from "../store/db.js";
 /** PostHog's EU ingestion host. */
 export const TELEMETRY_HOST = "https://eu.i.posthog.com";
 /**
- * The PostHog project's public key (a "phc_" token; it identifies the project, it isn't a secret). Empty until the
- * project exists: events are then kept locally, up to `MAX_QUEUED`, and sent once a key is set.
- * `ALDEN_TELEMETRY_KEY` overrides it.
+ * The PostHog project's public key (a "phc_" token: it names the project and can only send events, so it isn't a
+ * secret). `ALDEN_TELEMETRY_KEY` overrides it, e.g. to point a test build at another project.
  */
-export const TELEMETRY_KEY = "";
+export const TELEMETRY_KEY = "phc_qkSGWofnv9C9YLomkc3jAPbDfVe8hFEsy6dCzbsfj9Mb";
 /** The most events kept waiting; older ones are dropped first. */
 export const MAX_QUEUED = 5_000;
 const BATCH = 200;
