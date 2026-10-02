@@ -38,6 +38,15 @@ export const AldenConfigSchema = z.object({
       dailyUsd: z.number().positive().default(10),
     })
     .prefault({}),
+  telemetry: z
+    .object({
+      /**
+       * Whether to send anonymous usage stats. Unset until you answer; read only from your user config, never from a
+       * repo's .alden.toml. DO_NOT_TRACK, ALDEN_TELEMETRY=0 and CI turn it off regardless.
+       */
+      enabled: z.boolean().optional(),
+    })
+    .prefault({}),
   updates: z
     .object({
       /** Whether `alden --version` and `alden doctor` say when a newer Alden exists (checked at most once a day). */

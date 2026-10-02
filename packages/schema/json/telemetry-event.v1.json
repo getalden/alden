@@ -1,0 +1,592 @@
+{
+  "$id": "https://getalden.dev/schema/telemetry-event.v1.json",
+  "title": "Alden telemetry event (only sent if you opt in)",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "common": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "number",
+          "const": 1
+        },
+        "app_version": {
+          "type": "string"
+        },
+        "surface": {
+          "type": "string",
+          "enum": [
+            "cli",
+            "ui",
+            "desktop"
+          ],
+          "description": "where the event happened"
+        },
+        "runtime": {
+          "type": "string",
+          "enum": [
+            "node",
+            "binary"
+          ]
+        },
+        "os": {
+          "type": "string",
+          "enum": [
+            "darwin",
+            "linux",
+            "win32",
+            "other"
+          ]
+        },
+        "arch": {
+          "type": "string"
+        },
+        "install_age_days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "days since this install first ran"
+        }
+      },
+      "required": [
+        "schema",
+        "app_version",
+        "surface",
+        "runtime",
+        "os",
+        "arch",
+        "install_age_days"
+      ],
+      "additionalProperties": false
+    },
+    "event": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "telemetry_enabled"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "command_run"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "enum": [
+                    "queue",
+                    "open",
+                    "review",
+                    "ui",
+                    "stats",
+                    "feedback",
+                    "memory",
+                    "spend",
+                    "config",
+                    "auth",
+                    "doctor",
+                    "telemetry",
+                    "other"
+                  ]
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "duration_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "command",
+                "ok",
+                "duration_ms"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "queue_ranked"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "needs_you": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "fast_track": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "dismissed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "repos": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "moved_by_learning": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "rows whose rank your feedback changed"
+                }
+              },
+              "required": [
+                "needs_you",
+                "fast_track",
+                "dismissed",
+                "repos",
+                "moved_by_learning"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "review_completed"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "enum": [
+                    "pr",
+                    "local"
+                  ]
+                },
+                "repo_hash": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "files": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "lines": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "code graph languages in the change, e.g. typescript, go"
+                },
+                "graph": {
+                  "type": "boolean",
+                  "description": "callers outside the diff were looked for"
+                },
+                "callers": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "checks_flagged": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "places": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "places to look shown"
+                },
+                "hidden_by_feedback": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "notes_used": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "llm_status": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "ok",
+                    "refused",
+                    "over_budget",
+                    "failed",
+                    "truncated",
+                    "skipped"
+                  ]
+                },
+                "model": {
+                  "description": "the model id, e.g. claude-sonnet-5; null without one",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "usd": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "duration_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "target",
+                "repo_hash",
+                "files",
+                "lines",
+                "languages",
+                "graph",
+                "callers",
+                "checks_flagged",
+                "places",
+                "hidden_by_feedback",
+                "notes_used",
+                "llm_status",
+                "model",
+                "usd",
+                "duration_ms"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "feedback_given"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "verdict": {
+                  "type": "string",
+                  "enum": [
+                    "agree",
+                    "not_needed",
+                    "dismiss",
+                    "clear"
+                  ]
+                },
+                "placement": {
+                  "type": "string",
+                  "enum": [
+                    "eyes",
+                    "finding",
+                    "check"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "check",
+                    "llm"
+                  ]
+                },
+                "check_id": {
+                  "description": "Alden's own check id, e.g. tests.missing",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "verdict",
+                "placement",
+                "source",
+                "check_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "missed_reported"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "has_place": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "has_place"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "reaction_given"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "reaction": {
+                  "type": "string",
+                  "enum": [
+                    "up",
+                    "down",
+                    "dismiss",
+                    "clear"
+                  ]
+                }
+              },
+              "required": [
+                "reaction"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "pr_opened"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "position": {
+                  "type": "integer",
+                  "minimum": -1,
+                  "maximum": 9007199254740991,
+                  "description": "rank among PRs not opened lately; -1 in fast-track"
+                }
+              },
+              "required": [
+                "position"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "memory_changed"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "add",
+                    "edit",
+                    "forget",
+                    "restore",
+                    "pause",
+                    "resume",
+                    "forget_all"
+                  ]
+                }
+              },
+              "required": [
+                "action"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "stats_viewed"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "repo_hash": {
+                  "type": "string"
+                },
+                "prs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "split": {
+                  "type": "boolean",
+                  "description": "there's a before and after"
+                },
+                "first_review_before_h": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "first_review_after_h": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cycle_before_h": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cycle_after_h": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "repo_hash",
+                "prs",
+                "split",
+                "first_review_before_h",
+                "first_review_after_h",
+                "cycle_before_h",
+                "cycle_after_h"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "common",
+    "event"
+  ],
+  "additionalProperties": false
+}

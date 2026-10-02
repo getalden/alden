@@ -8,6 +8,7 @@ import { ReviewPane } from "./components/ReviewPane";
 import { SettingsView } from "./components/SettingsView";
 import { StateCard } from "./components/StateCard";
 import { StatsView } from "./components/StatsView";
+import { TelemetryCard } from "./components/TelemetryCard";
 import { TopBar } from "./components/TopBar";
 import { useFeedback } from "./feedback";
 import { useReviews } from "./reviews";
@@ -121,6 +122,7 @@ export function App({ api }: { api: Api | undefined }) {
       {route.view === "queue" && (
         <div className={`workspace${current ? " has-detail" : ""}`}>
           <aside className="side" aria-label="Your review queue">
+            <TelemetryCard api={api} />
             <QueueView
               queue={queue}
               error={queueError ?? reactError}

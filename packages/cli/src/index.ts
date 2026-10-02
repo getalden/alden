@@ -1,3 +1,4 @@
+import { configureTelemetry } from "@alden/core";
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { registerAuthCommand } from "./commands/auth.js";
@@ -11,6 +12,7 @@ import { registerReviewCommand } from "./commands/review.js";
 import { registerSpendCommand } from "./commands/spend.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerUiCommand } from "./commands/ui.js";
+import { instrument, registerTelemetryCommand } from "./telemetry.js";
 import { updateNotice } from "./version.js";
 
 const program = new Command()
@@ -29,6 +31,10 @@ registerMemoryCommand(program);
 registerStatsCommand(program);
 registerDoctorCommand(program, pkg.version);
 registerUiCommand(program, pkg.version);
+registerTelemetryCommand(program);
+
+configureTelemetry({ version: pkg.version, surface: "cli" });
+instrument(program);
 
 // `alden --version` also says when a newer Alden exists (on stderr, so scripts reading the version aren't affected).
 const args = process.argv.slice(2);

@@ -16,6 +16,12 @@ export interface MemoryRepo {
   paused: boolean;
 }
 
+/** Anonymous usage stats: on, off, or not asked yet; `blocked` says what forces them off (DO_NOT_TRACK, CI). */
+export interface Telemetry {
+  consent: "on" | "off" | "unset";
+  blocked: string | null;
+}
+
 export type MemoryChange =
   | { action: "edit"; id: string; text: string }
   | { action: "restore"; id: string }
@@ -142,6 +148,11 @@ export class Api {
     this.request<unknown>("/api/reaction", { method: "POST", body: JSON.stringify({ pr, reaction }) });
 
   exportFeedback = () => this.request<unknown[]>("/api/feedback/export");
+
+  telemetry = () => this.request<Telemetry>("/api/telemetry");
+
+  setTelemetry = (on: boolean) =>
+    this.request<Telemetry>("/api/telemetry", { method: "PUT", body: JSON.stringify({ on }) });
 
   forgetMemory = (id: string, repo?: string) =>
     this.request<Memory>("/api/memory/forget", {

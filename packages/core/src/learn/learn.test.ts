@@ -215,7 +215,7 @@ describe("the store, memory and opens", () => {
   it("migrates once and survives reopening", () => {
     store.close();
     const again = AldenStore.open(join(dir, "alden.db"));
-    expect(again.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(1);
+    expect(again.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(2);
     expect(again.get<{ journal_mode: string }>("PRAGMA journal_mode")?.journal_mode).toBe("wal");
     again.close();
     store = openStore(join(dir, "alden.db"));
@@ -331,11 +331,11 @@ describe("the store, memory and opens", () => {
     });
     const rows = [row(1, 0), row(2, 1), row(3, 2), row(4, -1)];
     const t = (min: number) => new Date(NOW.getTime() + min * 60_000);
-    expect(recordOpen(store, rows, rows[2] as never, "ui", t(0))).toBe(true); // skipped #1 and #2
-    expect(recordOpen(store, rows, rows[0] as never, "ui", t(1))).toBe(true); // then the top
-    expect(recordOpen(store, rows, rows[1] as never, "ui", t(2))).toBe(true); // next unopened: in order
-    expect(recordOpen(store, rows, rows[1] as never, "ui", t(3))).toBe(false); // a reopen
-    expect(recordOpen(store, rows, rows[3] as never, "cli", t(4))).toBe(true); // fast-track
+    expect(recordOpen(store, rows, rows[2] as never, "ui", t(0))).toBeTruthy(); // skipped #1 and #2
+    expect(recordOpen(store, rows, rows[0] as never, "ui", t(1))).toBeTruthy(); // then the top
+    expect(recordOpen(store, rows, rows[1] as never, "ui", t(2))).toBeTruthy(); // next unopened: in order
+    expect(recordOpen(store, rows, rows[1] as never, "ui", t(3))).toBeUndefined(); // a reopen
+    expect(recordOpen(store, rows, rows[3] as never, "cli", t(4))).toBeTruthy(); // fast-track
     const opens = store.events<OpenEvent>("open", { repo: REPO });
     expect(opens.map((o) => [o.number, o.position])).toEqual([
       [3, 2],

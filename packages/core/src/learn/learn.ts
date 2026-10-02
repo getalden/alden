@@ -590,7 +590,7 @@ export interface QueueRow {
 
 /**
  * Records that you opened `row`. Its position counts only rows you haven't opened lately, so working down the list
- * reads as "in order" and jumping past PRs reads as "this matters more to me". Returns false for a reopen.
+ * reads as "in order" and jumping past PRs reads as "this matters more to me". Returns nothing for a reopen.
  */
 export function recordOpen(
   store: AldenStore,
@@ -598,7 +598,7 @@ export function recordOpen(
   row: QueueRow,
   via: OpenEvent["via"],
   now: Date = new Date(),
-): boolean {
+): OpenEvent | undefined {
   const since = new Date(now.getTime() - REOPEN_HOURS * 3_600_000).toISOString();
   const recent = store.all<{ repo: string; body: string }>(
     "SELECT repo, body FROM events WHERE type = 'open' AND at >= ?",
@@ -615,7 +615,7 @@ export function recordOpen(
     }),
   );
   const key = (r: Pick<QueueRow, "repo" | "number">) => `${r.repo.toLowerCase()}#${r.number}`;
-  if (opened.has(key(row))) return false;
+  if (opened.has(key(row))) return undefined;
   const position =
     row.base < 0 ? -1 : rows.filter((r) => r.base >= 0 && r.base < row.base && !opened.has(key(r))).length;
   const event: OpenEvent = {
@@ -629,5 +629,5 @@ export function recordOpen(
     via,
   };
   store.addEvent({ id: event.id, at: event.at, type: "open", repo: event.repo, body: event });
-  return true;
+  return event;
 }

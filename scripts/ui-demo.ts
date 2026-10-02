@@ -195,6 +195,7 @@ const memoryOf = async (repo = DEMO_REPO) => {
   const learning = await loadLearning(store, repo);
   return { repo, items: memoryItems(learning), paused: learning.paused, path: "~/.alden/alden.db (demo)" };
 };
+let demoConsent: "on" | "off" | "unset" = "unset";
 // What the queue last showed, so reactions find their row as the real API does.
 let lastRows: ReturnType<typeof queueRows> = [];
 
@@ -287,6 +288,12 @@ const api: UiApi = {
     return { pr, reaction };
   },
   exportFeedback: async () => redactFeedback(await feedback.events()),
+  // The demo never sends anything: it remembers the answer for this run only.
+  telemetry: async () => ({ consent: demoConsent, blocked: null }),
+  setTelemetry: async (on) => {
+    demoConsent = on ? "on" : "off";
+    return { consent: demoConsent, blocked: null };
+  },
   // Invented PRs, so the Stats view has a before and after to show: waits drift down after the split.
   stats: async ({ repo, days }) => {
     const now = new Date();

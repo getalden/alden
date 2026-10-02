@@ -52,6 +52,11 @@ const api: UiApi = {
     return input;
   },
   exportFeedback: async () => [],
+  telemetry: async () => ({ consent: "unset", blocked: null }),
+  setTelemetry: async (on) => {
+    calls.push({ method: "setTelemetry", args: on });
+    return { consent: on ? "on" : "off", blocked: null };
+  },
   stats: async (options) => {
     calls.push({ method: "stats", args: options });
     return { repo: options.repo };
@@ -221,6 +226,13 @@ describe("alden ui server", () => {
       { repo: "acme/shop", items: 2 },
     ]);
     expect((await call("/api/feedback/export", { headers: authed })).status).toBe(200);
+    expect(JSON.parse((await call("/api/telemetry", { headers: authed })).text)).toEqual({
+      consent: "unset",
+      blocked: null,
+    });
+    expect((await call("/api/telemetry", { method: "PUT", headers: authed, body: { on: "yes" } })).status).toBe(400);
+    await call("/api/telemetry", { method: "PUT", headers: authed, body: { on: true } });
+    expect(calls.at(-1)).toEqual({ method: "setTelemetry", args: true });
   });
 
   it("serves the UI without a token, the app for unknown paths, and nothing outside its folder", async () => {

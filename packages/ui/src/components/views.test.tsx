@@ -9,6 +9,7 @@ import { MemoryView } from "./MemoryView";
 import { QueueView } from "./QueueView";
 import { effortSupported, initialChoices, toRequest } from "./ReviewOptions";
 import { formatHours, StatsView } from "./StatsView";
+import { TelemetryCard } from "./TelemetryCard";
 
 afterEach(cleanup);
 
@@ -483,5 +484,34 @@ describe("StatsView", () => {
 
   it("formats waits with the horizon as a floor", () => {
     expect([0.5, 30, 60, 336].map((h) => formatHours(h, 336))).toEqual(["30m", "30h", "2d 12h", "14d+"]);
+  });
+});
+
+describe("TelemetryCard", () => {
+  it("asks once, saves the answer, and stays away once answered or blocked", async () => {
+    const answers: boolean[] = [];
+    let consent: "on" | "off" | "unset" = "unset";
+    const api = {
+      telemetry: async () => ({ consent, blocked: null }),
+      setTelemetry: async (on: boolean) => {
+        answers.push(on);
+        consent = on ? "on" : "off";
+        return { consent, blocked: null };
+      },
+    } as unknown as import("../api").Api;
+    const { unmount } = render(<TelemetryCard api={api} />);
+    expect(await screen.findByText("Help shape Alden?")).toBeTruthy();
+    expect(screen.getByText(/Never code, diffs, titles, paths, repo or user names/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send anonymous stats" }));
+    await waitFor(() => expect(screen.queryByText("Help shape Alden?")).toBeNull());
+    expect(answers).toEqual([true]);
+    unmount();
+
+    const blocked = {
+      telemetry: async () => ({ consent: "unset", blocked: "DO_NOT_TRACK is set" }),
+    } as unknown as import("../api").Api;
+    render(<TelemetryCard api={blocked} />);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(screen.queryByText("Help shape Alden?")).toBeNull();
   });
 });

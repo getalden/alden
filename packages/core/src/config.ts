@@ -21,7 +21,7 @@ export function repoConfigPath(cwd: string = process.cwd()): string {
   return join(cwd, ".alden.toml");
 }
 
-async function readToml(path: string): Promise<Table> {
+export async function readToml(path: string): Promise<Table> {
   if (!existsSync(path)) return {};
   return parse(await readFile(path, "utf8")) as Table;
 }

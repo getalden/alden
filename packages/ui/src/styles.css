@@ -1756,6 +1756,21 @@ details > summary {
   flex-wrap: wrap;
 }
 
+/* The usage-stats question, asked once at the top of the queue. */
+.telemetry-card {
+  margin: 12px 16px 4px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--acc-soft);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.telemetry-card svg {
+  flex: none;
+  margin-top: 2px;
+}
+
 /* State overrides, last so they win over the base rules above. */
 .pr-row.dismissed .pr-title {
   text-decoration: line-through;

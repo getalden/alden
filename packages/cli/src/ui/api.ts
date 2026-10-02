@@ -17,6 +17,7 @@ import {
   memoryItems,
   memoryRepos,
   openStore,
+  queueEvent,
   queueRows,
   rankQueue,
   recordReaction,
@@ -25,13 +26,18 @@ import {
   resolveModel,
   resolveToken,
   restore,
+  reviewEvent,
   reviewLocalChanges,
   reviewPullRequest,
   SpendLedger,
   selectProvider,
   setConfigValue,
   setLearning,
+  setTelemetryConsent,
   supportsEffort,
+  telemetryBlocked,
+  telemetryConsent,
+  track,
   UsageLog,
   unsetConfigValue,
   userConfigPath,
@@ -142,6 +148,7 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
           orgs,
         });
         const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
+        void track("queue_ranked", queueEvent(ranked));
         // Shared with the CLI, so `alden review 3` means the same PR in both.
         const last: LastQueue = {
           urls: [...ranked.needsYou, ...ranked.fastTrack].map((r) => r.pr.url),
@@ -155,6 +162,7 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
     },
 
     async review(request, onStage): Promise<Briefing> {
+      const startedAt = Date.now();
       const config = await loadConfig(options.cwd);
       const effort = request.effort as Effort | undefined;
       if (effort !== undefined && !EFFORTS.includes(effort)) {
@@ -199,6 +207,10 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
       // `alden stats` splits before and after at the first use on each repo.
       const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : (await repoOf(options.cwd))?.repos[0];
       if (usedOn) await new UsageLog().markUsed(usedOn).catch(() => {});
+      void track(
+        "review_completed",
+        reviewEvent(briefing, { durationMs: Date.now() - startedAt, repo: usedOn, graph: request.graph !== false }),
+      );
 
       if (unavailable && briefing.files.length > 0 && !briefing.llm) {
         briefing = {
@@ -220,7 +232,17 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
 
     async addFeedback(input) {
       try {
-        return await feedback.add(input);
+        const event = await feedback.add(input);
+        if (event.kind === "missed") void track("missed_reported", { has_place: event.anchor !== undefined });
+        else {
+          void track("feedback_given", {
+            verdict: event.verdict,
+            placement: event.item.placement,
+            source: event.item.source,
+            check_id: event.item.checkId ?? null,
+          });
+        }
+        return event;
       } catch (error) {
         throw new ApiError(
           400,
@@ -258,6 +280,15 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
       } catch (error) {
         throw error instanceof ApiError ? error : new ApiError(400, (error as Error).message);
       }
+      const action =
+        change.action === "learning"
+          ? change.on
+            ? "resume"
+            : "pause"
+          : change.action === "forget-all"
+            ? "forget_all"
+            : change.action;
+      void track("memory_changed", { action });
       return memoryOf(target);
     },
 
@@ -266,7 +297,17 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
       const row = last?.rows?.find((r) => `${r.repo}#${r.number}`.toLowerCase() === pr.toLowerCase());
       if (!row) throw new ApiError(404, `${pr} isn't in your last queue. Refresh the queue and try again.`);
       recordReaction(openStore(), row, reaction, row.updatedAt ?? new Date().toISOString());
+      void track("reaction_given", { reaction });
       return { pr, reaction };
+    },
+
+    async telemetry() {
+      return { consent: await telemetryConsent(), blocked: telemetryBlocked() ?? null };
+    },
+
+    async setTelemetry(on) {
+      await setTelemetryConsent(on);
+      return { consent: await telemetryConsent(), blocked: telemetryBlocked() ?? null };
     },
 
     async exportFeedback() {
@@ -280,12 +321,14 @@ export function createUiApi(options: { version: string; cwd: string }): UiApi {
       } catch (error) {
         throw new ApiError(400, (error as Error).message);
       }
+      void track("memory_changed", { action: "add" });
       return memoryOf(target);
     },
 
     async forgetMemory({ repo, id }) {
       const target = await memoryRepo(repo);
       if (!(await forget(openStore(), target, id))) throw new ApiError(404, `Nothing called ${id} in ${target}.`);
+      void track("memory_changed", { action: "forget" });
       return memoryOf(target);
     },
 

@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import type { Api, Session, SpendReport } from "../api";
 import { formatUsd, plural } from "../format";
 import { applyTheme, readTheme, type Theme } from "../theme";
+import { TelemetrySettings } from "./TelemetryCard";
 
 /** Saves `data` as a file the browser downloads, without a server round trip. */
 function download(name: string, data: unknown) {
@@ -200,6 +201,8 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
               <span className="faint small">{exportStatus ?? "Repo names, paths, titles and notes are removed."}</span>
             </div>
           </div>
+
+          <TelemetrySettings api={api} />
 
           <div className="card panel">
             <h2 className="label">Appearance</h2>

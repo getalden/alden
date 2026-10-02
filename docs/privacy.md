@@ -1,12 +1,13 @@
 # Privacy and data
 
-Alden runs on your machine. There is no Alden server, and nothing is sent to Alden's developers.
+Alden runs on your machine. There is no Alden server, and nothing is sent to Alden's developers unless you opt in to [anonymous usage stats](telemetry.md).
 
 ## What leaves your machine
 
 | Goes to | What | When |
 | --- | --- | --- |
 | GitHub | API requests with your token: review requests, PR details, diffs, CI status, CODEOWNERS. Git fetches of PRs for the code graph. | `alden queue`, `alden review <pr>` |
+| PostHog (EU), only if you said yes | Anonymous usage stats: see [Usage stats](telemetry.md) | After each command; every minute while `alden ui` runs |
 | Your model provider | The PR's title and description, the diff, a few lines around callers outside the diff, and your [notes](memory.md#your-notes) for the repo. | `alden review`, unless `--no-llm` |
 
 Nothing goes to a model when no provider is configured or you pass `--no-llm`. With a local model (Ollama, LM Studio),
@@ -31,6 +32,8 @@ Feedback, the PRs you open and what Alden learns from them stay in `~/.alden/ald
 memory](memory.md)). See [Files Alden keeps](configuration.md#files-alden-keeps). Your GitHub token is stored in the OS keychain, or, where
 there's no keychain, in a file only your user can read. `alden auth logout` removes it.
 
-## Telemetry
+## Usage stats
 
-Alden collects no usage data. An opt-in, anonymous option may come later, and it will be off unless you switch it on.
+Off unless you say yes. With your OK, Alden sends anonymous usage stats (which commands and views you use, review
+counts and timings, which way your feedback points) to PostHog in the EU. Never code, titles, paths, repo or user
+names. See [Usage stats](telemetry.md) for every event and how to turn it off.

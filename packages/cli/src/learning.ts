@@ -6,6 +6,7 @@ import {
   type RankedQueue,
   type ReviewQueue,
   recordOpen,
+  track,
 } from "@alden/core";
 
 /**
@@ -43,7 +44,8 @@ export function noteOpened(rows: QueueRow[] | undefined, url: string, via: "cli"
   const row = rows?.find((r) => r.url === url);
   if (!row || !rows) return;
   try {
-    recordOpen(openStore(), rows, row, via);
+    const opened = recordOpen(openStore(), rows, row, via);
+    if (opened) void track("pr_opened", { position: opened.position });
   } catch (error) {
     unavailable(error);
   }

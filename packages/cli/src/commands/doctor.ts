@@ -16,6 +16,8 @@ import {
   SpendLedger,
   selectProvider,
   supportsEffort,
+  telemetryBlocked,
+  telemetryConsent,
   userConfigPath,
 } from "@alden/core";
 import type { Command } from "commander";
@@ -103,6 +105,21 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
       fix: "Alden needs Node 22.13 or later (or the standalone binary). If the file is damaged, move it aside; Alden starts a new one.",
     });
   }
+
+  // Usage stats: say plainly whether anything is sent.
+  const consent = await telemetryConsent();
+  const blocked = telemetryBlocked();
+  add({
+    area: "Usage stats",
+    status: "ok",
+    detail: blocked
+      ? `off (${blocked})`
+      : consent === "on"
+        ? "on: anonymous, to PostHog EU"
+        : consent === "off"
+          ? "off"
+          : "not asked yet; nothing is sent until you say yes",
+  });
 
   // Settings.
   let config: Awaited<ReturnType<typeof loadConfig>> | undefined;

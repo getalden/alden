@@ -169,4 +169,18 @@ export {
 } from "./stats/stats.js";
 export { UsageLog } from "./stats/usage.js";
 export { AldenStore, closeStores, openStore } from "./store/db.js";
+export { queueEvent, reviewEvent, statsEvent } from "./telemetry/events.js";
+export {
+  type Consent,
+  configureTelemetry,
+  flushTelemetry,
+  installId,
+  queuedTelemetry,
+  repoHash,
+  setTelemetryConsent,
+  TELEMETRY_HOST,
+  telemetryBlocked,
+  telemetryConsent,
+  track,
+} from "./telemetry/telemetry.js";
 export { checkForUpdate, newerVersion } from "./updates.js";

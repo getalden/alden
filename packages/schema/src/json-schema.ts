@@ -4,6 +4,7 @@ import { FEEDBACK_SCHEMA_VERSION, FeedbackEventSchema } from "./feedback.js";
 import { MEMORY_SCHEMA_VERSION, MemoryItemSchema } from "./memory.js";
 import { QUEUE_SCHEMA_VERSION, RankedQueueSchema } from "./queue.js";
 import { RepoStatsSchema, STATS_SCHEMA_VERSION } from "./stats.js";
+import { TELEMETRY_SCHEMA_VERSION, TelemetryCommonSchema, TelemetryEventSchema } from "./telemetry.js";
 
 /** JSON Schema documents published with Alden, keyed by file name. Regenerate with `pnpm schema:generate`. */
 export function jsonSchemas(): Record<string, unknown> {
@@ -27,6 +28,13 @@ export function jsonSchemas(): Record<string, unknown> {
       $id: `https://getalden.dev/schema/memory-item.v${MEMORY_SCHEMA_VERSION}.json`,
       title: "Alden memory item",
       ...z.toJSONSchema(MemoryItemSchema, { target: "draft-2020-12" }),
+    },
+    [`telemetry-event.v${TELEMETRY_SCHEMA_VERSION}.json`]: {
+      $id: `https://getalden.dev/schema/telemetry-event.v${TELEMETRY_SCHEMA_VERSION}.json`,
+      title: "Alden telemetry event (only sent if you opt in)",
+      ...z.toJSONSchema(z.object({ common: TelemetryCommonSchema, event: TelemetryEventSchema }), {
+        target: "draft-2020-12",
+      }),
     },
     [`repo-stats.v${STATS_SCHEMA_VERSION}.json`]: {
       $id: `https://getalden.dev/schema/repo-stats.v${STATS_SCHEMA_VERSION}.json`,

@@ -76,3 +76,12 @@ export {
   RepoStatsSchema,
   STATS_SCHEMA_VERSION,
 } from "./stats.js";
+export {
+  TELEMETRY_SCHEMA_VERSION,
+  type TelemetryCommon,
+  TelemetryCommonSchema,
+  type TelemetryEvent,
+  type TelemetryEventName,
+  TelemetryEventSchema,
+  type TelemetryProperties,
+} from "./telemetry.js";

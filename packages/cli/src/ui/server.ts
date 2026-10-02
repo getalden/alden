@@ -46,6 +46,9 @@ export interface UiApi {
   react(input: { pr: string; reaction: "up" | "down" | "dismiss" | "clear" }): Promise<unknown>;
   /** Feedback events with repo names, titles, paths and notes removed, as `alden feedback --export` writes them. */
   exportFeedback(): Promise<unknown>;
+  /** Whether anonymous usage stats are on, off or not yet asked, and anything forcing them off. */
+  telemetry(): Promise<unknown>;
+  setTelemetry(on: boolean): Promise<unknown>;
 }
 
 export type MemoryChange =
@@ -277,6 +280,15 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
           throw new ApiError(400, "Send { pr: owner/repo#12, reaction: up | down | dismiss | clear }.");
         }
         send(res, 200, await api.react({ pr: body.pr, reaction }));
+        return;
+      }
+      case "GET /api/telemetry":
+        send(res, 200, await api.telemetry());
+        return;
+      case "PUT /api/telemetry": {
+        const body = await readJsonBody(req);
+        if (typeof body.on !== "boolean") throw new ApiError(400, "Send { on: true | false }.");
+        send(res, 200, await api.setTelemetry(body.on));
         return;
       }
       case "GET /api/feedback/export":

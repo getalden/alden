@@ -106,6 +106,11 @@ or `--repo owner/name`. `--json` prints the items. See [Learning and memory](mem
 | `alden memory add <text>` | Adds a note; the model gets it with every review of the repo. |
 | `alden memory forget <id>` | Forgets a note or a learned item, by the id `alden memory` shows. |
 
+## alden telemetry
+
+Anonymous usage stats, off unless you say yes. `alden telemetry` says whether they're on; `on` and `off` change it
+(`off` also deletes anything not yet sent); `show` prints what's waiting to be sent. See [Usage stats](telemetry.md).
+
 ## alden spend
 
 Shows what Alden has spent on models today and over recent days, against your caps. `--json` prints the report as

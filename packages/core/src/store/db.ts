@@ -58,6 +58,14 @@ const MIGRATIONS: ((store: AldenStore) => void)[] = [
     `);
     importLegacyFiles(store);
   },
+  (store) => {
+    store.exec(`
+      -- Small facts about this install: its anonymous id, the salt for repo hashes, when it first ran.
+      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      -- Telemetry waiting to be sent (only ever written after you opt in), oldest first.
+      CREATE TABLE telemetry (id TEXT PRIMARY KEY, at TEXT NOT NULL, event TEXT NOT NULL, properties TEXT NOT NULL);
+    `);
+  },
 ];
 
 /** The JSON files Alden kept before the database, read once into it. */

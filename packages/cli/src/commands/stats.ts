@@ -1,6 +1,15 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createGitHubClient, JsonCache, repoFromRemote, repoStats, resolveToken, UsageLog } from "@alden/core";
+import {
+  createGitHubClient,
+  JsonCache,
+  repoFromRemote,
+  repoStats,
+  resolveToken,
+  statsEvent,
+  track,
+  UsageLog,
+} from "@alden/core";
 import type { Distribution, Metric, RepoStats } from "@alden/schema";
 import type { Command } from "commander";
 import { describeGitHubError } from "../github-errors.js";
@@ -131,7 +140,7 @@ export async function loadRepoStats(
   if (!resolved) throw new Error("Not signed in. Run `alden auth login`.");
   const firstUse = await new UsageLog().firstUse(repo);
   try {
-    return await repoStats(createGitHubClient(resolved.token), repo, {
+    const stats = await repoStats(createGitHubClient(resolved.token), repo, {
       days: options.days,
       horizonHours: options.horizonDays * 24,
       ...(options.since ? { since: options.since } : {}),
@@ -139,6 +148,8 @@ export async function loadRepoStats(
       cache: new JsonCache(),
       refresh: options.refresh,
     });
+    await track("stats_viewed", statsEvent(stats));
+    return stats;
   } catch (error) {
     throw new Error(describeGitHubError(error, resolved.source));
   }

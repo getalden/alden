@@ -7,11 +7,13 @@ import {
   loadConfig,
   repoFromRemote,
   resolveToken,
+  reviewEvent,
   reviewLocalChanges,
   reviewPullRequest,
   SpendLedger,
   selectProvider,
   type TokenSource,
+  track,
   UsageLog,
   type WithModel,
 } from "@alden/core";
@@ -58,6 +60,7 @@ export function registerReviewCommand(program: Command): void {
     .option("--effort <level>", "how hard the model thinks: low, medium, high, xhigh or max (default: the model's own)")
     .option("--json", "print the briefing as JSON (see packages/schema/json)")
     .action(async (prArg: string | undefined, options: ReviewOptions) => {
+      const startedAt = Date.now();
       const config = await loadConfig();
       const effort = options.effort as Effort | undefined;
       if (effort !== undefined && !EFFORTS.includes(effort)) {
@@ -107,6 +110,10 @@ export function registerReviewCommand(program: Command): void {
       // `alden stats` splits before and after at the first use on each repo.
       const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : await originRepo(briefing.target.repoRoot);
       if (usedOn) await new UsageLog().markUsed(usedOn).catch(() => {});
+      await track(
+        "review_completed",
+        reviewEvent(briefing, { durationMs: Date.now() - startedAt, repo: usedOn, graph: options.graph }),
+      );
 
       if (unavailable && briefing.files.length > 0) {
         briefing = {

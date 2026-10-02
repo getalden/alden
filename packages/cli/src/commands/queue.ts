@@ -3,9 +3,11 @@ import {
   fetchReviewQueue,
   JsonCache,
   loadConfig,
+  queueEvent,
   queueRows,
   rankQueue,
   resolveToken,
+  track,
 } from "@alden/core";
 import type { Command } from "commander";
 import { describeGitHubError } from "../github-errors.js";
@@ -57,6 +59,7 @@ export function registerQueueCommand(program: Command): void {
         program.error(describeGitHubError(error, resolved.source));
       }
       const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
+      await track("queue_ranked", queueEvent(ranked));
 
       const lastQueue: LastQueue = {
         urls: [...ranked.needsYou, ...ranked.fastTrack].map((r) => r.pr.url),
