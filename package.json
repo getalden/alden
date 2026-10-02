@@ -35,6 +35,9 @@
     "screenshots": "tsx scripts/screenshots.ts",
     "posthog:dashboard": "tsx scripts/posthog-dashboard.ts",
     "gate": "tsx scripts/gate.ts",
+    "e2e:sandbox": "tsx scripts/e2e/sandbox.ts",
+    "e2e:seed": "tsx scripts/e2e/seed.ts",
+    "e2e:verify": "tsx scripts/e2e/verify.ts",
     "site:build": "tsx site/build.ts",
     "site:deploy": "pnpm site:build && cd site && pnpm dlx wrangler@4 pages deploy dist --project-name getalden --branch main"
   },

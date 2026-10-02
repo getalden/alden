@@ -18,3 +18,5 @@ site/dist/
 
 # Design partners' feedback exports, for `pnpm gate`: their data, never committed.
 eval/partners/
+# What `pnpm e2e:seed` opened and `pnpm e2e:verify` found: PR numbers in your repos, never committed.
+eval/e2e/
