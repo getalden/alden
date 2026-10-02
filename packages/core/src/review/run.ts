@@ -4,7 +4,7 @@ import { fetchPullRequestDiff, readLocalDiff } from "../diff/sources.js";
 import type { GitHubClient } from "../github/client.js";
 import { PULL_REQUEST_FIELDS, type RawPullRequest, toFacts } from "../github/pull-requests.js";
 import { fetchViewer } from "../github/queue.js";
-import { checkoutPullRequest } from "../graph/checkout.js";
+import { checkoutPullRequest, withCheckoutLock } from "../graph/checkout.js";
 import type { Learning } from "../learn/learn.js";
 import type { SpendLedger } from "../llm/ledger.js";
 import type { Effort, LlmProvider } from "../llm/provider.js";
@@ -113,7 +113,7 @@ export async function reviewPullRequest(
     tryManifests(() => loadPullRequestManifests(client, repo, number, files)),
     graphOptions.enabled === false
       ? Promise.resolve<GraphResult>({})
-      : tryGraph(checkoutPullRequest(graphOptions.cwd ?? process.cwd(), repo, number), files),
+      : withCheckoutLock(() => tryGraph(checkoutPullRequest(graphOptions.cwd ?? process.cwd(), repo, number), files)),
   ]);
   stage("checks", "Running checks");
   const briefing = buildBriefing({

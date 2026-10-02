@@ -68,3 +68,16 @@ export async function checkoutPullRequest(
   }
   return { ok: true, root: worktree };
 }
+
+let checkoutQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Runs `work` once every earlier call has finished. PR checkouts share one worktree per clone, so a PR's code graph
+ * must be read before the next PR is checked out there: the UI can run briefings side by side, and the desktop app
+ * prepares them in the background. (Separate processes, such as the CLI next to the app, aren't covered.)
+ */
+export function withCheckoutLock<T>(work: () => Promise<T>): Promise<T> {
+  const next = checkoutQueue.then(work, work);
+  checkoutQueue = next.catch(() => {});
+  return next;
+}
