@@ -20,7 +20,9 @@ stays private.
    Without a secret, its step is skipped: with none, a run builds and smoke-tests everything and publishes nothing.
 3. The PostHog project (EU cloud) is set up and its public key is in `TELEMETRY_KEY` in
    `packages/core/src/telemetry/telemetry.ts` (it's public by design: it can only send events). In the PostHog project,
-   keep "Discard client IP data" on.
+   keep "Discard client IP data" on. The "Alden beta" dashboard is defined in `scripts/posthog-dashboard.ts`: create
+   or update it with `POSTHOG_PERSONAL_API_KEY=phx_… pnpm posthog:dashboard` (a personal API key with dashboard and
+   insight write access; it stays in your shell).
 
 ## Each release
 
