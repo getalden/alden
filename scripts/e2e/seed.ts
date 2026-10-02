@@ -219,7 +219,7 @@ async function seed(planned: Planned[]): Promise<void> {
 
     opened.push({ id: p.id, number: pr.number, url: pr.html_url, title: p.title, expect: p.expect });
     console.log(`opened #${pr.number}  ${p.id}`);
-    await sleep(1_200); // GitHub limits how fast one account can create content.
+    await sleep(3_000); // GitHub limits how fast one account can create content (about 80 a minute, 500 an hour).
   }
 
   // Conflicts last, so the base changes only after every PR is open: a file each conflicting PR adds lands on the base
