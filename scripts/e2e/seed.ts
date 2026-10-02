@@ -16,7 +16,7 @@
  * `pnpm e2e:verify`.
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { openRepo, type Planned, plan } from "./scenarios.js";
@@ -113,6 +113,7 @@ if (flag("cleanup")) {
     if (prs.length < 100) break;
   }
   if (flag("all")) await gh("DELETE", `/repos/${repo}/git/refs/heads/${base}`, undefined, [422, 404]);
+  rmSync(manifestPath, { force: true });
   console.log(`Closed ${closed} test PRs in ${repo} and deleted their branches${flag("all") ? `, and ${base}` : ""}.`);
   process.exit(0);
 }
@@ -243,10 +244,15 @@ async function seed(planned: Planned[]): Promise<void> {
     console.log(`changed ${base} so ${conflicts.map((p) => p.id).join(", ")} conflict`);
   }
 
+  // A run with --only adds to (or refreshes) the PRs an earlier run wrote down, rather than replacing them.
   mkdirSync(dirname(manifestPath), { recursive: true });
+  const earlier = existsSync(manifestPath)
+    ? ((JSON.parse(readFileSync(manifestPath, "utf8")) as { prs: typeof opened }).prs ?? [])
+    : [];
+  const prs = [...earlier.filter((e) => !opened.some((o) => o.id === e.id)), ...opened];
   writeFileSync(
     manifestPath,
-    `${JSON.stringify({ repo, base, from, author: author.login, reviewer, team: team ?? null, createdAt: new Date().toISOString(), prs: opened }, null, 2)}\n`,
+    `${JSON.stringify({ repo, base, from, author: author.login, reviewer, team: team ?? null, updatedAt: new Date().toISOString(), prs }, null, 2)}\n`,
   );
   console.log(
     `\n${opened.length} PRs open in ${repo}, ${noRequest ? "no review requested (--no-request)" : `review requested from ${reviewer}`}. Expectations: ${manifestPath}`,
