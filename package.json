@@ -29,7 +29,7 @@
     "desktop:build": "pnpm build && pnpm build:binary && pnpm desktop:sidecar && pnpm --filter @alden/desktop app:build",
     "screenshots": "tsx scripts/screenshots.ts",
     "site:build": "tsx site/build.ts",
-    "site:deploy": "pnpm site:build && wrangler pages deploy site/dist --project-name getalden --branch main"
+    "site:deploy": "pnpm site:build && cd site && pnpm dlx wrangler@4 pages deploy dist --project-name getalden --branch main"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

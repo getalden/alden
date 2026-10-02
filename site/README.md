@@ -14,13 +14,17 @@ python3 -m http.server -d site/dist   # look at it
 pnpm site:deploy                      # build and upload to the Cloudflare Pages project "getalden"
 ```
 
-## First deploy
+## Deploying
 
-1. `pnpm dlx wrangler login`, with the Cloudflare account that will host it.
-2. `pnpm dlx wrangler pages project create getalden --production-branch main` (once).
-3. `pnpm site:deploy`.
-4. In the Pages project: Custom domains → add `getalden.dev` (and `www.getalden.dev`, redirected). If the domain's DNS
-   is on Cloudflare this is one click; otherwise point it at the `*.pages.dev` name it gives you.
+The Cloudflare Pages project `getalden` exists (created 2 Oct 2026; https://getalden.pages.dev). After
+`pnpm dlx wrangler login`, `pnpm site:deploy` builds and uploads. Wrangler runs from `site/` because it refuses to run at
+the root of a pnpm workspace.
+
+The custom domain: in Cloudflare, Workers & Pages → getalden → Custom domains → add `getalden.dev` (and
+`www.getalden.dev`). With the domain's DNS on Cloudflare that's one click; elsewhere, add the CNAME it shows.
+
+If the project ever has to be recreated: `cd site && pnpm dlx wrangler@4 pages project create getalden
+--production-branch main --force` (`--force` once, so wrangler makes a Pages project instead of a Worker).
 
 `_headers` sets a strict Content-Security-Policy: everything is served from the site itself.
 
