@@ -2,15 +2,24 @@
 
 ## Install
 
-Alden needs Node 22.13 or later (or the standalone binary, which needs nothing). Run it with `npx`, or install it globally:
+With Homebrew, on macOS or Linux (the standalone binary, which needs nothing else):
 
 ```sh
-npx alden@next --help
-npm install -g alden@next
+brew install getalden/tap/alden
 ```
 
-Pre-release builds are published under the `next` tag. The examples below assume a global install; with `npx`, put
-`npx alden@next` in place of `alden`.
+Or with npm, which needs Node 22.13 or later:
+
+```sh
+npm install -g alden@next
+npx alden@next --help                # or run it without installing
+```
+
+During the beta, npm releases are published under the `next` tag. The examples below assume `alden` is installed; with
+`npx`, put `npx alden@next` in place of `alden`. There are also standalone binaries for macOS, Linux and Windows on the
+[releases page](https://github.com/getalden/homebrew-tap/releases).
+
+On a Mac you can also have Alden in a window and the menu bar: see [The desktop app](desktop.md).
 
 ## Sign in to GitHub
 

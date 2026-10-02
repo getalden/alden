@@ -13,6 +13,11 @@ Alden in a window and the menu bar. A [Tauri 2](https://tauri.app) shell around 
 The window only ever shows Alden's own server on 127.0.0.1 (and the bundled loading page), with the same session key
 and checks as `alden ui` in a browser. It calls no Tauri commands, so the capability set is `core:default`.
 
+## Install
+
+Releases ship a universal (Apple silicon and Intel), signed and notarized `Alden-<version>-universal.dmg`, and a cask:
+`brew install --cask getalden/tap/alden-desktop`. See [docs/desktop.md](../../docs/desktop.md).
+
 ## Build
 
 Needs Rust (stable) and, on macOS, Xcode's command line tools.
@@ -22,7 +27,8 @@ pnpm desktop:build      # builds Alden, the binary, the sidecar and Alden.app
 pnpm desktop:dev        # after `pnpm build:binary && pnpm desktop:sidecar`
 ```
 
-The app lands in `src-tauri/target/release/bundle/macos/Alden.app`. Unsigned builds are for testing: macOS asks once
+The app lands in `src-tauri/target/release/bundle/macos/Alden.app`. For the universal app the release builds, run
+`pnpm release:dry-run --desktop` (needs `rustup target add x86_64-apple-darwin`). Unsigned builds are for testing: macOS asks once
 whether the bundled `alden` may read the sign-in Alden stored in your keychain (choose Always Allow).
 
 ## Icons

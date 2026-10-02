@@ -143,17 +143,34 @@ fn status(app: &AppHandle, text: &str) {
     }
 }
 
+/// An app opened from the Finder gets a bare PATH (/usr/bin:/bin:/usr/sbin:/sbin), so `alden` wouldn't find the GitHub
+/// CLI (for its sign-in) or a Homebrew git. Add the places Homebrew installs them.
+#[cfg(unix)]
+fn sidecar_path() -> String {
+    let mut parts: Vec<String> = std::env::var("PATH")
+        .unwrap_or_default()
+        .split(':')
+        .filter(|part| !part.is_empty())
+        .map(String::from)
+        .collect();
+    for extra in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"] {
+        if !parts.iter().any(|part| part == extra) {
+            parts.push(extra.to_string());
+        }
+    }
+    parts.join(":")
+}
+
 fn start_server(app: &AppHandle) {
     let dir = folder(app);
     let command = match app.shell().sidecar("alden") {
         Ok(command) => command,
         Err(error) => return status(app, &format!("Alden's binary is missing from the app: {error}")),
     };
-    let spawned = command
-        .args(["ui", "--json"])
-        .current_dir(&dir)
-        .env("ALDEN_NO_UPDATE_CHECK", "1")
-        .spawn();
+    let command = command.args(["ui", "--json"]).current_dir(&dir).env("ALDEN_NO_UPDATE_CHECK", "1");
+    #[cfg(unix)]
+    let command = command.env("PATH", sidecar_path());
+    let spawned = command.spawn();
     let (mut events, child) = match spawned {
         Ok(pair) => pair,
         Err(error) => return status(app, &format!("Couldn't start Alden: {error}")),

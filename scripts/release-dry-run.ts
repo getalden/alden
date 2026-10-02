@@ -4,7 +4,9 @@
  * It does what the Release workflow does for the host platform: builds, builds and smoke-tests the binary, packages it
  * the way the workflow does, writes checksums and the Homebrew formula (and checks it parses), then packs
  * the npm package, installs that tarball into a throwaway prefix and smoke-tests the installed `alden` under Node.
- * Everything lands in build/release/, which is what a release would upload.
+ * With `--desktop` (macOS, with Rust and the x86_64-apple-darwin target) it also builds the universal Alden.app around
+ * both macOS binaries, unsigned, and writes the cask. Everything lands in build/release/, which is what a release would
+ * upload.
  */
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -63,6 +65,33 @@ if (has("ruby")) {
   sh("ruby", ["-c", join(OUT, "alden.rb")]);
   console.log("alden.rb parses");
 } else console.log("ruby isn't installed, so the formula wasn't checked");
+
+if (process.argv.includes("--desktop")) {
+  step("Desktop app (universal, unsigned)");
+  if (process.platform !== "darwin") throw new Error("The desktop app is built on macOS.");
+  const other = target === "darwin-arm64" ? "darwin-x64" : "darwin-arm64";
+  sh("pnpm", ["build:binary", "--target", other]);
+  sh("pnpm", ["-s", "desktop:sidecar", "universal"]);
+  sh("pnpm", ["--filter", "@alden/desktop", "app:build", "--target", "universal-apple-darwin"]);
+  const bundle = join(ROOT, "packages/desktop/src-tauri/target/universal-apple-darwin/release/bundle");
+  const sidecar = join(bundle, "macos/Alden.app/Contents/MacOS/alden");
+  const archs = sh("lipo", ["-archs", sidecar]).trim();
+  if (archs !== "x86_64 arm64") throw new Error(`The app's alden is ${archs}, not universal.`);
+  const appVersion = execFileSync(sidecar, ["--version"], {
+    env: { ...env, ALDEN_HOME: mkdtempSync(join(tmpdir(), "alden-app-")), ALDEN_NO_UPDATE_CHECK: "1" },
+    encoding: "utf8",
+  }).trim();
+  if (appVersion !== version) throw new Error(`The app's alden says ${appVersion}.`);
+  const dmg = `Alden-${version}-universal.dmg`;
+  cpSync(join(bundle, `dmg/Alden_${version}_universal.dmg`), join(OUT, dmg));
+  writeFileSync(
+    join(OUT, "SHA256SUMS"),
+    readFileSync(join(OUT, "SHA256SUMS"), "utf8") + sh("shasum", ["-a", "256", dmg], OUT),
+  );
+  writeFileSync(join(OUT, "alden-desktop.rb"), sh("pnpm", ["-s", "homebrew:cask", version, join(OUT, "SHA256SUMS")]));
+  if (has("ruby")) sh("ruby", ["-c", join(OUT, "alden-desktop.rb")]);
+  console.log(`${dmg}: Alden.app ${version}, alden inside is ${archs}`);
+}
 
 step("npm package");
 const packed = JSON.parse(sh("npm", ["pack", "--json", "--pack-destination", OUT], join(ROOT, "packages/cli"))) as {

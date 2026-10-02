@@ -11,6 +11,7 @@ sign-in and your own model account.
 - [Getting started](getting-started.md): install, sign in, and your first queue and review.
 - [Commands](commands.md): every command and flag.
 - [The web UI](web-ui.md): `alden ui`, its views, keyboard and security.
+- [The desktop app](desktop.md): Alden in a window and the macOS menu bar.
 - [The review queue](queue.md): how PRs are ranked, and what "fast-track" means.
 - [Briefings and checks](checks.md): what `alden review` checks, and how it picks where to look.
 - [Learning and memory](memory.md): what Alden learns from your feedback, your notes, and how to forget.

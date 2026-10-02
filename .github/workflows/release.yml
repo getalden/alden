@@ -1,8 +1,9 @@
 name: Release
 
 # Runs when a version tag is pushed (see RELEASING.md). Builds the standalone binaries on their own platforms,
-# smoke-tests each, signs and notarizes the macOS ones, publishes the npm package, and publishes the binaries and the
-# Homebrew formula to the public getalden/homebrew-tap repo (this repo stays private during the beta).
+# smoke-tests each, signs and notarizes the macOS ones, builds the universal desktop app around them, publishes the npm
+# package, and publishes the binaries, the app, the Homebrew formula and the cask to the public getalden/homebrew-tap
+# repo (this repo stays private during the beta).
 #
 # Secrets (steps that need one are skipped without it, so a dry run works with none):
 #   NPM_TOKEN               npm automation token, to publish `alden`
@@ -93,6 +94,86 @@ jobs:
           path: dist-bin/alden-*-${{ matrix.target }}.*
           if-no-files-found: error
 
+  desktop:
+    # One universal macOS app (Apple silicon and Intel) around the signed binaries from the job above.
+    needs: binaries
+    runs-on: macos-15
+    env:
+      CAN_SIGN: ${{ secrets.APPLE_CERT_P12_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: alden-darwin-*
+          path: downloads
+          merge-multiple: true
+      - name: Sidecar
+        run: |
+          mkdir -p dist-bin
+          for target in darwin-arm64 darwin-x64; do
+            tar -xzf downloads/alden-*-$target.tar.gz -C downloads
+            mv downloads/alden "dist-bin/alden-$target"
+          done
+          pnpm desktop:sidecar universal
+
+      - name: Signing keychain
+        if: env.CAN_SIGN == 'true'
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p "$RUNNER_TEMP" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$RUNNER_TEMP" "$KEYCHAIN"
+          echo "$APPLE_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$RUNNER_TEMP" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | grep -o '"Developer ID Application[^"]*"' | head -1 | tr -d '"')
+          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Build Alden.app
+        env:
+          # Tauri signs the app and the bundled alden (with scripts/macos-entitlements.plist) when an identity is set,
+          # and notarizes and staples it when these are set too.
+          APPLE_ID: ${{ env.CAN_SIGN == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_TEAM_ID: ${{ env.CAN_SIGN == 'true' && secrets.APPLE_TEAM_ID || '' }}
+          APPLE_PASSWORD: ${{ env.CAN_SIGN == 'true' && secrets.APPLE_APP_PASSWORD || '' }}
+        run: pnpm --filter @alden/desktop app:build --target universal-apple-darwin
+
+      - name: Check and package
+        run: |
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
+          BUNDLE=packages/desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          APP="$BUNDLE/macos/Alden.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION"
+          lipo -info "$APP/Contents/MacOS/alden" | grep -q 'x86_64 arm64'
+          test "$(ALDEN_NO_UPDATE_CHECK=1 ALDEN_HOME="$RUNNER_TEMP/home" "$APP/Contents/MacOS/alden" --version)" = "$VERSION"
+          if [ "$CAN_SIGN" = true ]; then
+            codesign --verify --deep --strict --verbose=2 "$APP"
+            spctl --assess --type execute --verbose "$APP"
+          fi
+          mkdir -p out
+          cp "$BUNDLE/dmg/Alden_${VERSION}_universal.dmg" "out/Alden-$VERSION-universal.dmg"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: alden-desktop
+          path: out/Alden-*-universal.dmg
+          if-no-files-found: error
+
   npm:
     needs: binaries
     runs-on: ubuntu-24.04
@@ -117,7 +198,7 @@ jobs:
         run: pnpm publish --tag next --no-git-checks --access public
 
   tap:
-    needs: binaries
+    needs: [binaries, desktop]
     runs-on: ubuntu-24.04
     env:
       CAN_RELEASE: ${{ secrets.TAP_TOKEN != '' }}
@@ -133,27 +214,29 @@ jobs:
         with:
           path: release
           merge-multiple: true
-      - name: Checksums and formula
+      - name: Checksums, formula and cask
         run: |
           VERSION=$(node -p "require('./packages/cli/package.json').version")
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          (cd release && shasum -a 256 alden-* > SHA256SUMS)
+          (cd release && shasum -a 256 alden-* Alden-* > SHA256SUMS)
           cat release/SHA256SUMS
           pnpm -s homebrew:formula "$VERSION" release/SHA256SUMS > release/alden.rb
+          pnpm -s homebrew:cask "$VERSION" release/SHA256SUMS > release/alden-desktop.rb
       - name: Release in getalden/homebrew-tap
         if: env.CAN_RELEASE == 'true'
         env:
           GH_TOKEN: ${{ secrets.TAP_TOKEN }}
         run: |
-          gh release create "v$VERSION" release/alden-* release/SHA256SUMS --repo getalden/homebrew-tap \
-            --title "Alden $VERSION" --notes "Standalone binaries for Alden $VERSION. Install with \`brew install getalden/tap/alden\`." \
-            --prerelease
+          gh release create "v$VERSION" release/alden-* release/Alden-* release/SHA256SUMS --repo getalden/homebrew-tap \
+            --title "Alden $VERSION" --prerelease --notes "Alden $VERSION. The command line tool: \`brew install getalden/tap/alden\`, or the standalone binaries below. The desktop app for macOS: \`brew install --cask getalden/tap/alden-desktop\`, or the .dmg below."
           git clone "https://x-access-token:$GH_TOKEN@github.com/getalden/homebrew-tap.git" tap
-          mkdir -p tap/Formula && cp release/alden.rb tap/Formula/alden.rb
+          mkdir -p tap/Formula tap/Casks
+          cp release/alden.rb tap/Formula/alden.rb
+          cp release/alden-desktop.rb tap/Casks/alden-desktop.rb
           cd tap
           git config user.name "alden-release"
           git config user.email "release@getalden.dev"
-          git add Formula/alden.rb
+          git add Formula/alden.rb Casks/alden-desktop.rb
           git commit -m "alden $VERSION"
           git push
       - uses: actions/upload-artifact@v5
