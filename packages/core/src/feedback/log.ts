@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   FEEDBACK_SCHEMA_VERSION,
   type FeedbackEvent,
@@ -115,6 +115,10 @@ const hashed = (text: string) => createHash("sha256").update(text).digest("hex")
  * no titles, paths, lines or notes. What stays is what the gate needs: which check, which verdict, when, which model.
  */
 export function redactFeedback(events: FeedbackEvent[]): FeedbackEvent[] {
+  // Each flag gets a code in place of its title and place, so two flags of one check stay two (the latest verdict per
+  // flag counts). The salt is new for every export and never written down, so codes can't be matched to guesses.
+  const salt = randomBytes(16).toString("hex");
+  const code = (item: FeedbackItem) => hashed(`${salt}|${feedbackItemKey(item)}`);
   return events.map((event) => {
     const target: FeedbackTarget =
       event.target.kind === "pr"
@@ -125,6 +129,6 @@ export function redactFeedback(events: FeedbackEvent[]): FeedbackEvent[] {
       return { ...rest, target, note: "(redacted)" };
     }
     const { anchor: _anchor, ...item } = event.item;
-    return { ...event, target, item: { ...item, title: "(redacted)" } };
+    return { ...event, target, item: { ...item, title: `(redacted ${code(event.item)})` } };
   });
 }

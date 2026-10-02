@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { FeedbackInput } from "@alden/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeStores } from "../store/db.js";
-import { FeedbackLog, redactFeedback } from "./log.js";
+import { FeedbackLog, redactFeedback, summarizeFeedback } from "./log.js";
 
 let dir: string;
 let log: FeedbackLog;
@@ -134,5 +134,20 @@ describe("redactFeedback", () => {
       repo: expect.stringMatching(/^repo-[0-9a-f]{12}$/),
     });
     expect(redacted[0]?.kind === "verdict" && redacted[0].item.checkId).toBe("tests.missing");
+  });
+
+  it("keeps two flags of one check apart, so the redacted log summarises like the real one", async () => {
+    await log.add(verdict(eyes("tests.missing", 9), "agree"));
+    await log.add(verdict(eyes("tests.missing", 30), "not_needed"));
+    await log.add(verdict(eyes("tests.missing", 9), "not_needed"));
+    const redacted = redactFeedback(await log.events());
+    const titles = redacted.map((e) => (e.kind === "verdict" ? e.item.title : ""));
+    expect(titles[0]).toMatch(/^\(redacted [0-9a-f]{12}\)$/);
+    expect(titles[0]).toBe(titles[2]);
+    expect(titles[0]).not.toBe(titles[1]);
+    expect(summarizeFeedback(redacted)).toMatchObject({ verdicts: 2, notNeeded: 2 });
+    // A new export, a new salt: codes from one export can't be matched to another's.
+    const again = redactFeedback(await log.events());
+    expect(again[0]?.kind === "verdict" && again[0].item.title).not.toBe(titles[0]);
   });
 });
