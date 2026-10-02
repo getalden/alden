@@ -168,7 +168,12 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
         area: "GitHub",
         status: "fail",
         detail: `GitHub rejected the token from ${from}`,
-        fix: resolved.source === "env" ? "Fix or unset ALDEN_GITHUB_TOKEN." : "Run `alden auth login --device`.",
+        fix:
+          resolved.source === "env"
+            ? "Fix or unset ALDEN_GITHUB_TOKEN."
+            : resolved.source === "alden"
+              ? "Run `alden auth login --device` to sign in again, or `alden auth logout` to use your GitHub CLI sign-in."
+              : "Run `gh auth login` to refresh it, or `alden auth login --device` to sign in to Alden directly.",
       });
     }
   }
