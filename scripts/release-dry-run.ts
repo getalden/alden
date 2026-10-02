@@ -35,8 +35,8 @@ console.log(`Rehearsing alden ${version} for ${target}. Nothing is published.`);
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 
-step("Desktop version");
-process.stdout.write(sh("pnpm", ["-s", "tsx", "scripts/sync-desktop-version.ts", "--check"]));
+step("Versions");
+process.stdout.write(sh("pnpm", ["-s", "tsx", "scripts/sync-versions.ts", "--check"]));
 
 step("Build");
 sh("pnpm", ["build"]);

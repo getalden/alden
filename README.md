@@ -88,6 +88,9 @@ graph, learning and memory, models and budgets, privacy, and troubleshooting.
 ## Also in phase 1
 
 - `alden stats` shows your repo's time to first review and review cycle time, before and after Alden.
+- In Claude Code, the [Alden plugin](docs/claude-code.md) adds `/alden:review` and your queue; `alden mcp` gives
+  [any MCP client](docs/mcp.md) the same tools.
+- On macOS, the [desktop app](docs/desktop.md) keeps your queue in the menu bar.
 
 Alden is GitHub-only for now and supports TypeScript/JavaScript, Python, PHP (Laravel, Symfony) and Go.
 

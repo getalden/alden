@@ -1,0 +1,12 @@
+{
+  "name": "getalden",
+  "owner": { "name": "Alden", "url": "https://getalden.dev" },
+  "description": "Alden, the code review companion, for Claude Code.",
+  "plugins": [
+    {
+      "name": "alden",
+      "source": "./plugins/alden",
+      "description": "The PRs waiting on you, ranked, and reviews that use Alden's checks, the callers outside the diff and what you look for."
+    }
+  ]
+}

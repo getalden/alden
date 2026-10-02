@@ -15,7 +15,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "changeset": "changeset",
-    "release:version": "changeset version && tsx scripts/sync-desktop-version.ts && pnpm install --lockfile-only",
+    "release:version": "changeset version && tsx scripts/sync-versions.ts && pnpm install --lockfile-only",
     "release": "pnpm build && changeset publish",
     "fixtures:record": "tsx scripts/record-fixtures.ts",
     "schema:generate": "tsx scripts/generate-schemas.ts",
