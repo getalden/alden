@@ -161,5 +161,5 @@ export {
   weekOf,
 } from "./stats/stats.js";
 export { UsageLog } from "./stats/usage.js";
-export { AldenStore, openStore } from "./store/db.js";
+export { AldenStore, closeStores, openStore } from "./store/db.js";
 export { checkForUpdate, newerVersion } from "./updates.js";

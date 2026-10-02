@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SpendLedger } from "@alden/core";
+import { closeStores, SpendLedger } from "@alden/core";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { renderSpend, spendReport } from "./spend.js";
 
@@ -13,6 +13,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  closeStores();
   await rm(dir, { recursive: true, force: true });
 });
 

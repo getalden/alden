@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { closeStores } from "../store/db.js";
 import { distribution, measure, type StatsPullRequest, summarizeStats, weekOf } from "./stats.js";
 import { UsageLog } from "./usage.js";
 
@@ -152,6 +153,7 @@ describe("weekOf", () => {
 describe("UsageLog", () => {
   let dir: string;
   afterEach(async () => {
+    closeStores();
     await rm(dir, { recursive: true, force: true });
   });
 

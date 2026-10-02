@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
+import { closeStores } from "../store/db.js";
 import { affordableInputTokens, checkBudget, estimateTokens } from "./budget.js";
 import { BudgetExceededError, budgetedGenerate } from "./budgeted.js";
 import { localDay, SpendLedger } from "./ledger.js";
@@ -55,6 +56,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  closeStores();
   await rm(dir, { recursive: true, force: true });
 });
 

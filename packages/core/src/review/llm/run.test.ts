@@ -7,6 +7,7 @@ import { fromRestFile } from "../../diff/sources.js";
 import { type RawPullRequest, toFacts } from "../../github/pull-requests.js";
 import { SpendLedger } from "../../llm/ledger.js";
 import { type GenerateResult, LlmError, type LlmProvider } from "../../llm/provider.js";
+import { closeStores } from "../../store/db.js";
 import { buildBriefing } from "../briefing.js";
 import { mergeLookHere } from "./merge.js";
 import type { LlmOutput } from "./prompt.js";
@@ -74,7 +75,10 @@ beforeEach(async () => {
     mkdtemp(join(tmpdir(), "alden-llm-"), (err, path) => (err ? reject(err) : resolve(path))),
   );
 });
-afterEach(() => rm(dir, { recursive: true, force: true }, () => {}));
+afterEach(() => {
+  closeStores();
+  rm(dir, { recursive: true, force: true }, () => {});
+});
 
 describe("addModelReview on a real PR", () => {
   it("adds the model's view, keeps only real locations, and records the spend", async () => {

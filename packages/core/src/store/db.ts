@@ -261,3 +261,8 @@ export function openStore(path: string = join(aldenHome(), "alden.db")): AldenSt
   }
   return store;
 }
+
+/** Closes every database this process opened, e.g. before a test deletes its folder (Windows won't delete open files). */
+export function closeStores(): void {
+  for (const store of [...opened.values()]) store.close();
+}

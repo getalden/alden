@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FeedbackInput } from "@alden/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { closeStores } from "../store/db.js";
 import { FeedbackLog, redactFeedback } from "./log.js";
 
 let dir: string;
@@ -12,6 +13,7 @@ beforeEach(async () => {
   log = new FeedbackLog(join(dir, "alden.db"));
 });
 afterEach(async () => {
+  closeStores();
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -101,6 +103,7 @@ describe("FeedbackLog", () => {
     expect(await imported.events()).toEqual([kept]);
     // The old folder moves out of the way, and isn't imported twice.
     expect(await readdir(join(legacy, "legacy"))).toEqual(["feedback"]);
+    closeStores();
     await rm(legacy, { recursive: true, force: true });
   });
 
