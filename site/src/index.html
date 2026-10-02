@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alden · the review companion that knows what you look for</title>
+    <meta
+      name="description"
+      content="Alden ranks the PRs waiting on you and briefs you on each one, with the callers and checks the diff leaves out. It learns what you look for, and it runs on your machine."
+    />
+    <meta property="og:title" content="Alden · the review companion that knows what you look for" />
+    <meta
+      property="og:description"
+      content="Ranks the PRs waiting on you, shows what the diff doesn't, and learns what you look for. Runs on your machine."
+    />
+    <meta property="og:image" content="https://getalden.dev/assets/og.png" />
+    <meta property="og:url" content="https://getalden.dev/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#081014" />
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <div class="hero-wrap">
+      <div class="grid-bg" aria-hidden="true"></div>
+      <div class="glow" aria-hidden="true"></div>
+
+      <header class="top">
+        <a class="brand" href="/" aria-label="Alden home">
+          <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+            <rect x=".5" y=".5" width="31" height="31" rx="8" fill="#101B20" stroke="#263c44" />
+            <path d="M8 24 L16 8 L24 24" fill="none" stroke="#14B8A6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M8 24 L16 19 L24 24 M16 8 L16 19" fill="none" stroke="#5EEAD4" stroke-width="1" stroke-dasharray="1.5 2" opacity=".7" />
+            <circle class="pulse" cx="16" cy="19" r="3" fill="none" stroke="#5EEAD4" stroke-width="1" />
+            <circle cx="8" cy="24" r="2" fill="#5EEAD4" />
+            <circle cx="16" cy="8" r="2" fill="#5EEAD4" />
+            <circle cx="24" cy="24" r="2" fill="#5EEAD4" />
+            <circle cx="16" cy="19" r="2.4" fill="#F0FDFA" />
+          </svg>
+          <span>alden</span>
+        </a>
+        <nav>
+          <a href="/docs/">Docs</a>
+          <span class="mono faint">open source after the beta</span>
+          <a class="btn small" href="mailto:beta@getalden.dev?subject=Alden%20beta">Join the beta</a>
+        </nav>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="kicker"><span class="dot" aria-hidden="true"></span>private beta · macOS, Linux and Windows</span>
+          <h1>The review companion that knows what you look for.</h1>
+          <p class="lede">
+            Alden ranks the PRs waiting on you and writes each one a briefing with the callers and checks the diff leaves
+            out. Every place you mark useful or not useful teaches it a little more about how you review.
+          </p>
+          <div class="actions">
+            <a class="btn big glow-btn" href="mailto:beta@getalden.dev?subject=Alden%20beta">Ask to join</a>
+            <span class="cmd"><span class="acc">$</span>brew install getalden/tap/alden</span>
+          </div>
+        </div>
+
+        <div class="window" aria-label="An animation of Alden ranking a review queue" role="img">
+          <div class="window-bar">
+            <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="ink2">alden queue</span>
+            <span id="q-status" class="status">sorted by date</span>
+          </div>
+          <div class="queue" id="queue">
+            <div class="scan" aria-hidden="true"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="shot">
+      <picture>
+        <img
+          src="/assets/screens/briefing-dark.png"
+          width="1440"
+          height="900"
+          alt="Alden's queue beside a briefing for a Django PR: one place needs your eyes, a migration that may lose data, and every check with its evidence."
+          loading="lazy"
+        />
+      </picture>
+      <span class="mono faint small">
+        Real output on recorded public PRs from Next.js, Django, Laravel, Hugo and Grafana; checks only, no model.
+      </span>
+    </section>
+
+    <section class="band">
+      <div class="split">
+        <div class="copy">
+          <span class="kicker-num">01 / beyond the diff</span>
+          <h2>Twelve lines changed. Seven places call them.</h2>
+          <p>
+            GitHub shows you the lines that moved. Alden reads your local clone and follows them out to every call site, so
+            you see that three of seven callers don't catch the new error before you approve.
+          </p>
+          <span class="mono faint">TypeScript · JavaScript · Python · Go · PHP</span>
+        </div>
+        <div class="demo-callers">
+          <div class="diff">
+            <div class="diff-head"><span>packages/next/src/server/revalidate.ts</span><span class="acc2">+9 −3</span></div>
+            <div class="diff-body" id="diff"></div>
+          </div>
+          <div class="trace"><span class="dash" aria-hidden="true"></span><span id="ctx">reading local clone…</span></div>
+          <div class="callers" id="callers"></div>
+          <span class="mono faint small">Illustration.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="band tint">
+      <div class="split">
+        <div class="copy">
+          <span class="kicker-num">02 / learns you</span>
+          <h2>In week one it flags a lot. By week six it flags what you would.</h2>
+          <p>
+            Mark a place useful and Alden gives that kind of flag more weight next time. Mark it not useful and it backs
+            off. Open some PRs first and they rank higher. Everything it learns is listed, with where it came from, and you
+            can edit or forget any of it.
+          </p>
+          <fieldset class="weeks" id="weeks" aria-label="Pick a week"></fieldset>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="ink2">Memory · vercel/next.js</span><span id="week-label">week 1</span></div>
+          <div class="panel-stats">
+            <div><span class="big" id="per-pr">5</span><span class="mono faint small">places per PR</span></div>
+            <div><span class="big acc2" id="useful">31%</span><span class="mono faint small">you found useful</span></div>
+          </div>
+          <ul class="memory" id="memory" aria-live="polite"></ul>
+          <div class="log" id="log"></div>
+          <span class="mono faint small pad">Illustration of one reviewer's first six weeks.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="split top">
+        <div class="copy">
+          <span class="kicker-num">03 / yours</span>
+          <h2>Runs on your machine, on your terms.</h2>
+          <p>Alden works from your local clone and your own GitHub sign-in. You pick the model and decide how much it can spend.</p>
+        </div>
+        <dl class="spec">
+          <div><dt>where</dt><dd>On your machine. The queue, briefings and what Alden learns about you stay in ~/.alden.</dd></div>
+          <div><dt>github</dt><dd>Your own sign-in. Alden reads PRs and posts nothing to GitHub.</dd></div>
+          <div><dt>model</dt><dd>Your Anthropic key, Bedrock, Vertex, Foundry or a local model. Pick it per PR, or run checks only.</dd></div>
+          <div><dt>spend</dt><dd>Caps per briefing and per day, $0.50 and $10 by default, checked before every call.</dd></div>
+          <div><dt>source</dt><dd>Open source when the beta ends. The single-developer app stays free.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="band cta">
+      <div class="glow bottom" aria-hidden="true"></div>
+      <div class="split">
+        <div class="copy">
+          <h2 class="huge">Your next review is already waiting.</h2>
+          <p>We're letting in a few teams at a time. Expect a short call each week while we tune it to how you work.</p>
+          <a class="btn big light" href="mailto:beta@getalden.dev?subject=Alden%20beta">Ask to join the beta</a>
+        </div>
+        <div class="terminal" id="terminal" aria-label="A terminal running alden queue and alden review" role="img">
+          <div id="term-lines"></div>
+          <span class="cursor" aria-hidden="true"></span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <span class="word">alden</span><span>from the Old English for “old friend”</span>
+      <span class="links"><a href="/docs/">Docs</a><a href="/docs/privacy/">Privacy</a><span>getalden.dev</span></span>
+    </footer>
+
+    <script src="/site.js" defer></script>
+  </body>
+</html>

@@ -4,6 +4,8 @@ The review companion that knows what you look for. Alden ranks the PRs waiting o
 
 > **Status: pre-alpha.** Phase 1 is being built. `alden queue` and `alden review` (with or without a model) work today.
 
+![Alden's queue beside a briefing for a Django PR](site/src/assets/screens/briefing-dark.png)
+
 ## Quickstart
 
 Requires Node 22.13+.

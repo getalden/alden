@@ -26,7 +26,10 @@
     "homebrew:formula": "tsx scripts/homebrew-formula.ts",
     "desktop:sidecar": "tsx scripts/desktop-sidecar.ts",
     "desktop:dev": "pnpm --filter @alden/desktop app:dev",
-    "desktop:build": "pnpm build && pnpm build:binary && pnpm desktop:sidecar && pnpm --filter @alden/desktop app:build"
+    "desktop:build": "pnpm build && pnpm build:binary && pnpm desktop:sidecar && pnpm --filter @alden/desktop app:build",
+    "screenshots": "tsx scripts/screenshots.ts",
+    "site:build": "tsx site/build.ts",
+    "site:deploy": "pnpm site:build && wrangler pages deploy site/dist --project-name getalden --branch main"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
@@ -34,6 +37,7 @@
     "@types/node": "^26.6.3",
     "@types/picomatch": "^4.0.3",
     "bun": "^1.4.2",
+    "marked": "^18.0.14",
     "picomatch": "^4.0.7",
     "tsup": "^8.5.1",
     "tsx": "^4.23.15",

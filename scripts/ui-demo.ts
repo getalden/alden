@@ -70,7 +70,7 @@ const facts: PullRequestFacts[] = recorded.map(({ raw }, i) => {
   return { ...pr, request: { ...pr.request, direct: i % 3 !== 0, requestedAt: asked } };
 });
 
-function briefingFor(repo: string, number: number, learning?: Learning): Briefing {
+function briefingFor(repo: string, number: number, learning?: Learning, withModel = true): Briefing {
   const match = recorded.find(({ raw }) => raw.repository.nameWithOwner === repo && raw.number === number);
   if (!match) throw new Error(`${repo}#${number} isn't one of the recorded PRs.`);
   const files = (
@@ -99,7 +99,7 @@ function briefingFor(repo: string, number: number, learning?: Learning): Briefin
   });
   const first = files.find((f) => f.hunks.length > 0);
   const line = first?.hunks[0]?.lines.find((l) => l.kind === "add")?.newLine;
-  if (number % 2 === 1 && first && line) {
+  if (withModel && number % 2 === 1 && first && line) {
     const findings = [
       {
         title: "Example model finding",
@@ -244,8 +244,7 @@ const api: UiApi = {
       onStage("model", "Asking claude-sonnet-5");
       await sleep(1_200);
     }
-    const { llm, ...briefing } = briefingFor(ref[1], Number(ref[2]), await learningFor(ref[1]));
-    return request.llm === false || !llm ? briefing : { ...briefing, llm };
+    return briefingFor(ref[1], Number(ref[2]), await learningFor(ref[1]), request.llm !== false);
   },
   spend: async () => ({
     today: new Date().toISOString().slice(0, 10),
