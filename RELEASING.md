@@ -6,7 +6,7 @@ stays private.
 
 ## Once: set up
 
-1. Create the public repo `getalden/homebrew-tap` with a README (it holds only `Formula/alden.rb` and releases).
+1. The public repo `getalden/homebrew-tap` exists (created 2 Oct 2026, with a README and an empty `Formula/`).
 2. Add these GitHub Actions secrets to this repo:
 
    | Secret | What |
@@ -18,6 +18,10 @@ stays private.
    | `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` | For notarization; the password is an app-specific password from appleid.apple.com. |
 
    Without a secret, its step is skipped: with none, a run builds and smoke-tests everything and publishes nothing.
+3. Put the PostHog project's public key (`phc_…`, Project settings → Project API key; EU cloud) in `TELEMETRY_KEY` in
+   `packages/core/src/telemetry/telemetry.ts`. It's public by design, so it lives in the code, not a secret. Until it's
+   set, opted-in installs keep their events locally (up to 5,000) and send them once a release carries the key. In
+   the PostHog project, turn on "Discard client IP data".
 
 ## Each release
 
