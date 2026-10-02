@@ -2,9 +2,10 @@
 
 The review companion that knows what you look for. Alden ranks the PRs waiting on you, shows what the diff doesn't (who calls the changed code), and points you at the few places that need your eyes. It learns from your feedback as you go, and it runs on your machine.
 
-> **Status: pre-alpha.** Phase 1 is being built. `alden queue` and `alden review` (with or without a model) work today.
+> **Status: private beta.** `alden queue`, `review`, `ui`, `stats`, `memory` and `mcp` work today. Commands and output
+> formats may still change before 1.0.
 
-![Alden's queue beside a briefing for a Django PR](site/src/assets/screens/briefing-dark.png)
+![Alden's queue beside a briefing for a Django PR](https://getalden.dev/assets/screens/briefing-dark.png)
 
 ## Quickstart
 
@@ -53,7 +54,7 @@ Needs your eyes
   version. In a repo with no CI, only docs-only PRs qualify. Alden only orders them; it never approves anything.
 
 Every row says why it ranks where it does. Narrow the queue with `--repo owner/name` or `--org name` (repeatable), or
-get it as JSON with `--json` (schema: [`packages/schema/json`](packages/schema/json)).
+get it as JSON with `--json` ([Commands](https://getalden.dev/docs/commands/#alden-queue) names the schema).
 
 Tune it in your settings, for example:
 
@@ -64,10 +65,10 @@ alden config set queue.includeDrafts true
 
 ## It learns what you look for
 
-Mark a flag "agree" or "not needed" (in `alden ui`), and open the PRs you care about. After a few one-sided verdicts on
-a check, Alden puts its flags first, or leaves them out (never secrets, never high severity). After you open a kind of
-PR ahead of its rank a few times, those rank higher. A place you dismissed stays down when you re-review that PR. Every
-change says why, in the briefing or the queue row, and nothing is hidden silently.
+Mark a flag **Useful** or **Not useful** (or **Dismiss** it) in `alden ui`, and open the PRs you care about. After a few
+one-sided verdicts on a check, Alden puts its flags first, or leaves them out (never secrets, never high severity).
+After you open a kind of PR ahead of its rank a few times, those rank higher. A place you dismissed stays down when you
+re-review that PR. Every change says why, in the briefing or the queue row, and nothing is hidden silently.
 
 Add notes the model gets with every review of a repo, and see or forget anything Alden knows:
 
@@ -78,19 +79,19 @@ alden memory forget check:tests.missing:down
 ```
 
 It all stays in `~/.alden/alden.db` on your machine; only your notes go to the model. See
-[Learning and memory](docs/memory.md).
+[Learning and memory](https://getalden.dev/docs/memory/).
 
 ## Documentation
 
-See [docs/](docs/README.md): getting started, every command and setting, how the queue and checks work, the code
-graph, learning and memory, models and budgets, privacy, and troubleshooting.
+See [the docs](https://getalden.dev/docs/): getting started, every command and setting, how the queue and checks
+work, the code graph, learning and memory, models and budgets, privacy, and troubleshooting.
 
-## Also in phase 1
+## Also
 
 - `alden stats` shows your repo's time to first review and review cycle time, before and after Alden.
-- In Claude Code, the [Alden plugin](docs/claude-code.md) adds `/alden:review` and your queue; `alden mcp` gives
-  [any MCP client](docs/mcp.md) the same tools.
-- On macOS, the [desktop app](docs/desktop.md) keeps your queue in the menu bar.
+- In Claude Code, the [Alden plugin](https://getalden.dev/docs/claude-code/) adds `/alden:review` and your queue;
+  `alden mcp` gives [any MCP client](https://getalden.dev/docs/mcp/) the same tools.
+- On macOS, the [desktop app](https://getalden.dev/docs/desktop/) keeps your queue in the menu bar.
 
 Alden is GitHub-only for now and supports TypeScript/JavaScript, Python, PHP (Laravel, Symfony) and Go.
 
@@ -105,7 +106,8 @@ alden config list
 ```
 
 Settings live in `~/.alden/config.toml`. A repo can override them in `.alden.toml`. See
-[Models, providers and budgets](docs/models.md) and [Configuration](docs/configuration.md).
+[Models, providers and budgets](https://getalden.dev/docs/models/) and
+[Configuration](https://getalden.dev/docs/configuration/).
 
 ## Development
 
@@ -125,10 +127,13 @@ node packages/cli/dist/index.js --help
 | `packages/cli` | The `alden` command. The only published package; bundles the others. |
 | `packages/core` | The engine: config, GitHub, queue ranking, review. |
 | `packages/schema` | Shared data formats (config, queue items, briefings) that the CLI, UI and desktop app all render. |
-| `packages/ui` | The local web UI. Placeholder until week 7. |
+| `packages/ui` | The local web UI (React, Vite), also used by the desktop app. |
+| `packages/desktop` | The macOS app: a Tauri shell around `alden ui`. |
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Releasing: [RELEASING.md](RELEASING.md). Desktop app:
+[packages/desktop/README.md](packages/desktop/README.md). Site and screenshots: [site/README.md](site/README.md). Evals,
+the gate and the end-to-end test kit: [Evals](https://getalden.dev/docs/evals/).
 
 ## License
 
-[Apache-2.0](LICENSE)
+[Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0); the full text is in `LICENSE`.

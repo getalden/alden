@@ -122,7 +122,7 @@ describe("redactFeedback", () => {
       note: "The migration drops a column",
       anchor: { path: "db/x.sql" },
     });
-    const redacted = redactFeedback(await log.events());
+    const redacted = await log.redacted();
     const text = JSON.stringify(redacted);
     for (const secret of ["acme/api", "src/charge.ts", "db/x.sql", "migration", "tests.missing flag"]) {
       expect(text).not.toContain(secret);
@@ -133,6 +133,9 @@ describe("redactFeedback", () => {
       number: 7,
       repo: expect.stringMatching(/^repo-[0-9a-f]{12}$/),
     });
+    // Salted per install: the same repo gets the same code from this install, but not the plain hash of its name.
+    expect((await log.redacted())[0]?.target.repo).toBe(redacted[0]?.target.repo);
+    expect(redacted[0]?.target.repo).not.toBe(redactFeedback(await log.events(), (r) => r)[0]?.target.repo);
     expect(redacted[0]?.kind === "verdict" && redacted[0].item.checkId).toBe("tests.missing");
   });
 

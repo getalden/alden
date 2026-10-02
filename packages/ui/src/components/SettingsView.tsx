@@ -199,7 +199,9 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
               <button type="button" className="btn sm" onClick={exportFeedback}>
                 Export redacted feedback
               </button>
-              <span className="faint small">{exportStatus ?? "Repo names, paths, titles and notes are removed."}</span>
+              <span className="faint small">
+                {exportStatus ?? "Repo names become codes; titles, paths and notes are removed."}
+              </span>
             </div>
           </div>
 

@@ -55,6 +55,7 @@ const marked = new Marked({
       const text = this.parser.parseInline(tokens);
       const id = text
         .replace(/<[^>]+>/g, "")
+        .replace(/&[#\w]+;/g, "")
         .toLowerCase()
         .replace(/[^\w\s-]/g, "")
         .trim()

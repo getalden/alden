@@ -30,17 +30,18 @@ dropped.
 
 | Event | What it says |
 | --- | --- |
-| `command_run` | Which command (queue, review, ui, …), whether it worked, how long it took |
+| `command_run` | Which command (queue, review, ui, mcp, …), whether it worked, how long it took |
 | `queue_ranked` | How many PRs need you, are fast-track or dismissed, across how many repos, how many your feedback moved |
-| `review_completed` | PR or local; files and lines; languages; callers found; checks flagged; places shown; how many your feedback hid; notes used; model, its status and cost; how long it took |
+| `review_completed` | PR or local; a salted repo hash; files and lines; languages; whether callers were looked for, and how many were found; checks flagged; places shown; how many your feedback hid; notes used; model, its status and cost; how long it took |
 | `feedback_given` | Useful, not useful or dismiss; on a place, finding or check; which of Alden's checks |
 | `missed_reported` | That you reported a miss, and whether you said where (not what) |
 | `reaction_given`, `pr_opened`, `memory_changed` | The reaction; the opened PR's rank; add, edit, forget, pause… |
-| `stats_viewed` | Median time to first review and cycle time, before and after Alden, and how many PRs |
+| `stats_viewed` | A salted repo hash, how many PRs, whether there's a before and after, and median time to first review and cycle time before and after |
 | `telemetry_enabled` | That you said yes |
 
-Each also carries Alden's version, where it ran (terminal, UI, desktop app or an AI coding tool through `alden mcp`), Node or the standalone binary, the OS
-and CPU type, and how many days since this install first ran.
+Each also carries the schema version, Alden's version, where it ran (terminal, UI, desktop app or an AI coding tool
+through `alden mcp`), Node or the standalone binary, the OS and CPU type, and how many days since this install first
+ran.
 
 **Never sent:** code, diffs, PR titles or descriptions, file paths, repo names, user names, your notes, model output,
 tokens or keys. A repo appears only as a hash salted with a random value that never leaves your machine, so we can

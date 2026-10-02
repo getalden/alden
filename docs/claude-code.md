@@ -13,8 +13,8 @@ Claude also uses them without the command when you ask: "what's waiting on me?",
 
 ## Install
 
-Alden itself must be installed and signed in first ([Getting started](getting-started.md)): the plugin runs
-`alden mcp`. Then:
+Alden itself (0.2.0 or later) must be installed and signed in first ([Getting started](getting-started.md)): the
+plugin runs `alden mcp`. Then:
 
 ```sh
 claude plugin marketplace add getalden/claude-plugin

@@ -4,7 +4,7 @@ Alden is a code review companion. It ranks the PRs waiting on you, briefs you on
 already checked, and points you at the few places that need your eyes. It runs on your machine, with your own GitHub
 sign-in and your own model account.
 
-> **Status: pre-alpha.** Commands and output formats may still change before 1.0.
+> **Status: private beta.** Commands and output formats may still change before 1.0.
 
 ## Using Alden
 
@@ -28,5 +28,6 @@ sign-in and your own model account.
 ## Working on Alden
 
 - [Architecture](architecture.md): the packages and how a review flows through them.
-- [Evals](evals.md): measuring briefing quality on recorded PRs.
+- [Evals](evals.md): measuring briefing quality on recorded PRs, the gate, and the end-to-end test kit.
 - [CONTRIBUTING.md](../CONTRIBUTING.md): setup, tests and pull requests.
+- [RELEASING.md](../RELEASING.md): versioning, the release workflow, and checking a release.

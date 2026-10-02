@@ -1,7 +1,7 @@
 # Architecture
 
-Alden is a TypeScript monorepo. The engine does the whole review locally; the CLI, and later the local UI and desktop
-app, render its output. Deterministic analysis handles what can be proven, and the model judges on top of it.
+Alden is a TypeScript monorepo. The engine does the whole review locally; the CLI, the local UI, the desktop app and
+`alden mcp` render its output. Deterministic analysis handles what can be proven, and the model judges on top of it.
 
 ## Packages
 
@@ -9,8 +9,9 @@ app, render its output. Deterministic analysis handles what can be proven, and t
 | --- | --- |
 | `packages/schema` | The shared formats, as zod schemas: config, ranked queue, briefing. JSON Schemas are generated into `packages/schema/json`, and a test fails when they're stale. |
 | `packages/core` | The engine: config, GitHub, the queue, diffs, checks, the code graph and the model layer. |
-| `packages/cli` | The `alden` command and terminal rendering. The only published package; tsup bundles `core` and `schema` into it. |
+| `packages/cli` | The `alden` command and terminal rendering, the web UI's server (`src/ui`) and the MCP server for AI coding tools (`src/mcp`: the protocol over stdio, the tools and their Markdown output). The only published package; tsup bundles `core` and `schema` into it. |
 | `packages/ui` | The web UI: React and Vite, talking only to the local API, so the desktop app can wrap it. The CLI build copies it into `dist/ui`. |
+| `packages/desktop` | The macOS app: a Tauri 2 shell that runs the standalone binary as `alden ui --json` and shows it in a window and the menu bar. See its [README](../packages/desktop/README.md). |
 
 ## Inside core
 
@@ -23,13 +24,41 @@ app, render its output. Deterministic analysis handles what can be proven, and t
 | `review/llm/` | The model's prompt (diff packed by priority to fit the budget), validation of its findings against the diff, and merging them into the briefing. |
 | `llm/` | Model aliases and prices, providers (Anthropic, Bedrock, Vertex, Foundry, OpenAI-compatible), budgets and the spend ledger. |
 | `graph/` | tree-sitter parsing and symbol extraction, the repo index and its cache, changed symbols, import resolution, caller queries, and PR worktrees. |
+| `feedback/` | The feedback log (verdicts and misses), its summary, and the redacted export. |
+| `learn/` | What Alden learns from one reviewer in one repo, as plain counts, and how it moves flags and queue rows. |
+| `stats/` | Time to first review and cycle time for `alden stats`, and the first use of Alden per repo. |
+| `store/` | The SQLite database, `~/.alden/alden.db` (`node:sqlite`, or Bun's in the standalone binary), and its migrations. |
+| `telemetry/` | Opt-in usage stats: consent, the salted repo hash, the queue in the database and sending to PostHog. |
 
 ## The web UI's server
 
 `alden ui` runs `packages/cli/src/ui/server.ts`: a `node:http` server on 127.0.0.1 that serves the built UI and a
 JSON API. `api.ts` wires the API to the engine with the same calls the CLI commands make. Every API call needs the
 session token and the server's own Host, and reviews stream newline-delimited JSON: a `stage` event per step (from
-core's `onStage` callback), then the `briefing` or an `error`.
+core's `onStage` callback), then the `briefing` or an `error`. Any path outside `/api/` serves the built UI.
+
+| Method and path | What it does |
+| --- | --- |
+| `GET /api/session` | Alden's version, the folder and repo it runs in, the GitHub user, the model, the budget, and whether it's the desktop app and background briefings are on. |
+| `GET /api/queue` | The ranked queue. `refresh=1` skips the cache; `repo` and `org` (repeatable) narrow it. |
+| `POST /api/review` | Runs a review of `{ pr?, llm?, graph?, model?, effort? }` and streams it as above. No `pr` reviews local changes. |
+| `POST /api/prepare` | Briefs the next of the top three PRs in the background. Acts only when started with `--json` (the desktop app) and `background.enabled` is on; asks the model only if `background.model` is true in the user config. |
+| `GET /api/prepared` | Briefings prepared in the background; with `pr=owner/repo#12`, that PR's briefing, unless the PR changed since. |
+| `GET /api/spend` | Today's and recent spend against your caps. |
+| `GET /api/config` | The merged settings. |
+| `PUT /api/config` | Sets `{ key, value }` in the user config; a `null` value removes it. |
+| `GET /api/stats` | `alden stats` for `repo`, over `days` (90), split at `since`; `refresh=1` skips the cache. |
+| `GET /api/feedback` | The feedback summary. |
+| `POST /api/feedback` | Records a verdict on a flag, or a miss. |
+| `GET /api/feedback/export` | Your feedback, always redacted (see [Privacy and data](privacy.md#sharing-your-feedback)). |
+| `POST /api/reaction` | Records `{ pr, reaction }` (`up`, `down`, `dismiss` or `clear`) on a row of the last queue. |
+| `GET /api/memory` | What Alden knows about you in `repo` (default: the clone it runs in). |
+| `POST /api/memory` | Adds a note: `{ text, repo? }`. |
+| `GET /api/memory/repos` | Each repo Alden has memory for. |
+| `POST /api/memory/change` | `{ action, repo? }`: `edit` (with `id`, `text`), `restore` (with `id`), `learning` (with `on`) or `forget-all`. |
+| `POST /api/memory/forget` | Forgets one item: `{ id, repo? }`. |
+| `GET /api/telemetry` | Whether usage stats are on, and what blocks them, if anything. |
+| `PUT /api/telemetry` | Turns usage stats on or off: `{ on }`. |
 
 ## How a review flows
 

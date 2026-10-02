@@ -26,6 +26,19 @@ the browser in the link's `#fragment` (never sent to a server or in a Referer) a
 server also rejects any Host or Origin that isn't its own, which stops other websites, including through DNS
 rebinding. It sends no CORS headers, so other pages can't read its responses. Pages get a strict Content Security
 Policy (only Alden's own scripts, styles and images, plus GitHub avatars), can't be framed, and send no referrer.
+Every route the server answers is listed in [Architecture](architecture.md#the-web-uis-server).
+
+**The desktop app.** It runs the bundled `alden` as `alden ui --json` and shows that server in its window. The window
+only loads Alden's own server on 127.0.0.1 (and a bundled loading page), with the same session key and checks as a
+browser. While your Mac has been idle for 3 minutes, the app calls the local `POST /api/prepare` once a minute to brief
+the top PRs waiting on you. Those briefings ask the model only if `background.model` is true in your user config; a
+repo's `.alden.toml` can't set it, so a repo can't make you spend. They're kept in the running server's memory only.
+
+**`alden mcp`.** Briefings, PR text and code, and your memory notes go into your AI coding tool's context, and from
+there to that tool's model provider, under your agreement with it. Everything that came from a PR is labelled as
+written by its author, and the tool is told to treat it as data, never instructions. A PR can still try prompt
+injection on an assistant that has tools of its own, so keep your tool asking before it runs commands. The MCP tools
+write only to Alden's own database and post nothing to GitHub. See [Alden in your AI coding tool](mcp.md#safety).
 
 **PR content.**
 
@@ -41,8 +54,16 @@ Policy (only Alden's own scripts, styles and images, plus GitHub avatars), can't
 that keeps only its kind and length (see [Privacy and data](privacy.md)). Detection is heuristic, so use `--no-llm`
 for changes you know contain secrets, and rotate any secret that was committed.
 
-**Your data.** Nothing goes to Alden's developers except anonymous usage stats, and only if you opt in ([Usage stats](telemetry.md)). Feedback, memory, spend and settings stay in `~/.alden`;
-`alden feedback --export` leaves out repo names, paths and notes unless you pass `--full`.
+**Your data.** Nothing goes to Alden's developers except anonymous usage stats, and only if you opt in
+([Usage stats](telemetry.md)). Feedback, memory, notes and spend stay in the SQLite database `~/.alden/alden.db`,
+settings in `~/.alden/config.toml`, and PR checkouts in `~/.alden/worktrees`. `alden feedback --export` replaces repo
+names with a hash salted with a value that never leaves your machine, and each flag's title with a code salted fresh
+for each export, and drops paths, lines and notes; PR numbers, check ids, verdicts, times and the model stay. `--full`
+keeps everything.
+
+**Update check.** `alden --version` and `alden doctor` ask the npm registry (`registry.npmjs.org`) for Alden's newest
+version, at most once a day. Nothing about you or your repos is sent. `alden config set updates.check false` or
+`ALDEN_NO_UPDATE_CHECK` turns it off.
 
 **Supply chain.** Dependencies are audited before each release (`pnpm audit`), lockfiles are committed, and
 releases are built in CI from a tag, with macOS binaries signed and notarized.
@@ -54,4 +75,6 @@ releases are built in CI from a tag, with macOS binaries signed and notarized.
   read the model's view as one opinion.
 - **Secret redaction** catches known key formats, private keys, passwords in URLs and random-looking values assigned to
   secret-like names. A secret in an unusual shape can get through.
+- **Through `alden mcp`**, a PR's text reaches an assistant that may have tools of its own. Labelling it as data
+  doesn't make prompt injection impossible, so keep your tool asking before it runs commands or edits files.
 - The standalone binary isn't sandboxed beyond what your OS applies to any program you run.

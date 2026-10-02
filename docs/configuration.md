@@ -71,14 +71,29 @@ For the [desktop app](desktop.md#while-youre-away), which briefs your top PRs wh
 | `background.enabled` | `true` | Prepare briefings in the background. A repo's `.alden.toml` can turn it off there. |
 | `background.model` | `false` | Ask the model for them too, within your caps. Read from your user config only, so a repo can't make you spend. |
 
+## telemetry
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `telemetry.enabled` | unset | Send anonymous usage stats. Read from your user config only. `DO_NOT_TRACK`, `ALDEN_TELEMETRY=0` and CI turn it off. See [Usage stats](telemetry.md). |
+
+## updates
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `updates.check` | `true` | `alden --version` and `alden doctor` say when a newer Alden exists (checked at most once a day). |
+
 ## Environment variables
 
 | Variable | What it does |
 | --- | --- |
 | `ALDEN_GITHUB_TOKEN` | A GitHub token to use instead of the stored one. |
 | `ALDEN_HOME` | Where Alden keeps its files. Default `~/.alden`. |
+| `ALDEN_NO_UPDATE_CHECK` | Set to anything to skip the check for a newer Alden. |
 | `ALDEN_OPENAI_API_KEY` | The key for an `openai-compatible` endpoint (falls back to `OPENAI_API_KEY`). |
+| `ALDEN_TELEMETRY` | `0` or `false` turns usage stats off, whatever your config says. |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key, for the `anthropic` provider. |
+| `DO_NOT_TRACK` | Set (to anything but `0`) to turn usage stats off. |
 
 ## Files Alden keeps
 
@@ -90,7 +105,7 @@ Everything is under `~/.alden` (or `ALDEN_HOME`):
 | `cache/` | GitHub responses, cached briefly, and your last queue (for `alden open` and `alden review <#>`). |
 | `index/` | The code graph's per-file cache. Around 100 MB for a repo the size of Kubernetes. |
 | `worktrees/` | Checkouts of PRs for the code graph, one per repo. |
-| `alden.db` | The local database: feedback, the PRs you open, your notes, model spending, first use per repo. See [Learning and memory](memory.md). |
+| `alden.db` | The local database: feedback, the PRs you open, your notes, model spending, first use per repo, queued usage stats, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
 | `legacy/` | Files from before the database, kept after their one-time import. Safe to delete. |
 
 Deleting any of these is safe, but deleting `alden.db` also deletes your feedback, notes and what Alden learned, and

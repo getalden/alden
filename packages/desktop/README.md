@@ -7,6 +7,9 @@ Alden in a window and the menu bar. A [Tauri 2](https://tauri.app) shell around 
 - The menu bar shows how many PRs wait on you, the top three (click one to open its briefing), Open Alden (⌘⇧A,
   Ctrl+Shift+A elsewhere), Refresh and Quit. It reads the local API every 5 minutes.
 - When someone has waited three days on a PR that isn't waiting on its author, you get one notification for it.
+- While the Mac has been idle for 3 minutes, it calls the local `POST /api/prepare` once a minute to brief the top three
+  PRs, and tells you when one is ready. See [docs/desktop.md](../../docs/desktop.md#while-youre-away).
+- Sign-in is shared with the CLI: see [docs/desktop.md](../../docs/desktop.md#sign-in).
 - Closing the window keeps Alden in the menu bar. Quitting stops the server; the server also stops by itself when this
   app's end of its stdin closes, so a crash can't leave it running.
 

@@ -15,6 +15,7 @@ what "My changes" reviews.
 | --- | --- |
 | `--port <n>` | Serve on this port instead of a free one. |
 | `--no-open` | Print the link instead of opening a browser. |
+| `--json` | Print one JSON line with the link and port, and don't open a browser. The desktop app uses it, and it turns on background briefings. |
 
 Stop it with Ctrl+C.
 
@@ -23,6 +24,8 @@ Stop it with Ctrl+C.
 - **Queue.** "Needs you" and "Fast-track", with each PR's wait, size, CI and the reasons it ranks where it does (a
   line marked ↑ or ↓ when your own feedback moved it). The selected row takes **Useful**, **Not useful** and
   **Dismiss** (hidden until it changes). Filter by repo, refresh, and pick a PR to see its briefing beside the list.
+  Until you've answered, a card at the top asks whether to send [anonymous usage stats](telemetry.md). In the desktop
+  app, PRs briefed while you were away are marked "Briefing ready".
 - **A PR.** "Brief me" runs the review and shows each stage as it goes (fetching, finding callers, checks, the
   model). The briefing follows the CLI's order. Every place links into the PR's "Files changed" view at that line.
   A review keeps running if you look at another PR, and its briefing is there when you come back. **Useful** and
@@ -35,7 +38,8 @@ Stop it with Ctrl+C.
   what it changes, Edit (notes), Forget and Undo, a switch to pause learning, and "Tell Alden something" to add a note.
   See [Learning and memory](memory.md).
 - **Settings.** The default model, effort and caps (saved to your user config), your feedback with a redacted export,
-  today's spend by PR, and light, dark or system appearance.
+  usage stats on or off, today's spend by PR, and light, dark or system appearance. In the desktop app, "While you're
+  away" turns [background briefings](desktop.md#while-youre-away) and their use of the model on or off.
 
 Each review has its own options: ask the model or not, which model, which effort, and whether to find callers. The
 line beside them shows the per-review cap and what's left of today's budget. These choices last until you close the
@@ -73,4 +77,5 @@ Don't share the link while `alden ui` is running. A new run makes a new key.
 ## Working on the UI
 
 See [`packages/ui/README.md`](../packages/ui/README.md). `pnpm ui:demo` serves the UI over the recorded public PRs,
-with no GitHub or model calls, for UI work and screenshots.
+with no GitHub or model calls, for UI work and screenshots. Every route of the local API is listed in
+[Architecture](architecture.md#the-web-uis-server).

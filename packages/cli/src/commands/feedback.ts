@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { FeedbackLog, redactFeedback } from "@alden/core";
+import { FeedbackLog } from "@alden/core";
 import type { FeedbackSummary } from "@alden/schema";
 import type { Command } from "commander";
 import { paint, shouldColor } from "../render/style.js";
@@ -8,12 +8,12 @@ const percent = (rate: number | null) => (rate === null ? "no verdicts yet" : `$
 
 export function renderFeedback(summary: FeedbackSummary, color: boolean): string {
   if (summary.briefings === 0) {
-    return "No feedback yet. Mark flags as agreed or not needed in `alden ui`, and report what Alden missed.\n";
+    return "No feedback yet. Mark flags useful or not useful in `alden ui` (or through `alden mcp`), and report what Alden missed.\n";
   }
   const eyes = summary.eyes.agree + summary.eyes.notNeeded;
   const out = [
-    `${paint('Agree rate on "needs your eyes"', "bold", color)}: ${percent(summary.eyesAgreeRate)} (${summary.eyes.agree} of ${eyes})`,
-    `Model findings: ${summary.modelFindings.agree} agreed, ${summary.modelFindings.notNeeded} not needed`,
+    `${paint('Useful rate on "needs your eyes"', "bold", color)}: ${percent(summary.eyesAgreeRate)} (${summary.eyes.agree} of ${eyes})`,
+    `Model findings: ${summary.modelFindings.agree} useful, ${summary.modelFindings.notNeeded} not useful`,
     `Missed: ${summary.missed} · Briefings with feedback: ${summary.briefings}${summary.since ? ` · since ${summary.since.slice(0, 10)}` : ""}`,
     "",
     paint("By check", "bold", color),
@@ -23,7 +23,7 @@ export function renderFeedback(summary: FeedbackSummary, color: boolean): string
   for (const [id, c] of rows) {
     const rate = c.agree + c.notNeeded === 0 ? null : c.agree / (c.agree + c.notNeeded);
     out.push(
-      `  ${id.padEnd(width)}  ${String(c.agree).padStart(3)} agreed  ${String(c.notNeeded).padStart(3)} not needed  ${percent(rate)}`,
+      `  ${id.padEnd(width)}  ${String(c.agree).padStart(3)} useful  ${String(c.notNeeded).padStart(3)} not useful  ${percent(rate)}`,
     );
   }
   return `${out.join("\n")}\n`;
@@ -38,7 +38,7 @@ interface FeedbackOptions {
 export function registerFeedbackCommand(program: Command): void {
   program
     .command("feedback")
-    .description("Show how often you agreed with Alden's flags, and what it missed.")
+    .description("Show how often you found Alden's flags useful, and what it missed.")
     .option("--json", "print the summary as JSON")
     .option("--export <file>", "write your feedback to a file you can share, with repos, paths and notes removed")
     .option("--full", "with --export: keep repo names, titles, paths and notes")
@@ -46,7 +46,7 @@ export function registerFeedbackCommand(program: Command): void {
       const log = new FeedbackLog();
       if (options.export) {
         const events = await log.events();
-        const shared = options.full ? events : redactFeedback(events);
+        const shared = options.full ? events : await log.redacted();
         const summary = await log.summary();
         await writeFile(
           options.export,

@@ -2,6 +2,12 @@
 
 Run `alden <command> --help` for the same information in your terminal.
 
+## alden --version
+
+Prints Alden's version. When a newer Alden is out, it also says so, with how to upgrade, on standard error so scripts
+reading the version aren't affected. It asks npm at most once a day; `alden config set updates.check false` or
+`ALDEN_NO_UPDATE_CHECK` turns this off. `alden doctor` reports the same.
+
 ## alden auth
 
 Sign in to GitHub.
@@ -69,6 +75,7 @@ Opens the queue and briefings in your browser, served on 127.0.0.1 only until yo
 | --- | --- |
 | `--port <n>` | Serve on this port instead of a free one. |
 | `--no-open` | Print the link instead of opening a browser. |
+| `--json` | Print one JSON line with the link and port, and don't open a browser. The desktop app uses it, and it turns on background briefings. |
 
 ## alden mcp
 
@@ -101,19 +108,27 @@ Shows a repo's time to first review and review cycle time, before and after Alde
 
 ## alden feedback
 
-Shows how often you agreed with Alden's flags, and what it missed. `--json` prints the summary. `--export <file>`
-writes your feedback to a file you can share, with repo names, titles, paths and notes removed; add `--full` to keep
-them.
+Shows how often you found Alden's flags useful, and what it missed. `--json` prints the summary.
+
+`--export <file>` writes your feedback to a file you can share. Repo names become a hash salted with a value that never
+leaves your machine (the same one [usage stats](telemetry.md) use), and each flag's title becomes a code salted fresh
+for that export. Paths, lines and notes are dropped. PR numbers, check ids, verdicts, times and the model stay. Add
+`--full` to keep everything.
 
 ## alden memory
 
 Lists what Alden has learned about you in a repo, and your notes for it: by default the repo of the clone you're in,
-or `--repo owner/name`. `--json` prints the items. See [Learning and memory](memory.md).
+or `--repo owner/name`. `--json` prints the items. Every subcommand also takes `--repo owner/name`. See
+[Learning and memory](memory.md).
 
 | Command | What it does |
 | --- | --- |
 | `alden memory add <text>` | Adds a note; the model gets it with every review of the repo. |
+| `alden memory edit <id> <text>` | Changes a note's text. |
 | `alden memory forget <id>` | Forgets a note or a learned item, by the id `alden memory` shows. |
+| `alden memory forget --all` | Forgets everything in this repo. |
+| `alden memory restore <id>` | Takes back a forget. |
+| `alden memory pause` / `resume` | Stops or restarts applying what Alden learned here. Your reactions are still saved, and notes still apply. |
 
 ## alden telemetry
 

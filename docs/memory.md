@@ -81,4 +81,5 @@ Alden needs Node 22.13 or later for the database (the standalone binary has it b
 
 Learning happens on your machine and its data stays there. Your notes, and the checks you care about (as one line
 each, e.g. "Cares about migration issues"), are sent to your model provider with each review; nothing else from
-memory is. With `--no-llm`, nothing is. `alden feedback --export` shares feedback only, with names removed.
+memory is. With `--no-llm`, nothing is. `alden feedback --export` shares feedback only: repo names become a salted
+hash, and titles, paths and notes are removed. See [Sharing your feedback](privacy.md#sharing-your-feedback).

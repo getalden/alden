@@ -1,8 +1,9 @@
 # Releasing Alden
 
 During the private beta, releases go to npm under `next` and to the public
-[getalden/homebrew-tap](https://github.com/getalden/homebrew-tap) repo (binaries and the Homebrew formula). This repo
-stays private.
+[getalden/homebrew-tap](https://github.com/getalden/homebrew-tap) repo (the binaries, the desktop app's .dmg, the
+Homebrew formula and the cask). The Claude Code plugin and its marketplace go to the public
+[getalden/claude-plugin](https://github.com/getalden/claude-plugin) repo. This repo stays private.
 
 ## Once: set up
 
@@ -28,7 +29,8 @@ stays private.
 ## Each release
 
 1. Add changesets as you go (`pnpm changeset`), then version: `pnpm release:version`. That runs `changeset version`,
-   gives the desktop app the same version and updates the lockfile. Review `packages/cli/CHANGELOG.md` and commit.
+   gives the desktop app and the Claude Code plugin the same version (`scripts/sync-versions.ts`; CI runs it with
+   `--check` and fails when they differ) and updates the lockfile. Review `packages/cli/CHANGELOG.md` and commit.
 2. Rehearse on your machine: `pnpm release:dry-run` (a few seconds, no CI minutes, publishes nothing). It builds and
    smoke-tests your platform's binary, packages it as the workflow does, writes checksums and the formula, and installs
    the npm tarball into a throwaway prefix and smoke-tests that too. Add `--desktop` to build the universal Alden.app
@@ -38,7 +40,9 @@ stays private.
 4. The Release workflow builds the five binaries on their own runners, smoke-tests each (`pnpm smoke:binary`),
    signs and notarizes the macOS ones, builds the universal desktop app around them (Tauri signs, notarizes and staples
    it with the same Apple secrets), publishes `alden@<version>` to npm under `next`, and creates the release and
-   updates the formula (`Formula/alden.rb`) and the cask (`Casks/alden-desktop.rb`) in `getalden/homebrew-tap`. Then
+   updates the formula (`Formula/alden.rb`) and the cask (`Casks/alden-desktop.rb`) in `getalden/homebrew-tap`. It
+   writes those two with `pnpm homebrew:formula <version> release/SHA256SUMS` and
+   `pnpm homebrew:cask <version> release/SHA256SUMS`. Then
    it publishes the Claude Code plugin and its marketplace to `getalden/claude-plugin` (`pnpm plugin:repo` writes it).
 5. Check: `pnpm release:verify` (see below), then by hand: `brew install getalden/tap/alden` and
    `npm i -g alden@next`, then `alden --version` and `alden doctor`; `brew install --cask getalden/tap/alden-desktop`
@@ -52,3 +56,9 @@ pnpm smoke:binary dist-bin/alden-darwin-arm64
 ```
 
 A local binary isn't signed, so macOS asks once before it can read a token Node stored in the keychain.
+
+## Website
+
+The site (getalden.dev, with these docs) is built and deployed separately: `pnpm site:build`, then `pnpm site:deploy`,
+which publishes to Cloudflare Pages with wrangler. `pnpm screenshots` retakes its screenshots. See
+[site/README.md](site/README.md).

@@ -17,8 +17,8 @@ describe("renderFeedback", () => {
       })),
     ]);
     const text = renderFeedback(summary, false);
-    expect(text).toContain('Agree rate on "needs your eyes": 67% (2 of 3)');
-    expect(text).toMatch(/callers\.outside\s+2 agreed\s+1 not needed\s+67%/);
+    expect(text).toContain('Useful rate on "needs your eyes": 67% (2 of 3)');
+    expect(text).toMatch(/callers\.outside\s+2 useful\s+1 not useful\s+67%/);
   });
 
   it("says how to give feedback when there's none", () => {

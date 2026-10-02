@@ -22,7 +22,6 @@ import {
   queueRows,
   rankQueue,
   recordReaction,
-  redactFeedback,
   repoFromRemote,
   resolveModel,
   resolveToken,
@@ -334,7 +333,7 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
     },
 
     async exportFeedback() {
-      return redactFeedback(await feedback.events());
+      return feedback.redacted();
     },
 
     async addMemory({ repo, text }) {
