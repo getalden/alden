@@ -24,13 +24,17 @@ stays private.
 
 ## Each release
 
-1. Add changesets as you go (`pnpm changeset`), then version: `pnpm changeset version`. Review the changelog and the
-   new version in `packages/cli/package.json`, and commit.
-2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
-3. The Release workflow builds the five binaries on their own runners, smoke-tests each (`pnpm smoke:binary`),
+1. Add changesets as you go (`pnpm changeset`), then version: `pnpm release:version`. That runs `changeset version`,
+   gives the desktop app the same version and updates the lockfile. Review `packages/cli/CHANGELOG.md` and commit.
+2. Rehearse on your machine: `pnpm release:dry-run` (a few seconds, no CI minutes, publishes nothing). It builds and
+   smoke-tests your platform's binary, packages it as the workflow does, writes checksums and the formula, and installs
+   the npm tarball into a throwaway prefix and smoke-tests that too. The output is in `build/release/`.
+3. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`. This starts the Release workflow, which costs Actions
+   minutes (macOS runners bill at 10× on a private repo), so do it once the dry run passes.
+4. The Release workflow builds the five binaries on their own runners, smoke-tests each (`pnpm smoke:binary`),
    signs and notarizes the macOS ones, publishes `alden@<version>` to npm under `next`, and creates the release and
    updates the formula in `getalden/homebrew-tap`.
-4. Check: `brew upgrade alden` (or `brew install getalden/tap/alden`) and `npm i -g alden@next`, then
+5. Check: `brew upgrade alden` (or `brew install getalden/tap/alden`) and `npm i -g alden@next`, then
    `alden --version` and `alden doctor`.
 
 ## Locally

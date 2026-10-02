@@ -21,6 +21,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      - run: pnpm -s tsx scripts/sync-desktop-version.ts --check
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
