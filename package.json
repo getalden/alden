@@ -33,6 +33,7 @@
     "desktop:build": "pnpm build && pnpm build:binary && pnpm desktop:sidecar && pnpm --filter @alden/desktop app:build",
     "screenshots": "tsx scripts/screenshots.ts",
     "posthog:dashboard": "tsx scripts/posthog-dashboard.ts",
+    "gate": "tsx scripts/gate.ts",
     "site:build": "tsx site/build.ts",
     "site:deploy": "pnpm site:build && cd site && pnpm dlx wrangler@4 pages deploy dist --project-name getalden --branch main"
   },
