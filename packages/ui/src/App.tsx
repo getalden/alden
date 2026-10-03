@@ -163,6 +163,7 @@ export function App({ api }: { api: Api | undefined }) {
               reactions={reactions}
               onReact={react}
               ready={ready}
+              scope={session?.queueScope}
             />
           </aside>
           <main className="main-pane detail">

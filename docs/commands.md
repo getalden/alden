@@ -28,12 +28,13 @@ Alden looks for a token in this order:
 
 ## alden queue
 
-Ranks the open PRs waiting on your review. See [The review queue](queue.md).
+Ranks the open PRs waiting on your review, within what your queue covers on this machine (`queue.orgs`, `queue.repos`
+and `queue.ignore`; see [Configuration](configuration.md#queue)). See [The review queue](queue.md).
 
 | Flag | What it does |
 | --- | --- |
-| `--repo <owner/name>` | Only this repo. Repeat for more. |
-| `--org <name>` | Only repos in this organisation. Repeat for more. |
+| `--repo <owner/name>` | Only this repo, instead of your queue settings for this run. Repeat for more. |
+| `--org <name>` | Only repos in this organisation, instead of your queue settings for this run. Repeat for more. |
 | `--limit <n>` | The most PRs to fetch. Default 100. |
 | `--include-drafts` | Include draft PRs. |
 | `--refresh` | Ignore the 60-second cache. |

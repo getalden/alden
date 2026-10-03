@@ -139,6 +139,13 @@ describe("queueSearchQuery", () => {
     );
   });
 
+  it("leaves out ignored orgs and repos", () => {
+    expect(queueSearchQuery({ orgs: ["acme"], ignore: ["acme/legacy", "acme-labs"] })).toBe(
+      "is:pr is:open archived:false review-requested:@me draft:false org:acme -repo:acme/legacy -org:acme-labs",
+    );
+    expect(() => queueSearchQuery({ ignore: ["a b"] })).toThrow(/queue.ignore/);
+  });
+
   it("rejects names that would inject other search qualifiers", () => {
     expect(() => queueSearchQuery({ repos: ["getalden"] })).toThrow(/owner\/name/);
     expect(() => queueSearchQuery({ repos: ["a/b is:closed"] })).toThrow();

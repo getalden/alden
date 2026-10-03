@@ -20,6 +20,7 @@ import {
   openStore,
   queueEvent,
   queueRows,
+  queueScope,
   rankQueue,
   recordReaction,
   repoFromRemote,
@@ -148,6 +149,7 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
         cwd: options.cwd,
         desktop: options.desktop === true,
         signIn: { source: resolved?.source ?? null, gitHubCli: await gitHubCliSignedIn() },
+        queueScope: queueScope(config),
         ...(options.desktop ? { cli: cliStatus() } : {}),
         background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
         repo: (await repoOf(options.cwd)) ?? null,
@@ -180,8 +182,7 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
           limit: 100,
           cache,
           refresh,
-          repos,
-          orgs,
+          ...queueScope(config, { repos, orgs }),
         });
         const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
         void track("queue_ranked", queueEvent(ranked));

@@ -205,6 +205,8 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
             </div>
           </div>
 
+          <QueueScopeSettings api={api} initial={session.queueScope} onSaved={onSaved} />
+
           {session.desktop && session.cli && session.cli.state !== "unavailable" && (
             <CliSettings api={api} initial={session.cli} />
           )}
@@ -356,5 +358,69 @@ function CliSettings({ api, initial }: { api: Api; initial: NonNullable<Session[
       )}
       {note && <p className="small">{note}</p>}
     </div>
+  );
+}
+
+/** What this machine's queue covers: a work laptop can show only work orgs, a personal one only your own repos. */
+function QueueScopeSettings(props: { api: Api; initial: Session["queueScope"]; onSaved: () => void }) {
+  const join = (list: string[] | undefined) => (list ?? []).join(", ");
+  const [orgs, setOrgs] = useState(join(props.initial?.orgs));
+  const [repos, setRepos] = useState(join(props.initial?.repos));
+  const [ignore, setIgnore] = useState(join(props.initial?.ignore));
+  const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string }>();
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setStatus(undefined);
+    try {
+      for (const [key, value] of [
+        ["queue.orgs", orgs],
+        ["queue.repos", repos],
+        ["queue.ignore", ignore],
+      ] as const) {
+        await props.api.setConfig(key, value.trim() ? value : null);
+      }
+      setStatus({ tone: "ok", text: "Saved for this machine. The queue updates on its next refresh." });
+      props.onSaved();
+    } catch (error) {
+      setStatus({ tone: "error", text: (error as Error).message });
+    }
+  };
+  return (
+    <form className="card panel" onSubmit={save}>
+      <h2 className="label">Your queue on this machine</h2>
+      <p className="muted small">
+        Leave these empty to see every PR waiting on you. Set them per machine: only your company's organisation on a
+        work laptop, only your own repos on a personal one. Comma-separated.
+      </p>
+      <label className="field">
+        Only these organisations
+        <input className="input mono" value={orgs} placeholder="acme" onChange={(e) => setOrgs(e.target.value)} />
+      </label>
+      <label className="field">
+        Only these repos
+        <input
+          className="input mono"
+          value={repos}
+          placeholder="owner/name, owner/other"
+          onChange={(e) => setRepos(e.target.value)}
+        />
+      </label>
+      <label className="field">
+        Leave out
+        <input
+          className="input mono"
+          value={ignore}
+          placeholder="an-org, owner/noisy-repo"
+          onChange={(e) => setIgnore(e.target.value)}
+        />
+        <span className="help">Organisations or repos to hide, even when they're covered above.</span>
+      </label>
+      <div className="form-actions">
+        <button type="submit" className="btn primary">
+          Save
+        </button>
+        {status && <span className={status.tone === "error" ? "error-text" : "muted"}>{status.text}</span>}
+      </div>
+    </form>
   );
 }

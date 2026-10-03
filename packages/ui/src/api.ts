@@ -75,6 +75,8 @@ export interface Session {
   signIn?: { source: "env" | "alden" | "gh" | null; gitHubCli: boolean };
   /** The desktop app's `alden` command. */
   cli?: CliStatus;
+  /** What this machine's queue covers (queue.orgs, queue.repos, queue.ignore); empty lists mean everywhere. */
+  queueScope?: { orgs: string[]; repos: string[]; ignore: string[] };
   background?: { enabled: boolean; model: boolean };
 }
 

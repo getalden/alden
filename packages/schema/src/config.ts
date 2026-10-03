@@ -15,6 +15,10 @@ export const DEFAULT_SENSITIVE_PATHS = [
   "**/poetry.lock",
 ];
 
+const OWNER = /^[A-Za-z0-9-]+$/;
+const REPO = /^[A-Za-z0-9-]+\/[\w.-]+$/;
+const OWNER_OR_REPO = /^[A-Za-z0-9-]+(\/[\w.-]+)?$/;
+
 export const AldenConfigSchema = z.object({
   model: z
     .object({
@@ -69,6 +73,14 @@ export const AldenConfigSchema = z.object({
       includeDrafts: z.boolean().default(false),
       sensitivePaths: z.array(z.string()).default(DEFAULT_SENSITIVE_PATHS),
       fastTrackMaxLines: z.number().int().positive().default(50),
+      /**
+       * What your queue covers on this machine: only PRs in these organisations or users' repos, and in these repos
+       * (`owner/name`); a PR in either counts. Empty means everywhere. Read from your user config only.
+       */
+      orgs: z.array(z.string().regex(OWNER, "an organisation or user name, e.g. getalden")).default([]),
+      repos: z.array(z.string().regex(REPO, "owner/name, e.g. getalden/alden")).default([]),
+      /** Organisations or repos (`owner/name`) to leave out of your queue. Read from your user config only. */
+      ignore: z.array(z.string().regex(OWNER_OR_REPO, "an organisation, or owner/name for a repo")).default([]),
     })
     .prefault({}),
 });

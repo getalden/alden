@@ -5,6 +5,7 @@ import {
   loadConfig,
   queueEvent,
   queueRows,
+  queueScope,
   rankQueue,
   resolveToken,
   track,
@@ -52,8 +53,7 @@ export function registerQueueCommand(program: Command): void {
           limit,
           cache,
           refresh: options.refresh ?? false,
-          repos: options.repo,
-          orgs: options.org,
+          ...queueScope(config, { repos: options.repo, orgs: options.org }),
         });
       } catch (error) {
         program.error(describeGitHubError(error, resolved.source));

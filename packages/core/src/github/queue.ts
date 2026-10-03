@@ -1,7 +1,7 @@
 import type { JsonCache } from "../cache.js";
 import type { GitHubClient } from "./client.js";
 import { CODEOWNERS_PATHS, type CodeownersRule, parseCodeowners } from "./codeowners.js";
-import { cachedOrgAccess, orgAccessWarnings } from "./orgs.js";
+import { cachedOrgAccess, orgAccessWarnings, orgInScope } from "./orgs.js";
 import {
   PULL_REQUEST_FIELDS,
   type PullRequestFacts,
@@ -130,13 +130,17 @@ export interface QueueOptions {
   repos?: string[];
   /** Only repos owned by these users or organisations. */
   orgs?: string[];
+  /** Organisations or repos (`owner/name`) to leave out. */
+  ignore?: string[];
 }
 
 const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
 const OWNER_NAME = /^[\w-]+$/;
 
 /** The GitHub search query for the viewer's queue. Throws on a malformed repo or org name. */
-export function queueSearchQuery(options: Pick<QueueOptions, "includeDrafts" | "repos" | "orgs"> = {}): string {
+export function queueSearchQuery(
+  options: Pick<QueueOptions, "includeDrafts" | "repos" | "orgs" | "ignore"> = {},
+): string {
   const parts = ["is:pr", "is:open", "archived:false", "review-requested:@me"];
   if (!options.includeDrafts) parts.push("draft:false");
   for (const repo of options.repos ?? []) {
@@ -146,6 +150,11 @@ export function queueSearchQuery(options: Pick<QueueOptions, "includeDrafts" | "
   for (const org of options.orgs ?? []) {
     if (!OWNER_NAME.test(org)) throw new Error(`"${org}" isn't a GitHub user or organisation name.`);
     parts.push(`org:${org}`);
+  }
+  for (const name of options.ignore ?? []) {
+    if (REPO_NAME.test(name)) parts.push(`-repo:${name}`);
+    else if (OWNER_NAME.test(name)) parts.push(`-org:${name}`);
+    else throw new Error(`"${name}" in queue.ignore isn't an organisation or owner/name.`);
   }
   return parts.join(" ");
 }
@@ -165,7 +174,7 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
     // Orgs that hide their PRs from this sign-in make the queue look short without an error: say which.
     cachedOrgAccess(client, viewer.login, cache).catch(() => []),
   ]);
-  warnings.push(...orgAccessWarnings(orgAccess));
+  warnings.push(...orgAccessWarnings(orgAccess.filter((a) => orgInScope(a.org, options))));
   if (raw.more) {
     warnings.push(
       `More than ${limit} PRs are waiting on you; Alden ranked the ${limit} GitHub returned first. Narrow it with --repo or --org, or raise --limit.`,

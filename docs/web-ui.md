@@ -37,7 +37,8 @@ Stop it with Ctrl+C.
 - **Memory.** Each repo Alden knows about, then what you look for and what you skip there: where each item came from,
   what it changes, Edit (notes), Forget and Undo, a switch to pause learning, and "Tell Alden something" to add a note.
   See [Learning and memory](memory.md).
-- **Settings.** The default model, effort and caps (saved to your user config), your feedback with a redacted export,
+- **Settings.** The default model, effort and caps (saved to your user config), what your queue covers on this machine
+  (organisations, repos, and what to leave out; the queue says when it's narrowed), your feedback with a redacted export,
   usage stats on or off, today's spend by PR, and light, dark or system appearance. In the desktop app, "While you're
   away" turns [background briefings](desktop.md#while-youre-away) and their use of the model on or off, and "Command
   line tool" installs the `alden` command if it isn't there.

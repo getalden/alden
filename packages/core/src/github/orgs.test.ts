@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GitHubClient } from "./client.js";
-import { checkOrgAccess, orgAccessFromError, orgAccessWarnings } from "./orgs.js";
+import { checkOrgAccess, orgAccessFromError, orgAccessWarnings, orgInScope } from "./orgs.js";
 
 const fail = (status: number, message: string) => Object.assign(new Error(message), { status });
 const SSO =
@@ -53,5 +53,12 @@ describe("org access", () => {
       { org: "getalden", access: "ok" },
       { org: "acme", access: "restricted" },
     ]);
+  });
+
+  it("counts an org in scope when nothing is set, when named, or when it owns a named repo, never when ignored", () => {
+    expect(orgInScope("acme", {})).toBe(true);
+    expect(orgInScope("acme", { orgs: ["getalden"] })).toBe(false);
+    expect(orgInScope("Acme", { repos: ["acme/web"] })).toBe(true);
+    expect(orgInScope("acme", { ignore: ["acme"] })).toBe(false);
   });
 });

@@ -41,6 +41,8 @@ interface QueueViewProps {
   onReact?: (key: string, reaction: Reaction) => void;
   /** PRs (lowercased "owner/repo#12") with a briefing ready from the desktop app's background run. */
   ready?: Set<string>;
+  /** This machine's queue scope, shown so a narrowed queue never looks like an empty one. */
+  scope?: { orgs: string[]; repos: string[]; ignore: string[] } | undefined;
 }
 
 /** The PRs waiting on you: "Needs you", ranked, then "Fast-track". Every row says why it ranks where it does. */
@@ -57,6 +59,7 @@ export function QueueView({
   reactions = {},
   onReact,
   ready,
+  scope,
 }: QueueViewProps) {
   const [showDismissed, setShowDismissed] = useState(false);
   const repos = useMemo(
@@ -113,8 +116,24 @@ export function QueueView({
     );
   }
 
+  const only = [...(scope?.orgs ?? []), ...(scope?.repos ?? [])];
+  const scopeNote =
+    only.length || scope?.ignore.length
+      ? [only.length ? `Only ${only.join(", ")}` : "", scope?.ignore.length ? `not ${scope.ignore.join(", ")}` : ""]
+          .filter(Boolean)
+          .join("; ")
+      : undefined;
+
   return (
     <section aria-labelledby="needs-you">
+      {scopeNote && (
+        <p className="side-note faint small scope-note">
+          {scopeNote} on this machine.{" "}
+          <a href="/settings" onClick={onLinkClick({ view: "settings" })}>
+            Change
+          </a>
+        </p>
+      )}
       {(repos.length > 1 || error) && (
         <div className="list-tools">
           {repos.length > 1 && (

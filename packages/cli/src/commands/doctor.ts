@@ -13,6 +13,8 @@ import {
   loadConfig,
   type OrgAccess,
   openStore,
+  orgInScope,
+  queueScope,
   repoConfigPath,
   repoFromRemote,
   resolveModel,
@@ -159,7 +161,15 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
       const client = createGitHubClient(resolved.token);
       const viewer = await getViewer(client);
       add({ area: "GitHub", status: "ok", detail: `@${viewer.login}, using ${from}` });
-      for (const line of await orgLines(client, resolved.source)) add(line);
+      const scope = config ? queueScope(config) : { repos: [], orgs: [], ignore: [] };
+      if (scope.orgs.length || scope.repos.length || scope.ignore.length) {
+        const parts = [
+          scope.orgs.length || scope.repos.length ? `only ${[...scope.orgs, ...scope.repos].join(", ")}` : "",
+          scope.ignore.length ? `leaving out ${scope.ignore.join(", ")}` : "",
+        ].filter(Boolean);
+        add({ area: "Queue", status: "ok", detail: `${parts.join("; ")} (queue.orgs, queue.repos, queue.ignore)` });
+      }
+      for (const line of await orgLines(client, resolved.source, scope)) add(line);
       if (viewer.missingScopes.length > 0) {
         add({
           area: "GitHub scopes",
@@ -305,13 +315,19 @@ function aldenAppSettings(): string {
 }
 
 /** One line for the orgs this sign-in can see, and one per org that hides its PRs, with the fix for this sign-in. */
-async function orgLines(client: GitHubClient, source: TokenSource): Promise<Finding[]> {
+async function orgLines(
+  client: GitHubClient,
+  source: TokenSource,
+  scope: { orgs: string[]; repos: string[]; ignore: string[] },
+): Promise<Finding[]> {
   let access: OrgAccess[];
   try {
-    access = await checkOrgAccess(client);
+    // Only the orgs this machine's queue covers: a work org's sign-on is no concern on a personal laptop.
+    access = (await checkOrgAccess(client)).filter((a) => orgInScope(a.org, scope));
   } catch {
     return [];
   }
+  const scoped = scope.orgs.length + scope.repos.length > 0;
   const blocked = access.filter((a) => a.access === "sso" || a.access === "restricted");
   const visible = access.filter((a) => a.access === "ok").map((a) => a.org);
   const lines: Finding[] = [];
@@ -323,7 +339,9 @@ async function orgLines(client: GitHubClient, source: TokenSource): Promise<Find
         visible.length ? `can see PRs in ${visible.join(", ")}` : "can't see private PRs in any of your organizations"
       }${
         // Without the GitHub CLI to compare with, an org that hides itself from this sign-in may not show up at all.
-        blocked.length === 0 && source !== "gh" ? " (company missing? see getalden.dev/docs/troubleshooting)" : ""
+        blocked.length === 0 && source !== "gh" && !scoped
+          ? " (company missing? see getalden.dev/docs/troubleshooting)"
+          : ""
       }`,
     });
   }

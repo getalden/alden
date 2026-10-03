@@ -4,6 +4,12 @@
 
 ### Patch Changes
 
+- Set what your queue covers on each machine: `queue.orgs`, `queue.repos` and `queue.ignore` in your user config (or
+  Settings → Your queue on this machine). Only your company's organisation on a work laptop, only your own repos on a
+  personal one; the terminal, the web UI, the desktop app and `alden mcp` all follow it, `--repo` and `--org` override
+  it for one run, and a repo's `.alden.toml` can't change it. Doctor shows the scope, and only warns about
+  organisations inside it. `alden config set` takes comma-separated lists.
+
 - `alden doctor` and the queue now find organisations that hide themselves from Alden's own sign-in. GitHub leaves
   such an organisation out of the sign-in's list of your organisations altogether, so Alden also checks your public
   memberships and the organisations the GitHub CLI's sign-in can see, and probes each one.

@@ -5,6 +5,7 @@ export {
   getConfigValue,
   isKnownKey,
   loadConfig,
+  queueScope,
   repoConfigPath,
   setConfigValue,
   unsetConfigValue,

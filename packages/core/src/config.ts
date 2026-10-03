@@ -39,11 +39,38 @@ function deepMerge(base: Table, override: Table): Table {
   return out;
 }
 
-/** Defaults, then `~/.alden/config.toml`, then the repo's `.alden.toml`. */
+/** Settings that describe you, not the repo: a repo's `.alden.toml` can't change them. */
+const USER_ONLY = [
+  ["queue", "orgs"],
+  ["queue", "repos"],
+  ["queue", "ignore"],
+] as const;
+
+/** Defaults, then `~/.alden/config.toml`, then the repo's `.alden.toml` (except the user-only settings). */
 export async function loadConfig(cwd: string = process.cwd()): Promise<AldenConfig> {
   const user = await readToml(userConfigPath());
   const repo = await readToml(repoConfigPath(cwd));
+  for (const [table, key] of USER_ONLY) {
+    const node = repo[table];
+    if (isTable(node)) delete node[key];
+  }
   return AldenConfigSchema.parse(deepMerge(user, repo));
+}
+
+/**
+ * The queue's scope: `--repo` and `--org` for one run when given, else this machine's `queue.repos` and
+ * `queue.orgs`; `queue.ignore` always applies.
+ */
+export function queueScope(
+  config: AldenConfig,
+  flags: { repos?: string[]; orgs?: string[] } = {},
+): { repos: string[]; orgs: string[]; ignore: string[] } {
+  const given = (flags.repos?.length ?? 0) + (flags.orgs?.length ?? 0) > 0;
+  return {
+    repos: given ? (flags.repos ?? []) : config.queue.repos,
+    orgs: given ? (flags.orgs ?? []) : config.queue.orgs,
+    ignore: config.queue.ignore,
+  };
 }
 
 export function getConfigValue(config: AldenConfig, key: string): unknown {
@@ -55,7 +82,15 @@ export function getConfigValue(config: AldenConfig, key: string): unknown {
   return node;
 }
 
-function coerce(raw: string): unknown {
+/** A value from `alden config set`: lists are comma-separated ("a, b") or JSON ("[\"a\"]"). */
+function coerce(raw: string, list = false): unknown {
+  if (list) {
+    if (raw.trim().startsWith("[")) return JSON.parse(raw);
+    return raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
   if (raw === "true") return true;
   if (raw === "false") return false;
   if (raw.trim() !== "" && !Number.isNaN(Number(raw))) return Number(raw);
@@ -76,7 +111,7 @@ export async function setConfigValue(key: string, raw: string): Promise<void> {
     node[part] = isTable(next) ? next : {};
     node = node[part] as Table;
   }
-  node[last] = coerce(raw);
+  node[last] = coerce(raw, Array.isArray(getConfigValue(AldenConfigSchema.parse({}), key)));
 
   const result = AldenConfigSchema.safeParse(table);
   if (!result.success) {

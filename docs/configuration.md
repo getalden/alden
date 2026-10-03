@@ -53,6 +53,15 @@ See [Models, providers and budgets](models.md).
 | `queue.includeDrafts` | `false` | Include draft PRs in `alden queue`. |
 | `queue.fastTrackMaxLines` | `50` | The largest PR, in changed lines, that can be fast-tracked. |
 | `queue.sensitivePaths` | see below | Glob patterns that raise a PR's risk and trigger the sensitive-paths check. Setting it replaces the defaults. |
+| `queue.orgs` | `[]` | Only PRs in these organisations' (or users') repos. Empty means everywhere. Your user config only. |
+| `queue.repos` | `[]` | Only PRs in these repos (`owner/name`); with `queue.orgs`, a PR in either counts. Your user config only. |
+| `queue.ignore` | `[]` | Organisations or repos (`owner/name`) to leave out, even when covered above. Your user config only. |
+
+`queue.orgs`, `queue.repos` and `queue.ignore` set what your queue covers on this machine, everywhere Alden shows it
+(the terminal, the web UI, the desktop app's menu and background briefings, and `alden mcp`): only your company's
+organisation on a work laptop, say, and only your own repos on a personal one. Set them in Settings → Your queue on this
+machine, or with `alden config set queue.orgs "acme"` (lists are comma-separated). `--repo` and `--org` override
+them for one run. A repo's `.alden.toml` can't set them.
 
 Default sensitive paths:
 

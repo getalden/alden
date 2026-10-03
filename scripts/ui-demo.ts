@@ -211,6 +211,11 @@ const api: UiApi = {
     // ALDEN_DEMO_SIGNED_OUT=1 shows the sign-in card, as if GitHub had rejected the saved sign-in.
     user: process.env.ALDEN_DEMO_SIGNED_OUT === "1" ? { error: "rejected" } : { login: "you", source: "demo" },
     signIn: { source: "alden" as const, gitHubCli: true },
+    // ALDEN_DEMO_SCOPED=1 shows a queue scoped to some orgs on this machine.
+    queueScope:
+      process.env.ALDEN_DEMO_SCOPED === "1"
+        ? { orgs: ["django", "vercel"], repos: [], ignore: ["grafana"] }
+        : { orgs: [], repos: [], ignore: [] },
     cli: { state: "missing" as const, bundled: "/Applications/Alden.app/Contents/MacOS/alden" },
     model: {
       provider: "anthropic",

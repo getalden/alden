@@ -106,3 +106,16 @@ export function orgAccessWarnings(access: OrgAccess[]): string[] {
         : [],
   );
 }
+
+/**
+ * Whether an org is in a queue's scope: everywhere when no orgs or repos are set, else an org you named or the owner
+ * of a repo you named; never one you ignore.
+ */
+export function orgInScope(org: string, scope: { orgs?: string[]; repos?: string[]; ignore?: string[] }): boolean {
+  const lower = org.toLowerCase();
+  if ((scope.ignore ?? []).some((i) => i.toLowerCase() === lower)) return false;
+  const named = [...(scope.orgs ?? []), ...(scope.repos ?? []).map((r) => r.split("/")[0] ?? "")].map((o) =>
+    o.toLowerCase(),
+  );
+  return named.length === 0 || named.includes(lower);
+}

@@ -2,7 +2,15 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getConfigValue, isKnownKey, loadConfig, setConfigValue, unsetConfigValue, userConfigPath } from "./config.js";
+import {
+  getConfigValue,
+  isKnownKey,
+  loadConfig,
+  queueScope,
+  setConfigValue,
+  unsetConfigValue,
+  userConfigPath,
+} from "./config.js";
 
 let home: string;
 let repo: string;
@@ -36,7 +44,38 @@ describe("loadConfig", () => {
   });
 });
 
+describe("queue scope", () => {
+  it("comes from this machine's user config, and a repo's config can't change it", async () => {
+    await writeFile(userConfigPath(), '[queue]\norgs = ["acme"]\nignore = ["acme/legacy"]\n');
+    await writeFile(
+      join(repo, ".alden.toml"),
+      '[queue]\norgs = ["evil"]\nrepos = ["evil/x"]\nfastTrackMaxLines = 20\n',
+    );
+    const config = await loadConfig(repo);
+    expect(config.queue.fastTrackMaxLines).toBe(20);
+    expect(queueScope(config)).toEqual({ orgs: ["acme"], repos: [], ignore: ["acme/legacy"] });
+  });
+
+  it("gives way to --repo and --org for one run, but keeps what you ignore", async () => {
+    await writeFile(userConfigPath(), '[queue]\norgs = ["acme"]\nignore = ["acme/legacy"]\n');
+    const config = await loadConfig(repo);
+    expect(queueScope(config, { repos: ["getalden/alden"], orgs: [] })).toEqual({
+      orgs: [],
+      repos: ["getalden/alden"],
+      ignore: ["acme/legacy"],
+    });
+  });
+});
+
 describe("setConfigValue", () => {
+  it("takes lists comma-separated or as JSON", async () => {
+    await setConfigValue("queue.orgs", "acme, getalden");
+    expect((await loadConfig(repo)).queue.orgs).toEqual(["acme", "getalden"]);
+    await setConfigValue("queue.repos", '["acme/x"]');
+    expect((await loadConfig(repo)).queue.repos).toEqual(["acme/x"]);
+    await expect(setConfigValue("queue.repos", "not-a-repo")).rejects.toThrow(/owner\/name/);
+  });
+
   it("writes a dotted key to the user config", async () => {
     await setConfigValue("budget.perReviewUsd", "1.25");
     expect(await readFile(userConfigPath(), "utf8")).toContain("perReviewUsd = 1.25");

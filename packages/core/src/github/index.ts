@@ -21,6 +21,7 @@ export {
   type OrgAccessState,
   orgAccessFromError,
   orgAccessWarnings,
+  orgInScope,
 } from "./orgs.js";
 export {
   type CiState,
