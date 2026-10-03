@@ -26,9 +26,16 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-  # The standalone binary, built and smoke-tested on one platform per push (the release builds all five).
+  # The standalone binary, built and smoke-tested per push on Linux and Windows (Windows builds differently enough
+  # to break on its own); the release builds all five.
   binary:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, bin: dist-bin/alden-linux-x64 }
+          - { os: windows-2025, bin: dist-bin/alden-windows-x64.exe }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -39,4 +46,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm build:binary
-      - run: pnpm smoke:binary dist-bin/alden-linux-x64
+      - run: pnpm smoke:binary ${{ matrix.bin }}

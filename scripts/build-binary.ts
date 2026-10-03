@@ -12,7 +12,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 const ROOT = join(import.meta.dirname, "..");
 const OUT = join(ROOT, "build/binary");
@@ -69,7 +69,9 @@ const size = files.reduce((n, [, path]) => n + statSync(path).size, 0);
 console.log(`Embedded ${files.length} files (${(size / 1024 / 1024).toFixed(1)} MB).`);
 
 mkdirSync(BIN, { recursive: true });
-const bun = join(ROOT, "node_modules/.bin/bun");
+// The bun package's own executable (bin/bun.exe on every platform), not node_modules/.bin/bun: on Windows that's
+// only a .cmd shim, which can't be spawned directly.
+const bun = join(dirname(require.resolve("bun/package.json")), "bin", "bun.exe");
 for (const target of targets) {
   const outfile = join(BIN, `alden-${target}${target.startsWith("windows") ? ".exe" : ""}`);
   execFileSync(
