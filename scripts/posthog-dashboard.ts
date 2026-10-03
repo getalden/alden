@@ -47,7 +47,7 @@ const INSIGHTS: { name: string; description: string; query: Query }[] = [
     description: "Terminal, web UI or desktop app: where people use Alden.",
     query: trends([anything()], {
       breakdownFilter: { breakdown: "surface", breakdown_type: "event" },
-      trendsFilter: { display: "ActionsBarStacked" },
+      trendsFilter: { display: "ActionsStackedBar" },
     }),
   },
   {
@@ -55,7 +55,7 @@ const INSIGHTS: { name: string; description: string; query: Query }[] = [
     description: "Reviews of PRs and of local changes.",
     query: trends([event("review_completed", { math: "total" })], {
       breakdownFilter: { breakdown: "target", breakdown_type: "event" },
-      trendsFilter: { display: "ActionsBarStacked" },
+      trendsFilter: { display: "ActionsStackedBar" },
     }),
   },
   {
@@ -75,7 +75,7 @@ const INSIGHTS: { name: string; description: string; query: Query }[] = [
     description: "Useful, not useful and dismiss on briefings: is anyone teaching Alden?",
     query: trends([event("feedback_given", { math: "total" })], {
       breakdownFilter: { breakdown: "verdict", breakdown_type: "event" },
-      trendsFilter: { display: "ActionsBarStacked" },
+      trendsFilter: { display: "ActionsStackedBar" },
     }),
   },
   {
@@ -158,7 +158,7 @@ WHERE event = 'review_completed' AND timestamp > now() - INTERVAL 30 DAY`),
     query: trends([anything()], {
       breakdownFilter: { breakdown: "app_version", breakdown_type: "event" },
       dateRange: { date_from: "-30d" },
-      trendsFilter: { display: "ActionsBarStacked" },
+      trendsFilter: { display: "ActionsStackedBar" },
     }),
   },
   {
