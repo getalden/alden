@@ -15,7 +15,7 @@ Sign in to GitHub.
 | Command | What it does |
 | --- | --- |
 | `alden auth login` | Uses the GitHub CLI's sign-in if there is one. Otherwise signs you in with a code in your browser and stores the token. |
-| `alden auth login --device` | Signs in with a code in your browser, even if the GitHub CLI is signed in. |
+| `alden auth login --device` | Signs in with a one-time code, even if the GitHub CLI is signed in. Press Enter to open the GitHub page for it. |
 | `alden auth login --with-token` | Reads a token from standard input, e.g. `echo $TOKEN \| alden auth login --with-token`. |
 | `alden auth status` | Shows the account Alden is using, where the token comes from, and its scopes. |
 | `alden auth logout` | Removes the token Alden stored. Doesn't touch the GitHub CLI's sign-in. |

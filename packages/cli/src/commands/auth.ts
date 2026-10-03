@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline";
 import {
   createGitHubClient,
   DefaultCredentialStore,
@@ -11,6 +12,7 @@ import {
   type Viewer,
 } from "@alden/core";
 import type { Command } from "commander";
+import { openInBrowser } from "./open.js";
 
 const SOURCE_LABEL: Record<TokenSource, string> = {
   env: "ALDEN_GITHUB_TOKEN",
@@ -72,10 +74,22 @@ export function registerAuthCommand(program: Command): void {
         program.error((error as Error).message);
       }
       const code = await requestDeviceCode(clientId);
-      console.log(`Open ${code.verificationUri} and enter the code: ${code.userCode}`);
-      console.log("Waiting for you to approve it in the browser…");
+      console.log(`Your one-time code: ${code.userCode}`);
+      // In a terminal, Enter opens the page while Alden keeps waiting for the approval, as `gh auth login` does.
+      const interactive = process.stdin.isTTY && process.stdout.isTTY;
+      const prompt = interactive ? createInterface({ input: process.stdin, output: process.stdout }) : undefined;
+      if (prompt) {
+        console.log(`Press Enter to open ${code.verificationUri} in your browser, then enter the code there.`);
+        prompt.once("line", () => {
+          openInBrowser(code.verificationUri, `Couldn't open a browser. Go to ${code.verificationUri}.`);
+          console.log("Waiting for you to approve it in the browser…");
+        });
+      } else {
+        console.log(`Open ${code.verificationUri} and enter the code.`);
+        console.log("Waiting for you to approve it in the browser…");
+      }
       try {
-        const token = await pollForToken(clientId, code);
+        const token = await pollForToken(clientId, code).finally(() => prompt?.close());
         const viewer = await getViewer(createGitHubClient(token));
         await store.set(token);
         console.log(`Signed in to github.com as @${viewer.login}.`);
