@@ -1,5 +1,6 @@
 import type { JsonCache } from "../cache.js";
-import type { GitHubClient } from "./client.js";
+import { createGitHubClient, type GitHubClient } from "./client.js";
+import { ghCliToken } from "./token.js";
 
 /**
  * Whether a sign-in can see an organization's private data. Orgs can hide it from a token two ways, and GitHub's
@@ -26,14 +27,42 @@ export function orgAccessFromError(error: unknown): OrgAccessState {
   return "unknown";
 }
 
-/** Every org the token can name, and whether it can see that org's private data (one small request per org). */
-export async function checkOrgAccess(client: GitHubClient): Promise<OrgAccess[]> {
+async function userOrgs(client: GitHubClient): Promise<string[]> {
   const orgs: string[] = [];
   for (let page = 1; ; page++) {
     const { data } = await client.request("GET /user/orgs", { per_page: 100, page });
     orgs.push(...data.map((o) => o.login));
     if (data.length < 100) break;
   }
+  return orgs;
+}
+
+/**
+ * Your orgs, and whether this token can see each one's private data (one small request per org).
+ *
+ * An org that hides itself from a token is often missing from that token's own list of orgs too, so the list also
+ * takes your public memberships and the orgs the GitHub CLI's sign-in can see, when it's signed in (`otherOrgs`).
+ */
+export async function checkOrgAccess(
+  client: GitHubClient,
+  options: { otherOrgs?: () => Promise<string[]> } = {},
+): Promise<OrgAccess[]> {
+  const mine = await userOrgs(client);
+  const { data: user } = await client.request("GET /user");
+  const [publicOrgs, otherOrgs] = await Promise.all([
+    client
+      .request("GET /users/{username}/orgs", { username: user.login, per_page: 100 })
+      .then(({ data }) => data.map((o) => o.login))
+      .catch(() => [] as string[]),
+    (options.otherOrgs ?? gitHubCliOrgs)().catch(() => [] as string[]),
+  ]);
+  const seen = new Set<string>();
+  const orgs = [...mine, ...publicOrgs, ...otherOrgs].filter((org) => {
+    const key = org.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   return Promise.all(
     orgs.map(async (org): Promise<OrgAccess> => {
       try {
@@ -45,6 +74,12 @@ export async function checkOrgAccess(client: GitHubClient): Promise<OrgAccess[]>
       }
     }),
   );
+}
+
+/** The orgs the GitHub CLI's sign-in lists, if it's signed in. */
+async function gitHubCliOrgs(): Promise<string[]> {
+  const token = await ghCliToken();
+  return token ? userOrgs(createGitHubClient(token)) : [];
 }
 
 /** `checkOrgAccess`, remembered for an hour per account, for the queue (doctor always checks afresh). */

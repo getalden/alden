@@ -1,5 +1,13 @@
 # alden
 
+## 0.2.3
+
+### Patch Changes
+
+- `alden doctor` and the queue now find organisations that hide themselves from Alden's own sign-in. GitHub leaves
+  such an organisation out of the sign-in's list of your organisations altogether, so Alden also checks your public
+  memberships and the organisations the GitHub CLI's sign-in can see, and probes each one.
+
 ## 0.2.2
 
 ### Patch Changes

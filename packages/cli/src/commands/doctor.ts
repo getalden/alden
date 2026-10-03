@@ -319,9 +319,12 @@ async function orgLines(client: GitHubClient, source: TokenSource): Promise<Find
     lines.push({
       area: "Organizations",
       status: blocked.length ? "warn" : "ok",
-      detail: visible.length
-        ? `can see PRs in ${visible.join(", ")}`
-        : "can't see private PRs in any of your organizations",
+      detail: `${
+        visible.length ? `can see PRs in ${visible.join(", ")}` : "can't see private PRs in any of your organizations"
+      }${
+        // Without the GitHub CLI to compare with, an org that hides itself from this sign-in may not show up at all.
+        blocked.length === 0 && source !== "gh" ? " (company missing? see getalden.dev/docs/troubleshooting)" : ""
+      }`,
     });
   }
   for (const { org, access: state } of blocked) {
