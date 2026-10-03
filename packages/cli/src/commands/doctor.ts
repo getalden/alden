@@ -3,11 +3,15 @@ import { access, constants, mkdir } from "node:fs/promises";
 import { promisify } from "node:util";
 import {
   aldenHome,
+  checkOrgAccess,
   createGitHubClient,
+  type GitHubClient,
   getViewer,
+  githubClientId,
   isStandaloneBinary,
   languageOf,
   loadConfig,
+  type OrgAccess,
   openStore,
   repoConfigPath,
   repoFromRemote,
@@ -16,6 +20,7 @@ import {
   SpendLedger,
   selectProvider,
   supportsEffort,
+  type TokenSource,
   telemetryBlocked,
   telemetryConsent,
   userConfigPath,
@@ -151,8 +156,10 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
   } else {
     const from = { env: "ALDEN_GITHUB_TOKEN", alden: "Alden's stored sign-in", gh: "the GitHub CLI" }[resolved.source];
     try {
-      const viewer = await getViewer(createGitHubClient(resolved.token));
+      const client = createGitHubClient(resolved.token);
+      const viewer = await getViewer(client);
       add({ area: "GitHub", status: "ok", detail: `@${viewer.login}, using ${from}` });
+      for (const line of await orgLines(client, resolved.source)) add(line);
       if (viewer.missingScopes.length > 0) {
         add({
           area: "GitHub scopes",
@@ -286,4 +293,59 @@ export function registerDoctorCommand(program: Command, version: string): void {
       else process.stdout.write(renderDoctor(findings, shouldColor(process.stdout)));
       if (findings.some((f) => f.status === "fail")) process.exitCode = 1;
     });
+}
+
+/** Alden's OAuth app's page in the user's GitHub settings, where they authorize it for SSO or request approval. */
+function aldenAppSettings(): string {
+  try {
+    return `https://github.com/settings/connections/applications/${githubClientId()}`;
+  } catch {
+    return "https://github.com/settings/applications";
+  }
+}
+
+/** One line for the orgs this sign-in can see, and one per org that hides its PRs, with the fix for this sign-in. */
+async function orgLines(client: GitHubClient, source: TokenSource): Promise<Finding[]> {
+  let access: OrgAccess[];
+  try {
+    access = await checkOrgAccess(client);
+  } catch {
+    return [];
+  }
+  const blocked = access.filter((a) => a.access === "sso" || a.access === "restricted");
+  const visible = access.filter((a) => a.access === "ok").map((a) => a.org);
+  const lines: Finding[] = [];
+  if (access.length > 0) {
+    lines.push({
+      area: "Organizations",
+      status: blocked.length ? "warn" : "ok",
+      detail: visible.length
+        ? `can see PRs in ${visible.join(", ")}`
+        : "can't see private PRs in any of your organizations",
+    });
+  }
+  for (const { org, access: state } of blocked) {
+    const fix =
+      state === "sso"
+        ? source === "alden"
+          ? `Open ${aldenAppSettings()} and click Authorize next to ${org} (it signs you in to ${org}'s single sign-on).`
+          : source === "gh"
+            ? `Run \`gh auth refresh -h github.com\` and authorize ${org} in the browser, or authorize the GitHub CLI for it at https://github.com/settings/applications.`
+            : `At https://github.com/settings/tokens, choose Configure SSO next to the token and authorize ${org}.`
+        : source === "alden"
+          ? `Ask a ${org} owner to approve Alden (click Request next to ${org} at ${aldenAppSettings()}). Meanwhile, \`alden auth logout\` switches to your GitHub CLI sign-in, if ${org} approved that.`
+          : source === "gh"
+            ? `${org} hasn't approved the GitHub CLI either. Use a classic personal access token (\`alden auth login --with-token\`), or ask an owner to approve Alden.`
+            : `Ask a ${org} owner to approve the token's access, or use a classic personal access token.`;
+    lines.push({
+      area: `Org ${org}`,
+      status: "warn",
+      detail:
+        state === "sso"
+          ? "uses single sign-on, and this sign-in isn't authorized for it: its PRs are missing from your queue"
+          : "restricts third-party apps and hasn't approved this sign-in: its private PRs are missing from your queue",
+      fix,
+    });
+  }
+  return lines;
 }

@@ -1,5 +1,15 @@
 # alden
 
+## 0.2.1
+
+### Patch Changes
+
+- Say when an organisation hides its PRs from your sign-in. Organisations that use single sign-on, or allow only
+  approved apps, leave their PRs out of the queue without an error; `alden doctor` now names each one with the fix for
+  your kind of sign-in, and the queue, the web UI and the desktop menu warn about them. The desktop app can install the
+  `alden` command (Install command line tool… in the menu), and `alden auth login --device` opens GitHub when you press
+  Enter. Windows binaries build again.
+
 ## 0.2.0
 
 ### Minor Changes

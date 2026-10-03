@@ -13,14 +13,18 @@ Or download `Alden-<version>-universal.dmg` from the [releases page](https://git
 and drag Alden to Applications. It runs on Apple silicon and Intel Macs with macOS 12 or later, and it's signed and
 notarized, so it opens without a warning.
 
-The app and the `alden` command line tool install side by side and share `~/.alden`: the same sign-in, settings,
-memory and spend.
+The app carries its own copy of `alden`, which it runs in the background. To use it in a terminal as well (and for
+`alden mcp` and the Claude Code plugin), choose **Install command line tool…** in the menu: it links the app's `alden`
+into `/usr/local/bin` after macOS asks for your password, and updates with the app. If you've installed `alden` with
+Homebrew or npm already, there's nothing to do: the app and the command share `~/.alden`, so the same sign-in,
+settings, memory and spend.
 
 ## Using it
 
 - **Choose repo folder…** in the menu picks the clone Alden reviews from (your home folder until you choose one). Alden
   remembers it.
-- The menu bar shows how many PRs wait on you and the top three; click one to open its briefing.
+- The menu bar shows how many PRs wait on you and the top three; click one to open its briefing. If an organisation hides
+  its PRs from your sign-in, the menu says some are hidden, and the window says which and why.
 - **Open Alden** (⌘⇧A) brings the window forward from anywhere. **Refresh** reloads the queue, which also happens
   every 5 minutes.
 - When someone has waited three days on a PR that isn't waiting on its author, you get one notification for it.

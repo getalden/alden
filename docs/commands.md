@@ -89,7 +89,8 @@ tool closes it. See [Alden in your AI coding tool](mcp.md).
 ## alden doctor
 
 Checks your setup here: the Alden version (and whether a newer one exists), where Alden keeps files, your settings,
-the GitHub sign-in and its scopes, the model and today's budget, whether this folder is a clone (and of which repo),
+the GitHub sign-in and its scopes, which of your organisations' PRs it can see (and why not, for any that hide
+them), the model and today's budget, whether this folder is a clone (and of which repo),
 and which languages the code graph reads in it. Every problem comes with its fix. `--json` prints the findings as
 data. Exits with 1 when something fails.
 

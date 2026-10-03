@@ -1,6 +1,7 @@
 import type { JsonCache } from "../cache.js";
 import type { GitHubClient } from "./client.js";
 import { CODEOWNERS_PATHS, type CodeownersRule, parseCodeowners } from "./codeowners.js";
+import { cachedOrgAccess, orgAccessWarnings } from "./orgs.js";
 import {
   PULL_REQUEST_FIELDS,
   type PullRequestFacts,
@@ -159,7 +160,12 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
   const cached = refresh ? undefined : await cache?.get<ReviewQueue>(cacheKey, maxAgeMs);
   if (cached) return cached;
 
-  const raw = await searchPullRequests(client, q, limit);
+  const [raw, orgAccess] = await Promise.all([
+    searchPullRequests(client, q, limit),
+    // Orgs that hide their PRs from this sign-in make the queue look short without an error: say which.
+    cachedOrgAccess(client, viewer.login, cache).catch(() => []),
+  ]);
+  warnings.push(...orgAccessWarnings(orgAccess));
   if (raw.more) {
     warnings.push(
       `More than ${limit} PRs are waiting on you; Alden ranked the ${limit} GitHub returned first. Narrow it with --repo or --org, or raise --limit.`,

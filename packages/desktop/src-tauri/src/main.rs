@@ -74,6 +74,9 @@ struct Ready {
 struct Queue {
     needs_you: Vec<Row>,
     fast_track: Vec<Row>,
+    /// e.g. an org that hides its PRs from this sign-in; the window shows them in full.
+    #[serde(default)]
+    warnings: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -305,10 +308,16 @@ async fn poll(app: &AppHandle) {
         1 => "1 waiting on you".to_string(),
         n => format!("{n} waiting on you"),
     };
-    let sub = if total == 0 {
-        String::new()
-    } else {
-        format!("{} need you · {} fast", queue.needs_you.len(), queue.fast_track.len())
+    let hidden = queue.warnings.iter().any(|w| w.contains("missing"));
+    let sub = match (total, hidden) {
+        (0, false) => String::new(),
+        (0, true) => "Some organizations' PRs are hidden: open Alden".to_string(),
+        (_, false) => format!("{} need you · {} fast", queue.needs_you.len(), queue.fast_track.len()),
+        (_, true) => format!(
+            "{} need you · {} fast · some hidden",
+            queue.needs_you.len(),
+            queue.fast_track.len()
+        ),
     };
     let ready: HashSet<String> = api_get::<Vec<ReadyPr>>(&base, &token, "/api/prepared")
         .await
@@ -457,6 +466,7 @@ fn menu(app: &AppHandle, header: &str, sub: &str, rows: &[(String, String)]) -> 
         .item(&MenuItemBuilder::with_id("open", "Open Alden").accelerator("CmdOrCtrl+Shift+A").build(app)?)
         .item(&MenuItemBuilder::with_id("refresh", "Refresh now").build(app)?)
         .item(&MenuItemBuilder::with_id("folder", "Choose repo folder…").build(app)?)
+        .item(&MenuItemBuilder::with_id("cli", "Install command line tool…").build(app)?)
         .separator()
         .item(&PredefinedMenuItem::quit(app, Some("Quit Alden"))?)
         .build()
@@ -470,6 +480,7 @@ fn on_menu(app: &AppHandle, id: &str) {
             tauri::async_runtime::spawn(async move { poll(&app).await });
         }
         "folder" => choose_folder(app),
+        "cli" => install_cli(app),
         other => {
             if let Some(path) = other.strip_prefix("pr:") {
                 // "owner/repo/pull/12" → the UI's own route for that PR.
@@ -509,6 +520,53 @@ fn choose_folder(app: &AppHandle) {
         stop_server(&app);
         status(&app, "Starting Alden…");
         start_server(&app);
+    });
+}
+
+/// Where the `alden` command goes, as Docker Desktop and VS Code do it: on every Mac's PATH, outside Homebrew's folder.
+const CLI_LINK: &str = "/usr/local/bin/alden";
+
+/// Links the `alden` bundled in the app into /usr/local/bin, so the terminal, `alden mcp` and the Claude Code plugin
+/// work without a second install. macOS asks for an administrator's password, since /usr/local/bin belongs to root.
+fn install_cli(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let say = |text: String| {
+            app.dialog().message(text).title("Alden").blocking_show();
+        };
+        let Some(bundled) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join("alden"))) else {
+            return say("Couldn't find the alden command inside the app.".into());
+        };
+        let link = std::path::Path::new(CLI_LINK);
+        if std::fs::read_link(link).ok().as_deref() == Some(bundled.as_path()) {
+            return say(format!("The alden command is already installed at {CLI_LINK}."));
+        }
+        for existing in [CLI_LINK, "/opt/homebrew/bin/alden"] {
+            if std::path::Path::new(existing).exists() {
+                return say(format!(
+                    "There's already an alden command at {existing} (from Homebrew or npm), so Alden left it as it is. \
+                     The app and that command share your sign-in, settings and memory."
+                ));
+            }
+        }
+        let path = bundled.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!(
+            "do shell script \"mkdir -p /usr/local/bin && ln -sf \" & quoted form of \"{path}\" & \" {CLI_LINK}\" \
+             with prompt \"Alden wants to install the alden command in /usr/local/bin.\" with administrator privileges"
+        );
+        match std::process::Command::new("osascript").args(["-e", &script]).output() {
+            Ok(out) if out.status.success() => say(format!(
+                "Installed. Open a new terminal window and run `alden --version`.\n\n{CLI_LINK} points into Alden.app, \
+                 so it updates with the app."
+            )),
+            // Cancelled at the password prompt: nothing to say.
+            Ok(out) if String::from_utf8_lossy(&out.stderr).contains("-128") => {}
+            Ok(out) => say(format!(
+                "Couldn't install the command: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            )),
+            Err(error) => say(format!("Couldn't install the command: {error}")),
+        }
     });
 }
 

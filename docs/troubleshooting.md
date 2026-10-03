@@ -15,8 +15,23 @@ wrong.
 **Team review requests are missing.** The token needs the `read:org` scope. `alden auth status` lists the token's
 scopes. Sign in again with `alden auth login --device`, or run `gh auth refresh -s read:org`.
 
-**Private repos are missing.** The token needs the `repo` scope, and your organisation may need to approve Alden's
-OAuth app. Check your organisation's third-party access settings on GitHub.
+**A company's PRs are missing.** Organisations can hide their private data from a sign-in, and GitHub then leaves
+their PRs out of Alden's queue without an error. `alden doctor` checks each of your organisations and names any that
+do, and the queue warns about them. There are two causes:
+
+- **Single sign-on (SAML).** The organisation needs each sign-in authorized for it. For Alden's own sign-in, open
+  Alden's page under GitHub → Settings → Applications → Authorized OAuth Apps (doctor prints the link) and click
+  **Authorize** next to the organisation. For the GitHub CLI's, run `gh auth refresh -h github.com` and authorize it in
+  the browser. For a personal token, choose **Configure SSO** next to it at github.com/settings/tokens.
+- **Third-party app restrictions.** The organisation only allows apps an owner has approved. Ask an owner to approve
+  Alden (click **Request** next to the organisation on Alden's page in your GitHub settings). Meanwhile, use a sign-in
+  it already allows: many companies approve the GitHub CLI, so `alden auth logout` (which switches Alden to the GitHub
+  CLI's sign-in) often works at once; otherwise a classic personal access token (`alden auth login --with-token`).
+
+Alden itself never needs installing on an organisation: it reads what your own sign-in can read, and posts nothing.
+
+**Private repos are missing.** The token needs the `repo` scope. `alden auth status` lists its scopes; sign in again
+with `alden auth login --device`, or run `gh auth refresh -s repo`.
 
 ## Models
 

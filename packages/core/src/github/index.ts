@@ -15,6 +15,14 @@ export {
   requestDeviceCode,
 } from "./device-flow.js";
 export {
+  cachedOrgAccess,
+  checkOrgAccess,
+  type OrgAccess,
+  type OrgAccessState,
+  orgAccessFromError,
+  orgAccessWarnings,
+} from "./orgs.js";
+export {
   type CiState,
   MAX_FILES,
   PULL_REQUEST_FIELDS,

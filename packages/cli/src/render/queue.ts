@@ -30,7 +30,13 @@ export function renderQueue(untrusted: RankedQueue, options: RenderOptions): str
   const ranked = stripControlDeep(untrusted);
   const { color } = options;
   const rows: Row[] = [...ranked.needsYou, ...ranked.fastTrack].map((item, i) => ({ rank: i + 1, item }));
-  if (rows.length === 0) return `Nothing is waiting on @${ranked.viewer}'s review.\n`;
+  // Warnings matter most when the queue is empty: an org hiding its PRs looks exactly like nothing to review.
+  const warningLines = ranked.warnings.map((w) => paint(`Warning: ${w}`, "yellow", options.color));
+  if (rows.length === 0) {
+    return [`Nothing is waiting on @${ranked.viewer}'s review.`, ...(warningLines.length ? ["", ...warningLines] : [])]
+      .join("\n")
+      .concat("\n");
+  }
 
   const prLabel = (r: Row) => `${r.item.pr.repo}#${r.item.pr.number}`;
   const cols = {
@@ -76,8 +82,8 @@ export function renderQueue(untrusted: RankedQueue, options: RenderOptions): str
   };
 
   const out: string[] = [];
-  for (const warning of ranked.warnings) out.push(paint(`Warning: ${warning}`, "yellow", color));
-  if (ranked.warnings.length > 0) out.push("");
+  out.push(...warningLines);
+  if (warningLines.length > 0) out.push("");
 
   const groups: [string, Row[]][] = [
     ["Needs you", rows.filter((r) => r.item.lane === "needs-you")],

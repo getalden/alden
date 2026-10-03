@@ -53,6 +53,10 @@ function queue(needsYou: RankedPullRequest[], fastTrack: RankedPullRequest[] = [
 describe("renderQueue", () => {
   it("says so when nothing is waiting", () => {
     expect(renderQueue(queue([]), { width: 100, color: false })).toBe("Nothing is waiting on @me's review.\n");
+    // An org hiding its PRs looks like an empty queue, so its warning still shows.
+    expect(renderQueue(queue([], [], ["acme uses single sign-on"]), { width: 100, color: false })).toBe(
+      "Nothing is waiting on @me's review.\n\nWarning: acme uses single sign-on\n",
+    );
   });
 
   it("numbers rows across both groups and puts the reasons under each row", () => {

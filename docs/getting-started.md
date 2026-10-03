@@ -34,6 +34,12 @@ Alden is using. See [Commands](commands.md#alden-auth) for the other options.
 
 Alden asks for the `repo` scope (to read private repos) and `read:org` (to see review requests sent to your teams).
 
+**At a company?** Alden needs no install on your organisation: it reads what your own sign-in can read. But many
+organisations use single sign-on or only allow approved apps, and then hide their PRs from a sign-in until it's
+authorized. Run `alden doctor` after signing in: it names any organisation whose PRs Alden can't see, and how to fix it.
+If your company already uses the GitHub CLI, its sign-in is usually the quickest route. See
+[Troubleshooting](troubleshooting.md#github).
+
 ## See what's waiting on you
 
 ```sh
