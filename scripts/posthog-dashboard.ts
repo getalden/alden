@@ -225,7 +225,7 @@ for (const insight of INSIGHTS) {
     console.log(`created  ${insight.name}`);
   }
 }
-const project = await api<{ id: number }>("GET", "/");
-console.log(`\n${HOST}/project/${project.id}/dashboard/${dashboardId}`);
+// PostHog opens /dashboard/<id> in your current project, so the link needs no project:read scope.
+console.log(`\nDone: ${HOST}/dashboard/${dashboardId}`);
 
 export {};
