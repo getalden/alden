@@ -19,7 +19,8 @@ During the private beta, npm releases are published under the `next` tag. The ex
 installed; with `npx`, put `npx alden@next` in place of `alden`. There are also standalone binaries for macOS, Linux
 and Windows on the [releases page](https://github.com/getalden/homebrew-tap/releases).
 
-On a Mac you can also have Alden in a window and the menu bar, which briefs your top PRs while you're away: see
+On a Mac you can also have Alden in a window and the menu bar (the app installs the `alden` command too, so it can
+be your only install), which briefs your top PRs while you're away: see
 [The desktop app](desktop.md).
 
 ## Sign in to GitHub

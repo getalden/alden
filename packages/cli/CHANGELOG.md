@@ -1,5 +1,15 @@
 # alden
 
+## 0.2.2
+
+### Patch Changes
+
+- The desktop app sets itself up without a terminal. Installing it installs the `alden` command too: the Homebrew cask
+  links it into Homebrew's bin, and the app links it into /usr/local/bin on its first launch (macOS asks for your
+  password only if that folder needs it). Signing in to GitHub works from the window: Sign in with GitHub shows a
+  one-time code and opens GitHub's page, or Use my GitHub CLI sign-in switches to the GitHub CLI's. The same sign-in
+  card shows in `alden ui`.
+
 ## 0.2.1
 
 ### Patch Changes

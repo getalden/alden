@@ -1362,6 +1362,16 @@ textarea.input {
   border-radius: var(--r-md);
   padding: 8px 12px;
 }
+.state .body p + p {
+  margin-top: 8px;
+}
+.state .signin-code {
+  font: 600 28px / 1.2 var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  margin: 4px 0 10px;
+  user-select: all;
+}
 .state.center code.cmd {
   align-self: center;
 }

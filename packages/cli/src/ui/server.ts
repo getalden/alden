@@ -33,6 +33,14 @@ export interface UiApi {
   prepareNext(): Promise<unknown>;
   /** Without a PR, which briefings are ready; with one ("owner/repo#12"), that briefing, or null if none or stale. */
   prepared(pr?: string): Promise<unknown>;
+  /** GitHub sign-in from the UI: start the device flow, its status, open GitHub's page, or use the GitHub CLI's. */
+  startSignIn(): Promise<unknown>;
+  signInStatus(): Promise<unknown>;
+  openSignIn(): Promise<unknown>;
+  useGitHubCli(): Promise<unknown>;
+  /** The desktop app's `alden` command: whether it's installed, and installing it. */
+  cliStatus(): Promise<unknown>;
+  installCli(): Promise<unknown>;
   spend(): Promise<unknown>;
   config(): Promise<unknown>;
   /** `null` removes the setting, so its default applies again. */
@@ -297,6 +305,24 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         send(res, 200, await api.react({ pr: body.pr, reaction }));
         return;
       }
+      case "POST /api/auth/device":
+        send(res, 200, await api.startSignIn());
+        return;
+      case "GET /api/auth/device":
+        send(res, 200, await api.signInStatus());
+        return;
+      case "POST /api/auth/device/open":
+        send(res, 200, await api.openSignIn());
+        return;
+      case "POST /api/auth/gh":
+        send(res, 200, await api.useGitHubCli());
+        return;
+      case "GET /api/cli":
+        send(res, 200, await api.cliStatus());
+        return;
+      case "POST /api/cli/install":
+        send(res, 200, await api.installCli());
+        return;
       case "GET /api/telemetry":
         send(res, 200, await api.telemetry());
         return;

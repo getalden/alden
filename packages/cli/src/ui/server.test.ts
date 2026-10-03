@@ -31,6 +31,18 @@ const api: UiApi = {
     calls.push({ method: "prepared", args: pr });
     return pr ? null : [];
   },
+  startSignIn: async () => {
+    calls.push({ method: "startSignIn", args: undefined });
+    return { state: "waiting", userCode: "ABCD-1234" };
+  },
+  signInStatus: async () => ({ state: "idle" }),
+  openSignIn: async () => ({ state: "waiting" }),
+  useGitHubCli: async () => ({ login: "sam" }),
+  cliStatus: async () => ({ state: "missing" }),
+  installCli: async () => {
+    calls.push({ method: "installCli", args: undefined });
+    return { state: "installed", path: "/usr/local/bin/alden" };
+  },
   spend: async () => ({ spentToday: 0.12 }),
   config: async () => ({ config: {} }),
   addFeedback: async (input) => {
@@ -158,6 +170,16 @@ describe("alden ui server", () => {
       { method: "prepared", args: undefined },
       { method: "prepared", args: "a/b#1" },
     ]);
+  });
+
+  it("signs in and installs the command through the API", async () => {
+    const post = (path: string) => call(path, { method: "POST", headers: authed });
+    expect(JSON.parse((await post("/api/auth/device")).text)).toEqual({ state: "waiting", userCode: "ABCD-1234" });
+    expect(JSON.parse((await call("/api/auth/device", { headers: authed })).text)).toEqual({ state: "idle" });
+    expect(JSON.parse((await post("/api/auth/gh")).text)).toEqual({ login: "sam" });
+    expect(JSON.parse((await post("/api/cli/install")).text)).toMatchObject({ state: "installed" });
+    expect((await call("/api/auth/device", { method: "POST" })).status).toBe(401);
+    expect(calls.map((c) => c.method)).toEqual(["startSignIn", "installCli"]);
   });
 
   it("passes queue filters through", async () => {

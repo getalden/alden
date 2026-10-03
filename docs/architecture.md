@@ -57,6 +57,12 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | `GET /api/memory/repos` | Each repo Alden has memory for. |
 | `POST /api/memory/change` | `{ action, repo? }`: `edit` (with `id`, `text`), `restore` (with `id`), `learning` (with `on`) or `forget-all`. |
 | `POST /api/memory/forget` | Forgets one item: `{ id, repo? }`. |
+| `POST /api/auth/device` | Starts GitHub sign-in with a one-time code (the device flow); the server waits for approval. |
+| `GET /api/auth/device` | How that sign-in is going: waiting (with the code), done, or failed. |
+| `POST /api/auth/device/open` | Opens GitHub's page for the code in the default browser. |
+| `POST /api/auth/gh` | Drops Alden's stored sign-in, so it uses the GitHub CLI's. |
+| `GET /api/cli` | Desktop app: whether the `alden` command is installed, and where. |
+| `POST /api/cli/install` | Desktop app: links its `alden` into `/usr/local/bin` (macOS may ask for a password). |
 | `GET /api/telemetry` | Whether usage stats are on, and what blocks them, if anything. |
 | `PUT /api/telemetry` | Turns usage stats on or off: `{ on }`. |
 

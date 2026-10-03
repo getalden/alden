@@ -39,7 +39,11 @@ Stop it with Ctrl+C.
   See [Learning and memory](memory.md).
 - **Settings.** The default model, effort and caps (saved to your user config), your feedback with a redacted export,
   usage stats on or off, today's spend by PR, and light, dark or system appearance. In the desktop app, "While you're
-  away" turns [background briefings](desktop.md#while-youre-away) and their use of the model on or off.
+  away" turns [background briefings](desktop.md#while-youre-away) and their use of the model on or off, and "Command
+  line tool" installs the `alden` command if it isn't there.
+- **Sign-in.** When Alden isn't signed in to GitHub, or GitHub no longer accepts its sign-in, the queue offers **Sign in
+  with GitHub** (a one-time code, with GitHub's page opened for you) and, when the GitHub CLI is signed in, **Use my
+  GitHub CLI sign-in**. No terminal needed.
 
 Each review has its own options: ask the model or not, which model, which effort, and whether to find callers. The
 line beside them shows the per-review cap and what's left of today's budget. These choices last until you close the

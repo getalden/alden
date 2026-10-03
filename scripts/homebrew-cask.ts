@@ -3,8 +3,8 @@
  *
  * The checksums file is the release's SHA256SUMS, which lists Alden-<version>-universal.dmg. The release workflow
  * commits the result to getalden/homebrew-tap as Casks/alden-desktop.rb, so `brew install --cask
- * getalden/tap/alden-desktop` installs Alden.app. It's named apart from the `alden` formula so each name means one
- * thing, and the app keeps its own copy of `alden`, so the two install side by side.
+ * getalden/tap/alden-desktop` installs Alden.app. The app carries its own `alden`, which the cask links into Homebrew's
+ * bin, so installing the app gives you the command too; if the `alden` formula is already there, its link is kept.
  */
 import { readFileSync } from "node:fs";
 
@@ -31,6 +31,22 @@ cask "alden-desktop" do
   depends_on macos: ">= :monterey"
 
   app "Alden.app"
+
+  # The app carries the alden command: link it into Homebrew's bin (already on your PATH), unless the alden formula
+  # put one there first.
+  postflight do
+    command = "#{HOMEBREW_PREFIX}/bin/alden"
+    unless File.exist?(command) || File.symlink?(command)
+      File.symlink("#{appdir}/Alden.app/Contents/MacOS/alden", command)
+    end
+  end
+
+  uninstall_postflight do
+    command = "#{HOMEBREW_PREFIX}/bin/alden"
+    if File.symlink?(command) && File.readlink(command).end_with?("Alden.app/Contents/MacOS/alden")
+      File.delete(command)
+    end
+  end
 
   # ~/.alden is shared with the alden command line tool, so it stays.
   zap trash: [

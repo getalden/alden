@@ -256,6 +256,8 @@ fn on_ready(app: &AppHandle, url: &str) {
     if first {
         let app = app.clone();
         let idle_app = app.clone();
+        let offer_app = app.clone();
+        tauri::async_runtime::spawn(async move { first_launch_cli(&offer_app).await });
         tauri::async_runtime::spawn(async move {
             loop {
                 poll(&app).await;
@@ -294,7 +296,7 @@ async fn poll(app: &AppHandle) {
     let queue = match response {
         Ok(res) if res.status().is_success() => res.json::<Queue>().await.ok(),
         Ok(res) if res.status().as_u16() == 409 => {
-            return set_tray(app, "Sign in to GitHub", "Run `alden auth login`", &[], None)
+            return set_tray(app, "Sign in to GitHub", "Open Alden to sign in", &[], None)
         }
         _ => None,
     };
@@ -480,7 +482,10 @@ fn on_menu(app: &AppHandle, id: &str) {
             tauri::async_runtime::spawn(async move { poll(&app).await });
         }
         "folder" => choose_folder(app),
-        "cli" => install_cli(app),
+        "cli" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move { install_cli(&app).await });
+        }
         other => {
             if let Some(path) = other.strip_prefix("pr:") {
                 // "owner/repo/pull/12" → the UI's own route for that PR.
@@ -523,51 +528,83 @@ fn choose_folder(app: &AppHandle) {
     });
 }
 
-/// Where the `alden` command goes, as Docker Desktop and VS Code do it: on every Mac's PATH, outside Homebrew's folder.
-const CLI_LINK: &str = "/usr/local/bin/alden";
+#[derive(Deserialize)]
+struct CliStatus {
+    state: String,
+}
 
-/// Links the `alden` bundled in the app into /usr/local/bin, so the terminal, `alden mcp` and the Claude Code plugin
-/// work without a second install. macOS asks for an administrator's password, since /usr/local/bin belongs to root.
-fn install_cli(app: &AppHandle) {
+#[derive(Deserialize)]
+struct CliInstall {
+    state: String,
+    path: Option<String>,
+    message: Option<String>,
+}
+
+/// Installs the `alden` command (the server links the app's own copy into /usr/local/bin after macOS asks for an
+/// administrator's password), and says how it went.
+async fn install_cli(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let (base, token) = (state.base.lock().unwrap().clone(), state.token.lock().unwrap().clone());
+    let (Some(base), Some(token)) = (base, token) else {
+        return say(app, "Alden is still starting. Try again in a moment.".into());
+    };
+    let result = reqwest::Client::new()
+        .post(format!("{base}/api/cli/install"))
+        .header("X-Alden-Token", token)
+        // The password prompt waits on the user.
+        .timeout(Duration::from_secs(300))
+        .send()
+        .await;
+    let install = match result {
+        Ok(res) if res.status().is_success() => res.json::<CliInstall>().await.ok(),
+        _ => None,
+    };
+    let text = match install {
+        Some(i) if i.state == "installed" => format!(
+            "The alden command is installed at {}, so you can use Alden in a terminal and from Claude Code and other \
+             AI coding tools. Open a new terminal window and run `alden --version`. It updates with the app.",
+            i.path.unwrap_or_default()
+        ),
+        Some(i) if i.state == "exists" => format!(
+            "There's already an alden command at {}. The app and that command share your sign-in, settings and memory.",
+            i.path.unwrap_or_default()
+        ),
+        Some(i) if i.state == "cancelled" => return,
+        Some(i) => format!("Couldn't install the command: {}", i.message.unwrap_or_default()),
+        None => "Couldn't install the command.".into(),
+    };
+    say(app, text);
+}
+
+fn say(app: &AppHandle, text: String) {
     let app = app.clone();
     std::thread::spawn(move || {
-        let say = |text: String| {
-            app.dialog().message(text).title("Alden").blocking_show();
-        };
-        let Some(bundled) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join("alden"))) else {
-            return say("Couldn't find the alden command inside the app.".into());
-        };
-        let link = std::path::Path::new(CLI_LINK);
-        if std::fs::read_link(link).ok().as_deref() == Some(bundled.as_path()) {
-            return say(format!("The alden command is already installed at {CLI_LINK}."));
-        }
-        for existing in [CLI_LINK, "/opt/homebrew/bin/alden"] {
-            if std::path::Path::new(existing).exists() {
-                return say(format!(
-                    "There's already an alden command at {existing} (from Homebrew or npm), so Alden left it as it is. \
-                     The app and that command share your sign-in, settings and memory."
-                ));
-            }
-        }
-        let path = bundled.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
-        let script = format!(
-            "do shell script \"mkdir -p /usr/local/bin && ln -sf \" & quoted form of \"{path}\" & \" {CLI_LINK}\" \
-             with prompt \"Alden wants to install the alden command in /usr/local/bin.\" with administrator privileges"
-        );
-        match std::process::Command::new("osascript").args(["-e", &script]).output() {
-            Ok(out) if out.status.success() => say(format!(
-                "Installed. Open a new terminal window and run `alden --version`.\n\n{CLI_LINK} points into Alden.app, \
-                 so it updates with the app."
-            )),
-            // Cancelled at the password prompt: nothing to say.
-            Ok(out) if String::from_utf8_lossy(&out.stderr).contains("-128") => {}
-            Ok(out) => say(format!(
-                "Couldn't install the command: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            )),
-            Err(error) => say(format!("Couldn't install the command: {error}")),
-        }
+        app.dialog().message(text).title("Alden").blocking_show();
     });
+}
+
+/// On the first launch, installs the `alden` command, so the app comes with it as Docker Desktop does: nothing to do
+/// when the Homebrew cask already linked it, a link when /usr/local/bin is writable, otherwise one password prompt
+/// from macOS. Cancelling is fine: Settings and the menu offer it again, and it isn't asked again on its own.
+async fn first_launch_cli(app: &AppHandle) {
+    let Ok(dir) = app.path().app_config_dir() else { return };
+    let done = dir.join("cli-offered");
+    if done.exists() {
+        return;
+    }
+    let (base, token) = {
+        let state = app.state::<AppState>();
+        let base = state.base.lock().unwrap().clone();
+        let token = state.token.lock().unwrap().clone();
+        (base, token)
+    };
+    let (Some(base), Some(token)) = (base, token) else { return };
+    let Some(status) = api_get::<CliStatus>(&base, &token, "/api/cli").await else { return };
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::write(&done, b"");
+    if status.state == "missing" {
+        install_cli(app).await;
+    }
 }
 
 fn clip(text: &str, max: usize) -> String {

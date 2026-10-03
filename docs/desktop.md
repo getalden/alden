@@ -13,11 +13,17 @@ Or download `Alden-<version>-universal.dmg` from the [releases page](https://git
 and drag Alden to Applications. It runs on Apple silicon and Intel Macs with macOS 12 or later, and it's signed and
 notarized, so it opens without a warning.
 
-The app carries its own copy of `alden`, which it runs in the background. To use it in a terminal as well (and for
-`alden mcp` and the Claude Code plugin), choose **Install command line tool…** in the menu: it links the app's `alden`
-into `/usr/local/bin` after macOS asks for your password, and updates with the app. If you've installed `alden` with
-Homebrew or npm already, there's nothing to do: the app and the command share `~/.alden`, so the same sign-in,
-settings, memory and spend.
+The app comes with the `alden` command, so the terminal, `alden mcp` and the Claude Code plugin work without a second
+install:
+
+- **With Homebrew,** the cask links the app's `alden` into Homebrew's `bin`, which is already on your PATH. If you'd
+  installed the `alden` formula first, its command stays.
+- **From the .dmg,** the app installs the command on its first launch: it links it into `/usr/local/bin`, and macOS asks
+  for your password if that folder needs it. If you cancel, Settings → Command line tool (or **Install command line
+  tool…** in the menu) does it later.
+
+Either way the command points into Alden.app, so it updates with the app, and the app and the command share `~/.alden`:
+the same sign-in, settings, memory and spend.
 
 ## Using it
 
@@ -44,9 +50,12 @@ whole thing off there, or with `alden config set background.enabled false`.
 
 ## Sign-in
 
+When Alden isn't signed in (or GitHub no longer accepts its sign-in), the window says so: **Sign in with GitHub** shows a
+one-time code and opens GitHub's page, and the app picks up your approval by itself. **Use my GitHub CLI sign-in**
+switches to the GitHub CLI's, when it's signed in on your Mac.
+
 The app uses the same sign-in as the command line tool: the token `alden auth login` stored in your keychain, or the
-GitHub CLI's if `gh` is signed in (the app looks for it where Homebrew installs it). If neither is there, the app says
-so; sign in once from the terminal with `alden auth login`. See
+GitHub CLI's if `gh` is signed in (the app looks for it where Homebrew installs it). See
 [Getting started](getting-started.md#sign-in-to-github).
 
 ## Uninstall

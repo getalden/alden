@@ -1,5 +1,5 @@
 import type { CiState, RankedPullRequest, RankedQueue } from "@alden/schema";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { formatWait } from "../format";
 import { onLinkClick, routePath } from "../router";
 import { Mark } from "./Mark";
@@ -35,6 +35,8 @@ interface QueueViewProps {
   selected: string | undefined;
   /** No GitHub sign-in: say how to fix it instead of an error. */
   signedOut?: boolean;
+  /** What to show when signed out: the sign-in card (the UI's), else the terminal command. */
+  signIn?: ReactNode;
   reactions?: Record<string, Reaction | undefined>;
   onReact?: (key: string, reaction: Reaction) => void;
   /** PRs (lowercased "owner/repo#12") with a briefing ready from the desktop app's background run. */
@@ -51,6 +53,7 @@ export function QueueView({
   onRefresh,
   selected,
   signedOut = false,
+  signIn,
   reactions = {},
   onReact,
   ready,
@@ -65,6 +68,7 @@ export function QueueView({
   const fastTrack = queue?.fastTrack.filter(keep) ?? [];
   const dismissed = queue?.dismissed?.filter(keep) ?? [];
 
+  if (signedOut && signIn) return <>{signIn}</>;
   if (signedOut) {
     return (
       <StateCard

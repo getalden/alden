@@ -51,6 +51,7 @@ import { describeGitHubError } from "../github-errors.js";
 import { learningFor, learningForQueue, noteOpened } from "../learning.js";
 import { parsePrRef } from "../pr-ref.js";
 import { ApiError, type ReviewRequest, type UiApi } from "./server.js";
+import { cliStatus, createSignIn, gitHubCliSignedIn, installCli } from "./setup.js";
 
 const run = promisify(execFile);
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -109,6 +110,7 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
   const cache = new JsonCache();
   const feedback = new FeedbackLog();
   const prepared = new Map<string, Prepared>();
+  const signIn = createSignIn();
   const keyOf = (repo: string, number: number) => `${repo}#${number}`.toLowerCase();
   /** The repo memory is about: the one asked for, or the clone `alden ui` was started in. */
   const memoryRepo = async (repo?: string) => {
@@ -145,6 +147,8 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
         version: options.version,
         cwd: options.cwd,
         desktop: options.desktop === true,
+        signIn: { source: resolved?.source ?? null, gitHubCli: await gitHubCliSignedIn() },
+        ...(options.desktop ? { cli: cliStatus() } : {}),
         background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
         repo: (await repoOf(options.cwd)) ?? null,
         user,
@@ -194,6 +198,25 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
     },
 
     review: (request, onStage) => runReview(request, onStage, false),
+
+    async startSignIn() {
+      try {
+        return await signIn.start();
+      } catch (error) {
+        throw new ApiError(502, (error as Error).message);
+      }
+    },
+    signInStatus: async () => signIn.status(),
+    async openSignIn() {
+      signIn.open();
+      return signIn.status();
+    },
+    useGitHubCli: () => signIn.useGitHubCli(),
+    cliStatus: async () => cliStatus(),
+    async installCli() {
+      if (!options.desktop) throw new ApiError(400, "Only the desktop app installs the alden command.");
+      return installCli();
+    },
 
     async prepareNext() {
       const config = await loadConfig(options.cwd);

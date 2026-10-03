@@ -205,6 +205,10 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
             </div>
           </div>
 
+          {session.desktop && session.cli && session.cli.state !== "unavailable" && (
+            <CliSettings api={api} initial={session.cli} />
+          )}
+
           {session.desktop && session.background && (
             <BackgroundSettings api={api} initial={session.background} onSaved={onSaved} />
           )}
@@ -302,6 +306,55 @@ function BackgroundSettings(props: { api: Api; initial: { enabled: boolean; mode
         per-briefing and daily caps. This setting lives in your user config only, so a repo can't turn it on.
       </p>
       {error && <p className="error-text small">{error}</p>}
+    </div>
+  );
+}
+
+/** The desktop app's `alden` command: the terminal, `alden mcp` and the Claude Code plugin all need it on the PATH. */
+function CliSettings({ api, initial }: { api: Api; initial: NonNullable<Session["cli"]> }) {
+  const [status, setStatus] = useState(initial);
+  const [note, setNote] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const install = () => {
+    setBusy(true);
+    setNote(undefined);
+    api
+      .installCli()
+      .then(
+        (result) => {
+          if (result.state === "installed") setNote("Installed. Open a new terminal window and run alden --version.");
+          if (result.state === "exists") setNote(`There's already an alden command at ${result.path}.`);
+          if (result.state === "failed") setNote(`Couldn't install it: ${result.message}`);
+          return api.cliStatus().then(setStatus);
+        },
+        (e: Error) => setNote(e.message),
+      )
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="card panel">
+      <h2 className="label">Command line tool</h2>
+      {status.state === "installed" ? (
+        <p className="muted small">
+          <code>alden</code> is installed at <code>{status.path}</code>
+          {status.ours ? ", from this app, and updates with it." : " (from Homebrew or npm)."} The terminal, the desktop
+          app, <code>alden mcp</code> and the Claude Code plugin share your sign-in, settings and memory.
+        </p>
+      ) : (
+        <>
+          <p className="muted small">
+            The app runs its own copy of <code>alden</code>. Install it as a command to use Alden in a terminal, and for{" "}
+            <code>alden mcp</code> and the Claude Code plugin. macOS asks for your password, since it goes in{" "}
+            <code>/usr/local/bin</code>.
+          </p>
+          <div className="form-actions">
+            <button type="button" className="btn primary" onClick={install} disabled={busy}>
+              {busy ? "Waiting for macOS…" : "Install the alden command"}
+            </button>
+          </div>
+        </>
+      )}
+      {note && <p className="small">{note}</p>}
     </div>
   );
 }

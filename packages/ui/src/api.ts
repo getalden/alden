@@ -71,8 +71,29 @@ export interface Session {
   budget: { perReviewUsd: number; dailyUsd: number; spentToday: number };
   /** Running inside the desktop app, which can prepare briefings while you're away. */
   desktop?: boolean;
+  /** Where the GitHub sign-in comes from, and whether the GitHub CLI's is there to switch to. */
+  signIn?: { source: "env" | "alden" | "gh" | null; gitHubCli: boolean };
+  /** The desktop app's `alden` command. */
+  cli?: CliStatus;
   background?: { enabled: boolean; model: boolean };
 }
+
+export type SignInState =
+  | { state: "idle" }
+  | { state: "waiting"; userCode: string; verificationUri: string; expiresAt: string }
+  | { state: "done"; login: string }
+  | { state: "failed"; message: string };
+
+export type CliStatus =
+  | { state: "unavailable" }
+  | { state: "installed"; path: string; ours: boolean }
+  | { state: "missing"; bundled: string };
+
+export type CliInstall =
+  | { state: "installed"; path: string }
+  | { state: "exists"; path: string }
+  | { state: "cancelled" }
+  | { state: "failed"; message: string };
 
 /** A briefing the desktop app made in the background, and when. */
 export interface Prepared {
@@ -157,6 +178,18 @@ export class Api {
     this.request<unknown>("/api/reaction", { method: "POST", body: JSON.stringify({ pr, reaction }) });
 
   exportFeedback = () => this.request<unknown[]>("/api/feedback/export");
+
+  startSignIn = () => this.request<SignInState>("/api/auth/device", { method: "POST" });
+
+  signInStatus = () => this.request<SignInState>("/api/auth/device");
+
+  openSignIn = () => this.request<SignInState>("/api/auth/device/open", { method: "POST" });
+
+  useGitHubCli = () => this.request<{ login: string } | { error: string }>("/api/auth/gh", { method: "POST" });
+
+  cliStatus = () => this.request<CliStatus>("/api/cli");
+
+  installCli = () => this.request<CliInstall>("/api/cli/install", { method: "POST" });
 
   /** PRs ("owner/repo#12") with a briefing ready from the background. */
   preparedList = () => this.request<{ pr: string; at: string }[]>("/api/prepared");

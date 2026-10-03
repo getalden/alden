@@ -1,7 +1,7 @@
 {
   "name": "alden",
   "displayName": "Alden",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Your code review companion in Claude Code: the PRs waiting on you, ranked, and reviews that use Alden's checks, the callers outside the diff and what you look for, and learn from your reactions.",
   "author": { "name": "Alden", "url": "https://getalden.dev" },
   "homepage": "https://getalden.dev/docs/claude-code/",

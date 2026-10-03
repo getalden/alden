@@ -6,6 +6,7 @@ import { isLearnedReason, prKey, QueueView, type Reaction } from "./components/Q
 import { type Choices, initialChoices, ReviewOptions, toRequest } from "./components/ReviewOptions";
 import { ReviewPane } from "./components/ReviewPane";
 import { SettingsView } from "./components/SettingsView";
+import { SignInCard } from "./components/SignIn";
 import { StateCard } from "./components/StateCard";
 import { StatsView } from "./components/StatsView";
 import { TelemetryCard } from "./components/TelemetryCard";
@@ -146,7 +147,19 @@ export function App({ api }: { api: Api | undefined }) {
               onRepoFilter={setRepoFilter}
               onRefresh={() => loadQueue(true)}
               selected={selected}
-              signedOut={session !== undefined && session.user === null}
+              signedOut={session !== undefined && (session.user === null || "error" in session.user)}
+              signIn={
+                api && session ? (
+                  <SignInCard
+                    api={api}
+                    session={session}
+                    onSignedIn={() => {
+                      loadSession();
+                      loadQueue(true);
+                    }}
+                  />
+                ) : undefined
+              }
               reactions={reactions}
               onReact={react}
               ready={ready}

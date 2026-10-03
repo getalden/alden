@@ -208,7 +208,10 @@ const api: UiApi = {
     version: "demo",
     cwd: ROOT,
     repo: { root: ROOT, repos: [DEMO_REPO] },
-    user: { login: "you", source: "demo" },
+    // ALDEN_DEMO_SIGNED_OUT=1 shows the sign-in card, as if GitHub had rejected the saved sign-in.
+    user: process.env.ALDEN_DEMO_SIGNED_OUT === "1" ? { error: "rejected" } : { login: "you", source: "demo" },
+    signIn: { source: "alden" as const, gitHubCli: true },
+    cli: { state: "missing" as const, bundled: "/Applications/Alden.app/Contents/MacOS/alden" },
     model: {
       provider: "anthropic",
       name: "sonnet",
@@ -224,6 +227,17 @@ const api: UiApi = {
     background: demoBackground,
   }),
   prepareNext: async () => ({ prepared: null, reason: "demo" }),
+  startSignIn: async () => ({
+    state: "waiting",
+    userCode: "DEMO-1234",
+    verificationUri: "https://github.com/login/device",
+    expiresAt: new Date(Date.now() + 900_000).toISOString(),
+  }),
+  signInStatus: async () => ({ state: "idle" }),
+  openSignIn: async () => ({ state: "idle" }),
+  useGitHubCli: async () => ({ login: "you" }),
+  cliStatus: async () => ({ state: "missing", bundled: "/Applications/Alden.app/Contents/MacOS/alden" }),
+  installCli: async () => ({ state: "installed", path: "/usr/local/bin/alden" }),
   prepared: async (pr) => {
     if (!DEMO_DESKTOP) return pr ? null : [];
     if (pr === undefined) return [{ pr: "django/django#19057", updatedAt: "", at: preparedAt }];

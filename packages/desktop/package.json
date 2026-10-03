@@ -1,6 +1,6 @@
 {
   "name": "@alden/desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Alden in the menu bar: a Tauri shell around `alden ui`, with the queue count, the top PRs and a nudge when someone has waited too long.",
   "scripts": {
