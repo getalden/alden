@@ -99,11 +99,20 @@ try {
   const session = await fetch(`${base}api/session`, { headers: { "X-Alden-Token": token } });
   check("ui answers the API with the session key", session.status === 200);
   check("ui refuses the API without it", (await fetch(`${base}api/session`)).status === 401);
+  // Wait for it to exit: on Windows its database stays locked, and can't be deleted, until the process is gone.
+  const exited = new Promise((done) => ui.once("exit", done));
   ui.kill();
+  await Promise.race([exited, new Promise((done) => setTimeout(done, 10_000))]);
 } catch (error) {
   check("smoke test", false, (error as Error).message);
 } finally {
-  rmSync(home, { recursive: true, force: true });
-  rmSync(repo, { recursive: true, force: true });
+  // A temporary folder that Windows still holds is left for the OS to clear; it never fails the test.
+  for (const dir of [home, repo]) {
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch (error) {
+      console.log(`(couldn't remove ${dir}: ${(error as Error).message})`);
+    }
+  }
 }
 process.exit(failed ? 1 : 0);
