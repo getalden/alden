@@ -234,13 +234,17 @@ async function seed(planned: Planned[]): Promise<void> {
   const requestReview = async (number: number, p: Planned) => {
     if (noRequest) return;
     const viaTeam = p.team && team;
-    await gh(
-      "POST",
-      `/repos/${repo}/pulls/${number}/requested_reviewers`,
-      viaTeam ? { team_reviewers: [(team as string).split("/")[1]] } : { reviewers: [reviewer] },
-      [],
-      viaTeam ? yourToken() : token,
-    );
+    const slug = viaTeam ? (team as string).split("/")[1] : undefined;
+    const as = viaTeam ? yourToken() : token;
+    const path = `/repos/${repo}/pulls/${number}/requested_reviewers`;
+    const refused = await gh("POST", path, slug ? { team_reviewers: [slug] } : { reviewers: [reviewer] }, [422], as);
+    if (refused !== undefined) return;
+    // Refused: fine if the review is already requested (CODEOWNERS asks you automatically for files you own).
+    const now = await gh<{ users: { login: string }[]; teams: { slug: string }[] }>("GET", path, undefined, [], as);
+    const asked = slug
+      ? now?.teams.some((t) => t.slug === slug)
+      : now?.users.some((u) => u.login.toLowerCase() === reviewer.toLowerCase());
+    if (!asked) throw new Error(`GitHub wouldn't request ${slug ?? reviewer}'s review on #${number}.`);
   };
 
   const opened: { id: string; number: number; url: string; title: string; expect: Planned["expect"] }[] = [];
