@@ -219,6 +219,30 @@ describe("dependencies.changed", () => {
     ]);
   });
 
+  it("flags changed and added overrides and resolutions like dependencies", () => {
+    const before = { dependencies: { react: "^19.0.0" }, resolutions: { "**/minimist": "1.2.6" } };
+    const after = {
+      dependencies: { react: "^19.0.0" },
+      resolutions: { "**/minimist": "1.2.8" },
+      pnpm: { overrides: { "semver@<7": "7.6.3" } },
+    };
+    const manifest = file("package.json", ['    "**/minimist": "1.2.8"', '      "semver@<7": "7.6.3"']);
+    const result = dependenciesCheck.run(
+      ctx([manifest], {
+        manifests: [{ path: "package.json", before: JSON.stringify(before), after: JSON.stringify(after) }],
+      }),
+    );
+    // A new override forces a version on the whole tree, so it's as risky as a new runtime package.
+    expect(result).toMatchObject({ status: "flagged", severity: "medium" });
+    expect(result.evidence).toEqual([
+      {
+        text: "updated **/minimist 1.2.6 → 1.2.8 (override) in package.json",
+        anchor: { path: "package.json", line: 1 },
+      },
+      { text: "added semver@<7 7.6.3 (override) in package.json", anchor: { path: "package.json", line: 2 } },
+    ]);
+  });
+
   it("flags only minor changes to dev tools as low", () => {
     const result = dependenciesCheck.run(
       ctx([file("package.json")], {

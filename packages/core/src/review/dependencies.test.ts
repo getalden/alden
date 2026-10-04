@@ -22,6 +22,23 @@ describe("parseManifest", () => {
     ]);
   });
 
+  it("reads yarn resolutions, npm overrides (nested too) and pnpm.overrides as overrides", () => {
+    const text = JSON.stringify({
+      dependencies: { react: "^19.0.0" },
+      resolutions: { "**/minimist": "1.2.8" },
+      overrides: { semver: "7.6.3", "@babel/core": { ".": "7.26.0", json5: "2.2.3" } },
+      pnpm: { overrides: { "lodash@<4.17.21": "4.17.21" } },
+    });
+    expect(names("package.json", text)).toEqual([
+      "override:**/minimist@1.2.8",
+      "override:@babel/core > json5@2.2.3",
+      "override:@babel/core@7.26.0",
+      "override:lodash@<4.17.21@4.17.21",
+      "override:semver@7.6.3",
+      "runtime:react@^19.0.0",
+    ]);
+  });
+
   it("reads composer.json, skipping php and extensions", () => {
     const text = JSON.stringify({
       require: { php: "^8.3", "ext-json": "*", "laravel/framework": "^13.0" },

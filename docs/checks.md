@@ -27,7 +27,7 @@ them as leads.
 | **Database migrations** (`migrations.changed`) | Changed migrations. Critical when they drop, rename or reshape data (SQL, Django, Laravel, Doctrine). | Medium or critical |
 | **Changed public signatures** (`signatures.changed`) | Exported functions, classes and methods whose signature changed or that were removed, in TS/JS, Python, PHP and Go. Go and PHP use the code graph; TS/JS and Python read the diff. | Low or medium |
 | **Code changed without tests** (`tests.missing`) | Code changes with no test changes alongside them. | Medium |
-| **Dependencies** (`dependencies.changed`) | Added, removed or re-versioned dependencies in package.json, composer.json, go.mod, requirements.txt and pyproject.toml. | Low, or medium for risky changes |
+| **Dependencies** (`dependencies.changed`) | Added, removed or re-versioned dependencies in package.json, composer.json, go.mod, requirements.txt and pyproject.toml, including package.json's `resolutions`, `overrides` and `pnpm.overrides`, which force versions on the whole tree. | Low, or medium for risky changes (a new runtime or peer package, a new override, a major upgrade) |
 | **Configuration and environment** (`config.changed`) | Config files (`.env`, settings, Docker, Terraform, CI, deploy config) and new environment variable references. | Medium |
 | **Sensitive paths** (`paths.sensitive`) | Files matching your [sensitive paths](configuration.md#queue). | Medium |
 

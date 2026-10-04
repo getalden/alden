@@ -8,7 +8,8 @@ export interface ManifestSnapshot {
   after?: string;
 }
 
-export type DependencyGroup = "runtime" | "dev" | "peer" | "optional";
+/** `override`: a version forced on the whole tree (yarn `resolutions`, npm `overrides`, `pnpm.overrides`). */
+export type DependencyGroup = "runtime" | "dev" | "peer" | "optional" | "override";
 
 export interface Dependency {
   name: string;
@@ -49,7 +50,24 @@ function parsePackageJson(text: string): Parsed {
       for (const [name, version] of Object.entries(section)) add(map, name, String(version), group);
     }
   }
+  // Overrides change installed versions as surely as dependencies do, deep in the tree too.
+  const pnpm = json.pnpm as Record<string, unknown> | undefined;
+  for (const section of [json.resolutions, json.overrides, pnpm?.overrides]) addOverrides(map, section, "");
   return map;
+}
+
+/**
+ * Flattens an overrides section into one entry per forced version. npm nests them (`{ "a": { ".": "1", "b": "2" } }`
+ * forces a@1 and a's b@2), written here as "a > b"; yarn and pnpm write the path in the key ("**\/b", "a>b").
+ */
+function addOverrides(map: Parsed, section: unknown, parent: string): void {
+  if (!section || typeof section !== "object") return;
+  for (const [key, value] of Object.entries(section)) {
+    const name = key === "." ? parent : parent ? `${parent} > ${key}` : key;
+    if (typeof value === "string") {
+      if (name) add(map, name, value, "override");
+    } else addOverrides(map, value, name);
+  }
 }
 
 function parseComposerJson(text: string): Parsed {

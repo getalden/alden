@@ -235,14 +235,15 @@ function describeChange(change: DependencyChange, path: string): string {
     case "removed":
       return `removed ${change.dep.name} (${change.dep.group}) from ${path}`;
     case "changed":
-      return `${change.major ? "major upgrade" : "updated"} ${change.to.name} ${change.from.version} → ${change.to.version} in ${path}`;
+      return `${change.major ? "major upgrade" : "updated"} ${change.to.name} ${change.from.version} → ${change.to.version}${change.to.group === "override" ? " (override)" : ""} in ${path}`;
   }
 }
 
-/** The added line that names the package, so the evidence points at it. */
+/** The added line that names the package, so the evidence points at it. A nested override ("a > b") is on b's line. */
 function lineNaming(file: DiffFile | undefined, name: string): number | undefined {
   if (!file) return undefined;
-  return addedLines(file).find((l) => l.text.includes(name))?.line;
+  const last = name.split(" > ").at(-1) ?? name;
+  return addedLines(file).find((l) => l.text.includes(last))?.line;
 }
 
 export const dependenciesCheck: Check = {
@@ -277,7 +278,9 @@ export const dependenciesCheck: Check = {
         });
         if (change.kind === "added") {
           counts.added++;
-          if (change.dep.group === "runtime" || change.dep.group === "peer") risky = true;
+          // A new override forces a version on every package that depends on it, so it's as risky as a new package.
+          if (change.dep.group === "runtime" || change.dep.group === "peer" || change.dep.group === "override")
+            risky = true;
         } else if (change.kind === "removed") counts.removed++;
         else if (change.major) {
           counts.major++;
