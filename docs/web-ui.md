@@ -26,7 +26,8 @@ Stop it with Ctrl+C.
   **Dismiss** (hidden until it changes). Filter by repo, refresh, and pick a PR to see its briefing beside the list.
   Until you've answered, a card at the top asks whether to send [anonymous usage stats](telemetry.md). In the desktop
   app, PRs briefed while you were away are marked "Briefing ready".
-- **A PR.** "Brief me" runs the review and shows each stage as it goes (fetching, finding callers, checks, the
+- **A PR.** Above the briefing, which clone its callers come from (when it isn't the folder `alden ui` runs in), or that
+  there's none, with how to point Alden at your clones (`clones.folders`). "Brief me" runs the review and shows each stage as it goes (fetching, finding callers, checks, the
   model). The briefing follows the CLI's order. Every place links into the PR's "Files changed" view at that line.
   A review keeps running if you look at another PR, and its briefing is there when you come back. **Useful** and
   **Not useful** on each place, finding and flagged check teach Alden; **Dismiss** hides one place on this PR. "Shaped
@@ -37,14 +38,18 @@ Stop it with Ctrl+C.
 - **Memory.** Each repo Alden knows about, then what you look for and what you skip there: where each item came from,
   what it changes, Edit (notes), Forget and Undo, a switch to pause learning, and "Tell Alden something" to add a note.
   See [Learning and memory](memory.md).
-- **Settings.** The default model, effort and caps (saved to your user config), what your queue covers on this machine
+- **Settings.** The default model, effort and caps (saved to your user config), your Anthropic API key (stored in the
+  keychain like `alden auth model`; the field is write-only and the page only learns where the key comes from), what
+  your queue covers on this machine
   (organisations, repos, and what to leave out; the queue says when it's narrowed), your feedback with a redacted export,
   usage stats on or off, today's spend by PR, and light, dark or system appearance. In the desktop app, "While you're
   away" turns [background briefings](desktop.md#while-youre-away) and their use of the model on or off, and "Command
   line tool" installs the `alden` command if it isn't there.
 - **Sign-in.** When Alden isn't signed in to GitHub, or GitHub no longer accepts its sign-in, the queue offers **Sign in
   with GitHub** (a one-time code, with GitHub's page opened for you) and, when the GitHub CLI is signed in, **Use my
-  GitHub CLI sign-in**. No terminal needed.
+  GitHub CLI sign-in**. No terminal needed. If you signed in in a terminal instead, **I've signed in** looks again and,
+  if Alden still can't see a sign-in, says what failed: the keychain refused to answer (as it does for an unsigned
+  development build of the desktop app), GitHub rejected the token, or there's none anywhere.
 
 Each review has its own options: ask the model or not, which model, which effort, and whether to find callers. The
 line beside them shows the per-review cap and what's left of today's budget. These choices last until you close the

@@ -10,21 +10,25 @@ reading the version aren't affected. It asks npm at most once a day; `alden conf
 
 ## alden auth
 
-Sign in to GitHub.
+Sign in to GitHub, and store your Anthropic API key.
 
 | Command | What it does |
 | --- | --- |
 | `alden auth login` | Uses the GitHub CLI's sign-in if there is one. Otherwise signs you in with a code in your browser and stores the token. |
 | `alden auth login --device` | Signs in with a one-time code, even if the GitHub CLI is signed in. Press Enter to open the GitHub page for it. |
 | `alden auth login --with-token` | Reads a token from standard input, e.g. `echo $TOKEN \| alden auth login --with-token`. |
-| `alden auth status` | Shows the account Alden is using, where the token comes from, and its scopes. |
+| `alden auth status` | Shows the account Alden is using, where the token comes from, and its scopes; and where the Anthropic key comes from (never the key). Signed out, it says whether the keychain refused to answer. |
 | `alden auth logout` | Removes the token Alden stored. Doesn't touch the GitHub CLI's sign-in. |
+| `alden auth model` | Asks for your Anthropic API key without showing it (or reads it from standard input, e.g. `pbpaste \| alden auth model`), checks it looks like an API key, and stores it in the OS keychain. The desktop app, `alden ui` and `alden mcp` use it too. |
+| `alden auth model --remove` | Removes the key Alden stored. |
 
 Alden looks for a token in this order:
 
 1. The `ALDEN_GITHUB_TOKEN` environment variable.
 2. The token Alden stored, in the OS keychain (or, where there's no keychain, a file only you can read).
 3. The GitHub CLI's token (`gh auth token`).
+
+For the model key's order, see [Models](models.md#anthropic-api-anthropic-the-default).
 
 ## alden queue
 

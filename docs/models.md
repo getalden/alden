@@ -40,8 +40,16 @@ Set the provider with `alden config set model.provider <name>`.
 
 ### Anthropic API (`anthropic`, the default)
 
-Set `ANTHROPIC_API_KEY`, or sign in with `ant auth login`. `ANTHROPIC_AUTH_TOKEN` and workload identity federation also
-work.
+Run `alden auth model` and paste your API key (from console.anthropic.com): it's stored in the OS keychain, like the
+GitHub token, and every surface uses it, including the desktop app, which never sees your shell's variables. You can
+also set it in the web UI's Settings. Alden looks for credentials in this order:
+
+1. The environment: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`, or workload identity federation.
+2. The key stored with `alden auth model` (in the keychain, or a file only you can read where there's no keychain).
+3. An `ant auth login` profile.
+
+`alden auth status` and `alden doctor` say which one is in use, never the key. `alden auth model --remove` removes the
+stored key. Admin API keys and Claude.ai sign-in tokens are refused.
 
 ### AWS Bedrock (`bedrock`)
 

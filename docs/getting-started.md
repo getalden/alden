@@ -74,9 +74,11 @@ Without a model, Alden runs only its deterministic checks. With one, the briefin
 whether it matches its title, and what else deserves a look.
 
 ```sh
-export ANTHROPIC_API_KEY=...        # from console.anthropic.com
+alden auth model                    # paste your key from console.anthropic.com; it's kept in the keychain
 alden review 1
 ```
+
+`ANTHROPIC_API_KEY` works too, and comes first where it's set.
 
 The default is Claude Sonnet, capped at $0.50 per review and $10 per day. Each briefing shows what it cost, and
 `alden spend` shows the running total. See [Models, providers and budgets](models.md) for other models, AWS Bedrock,

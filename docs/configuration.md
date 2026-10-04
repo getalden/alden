@@ -92,6 +92,18 @@ For the [desktop app](desktop.md#while-youre-away), which briefs your top PRs wh
 | --- | --- | --- |
 | `telemetry.enabled` | unset | Send anonymous usage stats. Read from your user config only. `DO_NOT_TRACK`, `ALDEN_TELEMETRY=0` and CI turn it off. See [Usage stats](telemetry.md). |
 
+## clones
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `clones.folders` | `[]` | Folders your clones live in, e.g. `~/src`. Searched (three levels down) for a clone of a PR's repo, so its briefing finds callers from anywhere. Your user config only. |
+
+PR briefings find callers in a local clone of the PR's repo. Alden uses, in order: the clone it runs in, if it has a
+remote for that repo; the clone it last saw for that repo (Alden remembers every clone with a GitHub remote it runs in,
+and checks the folder is still there and still has that remote); then the first clone under `clones.folders`. So
+`alden config set clones.folders "~/src"` once is enough for the desktop app, `alden ui` or `alden mcp` started anywhere
+to find callers in every repo under `~/src`.
+
 ## updates
 
 | Key | Default | What it does |
@@ -107,7 +119,7 @@ For the [desktop app](desktop.md#while-youre-away), which briefs your top PRs wh
 | `ALDEN_NO_UPDATE_CHECK` | Set to anything to skip the check for a newer Alden. |
 | `ALDEN_OPENAI_API_KEY` | The key for an `openai-compatible` endpoint (falls back to `OPENAI_API_KEY`). |
 | `ALDEN_TELEMETRY` | `0` or `false` turns usage stats off, whatever your config says. |
-| `ANTHROPIC_API_KEY` | Your Anthropic API key, for the `anthropic` provider. |
+| `ANTHROPIC_API_KEY` | Your Anthropic API key, for the `anthropic` provider. Comes before the key stored with `alden auth model`. |
 | `DO_NOT_TRACK` | Set (to anything but `0`) to turn usage stats off. |
 
 ## Files Alden keeps
@@ -120,7 +132,7 @@ Everything is under `~/.alden` (or `ALDEN_HOME`):
 | `cache/` | GitHub responses, cached briefly, and your last queue (for `alden open` and `alden review <#>`). |
 | `index/` | The code graph's per-file cache. Around 100 MB for a repo the size of Kubernetes. |
 | `worktrees/` | Checkouts of PRs for the code graph, one per repo. |
-| `alden.db` | The local database: feedback, the PRs you open, your notes, model spending, first use per repo, queued usage stats, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
+| `alden.db` | The local database: feedback, the PRs you open, your notes, model spending, first use per repo, queued usage stats, the clone Alden last saw for each repo, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
 | `legacy/` | Files from before the database, kept after their one-time import. Safe to delete. |
 
 Deleting any of these is safe, but deleting `alden.db` also deletes your feedback, notes and what Alden learned, and

@@ -27,14 +27,17 @@ the same sign-in, settings, memory and spend.
 
 ## Using it
 
-- **Choose repo folder…** in the menu picks the clone Alden reviews from (your home folder until you choose one). Alden
-  remembers it.
+- **Choose repo folder…** in the menu picks the folder Alden runs in (your home folder until you choose one), which is
+  where your uncommitted changes come from. Alden remembers it. Right after you choose, the window says where callers
+  now come from and shows that repo's PRs only; **Show all repos** goes back to everything.
+- PR briefings find callers in any clone Alden knows, not only the chosen folder: each clone you've run Alden in, and
+  the clones under `clones.folders` (see [Configuration](configuration.md#clones)). The briefing says which clone.
 - The menu bar shows how many PRs wait on you and the top three; click one to open its briefing. If an organisation hides
   its PRs from your sign-in, the menu says some are hidden, and the window says which and why.
 - **Open Alden** (⌘⇧A) brings the window forward from anywhere. **Refresh** reloads the queue, which also happens
   every 5 minutes.
 - When someone has waited three days on a PR that isn't waiting on its author, you get one notification for it.
-- Closing the window keeps Alden in the menu bar. **Quit** stops it.
+- Closing the window keeps Alden in the menu bar; clicking Alden in the Dock brings the window back. **Quit** stops it.
 
 ## While you're away
 
@@ -56,7 +59,20 @@ switches to the GitHub CLI's, when it's signed in on your Mac.
 
 The app uses the same sign-in as the command line tool: the token `alden auth login` stored in your keychain, or the
 GitHub CLI's if `gh` is signed in (the app looks for it where Homebrew installs it). See
-[Getting started](getting-started.md#sign-in-to-github).
+[Getting started](getting-started.md#sign-in-to-github). If you signed in in a terminal, **I've signed in** looks again,
+and if Alden still can't see it, says why: the keychain refused to answer, GitHub rejected the token, or there's no
+sign-in anywhere.
+
+An app opened from the Finder never sees your shell's `ANTHROPIC_API_KEY`. Store the key with `alden auth model`, or in
+Settings → Anthropic API key, and the app uses it from the keychain.
+
+## Development builds
+
+`pnpm desktop:build` and `pnpm release:dry-run --desktop` build an unsigned Alden.app. macOS registers it like any
+app, so it can open instead of the installed Alden, and unsigned it can't read the keychain: it asks you to sign in
+however you've signed in. The dry run unregisters and deletes its app once it has checked it (keeping the DMG);
+`desktop:build` keeps its app and warns. `pnpm desktop:forget-build` unregisters and deletes every Alden.app this
+checkout built.
 
 ## Uninstall
 

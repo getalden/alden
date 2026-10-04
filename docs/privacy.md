@@ -35,7 +35,8 @@ Feedback, the PRs you open and what Alden learns from them stay in `~/.alden/ald
 memory](memory.md)). So do your notes, what you've spent on models, usage stats waiting to be sent (only if you said
 yes), and this install's anonymous id and the salt for repo hashes. Checkouts of PRs for the code graph are in
 `~/.alden/worktrees`. See [Files Alden keeps](configuration.md#files-alden-keeps). Your GitHub token is stored in the
-OS keychain, or, where there's no keychain, in a file only your user can read. `alden auth logout` removes it.
+OS keychain, or, where there's no keychain, in a file only your user can read. `alden auth logout` removes it. So is an
+Anthropic API key you stored with `alden auth model`; `alden auth model --remove` removes it.
 
 The desktop app's [background briefings](desktop.md#while-youre-away) make the same GitHub calls as a review while
 you're away, and ask your model provider only if you turned on `background.model`. The briefings are held only in the
