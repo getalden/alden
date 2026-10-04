@@ -103,7 +103,8 @@
                 "info",
                 "low",
                 "medium",
-                "high"
+                "high",
+                "critical"
               ]
             },
             "anchor": {

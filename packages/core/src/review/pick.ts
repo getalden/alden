@@ -6,7 +6,10 @@ import { isLockfile } from "../queue/files.js";
 export const MAX_LOOK_HERE = 3;
 export const MOST_LOOK_HERE = 10;
 
-const SEVERITY_RANK: Record<Severity, number> = { high: 3, medium: 2, low: 1, info: 0 };
+const SEVERITY_RANK: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
+
+/** High and critical flags are never left out because of feedback. */
+export const isSevere = (severity: Severity) => severity === "high" || severity === "critical";
 
 /** Among equal severities, what a reviewer should see first. */
 const CHECK_PRIORITY = [
@@ -120,7 +123,7 @@ export interface PickAdjustments {
 
 /**
  * The places to look, with what you've taught Alden: a flag you marked "not needed" on this PR stays down on a
- * re-review, a check you usually don't need gives up its slots (never a high-severity one), and a check you usually
+ * re-review, a check you usually don't need gives up its slots (never a high or critical one), and a check you usually
  * agree with goes first among equals. What learning left out is returned as hidden, so the briefing can say so.
  */
 export function pickWithLearning(
@@ -136,7 +139,7 @@ export function pickWithLearning(
     );
     if (at) return `You dismissed it on ${at.slice(0, 10)}`;
     const lesson = learning.paused ? undefined : learning.checks.get(check.id);
-    if (lesson?.direction === "down" && check.severity !== "high") return checkReason(lesson);
+    if (lesson?.direction === "down" && !isSevere(check.severity)) return checkReason(lesson);
     return undefined;
   };
   const eyes = pickLookHere(checks, {

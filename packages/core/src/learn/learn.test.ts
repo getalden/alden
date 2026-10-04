@@ -387,6 +387,23 @@ describe("using what was learned", () => {
     ]);
   });
 
+  it("never quietens a critical flag you usually don't need", () => {
+    const learning = learn({
+      repo: REPO,
+      feedback: [1, 2, 3].map(() => verdict("secrets.likely", "not_needed")),
+      opens: [],
+      memory: [],
+      now: NOW,
+    });
+    const { eyes, hidden } = pickWithLearning(
+      [check("secrets.likely", "critical", ["src/keys.ts"])],
+      learning,
+      "acme/shop#9",
+    );
+    expect(eyes.map((e) => e.checkId)).toEqual(["secrets.likely"]);
+    expect(hidden).toEqual([]);
+  });
+
   it("keeps a flag dismissed on this PR down on a re-review, and only on this PR", () => {
     const learning = learn({
       repo: REPO,

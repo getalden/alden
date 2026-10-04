@@ -363,7 +363,7 @@ export function plan(repo: Repo): Planned[] {
       expect: {
         lane: "needs-you",
         flags: ["migrations.changed"],
-        manual: "'Needs your eyes' leads with the destructive migration, high severity.",
+        manual: "'Needs your eyes' leads with the destructive migration, critical severity.",
       },
     });
   }

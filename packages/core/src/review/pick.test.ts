@@ -30,6 +30,14 @@ describe("pickLookHere", () => {
     });
   });
 
+  it("puts critical before high", () => {
+    const picked = pickLookHere([
+      flagged("callers.outside", "high", ["src/cart.ts"]),
+      flagged("migrations.changed", "critical", ["db/migrations/2_drop.sql"]),
+    ]);
+    expect(picked.map((p) => p.checkId)).toEqual(["migrations.changed", "callers.outside"]);
+  });
+
   it("gives a file flagged by two checks only one slot", () => {
     const picked = pickLookHere([
       flagged("config.changed", "medium", [".github/workflows/ci.yml", ".github/workflows/nightly.yml"]),

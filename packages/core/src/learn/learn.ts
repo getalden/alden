@@ -402,7 +402,7 @@ export function memoryItems(learning: Learning): MemoryItem[] {
       examples: total,
       effect: up
         ? "Picked first among the places to look, and the model is told you care."
-        : "Left out of the places to look, unless high severity. The briefing says what it hid.",
+        : "Left out of the places to look, unless high or critical severity. The briefing says what it hid.",
       since: lesson.since,
     };
   });

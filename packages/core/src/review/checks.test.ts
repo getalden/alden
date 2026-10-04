@@ -127,9 +127,9 @@ describe("migrations.changed", () => {
     ["SQL", "db/migrations/0003.up.sql", "ALTER TABLE users DROP COLUMN nickname;"],
     ["golang-migrate", "migrations/0004_cleanup.up.sql", "TRUNCATE sessions;"],
     ["Doctrine", "migrations/Version20260928.php", "$this->addSql('DROP TABLE legacy');"],
-  ])("flags destructive %s operations as high, with the line", (_label, path, line) => {
+  ])("flags destructive %s operations as critical, with the line", (_label, path, line) => {
     const result = migrationsCheck.run(ctx([file(path, ["// setup", line])]));
-    expect(result.severity).toBe("high");
+    expect(result.severity).toBe("critical");
     expect(result.evidence[0]).toMatchObject({ anchor: { path, line: 2 } });
     expect(result.evidence[0]?.text).toMatch(/^may lose data: /);
   });
@@ -270,9 +270,9 @@ describe("dependencies.changed", () => {
 describe("secrets.likely", () => {
   const token = `ghp_${"a1B2c3D4e5".repeat(4)}`;
 
-  it("flags likely secrets as high with masked values and exact lines", () => {
+  it("flags likely secrets as critical with masked values and exact lines", () => {
     const result = secretsCheck.run(ctx([file("src/client.ts", ["import x from 'y';", `const t = "${token}";`])]));
-    expect(result).toMatchObject({ status: "flagged", severity: "high" });
+    expect(result).toMatchObject({ status: "flagged", severity: "critical" });
     expect(result.evidence).toEqual([
       { text: "GitHub token: ghp_…(44 chars)", anchor: { path: "src/client.ts", line: 2 } },
     ]);

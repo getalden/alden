@@ -54,7 +54,7 @@ function Place({ anchor, links, arrow = false }: { anchor: Anchor; links: Map<st
   );
 }
 
-const SEVERITY: Record<Severity, string> = { high: "high", medium: "med", low: "low", info: "—" };
+const SEVERITY: Record<Severity, string> = { critical: "critical", high: "high", medium: "med", low: "low", info: "—" };
 const STATUS: Record<CheckResult["status"], { glyph: string; label: string }> = {
   passed: { glyph: "✓", label: "Passed" },
   flagged: { glyph: "!", label: "Flagged" },
@@ -419,7 +419,7 @@ export function BriefingView({
                     ))}
                   </div>
                   <div className="acts">
-                    <span className="sev">{SEVERITY[f.severity]}</span>
+                    <span className={`sev ${f.severity}`}>{SEVERITY[f.severity]}</span>
                     {feedback && <SmallVerdicts item={findingItem(f)} feedback={feedback} />}
                   </div>
                 </li>
@@ -483,7 +483,9 @@ export function BriefingView({
                       </span>
                     )}
                   </span>
-                  <span className="sev">{check.status === "flagged" ? SEVERITY[check.severity] : "—"}</span>
+                  <span className={`sev${check.status === "flagged" ? ` ${check.severity}` : ""}`}>
+                    {check.status === "flagged" ? SEVERITY[check.severity] : "—"}
+                  </span>
                   <span className={`status ${check.status}`}>
                     {status.label} {canOpen ? (isOpen ? "▾" : "▸") : ""}
                   </span>

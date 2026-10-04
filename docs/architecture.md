@@ -77,7 +77,7 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 6. **Model** (unless `--no-llm` or unconfigured). The prompt is built from the diff, the check results and caller
    snippets, and sized to the budget. `budgetedGenerate` is the only way to call a model: it checks the worst-case
    cost against both caps, then records the actual cost in the ledger. Findings are checked against the diff, then
-   merged: deterministic high-severity picks keep their slots. The model step never throws; failures become a status
+   merged: deterministic high and critical picks keep their slots. The model step never throws; failures become a status
    and a note.
 7. **Render.** The briefing, a plain object matching `briefing.v1`, is printed as text or JSON.
 

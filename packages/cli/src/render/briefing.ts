@@ -8,11 +8,18 @@ const MARK: Record<CheckResult["status"], { symbol: string; style: Style }> = {
 };
 
 const SEVERITY_STYLE: Record<CheckResult["severity"], Style> = {
+  critical: "red",
   high: "red",
   medium: "yellow",
   low: "dim",
   info: "dim",
 };
+
+/** A severity in a fixed-width column; critical is bold as well as red, so it stands out from high. */
+function severityLabel(severity: CheckResult["severity"], color: boolean): string {
+  const label = paint(severity.padEnd(8), SEVERITY_STYLE[severity], color);
+  return severity === "critical" ? paint(label, "bold", color) : label;
+}
 
 /** Puts the line number where the text already names the file ("…: src/a.ts:10"), else prefixes the place. */
 function withPlace(text: string, anchor: Anchor | undefined): string {
@@ -79,17 +86,15 @@ function alsoNoted(briefing: Briefing, options: RenderOptions): string[] {
   const llm = briefing.llm;
   if (llm?.status !== "ok") return [];
   const shown = new Set(briefing.needsYourEyes.filter((i) => i.source === "llm").map((i) => i.title));
-  const order = { high: 0, medium: 1, low: 2, info: 3 } as const;
+  const order = { critical: 0, high: 1, medium: 2, low: 3, info: 4 } as const;
   const rest = llm.findings.filter((f) => !shown.has(f.title)).sort((a, b) => order[a.severity] - order[b.severity]);
   if (rest.length === 0) return [];
   const out = [paint("Also noted by the model", "bold", color)];
   for (const finding of rest) {
     const where = finding.anchors[0] ? `  ${place(finding.anchors[0])}` : "";
     const more = finding.anchors.length > 1 ? ` +${finding.anchors.length - 1}` : "";
-    out.push(
-      `  ${paint(finding.severity.padEnd(6), SEVERITY_STYLE[finding.severity], color)} ${finding.title}${paint(`${where}${more}`, "dim", color)}`,
-    );
-    out.push(...wrap(finding.detail, width, "         ").map((l) => paint(l, "dim", color)));
+    out.push(`  ${severityLabel(finding.severity, color)} ${finding.title}${paint(`${where}${more}`, "dim", color)}`);
+    out.push(...wrap(finding.detail, width, "           ").map((l) => paint(l, "dim", color)));
   }
   return [...out, ""];
 }
@@ -180,12 +185,9 @@ export function renderBriefing(untrusted: Briefing, options: RenderOptions): str
   for (const check of briefing.checks) {
     const mark = MARK[check.status];
     const title = fit(`${check.title}${check.heuristic ? " ~" : ""}`, titleWidth);
-    const severity =
-      check.status === "flagged"
-        ? `${paint(check.severity.padEnd(6), SEVERITY_STYLE[check.severity], color)} `
-        : "       ";
-    // "  ! " + title + "  " + severity column (7) + " " = where the summary starts.
-    const summaryColumn = titleWidth + 14;
+    const severity = check.status === "flagged" ? `${severityLabel(check.severity, color)} ` : "         ";
+    // "  ! " + title + "  " + severity column (9) + " " = where the summary starts.
+    const summaryColumn = titleWidth + 16;
     const [first = "", ...rest] = wrap(check.summary, width - summaryColumn);
     out.push(`  ${paint(mark.symbol, mark.style, color)} ${title}  ${severity} ${first}`);
     for (const line of rest) out.push(`${" ".repeat(summaryColumn)}${line}`);

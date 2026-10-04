@@ -125,7 +125,7 @@ export const migrationsCheck: Check = {
     const count = `${migrations.length} migration${migrations.length === 1 ? "" : "s"}`;
     return {
       status: "flagged",
-      severity: destructive.length > 0 ? "high" : "medium",
+      severity: destructive.length > 0 ? "critical" : "medium",
       summary:
         destructive.length > 0
           ? `${count} changed, with operations that can drop or reshape data. Check they're reversible and safe to run on production data.`
@@ -324,7 +324,7 @@ export const secretsCheck: Check = {
     if (evidence.length === 0) return passed("No likely secrets in the added lines.");
     return {
       status: "flagged",
-      severity: "high",
+      severity: "critical",
       summary: `${evidence.length} likely secret${evidence.length === 1 ? "" : "s"} in added lines. If real, rotate them: they're in the branch history now, even if removed later.`,
       evidence: capped(evidence),
     };

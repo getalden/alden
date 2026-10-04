@@ -267,6 +267,16 @@ describe("BriefingView", () => {
     });
   });
 
+  it("labels a critical check in words and styles it apart from high", () => {
+    const checks = [
+      check("secrets.likely", "flagged", { title: "Likely secrets", severity: "critical" }),
+      ...briefing.checks,
+    ];
+    const { container } = render(<BriefingView briefing={{ ...briefing, checks }} />);
+    expect(container.querySelector(".sev.critical")?.textContent).toBe("critical");
+    expect(container.querySelector(".sev.high")?.textContent).toBe("high");
+  });
+
   it("says so plainly when nothing needs a look", () => {
     render(<BriefingView briefing={{ ...briefing, needsYourEyes: [] }} />);
     expect(
