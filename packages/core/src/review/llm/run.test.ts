@@ -249,6 +249,47 @@ describe("addModelReview on a real PR", () => {
     expect(low.llm?.status).toBe("truncated");
   });
 
+  it("sends only what fits when the retry can't afford the whole PR again", async () => {
+    const { briefing, files } = recorded("grafana", 133736);
+    const sent: string[] = [];
+    const answer: LlmOutput = {
+      summary: "Searches the catalog.",
+      matchesTitle: { verdict: "yes", reason: "It does." },
+      findings: [],
+    };
+    const provider: LlmProvider = {
+      provider: "anthropic",
+      model: "claude-sonnet-5",
+      countInputTokens: async ({ user }) => Math.ceil(user.length / 3),
+      generate: async <T>(request: { user: string }) => {
+        sent.push(request.user);
+        const first = sent.length === 1;
+        // The first answer cost $0.41 of the $0.50 cap: 125k tokens in, 16k out.
+        return {
+          output: first ? null : answer,
+          usage: {
+            inputTokens: first ? 125_000 : 2_000,
+            outputTokens: first ? 16_000 : 800,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          },
+          stopReason: first ? "max_tokens" : "end",
+          model: "claude-sonnet-5",
+        } as GenerateResult<T>;
+      },
+    };
+    const result = await addModelReview(briefing, {
+      provider,
+      config,
+      ledger: new SpendLedger(join(dir, "alden.db")),
+      files,
+    });
+    expect(sent).toHaveLength(2);
+    expect((sent[1] ?? "").length).toBeLessThan((sent[0] ?? "").length);
+    expect(result.llm).toMatchObject({ status: "ok", effort: "low" });
+    expect(result.llm?.omittedFiles.length).toBeGreaterThan(0);
+  });
+
   it("stops before calling when the budget can't cover the review", async () => {
     const { briefing, files } = recorded("django", 22041);
     const { provider, sent } = model({}, 400_000);

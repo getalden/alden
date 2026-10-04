@@ -78,15 +78,17 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   const affordable = affordableInputTokens(provider.model, budgetUsd, MAX_OUTPUT_TOKENS);
   const maxInputTokens = Math.min(affordable ?? MAX_INPUT_TOKENS, MAX_INPUT_TOKENS);
 
-  const prompt = buildPrompt({
-    target: briefing.target,
-    ...(options.description ? { description: options.description } : {}),
-    files: options.files,
-    checks: briefing.checks,
-    maxInputTokens,
-    ...(options.callerSnippets ? { callerSnippets: options.callerSnippets } : {}),
-    reviewerNotes: promptNotes(options.learning),
-  });
+  const promptFor = (inputTokens: number) =>
+    buildPrompt({
+      target: briefing.target,
+      ...(options.description ? { description: options.description } : {}),
+      files: options.files,
+      checks: briefing.checks,
+      maxInputTokens: inputTokens,
+      ...(options.callerSnippets ? { callerSnippets: options.callerSnippets } : {}),
+      reviewerNotes: promptNotes(options.learning),
+    });
+  let prompt = promptFor(maxInputTokens);
   if (prompt.includedFiles.length === 0) {
     const note =
       dailyLeft < config.budget.perReviewUsd
@@ -123,6 +125,21 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
     ) {
       const first = result;
       const left = config.budget.perReviewUsd - (first.usd ?? 0);
+      // A big PR's prompt may not fit twice in the cap: the retry sends what fits of it (smallest files first, as
+      // always), and the briefing lists what was left out.
+      const fits = affordableInputTokens(
+        provider.model,
+        Math.min(left, dailyLeft - (first.usd ?? 0)),
+        RETRY_OUTPUT_TOKENS,
+      );
+      let trimmed = false;
+      if (fits !== undefined && fits < maxInputTokens) {
+        const smaller = promptFor(fits);
+        if (smaller.includedFiles.length > 0) {
+          trimmed = smaller.includedFiles.length < prompt.includedFiles.length;
+          prompt = smaller;
+        }
+      }
       try {
         const retry = await ask({ effort: "low", maxOutputTokens: RETRY_OUTPUT_TOKENS, perReviewUsd: left });
         result = {
@@ -130,7 +147,9 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
           usd: first.usd === undefined || retry.usd === undefined ? retry.usd : first.usd + retry.usd,
         };
         usedEffort = "low";
-        retryNote = "The first answer ran out of room while thinking, so Alden asked again with low effort.";
+        retryNote = trimmed
+          ? "The first answer ran out of room while thinking, so Alden asked again with low effort and the files that fit what was left of your cap."
+          : "The first answer ran out of room while thinking, so Alden asked again with low effort.";
       } catch (error) {
         if (!(error instanceof BudgetExceededError)) throw error;
         retryNote = "Asking again with less thinking wouldn't fit your per-review cap.";
