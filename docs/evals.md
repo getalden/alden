@@ -8,7 +8,8 @@ Prompt and model changes are measured against recorded public PRs before they sh
 pnpm eval                                  # prints what a run would cost; calls nothing
 pnpm eval --yes                            # runs every recorded PR through the model review
 pnpm eval --yes --model opus --effort medium
-pnpm eval --yes --only django              # one recorded PR
+pnpm eval --yes --only django              # one recorded set (django.json); --only reg-cli,hugo takes several
+pnpm eval --yes --pr cli/cli#13009         # single PRs, comma-separated
 pnpm eval --yes --clones ~/src             # with the code graph, from clones in ~/src/<name>
 pnpm eval --no-llm                         # the checks and code graph alone: free, no key needed
 pnpm eval --no-llm --only reg              # just the regression cases

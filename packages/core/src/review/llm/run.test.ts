@@ -185,6 +185,70 @@ describe("addModelReview on a real PR", () => {
     expect(result.checks).toEqual(briefing.checks);
   });
 
+  it("asks again with low effort when thinking runs out the room, within what's left of the cap", async () => {
+    const { briefing, files } = recorded("django", 22041);
+    const calls: { effort?: string; maxOutputTokens: number }[] = [];
+    const answer: LlmOutput = {
+      summary: "Fixes a lookup.",
+      matchesTitle: { verdict: "yes", reason: "It does." },
+      findings: [],
+    };
+    const provider: LlmProvider = {
+      provider: "anthropic",
+      model: "claude-sonnet-5",
+      countInputTokens: async () => 5_000,
+      generate: async <T>(request: { effort?: string; maxOutputTokens: number }) => {
+        calls.push({ effort: request.effort, maxOutputTokens: request.maxOutputTokens });
+        const first = calls.length === 1;
+        return {
+          output: first ? null : answer,
+          usage: { inputTokens: 5_000, outputTokens: first ? 16_000 : 1_500, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          stopReason: first ? "max_tokens" : "end",
+          model: "claude-sonnet-5",
+        } as GenerateResult<T>;
+      },
+    };
+    const result = await addModelReview(briefing, {
+      provider,
+      config,
+      ledger: new SpendLedger(join(dir, "alden.db")),
+      files,
+    });
+    expect(calls).toEqual([
+      { effort: undefined, maxOutputTokens: 16_000 },
+      { effort: "low", maxOutputTokens: 8_000 },
+    ]);
+    // Both calls are paid for: 5k in + 16k out, then 5k in + 1.5k out, at $2 and $10 a million.
+    expect(result.llm).toMatchObject({ status: "ok", effort: "low", summary: "Fixes a lookup.", usd: 0.195 });
+    expect(result.llm?.note).toMatch(/asked again with low effort/);
+  });
+
+  it("says when a retry wouldn't fit the cap, and doesn't retry what's already low effort", async () => {
+    const { briefing, files } = recorded("django", 22041);
+    const { provider, sent } = model({ stopReason: "max_tokens", output: null }, 120_000);
+    const capped = { ...config, budget: { perReviewUsd: 0.5, dailyUsd: 10 } };
+    const result = await addModelReview(briefing, {
+      provider,
+      config: capped,
+      ledger: new SpendLedger(join(dir, "alden.db")),
+      files,
+    });
+    expect(sent).toHaveLength(1);
+    expect(result.llm).toMatchObject({
+      status: "truncated",
+      note: expect.stringMatching(/wouldn't fit your per-review cap/),
+    });
+    const low = await addModelReview(briefing, {
+      provider,
+      config,
+      ledger: new SpendLedger(join(dir, "alden.db")),
+      files,
+      effort: "low",
+    });
+    expect(sent).toHaveLength(2);
+    expect(low.llm?.status).toBe("truncated");
+  });
+
   it("stops before calling when the budget can't cover the review", async () => {
     const { briefing, files } = recorded("django", 22041);
     const { provider, sent } = model({}, 400_000);

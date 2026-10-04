@@ -13,6 +13,11 @@ import { validateFindings } from "./validate.js";
 
 /** Room for adaptive thinking plus the answer. Thinking tokens count toward the cap. */
 export const MAX_OUTPUT_TOKENS = 16_000;
+/**
+ * When thinking uses up all of that before the answer (it happens on some PRs whatever their size), Alden asks once
+ * more with low effort and this much room: plenty for an answer with little thinking, and cheap enough to fit the cap.
+ */
+export const RETRY_OUTPUT_TOKENS = 8_000;
 /** Even when the budget allows more, bigger prompts mostly add latency. */
 export const MAX_INPUT_TOKENS = 150_000;
 
@@ -91,39 +96,64 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   }
 
   const purpose = briefing.target.kind === "pr" ? `${briefing.target.repo}#${briefing.target.number}` : "local changes";
-  let result: BudgetedResult<LlmOutput>;
-  try {
-    result = await budgetedGenerate(
+  const ask = (attempt: { effort?: Effort | undefined; maxOutputTokens: number; perReviewUsd: number }) =>
+    budgetedGenerate(
       provider,
       {
         system: prompt.system,
         user: prompt.user,
         schema: LlmOutputSchema,
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
-        ...(effort ? { effort } : {}),
+        maxOutputTokens: attempt.maxOutputTokens,
+        ...(attempt.effort ? { effort: attempt.effort } : {}),
       },
-      { limits: config.budget, ledger, purpose },
+      { limits: { ...config.budget, perReviewUsd: attempt.perReviewUsd }, ledger, purpose },
     );
+  let result: BudgetedResult<LlmOutput>;
+  let usedEffort = effort;
+  let retryNote: string | undefined;
+  try {
+    result = await ask({ effort, maxOutputTokens: MAX_OUTPUT_TOKENS, perReviewUsd: config.budget.perReviewUsd });
+    // Thinking ran out the room before the answer: once more with low effort, within what's left of the cap.
+    if (
+      !result.output &&
+      result.stopReason === "max_tokens" &&
+      effort !== "low" &&
+      provider.provider !== "openai-compatible" &&
+      supportsEffort(provider.model)
+    ) {
+      const first = result;
+      const left = config.budget.perReviewUsd - (first.usd ?? 0);
+      try {
+        const retry = await ask({ effort: "low", maxOutputTokens: RETRY_OUTPUT_TOKENS, perReviewUsd: left });
+        result = {
+          ...retry,
+          usd: first.usd === undefined || retry.usd === undefined ? retry.usd : first.usd + retry.usd,
+        };
+        usedEffort = "low";
+        retryNote = "The first answer ran out of room while thinking, so Alden asked again with low effort.";
+      } catch (error) {
+        if (!(error instanceof BudgetExceededError)) throw error;
+        retryNote = "Asking again with less thinking wouldn't fit your per-review cap.";
+      }
+    }
   } catch (error) {
     if (error instanceof BudgetExceededError)
       return withSection(briefing, empty("over_budget", error.message, provider));
     const kind = error instanceof LlmError ? error.kind : "other";
-    // Setup errors carry their own instructions (e.g. the package to install); for others the provider's detail
-    // (which URL, which model) is what makes the note actionable.
+    // Setup errors carry their own instructions (e.g. the package to install); for the rest, the provider's detail
+    // (which URL, which model, what timed out) is what makes the note actionable.
     const detail = error instanceof Error ? error.message.slice(0, 200) : "";
     const note =
-      kind === "setup"
-        ? detail
-        : kind === "network" || kind === "not_found" || kind === "bad_request"
-          ? `${ERROR_NOTES[kind]} (${detail})`
-          : ERROR_NOTES[kind];
+      kind === "setup" ? detail : kind === "auth" || !detail ? ERROR_NOTES[kind] : `${ERROR_NOTES[kind]} (${detail})`;
     return withSection(briefing, empty("failed", note, provider));
   }
 
   const base = {
     provider: provider.provider,
     model: result.model,
-    ...(effort && provider.provider !== "openai-compatible" && supportsEffort(result.model) ? { effort } : {}),
+    ...(usedEffort && provider.provider !== "openai-compatible" && supportsEffort(result.model)
+      ? { effort: usedEffort }
+      : {}),
     omittedFiles: prompt.omittedFiles,
     ...(prompt.redactedSecrets > 0 ? { redactedSecrets: prompt.redactedSecrets } : {}),
     ...(result.usd === undefined ? {} : { usd: result.usd }),
@@ -142,7 +172,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
     const status = result.stopReason === "max_tokens" ? "truncated" : "failed";
     const note =
       status === "truncated"
-        ? "The model's answer was cut off before it finished, so it was discarded."
+        ? `The model's answer was cut off before it finished, so it was discarded.${retryNote ? ` ${retryNote}` : ""}`
         : "The model's answer didn't match the expected format, so it was discarded.";
     return withSection(briefing, { ...base, status, note, findings: [], droppedFindings: 0 });
   }
@@ -187,6 +217,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
     llm: {
       ...base,
       status: "ok",
+      ...(retryNote ? { note: retryNote } : {}),
       summary: result.output.summary,
       matchesTitle: result.output.matchesTitle,
       findings,

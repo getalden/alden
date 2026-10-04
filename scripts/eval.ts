@@ -3,7 +3,8 @@
  * `pnpm eval [--model opus] [--effort medium] [--only nextjs] [--clones ~/src] [--yes]`.
  *
  * `--no-llm` measures the checks and code graph alone: free, no key needed, and the baseline the model adds to.
- * `--only reg` runs just the regression cases (PRs a later PR had to fix).
+ * `--only reg` runs just the regression cases (PRs a later PR had to fix); `--only reg-cli,hugo` takes several, and
+ * `--pr gohugoio/hugo#15231,cli/cli#13009` picks single PRs.
  *
  * Without --yes it only prints what the run could cost. With --yes it calls the configured provider (spending against
  * your caps and ledger like any review) and writes eval/results/<time>-<model>.json. Measures what needs no labels
@@ -62,9 +63,10 @@ const provider = choice?.ok ? choice.provider : undefined;
 const effort = (flag("--effort") ?? config.model.effort) as Effort | undefined;
 
 // Every recorded PR as the briefing Alden would build offline, with its description.
-const only = flag("--only");
-const cases = readdirSync(FIXTURES)
-  .filter((f) => f.endsWith(".json") && (!only || f.startsWith(only)))
+const only = flag("--only")?.split(",");
+const pick = flag("--pr")?.split(",");
+const recordedCases = readdirSync(FIXTURES)
+  .filter((f) => f.endsWith(".json") && (!only || only.some((o) => f.startsWith(o))))
   .flatMap((f) => {
     const fixture = JSON.parse(readFileSync(join(FIXTURES, f), "utf8")) as {
       name: string;
@@ -110,6 +112,7 @@ const cases = readdirSync(FIXTURES)
       };
     });
   });
+const cases = recordedCases.filter((c) => !pick || pick.includes(c.id));
 
 if (provider) {
   const worst = cases.reduce(
@@ -139,6 +142,8 @@ interface EvalRow {
   regression: boolean;
   /** For regression cases: the files the fix changed, and whether the briefing pointed at each. */
   broke: { path: string; inEyes: boolean; flagged: boolean }[];
+  /** The first answer ran out of room while thinking, and a low-effort retry answered. */
+  retried?: boolean;
   status: string | undefined;
   note: string | undefined;
   seconds: number;
@@ -228,6 +233,7 @@ for (const c of cases) {
     slotCapOk: slotCap ? (slotsOnGlob ?? 0) <= slotCap.max : undefined,
     summary: llm?.summary,
     titles: llm?.findings.map((f) => `[${f.severity}] ${f.title}`) ?? [],
+    retried: llm?.status === "ok" && llm.effort === "low" && llm.note !== undefined,
   });
   const row = rows.at(-1);
   const broke = row?.broke.length
@@ -235,7 +241,7 @@ for (const c of cases) {
     : "";
   console.log(
     provider
-      ? `${c.id.padEnd(30)} ${String(llm?.status).padEnd(10)} ${seconds.toFixed(1).padStart(5)}s  $${(llm?.usd ?? 0).toFixed(3)}  ${row?.findings} findings, ${row?.dropped} dropped${broke}`
+      ? `${c.id.padEnd(30)} ${String(llm?.status).padEnd(10)} ${seconds.toFixed(1).padStart(5)}s  $${(llm?.usd ?? 0).toFixed(3)}  ${row?.findings} findings, ${row?.dropped} dropped${llm?.effort === "low" && llm.note ? " (retried at low effort)" : ""}${broke}${llm?.status !== "ok" && llm?.note ? `\n${" ".repeat(31)}${llm.note}` : ""}`
       : `${c.id.padEnd(30)} ${seconds.toFixed(1).padStart(5)}s${broke}`,
   );
 }
@@ -269,6 +275,7 @@ const summary = {
   at: new Date().toISOString(),
   prs: rows.length,
   usableRate: ok.length / rows.length,
+  retried: rows.filter((r) => r.retried).length,
   droppedRate: totalFindings === 0 ? 0 : rows.reduce((n, r) => n + r.dropped, 0) / totalFindings,
   totalUsd: rows.reduce((n, r) => n + (r.usd ?? 0), 0),
   medianSeconds: [...rows.map((r) => r.seconds)].sort((a, b) => a - b)[Math.floor(rows.length / 2)],
