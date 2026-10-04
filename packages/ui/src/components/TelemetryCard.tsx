@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Api, Telemetry } from "../api";
 import { Mark } from "./Mark";
+import { Segmented } from "./Segmented";
 
 export const TELEMETRY_WHAT =
   "Which views and commands you use, how reviews go (counts, timings, the model used) and which way your feedback points. Never code, diffs, titles, paths, repo or user names.";
@@ -60,7 +61,7 @@ export function TelemetrySettings({ api }: { api: Api }) {
       {state?.blocked ? (
         <p className="small">Off: {state.blocked}.</p>
       ) : (
-        <fieldset className="segmented" aria-label="Usage stats" style={{ margin: 0, alignSelf: "flex-start" }}>
+        <Segmented label="Usage stats" style={{ alignSelf: "flex-start" }}>
           <button
             type="button"
             aria-pressed={on}
@@ -77,7 +78,7 @@ export function TelemetrySettings({ api }: { api: Api }) {
           >
             Don't send
           </button>
-        </fieldset>
+        </Segmented>
       )}
       {error && <p className="error-text small">{error}</p>}
     </div>

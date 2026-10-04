@@ -4,6 +4,7 @@ import type { Api, Session, SpendReport } from "../api";
 import { formatUsd, plural } from "../format";
 import { applyTheme, readTheme, type Theme } from "../theme";
 import { Switch } from "./ReviewOptions";
+import { Segmented } from "./Segmented";
 import { TelemetrySettings } from "./TelemetryCard";
 
 /** Saves `data` as a file the browser downloads, without a server round trip. */
@@ -103,7 +104,7 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
               </label>
               <div className="field">
                 Default effort
-                <fieldset className="segmented" aria-label="Default effort" style={{ margin: 0, height: 34 }}>
+                <Segmented label="Default effort" style={{ height: 34 }}>
                   <button type="button" aria-pressed={effort === ""} onClick={() => setEffort("")}>
                     Auto
                   </button>
@@ -112,7 +113,7 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
                       {e.charAt(0).toUpperCase() + e.slice(1)}
                     </button>
                   ))}
-                </fieldset>
+                </Segmented>
               </div>
             </div>
             <h2 className="label sep">Spend caps</h2>
@@ -234,7 +235,7 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
 
           <div className="card panel">
             <h2 className="label">Appearance</h2>
-            <fieldset className="segmented" aria-label="Theme" style={{ margin: 0, alignSelf: "flex-start" }}>
+            <Segmented label="Theme" style={{ alignSelf: "flex-start" }}>
               {(["system", "light", "dark"] as const).map((t) => (
                 <button
                   key={t}
@@ -248,7 +249,7 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
                   {t === "system" ? "Match system" : t === "light" ? "Light" : "Dark"}
                 </button>
               ))}
-            </fieldset>
+            </Segmented>
           </div>
         </div>
 

@@ -266,8 +266,13 @@ textarea.input {
   font-size: 13px;
 }
 
+/*
+ * A div with role="group", not a fieldset: browsers lay a fieldset's children out in an anonymous box that doesn't
+ * take the fieldset's height, so the buttons sat at the top with empty space below. Here they stretch to fill it.
+ */
 .segmented {
   display: inline-flex;
+  align-items: stretch;
   height: 32px;
   border: 1px solid var(--line2);
   border-radius: var(--r-md);

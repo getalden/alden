@@ -1,5 +1,6 @@
 import type { ReviewRequest, Session } from "../api";
 import { formatUsd } from "../format";
+import { Segmented } from "./Segmented";
 
 /** What the next review will use. Starts from the config; changing it here is for this session only. */
 export interface Choices {
@@ -107,15 +108,13 @@ export function ReviewOptions({
           </option>
         ))}
       </select>
-      <fieldset
-        className="segmented"
-        aria-label="Effort"
+      <Segmented
+        label="Effort"
         title={
           canEffort
             ? "How hard the model thinks: more effort, more time and cost"
             : "This model doesn't take an effort setting"
         }
-        style={{ margin: 0 }}
       >
         {session.efforts.map((e) => (
           <button
@@ -128,7 +127,7 @@ export function ReviewOptions({
             {e.charAt(0).toUpperCase() + e.slice(1)}
           </button>
         ))}
-      </fieldset>
+      </Segmented>
       <Switch
         on={choices.graph}
         label="Callers"
