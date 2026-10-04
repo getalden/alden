@@ -158,6 +158,61 @@ describe("renderBriefing", () => {
     expect(lines.every((l) => l.length <= 80)).toBe(true);
   });
 
+  describe("evidence", () => {
+    const signatures = check({
+      id: "signatures.changed",
+      title: "Changed public signatures",
+      status: "flagged",
+      severity: "medium",
+      summary: "1 public signature changed or removed.",
+      evidence: [
+        {
+          text: "changed: export function lineTotal(line: LineItem, currency: Currency): number → export function lineTotal(line: LineItem, currency: Currency, taxRate: number): number",
+          anchor: { path: "packages/checkout/src/pricing/line-total.ts", line: 12 },
+        },
+      ],
+    });
+    const callers = check({
+      id: "callers.outside",
+      title: "Callers outside the diff",
+      status: "flagged",
+      severity: "high",
+      summary: "1 removed or re-signed public symbol still called from 1 place this PR didn't change.",
+      evidence: [
+        {
+          text: "calls lineTotal (signature changed), name match only",
+          anchor: { path: "packages/storefront/src/components/cart/CartSummaryLineItemRow.tsx", line: 148 },
+        },
+      ],
+    });
+
+    it("puts a changed signature's old and new forms on lines of their own, wrapped, never cut", () => {
+      const out = plain(briefing({ checks: [signatures] }), 80);
+      const lines = out.split("\n");
+      expect(lines.every((l) => l.length <= 80)).toBe(true);
+      expect(out).not.toContain("…");
+      expect(out).toContain("      packages/checkout/src/pricing/line-total.ts:12  changed:\n");
+      expect(out).toContain(
+        "        - export function lineTotal(line: LineItem, currency: Currency): number\n" +
+          "        + export function lineTotal(line: LineItem, currency: Currency, taxRate:\n" +
+          "          number): number\n",
+      );
+    });
+
+    it("colours only the part of the signature that changed", () => {
+      const out = renderBriefing(briefing({ checks: [signatures] }), { width: 120, color: true });
+      expect(out).toContain("\u001b[32m, taxRate: number\u001b[39m");
+      expect(out).not.toContain("\u001b[31m");
+    });
+
+    it("wraps long caller lines under themselves instead of cutting them", () => {
+      const lines = plain(briefing({ checks: [callers] }), 80).split("\n");
+      const first = lines.findIndex((l) => l.includes("CartSummaryLineItemRow"));
+      expect(lines[first]).toBe("      packages/storefront/src/components/cart/CartSummaryLineItemRow.tsx:148");
+      expect(lines[first + 1]).toBe("        calls lineTotal (signature changed), name match only");
+    });
+  });
+
   it("lists what wasn't checked", () => {
     expect(plain(briefing())).toMatch(/Not checked\n {2}· Callers and code outside the diff/);
   });
