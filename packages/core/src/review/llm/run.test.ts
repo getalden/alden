@@ -187,7 +187,7 @@ describe("addModelReview on a real PR", () => {
 
   it("asks again with low effort when thinking runs out the room, within what's left of the cap", async () => {
     const { briefing, files } = recorded("django", 22041);
-    const calls: { effort?: string; maxOutputTokens: number }[] = [];
+    const calls: { effort?: string | undefined; maxOutputTokens: number }[] = [];
     const answer: LlmOutput = {
       summary: "Fixes a lookup.",
       matchesTitle: { verdict: "yes", reason: "It does." },
