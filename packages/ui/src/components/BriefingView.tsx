@@ -54,7 +54,7 @@ function Place({ anchor, links, arrow = false }: { anchor: Anchor; links: Map<st
   );
 }
 
-const SEVERITY: Record<Severity, string> = { high: "high", medium: "med", low: "low", info: "—" };
+const SEVERITY: Record<Severity, string> = { critical: "critical", high: "high", medium: "med", low: "low", info: "—" };
 const STATUS: Record<CheckResult["status"], { glyph: string; label: string }> = {
   passed: { glyph: "✓", label: "Passed" },
   flagged: { glyph: "!", label: "Flagged" },
@@ -427,7 +427,7 @@ export function BriefingView({
                     ))}
                   </div>
                   <div className="acts">
-                    <span className="sev">{SEVERITY[f.severity]}</span>
+                    <span className={`sev ${f.severity}`}>{SEVERITY[f.severity]}</span>
                     {feedback && <SmallVerdicts item={findingItem(f)} feedback={feedback} />}
                   </div>
                 </li>
@@ -492,7 +492,9 @@ export function BriefingView({
                       </span>
                     )}
                   </span>
-                  <span className="sev">{check.status === "flagged" ? SEVERITY[check.severity] : "—"}</span>
+                  <span className={`sev${check.status === "flagged" ? ` ${check.severity}` : ""}`}>
+                    {check.status === "flagged" ? SEVERITY[check.severity] : "—"}
+                  </span>
                   <span className={`status ${check.status}`} title={quiet ? upperFirst(quiet) : undefined}>
                     {quiet ? "Quietened" : status.label} {canOpen ? (isOpen ? "▾" : "▸") : ""}
                   </span>
@@ -555,8 +557,9 @@ export function BriefingView({
             const scale = Math.min(1, total / Math.min(totalLines, 60)) * 100;
             return (
               <li key={f.path} className="file">
-                <span className="path" title={f.path}>
+                <span className="path" title={f.previousPath ? `${f.path}, moved from ${f.previousPath}` : f.path}>
                   <Place anchor={{ path: f.path }} links={links} />
+                  {f.previousPath && <span className="moved faint small">moved from {f.previousPath}</span>}
                 </span>
                 <span>
                   <span className="add">+{f.additions}</span> <span className="del">−{f.deletions}</span>

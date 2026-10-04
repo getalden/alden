@@ -30,6 +30,8 @@ for fully qualified calls (see [Laravel and Symfony](#laravel-and-symfony)).
    - TypeScript and JavaScript: relative imports (including `.js` imports of `.ts` files), `index` files, `tsconfig`
      path aliases, workspace packages, and re-exports through barrel files.
    - Python: module paths from the repo's source roots, relative imports, and names re-exported through `__init__.py`.
+     A submodule imported from its package (`from .services import product_sync`, `from . import product_sync`) counts
+     as the module, so `product_sync.upsert()` reaches `services/product_sync.py`.
    - Go: import paths under the repo's modules, read from every `go.mod` (nested modules, and local `replace`
      directives such as Kubernetes' `staging/` packages). An import reaches every file in the package, under the name
      its `package` clause declares. Files in one package see each other's names without imports.
@@ -37,6 +39,12 @@ for fully qualified calls (see [Laravel and Symfony](#laravel-and-symfony)).
      prefixes in every `composer.json` (`autoload` and `autoload-dev`), or failing that the one file whose path ends
      in the class's namespace path. Classes in the same namespace see each other without `use`. Type hints count as
      uses, since frameworks mostly use a class by injecting it.
+
+5. **Moved and deleted files.** A file the change moves or deletes is treated like a removed symbol: files that still
+   import it by its old path (and that the PR didn't change) are listed under "Callers outside the diff" as
+   `imports src/pricing.ts (moved to src/lib/pricing.ts)`. An import that still resolves after the move (`./pricing`
+   now finding `pricing/index.ts`) isn't counted. In Go, an import breaks only when no package is left in the old
+   directory. A move with no edits isn't untested code, and the briefing says where each moved file came from.
 
 Indexing stops after 60 seconds. When that happens, the briefing says the results may be incomplete. As a guide,
 Kubernetes (13,500 Go files outside `vendor/`) indexes in about 18 seconds the first time and 1.5 seconds after that,

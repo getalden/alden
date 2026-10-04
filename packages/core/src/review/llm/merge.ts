@@ -1,8 +1,8 @@
 import type { CheckResult, LlmFinding, LookHere, Severity } from "@alden/schema";
 import { isLockfile } from "../../queue/files.js";
-import { MAX_LOOK_HERE } from "../pick.js";
+import { isSevere, MAX_LOOK_HERE } from "../pick.js";
 
-const RANK: Record<Severity, number> = { high: 3, medium: 2, low: 1, info: 0 };
+const RANK: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
 
 /** A finding's slot: its first anchor on a file nobody has claimed, or none if it has no place. */
 function fromFinding(finding: LlmFinding, used: Set<string>): LookHere | undefined {
@@ -22,7 +22,7 @@ function fromFinding(finding: LlmFinding, used: Set<string>): LookHere | undefin
 }
 
 /**
- * The final places to look (`max` of them, three unless `review.eyes` says otherwise). Deterministic high-severity picks (secrets, destructive migrations) always keep
+ * The final places to look (`max` of them, three unless `review.eyes` says otherwise). Deterministic high and critical picks (secrets, destructive migrations) always keep
  * their slots; then the model's findings, most severe first; then the remaining deterministic picks. One slot per file.
  */
 export function mergeLookHere(
@@ -45,11 +45,11 @@ export function mergeLookHere(
     picked.push(item);
   };
 
-  for (const item of withSource.filter((i) => severityOf(i) === "high")) take(item);
+  for (const item of withSource.filter((i) => isSevere(severityOf(i)))) take(item);
   const ranked = [...findings]
     .filter((f) => f.severity !== "low" && f.severity !== "info")
     .sort((a, b) => RANK[b.severity] - RANK[a.severity]);
   for (const finding of ranked) take(fromFinding(finding, used));
-  for (const item of withSource.filter((i) => severityOf(i) !== "high")) take(item);
+  for (const item of withSource.filter((i) => !isSevere(severityOf(i)))) take(item);
   return picked;
 }

@@ -403,6 +403,15 @@ describe("mergeLookHere", () => {
     ]);
   });
 
+  it("keeps critical checks ahead of the model's findings too", () => {
+    const merged = mergeLookHere(
+      [item("migrations.changed", "db/1.sql"), item("tests.missing", "a.ts")],
+      [check("migrations.changed", "critical"), check("tests.missing", "medium")],
+      [finding("Race in retry", "high", ["b.ts"]), finding("Leak", "high", ["c.ts"])],
+    );
+    expect(merged.map((m) => m.title)).toEqual(["migrations.changed", "Race in retry", "Leak"]);
+  });
+
   it("gives a finding repeated across files one slot that says so", () => {
     const merged = mergeLookHere(
       [],

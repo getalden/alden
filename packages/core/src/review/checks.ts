@@ -1,8 +1,10 @@
 import type { Evidence } from "@alden/schema";
 import picomatch from "picomatch";
+import { isPureRename, onlyCommentsChanged } from "../diff/comments.js";
 import { addedLines, type DiffFile } from "../diff/parse.js";
 import { fileKind, isLockfile, sensitiveMatcher } from "../queue/files.js";
 import { type DependencyChange, diffDependencies, isManifest } from "./dependencies.js";
+import { AI_INSTRUCTION_FILE, findInjection } from "./injection.js";
 import { findSecrets } from "./secrets.js";
 import { type SignatureChange, signatureChanges } from "./signatures.js";
 import { type Check, type CheckOutcome, MAX_EVIDENCE, symbolKey } from "./types.js";
@@ -62,9 +64,15 @@ export const testsCheck: Check = {
   title: "Code changed without tests",
   heuristic: true,
   run({ files }) {
-    const code = changed(files).filter((f) => fileKind(f.path) === "code");
+    const touched = changed(files).filter((f) => fileKind(f.path) === "code");
+    // A comment, a blank line or a move can't change behaviour, so it needs no test.
+    const code = touched.filter((f) => !isPureRename(f) && !onlyCommentsChanged(f));
     const tests = files.filter((f) => fileKind(f.path) === "test");
-    if (code.length === 0) return skipped("No code changed.");
+    if (code.length === 0) {
+      return skipped(
+        touched.length > 0 ? "Only comments, blank lines or file moves changed in code." : "No code changed.",
+      );
+    }
     if (tests.length > 0) {
       return passed(
         `${tests.length} test file${tests.length === 1 ? "" : "s"} changed alongside ${code.length} code file${code.length === 1 ? "" : "s"}.`,
@@ -125,7 +133,7 @@ export const migrationsCheck: Check = {
     const count = `${migrations.length} migration${migrations.length === 1 ? "" : "s"}`;
     return {
       status: "flagged",
-      severity: destructive.length > 0 ? "high" : "medium",
+      severity: destructive.length > 0 ? "critical" : "medium",
       summary:
         destructive.length > 0
           ? `${count} changed, with operations that can drop or reshape data. Check they're reversible and safe to run on production data.`
@@ -235,14 +243,15 @@ function describeChange(change: DependencyChange, path: string): string {
     case "removed":
       return `removed ${change.dep.name} (${change.dep.group}) from ${path}`;
     case "changed":
-      return `${change.major ? "major upgrade" : "updated"} ${change.to.name} ${change.from.version} → ${change.to.version} in ${path}`;
+      return `${change.major ? "major upgrade" : "updated"} ${change.to.name} ${change.from.version} → ${change.to.version}${change.to.group === "override" ? " (override)" : ""} in ${path}`;
   }
 }
 
-/** The added line that names the package, so the evidence points at it. */
+/** The added line that names the package, so the evidence points at it. A nested override ("a > b") is on b's line. */
 function lineNaming(file: DiffFile | undefined, name: string): number | undefined {
   if (!file) return undefined;
-  return addedLines(file).find((l) => l.text.includes(name))?.line;
+  const last = name.split(" > ").at(-1) ?? name;
+  return addedLines(file).find((l) => l.text.includes(last))?.line;
 }
 
 export const dependenciesCheck: Check = {
@@ -277,7 +286,9 @@ export const dependenciesCheck: Check = {
         });
         if (change.kind === "added") {
           counts.added++;
-          if (change.dep.group === "runtime" || change.dep.group === "peer") risky = true;
+          // A new override forces a version on every package that depends on it, so it's as risky as a new package.
+          if (change.dep.group === "runtime" || change.dep.group === "peer" || change.dep.group === "override")
+            risky = true;
         } else if (change.kind === "removed") counts.removed++;
         else if (change.major) {
           counts.major++;
@@ -324,8 +335,41 @@ export const secretsCheck: Check = {
     if (evidence.length === 0) return passed("No likely secrets in the added lines.");
     return {
       status: "flagged",
-      severity: "high",
+      severity: "critical",
       summary: `${evidence.length} likely secret${evidence.length === 1 ? "" : "s"} in added lines. If real, rotate them: they're in the branch history now, even if removed later.`,
+      evidence: capped(evidence),
+    };
+  },
+};
+
+// ─── Text aimed at AI reviewers ──────────────────────────────────────────────────────────────────
+
+export const injectionCheck: Check = {
+  id: "injection.ai",
+  title: "Text aimed at AI reviewers",
+  heuristic: true,
+  run({ target, description, files }) {
+    const evidence: Evidence[] = [];
+    if (target.kind === "pr") {
+      const inTitle = findInjection(target.title);
+      if (inTitle) evidence.push({ text: `PR title: "${inTitle}"` });
+      const inBody = description ? findInjection(description) : undefined;
+      if (inBody) evidence.push({ text: `PR description: "${inBody}"` });
+    }
+    for (const file of changed(files)) {
+      // Files written to instruct assistants (CLAUDE.md, Copilot rules) are meant to address them.
+      if (file.binary || isLockfile(file.path) || AI_INSTRUCTION_FILE.test(file.path)) continue;
+      for (const { line, text } of addedLines(file)) {
+        const found = findInjection(text);
+        if (found) evidence.push({ text: `"${found}"`, anchor: { path: file.path, line } });
+      }
+    }
+    if (evidence.length === 0)
+      return passed("Nothing in the title, description or added lines addresses an AI reviewer.");
+    return {
+      status: "flagged",
+      severity: "high",
+      summary: `${evidence.length} place${evidence.length === 1 ? "" : "s"} where the PR talks to AI reviewers rather than people (e.g. "ignore previous instructions"). Read it yourself, and don't trust an AI review of this PR until you have.`,
       evidence: capped(evidence),
     };
   },
@@ -397,6 +441,8 @@ export const signaturesCheck: Check = {
 
 // ─── Callers outside the diff ────────────────────────────────────────────────────────────────────
 
+const isTestEvidence = (e: Evidence) => e.anchor !== undefined && fileKind(e.anchor.path) === "test";
+
 export const callersCheck: Check = {
   id: "callers.outside",
   title: "Callers outside the diff",
@@ -409,7 +455,9 @@ export const callersCheck: Check = {
       );
     }
     const publicChanges = graph.changes.filter((c) => c.exported && c.change !== "added");
-    if (publicChanges.length === 0) return passed("No public functions, classes or methods changed.");
+    const goneModules = (graph.modules ?? []).filter((m) => m.importers.length > 0);
+    if (publicChanges.length === 0 && goneModules.length === 0)
+      return passed("No public functions, classes or methods changed.");
 
     // A removed definition, or one whose signature changed, can break its callers outright. Graph-based changes
     // name their type; diff-based ones only a name, which then matches any symbol of that name in the file.
@@ -449,6 +497,20 @@ export const callersCheck: Check = {
       }
     }
 
+    // A moved or deleted file breaks whatever still imports it by its old path, like a removed symbol.
+    for (const module of goneModules) {
+      breakingSymbols++;
+      const why = module.movedTo ? `moved to ${module.movedTo}` : "deleted";
+      for (const site of module.importers) {
+        breaking.push({ text: `imports ${module.path} (${why})`, anchor: { path: site.path, line: site.line } });
+      }
+    }
+
+    // Callers in code before callers in tests, across symbols, so the capped evidence keeps the ones that matter.
+    const codeFirst = (list: Evidence[]) => list.sort((a, b) => Number(isTestEvidence(a)) - Number(isTestEvidence(b)));
+    codeFirst(breaking);
+    codeFirst(reaching);
+
     const incomplete = graph.complete ? "" : " The index was cut short, so there may be more.";
     const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
     if (breaking.length > 0) {
@@ -456,7 +518,7 @@ export const callersCheck: Check = {
       return {
         status: "flagged",
         severity: sure ? "high" : "medium",
-        summary: `${count(breakingSymbols, "removed or re-signed public symbol")} still called from ${count(breaking.length, "place")} this PR didn't change. Check each caller still works.${incomplete}`,
+        summary: `${goneModules.length > 0 ? `${breakingSymbols} moved, removed or re-signed ${breakingSymbols === 1 ? "file or symbol" : "files or symbols"} still used from` : `${count(breakingSymbols, "removed or re-signed public symbol")} still called from`} ${count(breaking.length, "place")} this PR didn't change. Check each caller still works.${incomplete}`,
         evidence: capped([...breaking, ...reaching]),
       };
     }
@@ -476,6 +538,7 @@ export const callersCheck: Check = {
 export const CHECKS: Check[] = [
   ciCheck,
   secretsCheck,
+  injectionCheck,
   testsCheck,
   migrationsCheck,
   signaturesCheck,

@@ -1,16 +1,20 @@
 import type { BriefingLearning, CheckResult, Evidence, LookHere, Severity } from "@alden/schema";
 import { checkLesson, checkReason, dismissKey, type Learning, quietenedReason } from "../learn/learn.js";
-import { isLockfile } from "../queue/files.js";
+import { fileKind, isLockfile } from "../queue/files.js";
 
 /** How many places "Needs your eyes" holds unless `review.eyes` says otherwise, and the most it can be set to. */
 export const MAX_LOOK_HERE = 3;
 export const MOST_LOOK_HERE = 10;
 
-const SEVERITY_RANK: Record<Severity, number> = { high: 3, medium: 2, low: 1, info: 0 };
+const SEVERITY_RANK: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
+
+/** High and critical flags are never left out because of feedback. */
+export const isSevere = (severity: Severity) => severity === "high" || severity === "critical";
 
 /** Among equal severities, what a reviewer should see first. */
 const CHECK_PRIORITY = [
   "secrets.likely",
+  "injection.ai",
   "migrations.changed",
   "callers.outside",
   "signatures.changed",
@@ -28,6 +32,7 @@ const NOT_A_PLACE = new Set(["ci.status"]);
 
 const TITLES: Record<string, (path: string) => string> = {
   "secrets.likely": (p) => `Possible secret in ${p}`,
+  "injection.ai": (p) => `Text aimed at AI reviewers in ${p}`,
   "migrations.changed": (p) => `Migration in ${p}`,
   "signatures.changed": (p) => `Public API change in ${p}`,
   "callers.outside": (p) => `Caller of changed code in ${p}`,
@@ -37,13 +42,20 @@ const TITLES: Record<string, (path: string) => string> = {
   "paths.sensitive": (p) => `Sensitive file ${p}`,
 };
 
+/** Checks whose evidence without a file can still take a place, and its title. */
+const PLACELESS: Record<string, (text: string) => string> = {
+  "injection.ai": (text) =>
+    `Text aimed at AI reviewers in the PR ${text.startsWith("PR title") ? "title" : "description"}`,
+};
+
 type Anchored = Evidence & { anchor: NonNullable<Evidence["anchor"]> };
 
 /**
  * The few places a human should look, from the flagged checks: most severe first, at most one per file, at most
  * three. Each flagged check gets a slot before any check gets a second, so one noisy check can't crowd out the
  * rest; a file flagged by two checks takes one slot, and so does a directory of similar flags (except secrets). A
- * low-severity check gets one slot at most: it's worth a look, not the whole list.
+ * low-severity check gets one slot at most: it's worth a look, not the whole list. Places in code come before places in
+ * tests, and a caller in a test file never takes one.
  */
 export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}): LookHere[] {
   const preferred = (id: string) => (adjust.prefer?.(id) ? 0 : 1);
@@ -59,9 +71,30 @@ export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}
   const picked: LookHere[] = [];
   const usedPaths = new Set<string>();
   const usedDirs = new Set<string>();
+  const usedPlaceless = new Set<string>();
   const take = (check: CheckResult): boolean => {
+    // Text aimed at AI reviewers in the PR's title or description has no file, but is still a place to read.
+    if (PLACELESS[check.id]) {
+      const loose = check.evidence.find(
+        (e) =>
+          !e.anchor &&
+          !usedPlaceless.has(e.text) &&
+          !adjust.skip?.(check, PLACELESS[check.id]?.(e.text) ?? check.title, ""),
+      );
+      if (loose) {
+        usedPlaceless.add(loose.text);
+        const learned = adjust.why?.(check.id);
+        picked.push({
+          title: PLACELESS[check.id]?.(loose.text) ?? check.title,
+          reason: `${loose.text}. ${check.summary}`,
+          checkId: check.id,
+          ...(learned ? { learned } : {}),
+        });
+        return true;
+      }
+    }
     const isSecret = check.id === "secrets.likely";
-    const evidence = check.evidence.find(
+    const usable = check.evidence.filter(
       (e): e is Anchored =>
         e.anchor !== undefined &&
         !adjust.skip?.(check, titleOf(check, e.anchor.path), e.anchor.path) &&
@@ -71,6 +104,10 @@ export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}
         // One slot per directory, so ten near-identical workflow files don't fill the list. Each secret still counts.
         (isSecret || !usedDirs.has(dirOf(e.anchor.path))),
     );
+    // Code before tests: a caller in views.py matters more than one in test_pricing.py. Test callers stay in the
+    // check's evidence but never take a place; other checks fall back to a test file when that's all they flagged.
+    const isTest = (e: Anchored) => fileKind(e.anchor.path) === "test";
+    const evidence = usable.find((e) => !isTest(e)) ?? (check.id === "callers.outside" ? undefined : usable[0]);
     if (!evidence) return false;
     usedPaths.add(evidence.anchor.path);
     if (!isSecret && dirOf(evidence.anchor.path) !== "") usedDirs.add(dirOf(evidence.anchor.path));
@@ -120,7 +157,7 @@ export interface PickAdjustments {
 
 /**
  * The places to look, with what you've taught Alden: a flag you dismissed on this PR stays down on a re-review, a
- * check you usually mark not useful gives up its slots (never a high-severity one), and a check you usually mark
+ * check you usually mark not useful gives up its slots (never a high or critical one), and a check you usually mark
  * useful goes first among equals. What learning left out is returned as hidden, and the flagged checks it quietened
  * as quietened, so the briefing can say so in both places.
  */
@@ -137,7 +174,7 @@ export function pickWithLearning(
     );
     if (at) return `You dismissed it on ${at.slice(0, 10)}`;
     const lesson = checkLesson(learning, check.id);
-    if (lesson?.direction === "down" && check.severity !== "high") return checkReason(lesson);
+    if (lesson?.direction === "down" && !isSevere(check.severity)) return checkReason(lesson);
     return undefined;
   };
   const eyes = pickLookHere(checks, {
@@ -158,7 +195,7 @@ export function pickWithLearning(
   });
   const quietened = checks.flatMap((check) => {
     const lesson = checkLesson(learning, check.id);
-    return check.status === "flagged" && lesson?.direction === "down" && check.severity !== "high"
+    return check.status === "flagged" && lesson?.direction === "down" && !isSevere(check.severity)
       ? [{ checkId: check.id, reason: quietenedReason(lesson) }]
       : [];
   });

@@ -4,12 +4,13 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { DiffFile } from "../diff/parse.js";
 import { changedNewLines, changedSymbols, loadChangeSymbols } from "../graph/changes.js";
+import type { FileSymbols } from "../graph/extract.js";
 import { indexRepo } from "../graph/index-repo.js";
 import { languageOf } from "../graph/parser.js";
 import { type CallSite, CodeGraph } from "../graph/query.js";
-import { createResolver, loadResolverConfig } from "../graph/resolve.js";
+import { createResolver, dirOf, loadResolverConfig, type Resolver } from "../graph/resolve.js";
 import { fileKind } from "../queue/files.js";
-import { type GraphContext, symbolKey } from "./types.js";
+import { type GraphContext, type ModuleChange, symbolKey } from "./types.js";
 
 const run = promisify(execFile);
 
@@ -31,7 +32,9 @@ export async function buildGraphReview(root: string, files: DiffFile[], budgetMs
   const index = await indexRepo(root, { budgetMs });
   const { stdout } = await run("git", ["ls-files", "-z"], { cwd: root, maxBuffer: 256 * 1024 * 1024 });
   const tracked = stdout.split("\0").filter(Boolean);
-  const graph = new CodeGraph(index.files, createResolver(index.files.keys(), await loadResolverConfig(root, tracked)));
+  const resolverConfig = await loadResolverConfig(root, tracked);
+  const resolve = createResolver(index.files.keys(), resolverConfig);
+  const graph = new CodeGraph(index.files, resolve);
 
   const read = async (path: string) => {
     try {
@@ -103,17 +106,69 @@ export async function buildGraphReview(root: string, files: DiffFile[], budgetMs
     );
   }
 
+  // Moved and deleted modules: whatever still imports the old path breaks, as callers of a removed symbol do.
+  const gone = files.filter(
+    (f) => (f.status === "removed" || f.status === "renamed") && languageOf(f.previousPath ?? f.path) !== undefined,
+  );
+  const modules: ModuleChange[] = [];
+  if (gone.length > 0) {
+    const oldPaths = gone.map((f) => f.previousPath ?? f.path);
+    const resolveOld = createResolver([...index.files.keys(), ...oldPaths], resolverConfig);
+    for (const file of gone) {
+      const path = file.previousPath ?? file.path;
+      const importers = importersOf(index.files, path, resolve, resolveOld, exclude);
+      modules.push({ path, ...(file.status === "renamed" ? { movedTo: file.path } : {}), importers });
+      if (importers.length === 0) continue;
+      const what = file.status === "renamed" ? `moved to ${file.path}` : "deleted";
+      snippets.push(
+        `### ${path} (${what}) is still imported in ${importers.length} place${importers.length === 1 ? "" : "s"}\n${importers.map((s) => `${s.path}:${s.line}`).join("\n")}`,
+      );
+    }
+  }
+
   return {
     context: {
       changes,
       callers,
       complete: index.complete,
+      modules,
       covered: new Set(
         files.filter((f) => after.has(f.path) || before.has(f.previousPath ?? f.path)).map((f) => f.path),
       ),
     },
     callerSnippets: snippets.join("\n\n"),
   };
+}
+
+/**
+ * Imports that reached `oldPath` before the change and reach nothing now: `resolveOld` knows the old path, `resolve`
+ * only today's files. An import that now resolves elsewhere (`./pricing` finding `pricing/index.ts`) still works. Go
+ * imports name a package, so they match the old file's directory once no package is left there. Python's
+ * `from pkg import module` names the module after the package.
+ */
+function importersOf(
+  index: Map<string, FileSymbols>,
+  oldPath: string,
+  resolve: Resolver,
+  resolveOld: Resolver,
+  exclude: Map<string, Set<number>>,
+): CallSite[] {
+  const sites: CallSite[] = [];
+  const targets = new Set([oldPath, ...(oldPath.endsWith(".go") ? [dirOf(oldPath)] : [])]);
+  for (const [path, symbols] of index) {
+    for (const imp of symbols.imports) {
+      const specifiers = [imp.from];
+      if (path.endsWith(".py") && imp.imported !== "*")
+        specifiers.push(`${imp.from}${imp.from.endsWith(".") ? "" : "."}${imp.imported}`);
+      const broken = specifiers.some((spec) => {
+        const before = resolveOld(path, spec);
+        return before !== undefined && targets.has(before) && resolve(path, spec) === undefined;
+      });
+      if (broken && !exclude.get(path)?.has(imp.line) && !sites.some((s) => s.path === path && s.line === imp.line))
+        sites.push({ path, line: imp.line, confidence: "import" });
+    }
+  }
+  return productionFirst(sites.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line));
 }
 
 /** Languages whose callers the graph can find across files. */

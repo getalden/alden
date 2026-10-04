@@ -275,6 +275,15 @@ export class CodeGraph {
           }
           continue;
         }
+        // Python `from .services import product_sync` (or `from . import product_sync`) may name a submodule
+        // rather than something the package defines: then `product_sync.fn()` calls into services/product_sync.py.
+        // The name binding stays too, for when __init__.py defines or re-exports it.
+        if (path.endsWith(".py") && imp.imported !== "*") {
+          const submodule = resolve(path, `${imp.from}${imp.from.endsWith(".") ? "" : "."}${imp.imported}`);
+          if (submodule !== undefined && submodule !== target) {
+            list.push({ local: imp.local, namespace: true, target: submodule, imported: "*", reexport: false });
+          }
+        }
         // Python `import a.b` binds "a" but calls look like a.b.fn(), so the object to match is the module path.
         const pythonModule = path.endsWith(".py") && imp.imported === "*" && imp.local === imp.from.split(".")[0];
         list.push({

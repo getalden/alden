@@ -160,6 +160,37 @@ describe("renderBriefing", () => {
     expect(out).toContain("~ inferred from the diff alone");
   });
 
+  it("lists moved files with where they came from", () => {
+    const moved = {
+      path: "src/lib/pricing.ts",
+      previousPath: "src/pricing.ts",
+      status: "renamed" as const,
+      kind: "code" as const,
+      additions: 0,
+      deletions: 0,
+      binary: false,
+      patchMissing: false,
+    };
+    const out = plain(briefing({ files: [...briefing().files, moved] }));
+    expect(out).toContain("Moved\n  src/lib/pricing.ts moved from src/pricing.ts (no edits)\n");
+    expect(plain(briefing())).not.toContain("Moved");
+  });
+
+  it("labels critical checks in full", () => {
+    const flagged = check({
+      id: "secrets.likely",
+      title: "Likely secrets",
+      status: "flagged",
+      severity: "critical",
+      summary: "1 likely secret in added lines.",
+    });
+    expect(plain(briefing({ checks: [flagged] }))).toMatch(/! Likely secrets ~\s+critical\s+1 likely secret/);
+    // In colour it's bold as well as red, unlike high.
+    expect(renderBriefing(briefing({ checks: [flagged] }), { width: 100, color: true })).toContain(
+      "\u001b[1m\u001b[31mcritical\u001b[39m\u001b[22m",
+    );
+  });
+
   it("aligns wrapped summaries under the first line", () => {
     const long = "word ".repeat(40).trim();
     const lines = plain(briefing({ checks: [check({ summary: long })] }), 80).split("\n");
@@ -276,7 +307,7 @@ describe("renderBriefing", () => {
       expect(out).toContain(
         "  1. fetchCatalog callers must handle Catalog (model)\n     src/client.ts:191\n     The return type changed.",
       );
-      expect(out).toMatch(/Also noted by the model\n {2}low {4}Naming nit {2}src\/a\.ts:3 \+1\n {9}Minor\./);
+      expect(out).toMatch(/Also noted by the model\n {2}low {6}Naming nit {2}src\/a\.ts:3 \+1\n {11}Minor\./);
       expect(out.match(/fetchCatalog callers/g)).toHaveLength(1);
     });
 

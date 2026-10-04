@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { readLocalDiff } from "./sources.js";
+import { fromRestFile, readLocalDiff } from "./sources.js";
 
 let repo: string;
 
@@ -82,5 +82,24 @@ describe("readLocalDiff", () => {
     } finally {
       await rm(outside, { recursive: true, force: true });
     }
+  });
+});
+
+describe("fromRestFile", () => {
+  it("reads a move with no edits as a rename, not a binary file", () => {
+    const file = fromRestFile({
+      filename: "src/lib/pricing.ts",
+      previous_filename: "src/pricing.ts",
+      status: "renamed",
+      additions: 0,
+      deletions: 0,
+    });
+    expect(file).toMatchObject({
+      status: "renamed",
+      previousPath: "src/pricing.ts",
+      binary: false,
+      patchMissing: false,
+    });
+    expect(fromRestFile({ filename: "logo.png", status: "added", additions: 0, deletions: 0 }).binary).toBe(true);
   });
 });

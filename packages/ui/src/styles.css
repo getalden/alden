@@ -356,6 +356,16 @@ textarea.input {
   border-radius: var(--r-sm);
   white-space: nowrap;
 }
+.sev.high {
+  color: var(--bad);
+}
+/* Critical (a likely secret, a migration that drops data) is filled, so it reads as stronger than high. */
+.sev.critical {
+  font-weight: 600;
+  color: var(--bad);
+  background: var(--bad-soft);
+  border-color: var(--bad);
+}
 .pill {
   display: inline-flex;
   align-items: center;
@@ -1184,6 +1194,9 @@ textarea.input {
 .file .path > * {
   direction: ltr;
   unicode-bidi: plaintext;
+}
+.file .path .moved {
+  display: block;
 }
 .bar {
   display: flex;

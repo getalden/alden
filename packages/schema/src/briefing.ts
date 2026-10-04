@@ -19,7 +19,8 @@ export const EvidenceSchema = z.object({
 });
 
 export const CheckStatusSchema = z.enum(["passed", "flagged", "skipped"]);
-export const SeveritySchema = z.enum(["info", "low", "medium", "high"]);
+/** `critical` is for flags that can do damage on their own: a likely secret, a migration that drops data. */
+export const SeveritySchema = z.enum(["info", "low", "medium", "high", "critical"]);
 
 export const CheckResultSchema = z.object({
   id: z.string().describe("stable identifier, e.g. tests.missing"),

@@ -69,7 +69,7 @@ export function queueMarkdown(untrusted: RankedQueue, limit: number): string {
 export function otherFindings(briefing: Briefing): LlmFinding[] {
   if (briefing.llm?.status !== "ok") return [];
   const shown = new Set(briefing.needsYourEyes.filter((i) => i.source === "llm").map((i) => i.title));
-  const order = { high: 0, medium: 1, low: 2, info: 3 } as const;
+  const order = { critical: 0, high: 1, medium: 2, low: 3, info: 4 } as const;
   return briefing.llm.findings.filter((f) => !shown.has(f.title)).sort((a, b) => order[a.severity] - order[b.severity]);
 }
 
@@ -112,8 +112,10 @@ export function briefingPlaces(briefing: Briefing): Map<string, FeedbackItem> {
 function checkLines(check: CheckResult, quietened?: string): string[] {
   const mark = { passed: "✓", flagged: "!", skipped: "–" }[check.status];
   const id = check.status === "flagged" ? ` [C:${check.id}]` : "";
+  // Critical is said in words: it's the one level that should change what the reader does first.
+  const severity = check.status === "flagged" && check.severity === "critical" ? " **critical**" : "";
   const out = [
-    `- ${mark} **${check.title}**${check.heuristic ? " (inferred from the diff, can be wrong)" : ""}${id}: ${quote(check.summary)}`,
+    `- ${mark}${severity} **${check.title}**${check.heuristic ? " (inferred from the diff, can be wrong)" : ""}${id}: ${quote(check.summary)}`,
   ];
   // The reviewer taught Alden this: don't raise it again unless it's serious.
   if (quietened) out.push(`  - ${quote(quietened)}`);
@@ -163,7 +165,8 @@ export function briefingMarkdown(untrusted: Briefing, memory: MemoryItem[], used
   if (briefing.needsYourEyes.length === 0) out.push("Nothing flagged by Alden's checks.");
   briefing.needsYourEyes.forEach((item, i) => {
     const by = item.source === "llm" ? " (Alden's model)" : "";
-    out.push(`${i + 1}. [E${i + 1}] **${quote(item.title)}**${by} ${place(item.anchor)}`.trimEnd());
+    const critical = briefing.checks.find((c) => c.id === item.checkId)?.severity === "critical" ? " (critical)" : "";
+    out.push(`${i + 1}. [E${i + 1}] **${quote(item.title)}**${critical}${by} ${place(item.anchor)}`.trimEnd());
     out.push(`   ${quote(item.reason)}`);
     if (item.learned) out.push(`   ↑ ${quote(item.learned)}`);
   });
@@ -187,7 +190,7 @@ export function briefingMarkdown(untrusted: Briefing, memory: MemoryItem[], used
   out.push("## Not checked", ...briefing.notChecked.map((n) => `- ${quote(n)}`), "");
   out.push("## Files");
   for (const file of briefing.files) {
-    const renamed = file.previousPath ? ` (from ${file.previousPath})` : "";
+    const renamed = file.previousPath ? ` (moved from \`${file.previousPath}\`)` : "";
     const missing = file.patchMissing ? ", diff too large to fetch" : "";
     out.push(
       `- \`${file.path}\`${renamed}: ${file.status}, ${file.kind}, +${file.additions}/-${file.deletions}${missing}`,

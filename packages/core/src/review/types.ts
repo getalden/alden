@@ -12,6 +12,8 @@ export interface ReviewContext {
   files: DiffFile[];
   /** The PR's facts from the queue fetch (CI, labels…). Absent for local changes. */
   pr?: PullRequestFacts;
+  /** The PR's description, written by its author. Absent for local changes. */
+  description?: string;
   config: AldenConfig;
   /**
    * Changed manifests read in full on both sides, so dependency changes come from real parsing rather than diff lines.
@@ -35,6 +37,15 @@ export interface GraphContext {
   complete: boolean;
   /** Changed files the graph parsed (before or after), whose symbols and signatures it knows. */
   covered?: Set<string>;
+  /** Code files the change moved or deleted, with the places still importing them by their old path. */
+  modules?: ModuleChange[];
+}
+
+/** A module gone from its old path: moved (`movedTo`) or deleted. Its importers break like a removed symbol's callers. */
+export interface ModuleChange {
+  path: string;
+  movedTo?: string;
+  importers: CallSite[];
 }
 
 /** "path#Class.method" or "path#name". */

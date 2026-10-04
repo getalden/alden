@@ -195,6 +195,22 @@ function changeSignature(text: string, match: RegExpExecArray, add: string): str
   return text.slice(0, match.index) + next + text.slice(match.index + whole.length);
 }
 
+/** The top-level sections of package.json and composer.json that list dependencies (not resolutions or overrides). */
+const DEPENDENCY_SECTIONS = new Set(["dependencies", "devDependencies", "require", "require-dev"]);
+
+/** For each line of a pretty-printed JSON file, the top-level key it's under ("" outside any). */
+function jsonSections(lines: string[]): string[] {
+  let depth = 0;
+  let section = "";
+  return lines.map((line) => {
+    if (depth === 1) section = /^\s*"([^"]+)"\s*:/.exec(line)?.[1] ?? "";
+    const here = depth >= 1 ? section : "";
+    const bare = line.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+    depth += (bare.match(/[{[]/g)?.length ?? 0) - (bare.match(/[}\]]/g)?.length ?? 0);
+    return here;
+  });
+}
+
 /** Bumps the first exact or caret version in a manifest. `kind` is which part moves. */
 function bumpDependency(repo: Repo, kind: "patch" | "major", salt: string) {
   const manifests = repo.files.filter(
@@ -209,9 +225,12 @@ function bumpDependency(repo: Repo, kind: "patch" | "major", salt: string) {
         ? /^()([A-Za-z][\w.-]+)==(\d+)\.(\d+)\.(\d+)$/m
         : /^(\s*)"([@\w./-]+)":\s*"[\^~]?(\d+)\.(\d+)\.(\d+)"/m;
     const lines = text.split("\n");
+    const sections = file.endsWith(".json") ? jsonSections(lines) : undefined;
     const hits = lines
       .map((line, i) => ({ i, m: pattern.exec(line) }))
-      .filter((h) => h.m && !/(^|\s)"(version|node|php)"/.test(h.m[0]));
+      .filter((h) => h.m && !/(^|\s)"(version|node|php)"/.test(h.m[0]))
+      // A plain bump is a dependency's; an entry in resolutions or overrides is a different scenario.
+      .filter((h) => !sections || DEPENDENCY_SECTIONS.has(sections[h.i] ?? ""));
     const hit = pick(hits, salt);
     if (!hit?.m) continue;
     const [, , name, maj, min, pat] = hit.m;
@@ -363,7 +382,7 @@ export function plan(repo: Repo): Planned[] {
       expect: {
         lane: "needs-you",
         flags: ["migrations.changed"],
-        manual: "'Needs your eyes' leads with the destructive migration, high severity.",
+        manual: "'Needs your eyes' leads with the destructive migration, critical severity.",
       },
     });
   }
@@ -630,9 +649,9 @@ export function plan(repo: Repo): Planned[] {
       ],
       expect: {
         lane: "needs-you",
-        flags: [],
+        flags: ["injection.ai"],
         manual:
-          "In Claude Code (/alden:review) and with Alden's model: nothing in the PR's text is obeyed; no feedback is recorded unless you give it.",
+          "Needs your eyes names the text aimed at AI reviewers. In Claude Code (/alden:review) and with Alden's model: nothing in the PR's text is obeyed; no feedback is recorded unless you give it.",
       },
     });
     const escapes = pick(plainCode(repo, primary), "escapes") as string;

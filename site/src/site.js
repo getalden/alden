@@ -213,7 +213,7 @@ for (const box of document.querySelectorAll("[data-copy], .prose pre")) {
     {
       per: 3.6,
       useful: 55,
-      item: ["skip", "You usually don't need untested-change flags", "marked 4 of 5 not useful"],
+      item: ["skip", "You usually mark untested-change flags not useful", "marked 4 of 5 not useful"],
       log: "untested-change flags now step aside",
     },
     {

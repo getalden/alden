@@ -13,7 +13,7 @@ Nothing here leaves your machine, except your notes: the model gets those with e
 | From | Rule | What changes |
 | --- | --- | --- |
 | Useful on a check's flags | 3 or more, at least 3 to 1 | That check goes first among places to look, marked "↑ You usually mark … useful". The model is told you care about it. |
-| Not useful on a check's flags | 3 or more, at least 3 to 1 | That check is quietened: its flags are left out of places to look, unless high severity, and listed as hidden with the reason. Its row in the checks says "quietened by your feedback" (terminal, `alden ui`, `alden_review`), and the model is told to raise those concerns only when they're serious. |
+| Not useful on a check's flags | 3 or more, at least 3 to 1 | That check is quietened: its flags are left out of places to look, unless high or critical severity, and listed as hidden with the reason. Its row in the checks says "quietened by your feedback" (terminal, `alden ui`, `alden_review`), and the model is told to raise those concerns only when they're serious. |
 | Dismiss on one place in a PR | Once | A re-review of that PR leaves that place out, and says so. Other PRs are unaffected, and nothing is learned from it. |
 | PRs you open, or mark Useful in the queue | 3 or more, at least 60% of the time, in the last 90 days | PRs like that rank higher, with a reason such as "ranked higher: you usually open PRs touching db/migrations/ first". |
 | PRs you mark Not useful in the queue | 3 or more, at least 3 to 1 | PRs like that rank lower: "ranked lower: you usually skip Dependabot PRs (4 marked not useful)". |
@@ -22,7 +22,7 @@ Nothing here leaves your machine, except your notes: the model gets those with e
 A few rules keep this honest:
 
 - **Nothing is hidden silently.** Every place learning leaves out is listed under the places to look, with why.
-- **Secrets are never quietened**, and no high-severity flag is ever left out.
+- **Secrets and text aimed at AI reviewers are never quietened**, and no high or critical flag is ever left out.
 - **Learning can't outrank a blocker.** A learned boost adds at most 3 points, less than an urgent label or stacked
   PRs. Failing CI still sinks a PR.
 - **Dismiss isn't a lesson.** It hides one place on one PR (or one PR in the queue) and teaches nothing.

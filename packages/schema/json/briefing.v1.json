@@ -215,7 +215,8 @@
               "info",
               "low",
               "medium",
-              "high"
+              "high",
+              "critical"
             ],
             "description": "how much a flag matters; info for passed and skipped checks"
           },
@@ -416,7 +417,8 @@
                   "info",
                   "low",
                   "medium",
-                  "high"
+                  "high",
+                  "critical"
                 ]
               },
               "anchors": {

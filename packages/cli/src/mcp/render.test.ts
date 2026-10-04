@@ -128,6 +128,22 @@ describe("briefingMarkdown", () => {
     expect(text).toContain("gh pr diff");
   });
 
+  it("says when a check is critical, on the check and its place", () => {
+    const base = briefing();
+    const checks = base.checks.map((c) => (c.status === "flagged" ? { ...c, severity: "critical" as const } : c));
+    const text = briefingMarkdown({ ...base, checks }, [], false);
+    expect(text).toContain("[E1] **Migration may lose data** (critical)");
+    expect(text).toContain("- ! **critical** **Migration may lose data**");
+  });
+
+  it("says where a moved file came from", () => {
+    const base = briefing();
+    const files = base.files.map((f) => ({ ...f, previousPath: "db/old.ts", status: "renamed" as const }));
+    expect(briefingMarkdown({ ...base, files }, [], false)).toContain(
+      "- `db/migrate.ts` (moved from `db/old.ts`): renamed",
+    );
+  });
+
   it("keeps a title's backticks from breaking the Markdown", () => {
     expect(briefingMarkdown(briefing(), [], false)).toContain("Add the 'review' command");
   });

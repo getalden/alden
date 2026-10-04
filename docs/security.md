@@ -73,7 +73,8 @@ releases are built in CI from a tag, with macOS binaries signed and notarized.
 
 - **Prompt injection** can still make the model's part of a briefing wrong or quiet: an author can try to talk the
   model out of a finding. The deterministic checks don't read instructions, and every claim shows its evidence, so
-  read the model's view as one opinion.
+  read the model's view as one opinion. The "Text aimed at AI reviewers" check flags the common phrasings in the
+  title, description and added lines, but a reworded attempt can get past it.
 - **Secret redaction** catches known key formats, private keys, passwords in URLs and random-looking values assigned to
   secret-like names. A secret in an unusual shape can get through.
 - **Through `alden mcp`**, a PR's text reaches an assistant that may have tools of its own. Labelling it as data

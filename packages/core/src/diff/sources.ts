@@ -36,8 +36,8 @@ export function fromRestFile(file: RestFile): DiffFile {
     status: restStatus(file.status),
     additions: file.additions,
     deletions: file.deletions,
-    // GitHub omits the patch both for binary files and for text diffs too large to show.
-    binary: !file.patch && !changed,
+    // GitHub omits the patch for binary files, for text diffs too large to show, and for a move with no edits.
+    binary: !file.patch && !changed && file.status !== "renamed",
     patchMissing: !file.patch && changed,
     hunks,
   };
