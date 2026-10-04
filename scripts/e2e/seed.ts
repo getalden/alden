@@ -320,7 +320,8 @@ async function seed(planned: Planned[]): Promise<void> {
   // with other content.
   const conflicts = planned.filter((p) => p.conflictWith && p.edits[0]);
   if (conflicts.length) {
-    git(work, "fetch", "--quiet", "origin");
+    // By name: a shallow clone (--depth 1) tracks only its default branch, so `git fetch origin` wouldn't bring it.
+    git(work, "fetch", "--quiet", "origin", `+refs/heads/${base}:refs/remotes/origin/${base}`);
     git(work, "checkout", "--quiet", "--force", "-B", "alden-e2e-base", `origin/${base}`);
     for (const p of conflicts) {
       const path = join(work, (p.edits[0] as { path: string }).path);
