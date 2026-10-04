@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeStores, openStore } from "../store/db.js";
 import { clonesUnder, expandHome, findClone, noteClone, rememberClone, rememberedClone } from "./clones.js";
@@ -69,11 +69,11 @@ describe("clones", () => {
 
   it("expands ~ in folders", () => {
     expect(expandHome("~/src")).not.toContain("~");
-    expect(expandHome("/abs")).toBe("/abs");
+    expect(expandHome("/abs")).toBe(resolve("/abs"));
   });
 
   it("keeps clones in the store's meta table", async () => {
     rememberClone("a/b", "/x");
-    expect(openStore().get<{ value: string }>("SELECT value FROM meta WHERE key = 'clone:a/b'")?.value).toBe("/x");
+    expect(openStore().get<{ value: string }>("SELECT value FROM meta WHERE key = 'clone:a/b'")?.value).toBe(resolve("/x"));
   });
 });

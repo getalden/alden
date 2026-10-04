@@ -27,7 +27,9 @@ const MAX_DIRS = 4_000;
 export async function cloneAt(cwd: string): Promise<Clone | undefined> {
   try {
     const { stdout: root } = await run("git", ["rev-parse", "--show-toplevel"], { cwd, timeout: 10_000 });
-    return { root: root.trim(), repos: await remotesOf(root.trim()) };
+    // git prints forward slashes on Windows; resolve gives the platform's own form, as everywhere else.
+    const top = resolve(root.trim());
+    return { root: top, repos: await remotesOf(top) };
   } catch {
     return undefined;
   }
