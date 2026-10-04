@@ -86,4 +86,9 @@ macOS asks once before it reads the sign-in Alden stored. Choose Always Allow.
 
 **"The standalone alden binary doesn't include the bedrock SDK."** The binary bundles the Anthropic API and local
 models, but not the AWS, Google Cloud or Azure SDKs. To use Bedrock, Vertex or Foundry, install Alden from npm with
-the SDK beside it, e.g. `npm install -g alden @anthropic-ai/bedrock-sdk`.
+the SDK beside it, e.g. `npm install -g alden@next @anthropic-ai/bedrock-sdk`.
+
+## Get help
+
+If this page doesn't cover it, ask in the [Alden Community on Discord](https://discord.gg/ZtXFX7sxTu). Include what
+`alden doctor` says and your version (`alden --version`); leave out tokens, keys and anything private from your repos.

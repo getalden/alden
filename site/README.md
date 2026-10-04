@@ -26,6 +26,21 @@ The custom domain: in Cloudflare, Workers & Pages → getalden → Custom domain
 If the project ever has to be recreated: `cd site && pnpm dlx wrangler@4 pages project create getalden
 --production-branch main --force` (`--force` once, so wrangler makes a Pages project instead of a Worker).
 
-`_headers` sets a strict Content-Security-Policy: everything is served from the site itself.
+`_headers` sets a strict Content-Security-Policy: everything is served from the site itself, and the only other host
+a page may talk to is PostHog's EU ingest (`connect-src https://eu.i.posthog.com`), for the page view counts.
 
-The "Join the beta" links mail `beta@getalden.dev`; set that address up before the site goes live.
+## Page view counts
+
+`site.js` counts page views and clicks on install, copy and Discord links (`data-track` on a link or button names it;
+Discord links count by their address) in the PostHog project Alden's usage stats use, with the same public key as
+`TELEMETRY_KEY` in `packages/core/src/telemetry/telemetry.ts`. No cookies, no storage, no third-party script: a fresh
+random id per page load and `$process_person_profile: false`. Events are `$pageview` and `site_click` (with `cta` and
+`label`), with `$lib: "getalden.dev"`. It only runs on getalden.dev (not on localhost or pages.dev previews), and never
+with Do Not Track or Global Privacy Control. What it sends is disclosed in `docs/privacy.md` ("This website"); change
+both together.
+
+## Benchmarks
+
+`/benchmarks/` is `src/benchmarks.html`, wrapped in the docs' header and footer by `build.ts`. Every number on it comes
+from a result file named on the page (`eval/results/`, `eval/e2e/`) or a measured session it describes; update the
+date and version with the numbers.

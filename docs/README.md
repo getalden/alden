@@ -4,7 +4,9 @@ Alden is a code review companion. It ranks the PRs waiting on you, briefs you on
 already checked, and points you at the few places that need your eyes. It runs on your machine, with your own GitHub
 sign-in and your own model account.
 
-> **Status: private beta.** Commands and output formats may still change before 1.0.
+> **Status: open beta.** Anyone can [install it](getting-started.md), and it's free during the beta. Commands and
+> output formats may still change before 1.0. Questions and ideas: the
+> [Alden Community on Discord](https://discord.gg/ZtXFX7sxTu).
 
 ## Using Alden
 

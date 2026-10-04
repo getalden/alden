@@ -112,6 +112,15 @@ p {
   background: var(--ink);
   color: var(--bg);
 }
+.btn.ghost {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+.btn.ghost:hover {
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--acc2);
+}
 
 /* Hero */
 .hero-wrap {
@@ -774,7 +783,8 @@ h2.huge {
 .foot .links {
   margin-left: auto;
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 8px 20px;
 }
 .foot a {
   color: var(--ink2);
@@ -974,5 +984,205 @@ h2.huge {
   }
   .hero {
     padding-top: 40px;
+  }
+}
+
+/* ---- Install and copy buttons ------------------------------------------------------------------------------ */
+
+/* Install */
+.install {
+  position: relative;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 112px 24px;
+  display: grid;
+  gap: 48px;
+}
+.install h3 {
+  margin: 0;
+  font: 600 18px / 1.3 var(--sans);
+  letter-spacing: -0.01em;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.install p code {
+  font: 0.92em var(--mono);
+  color: var(--ink);
+}
+.install pre {
+  margin: 0;
+  background: #050b0d;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font: 13px / 1.7 var(--mono);
+  color: var(--ink2);
+}
+.install pre code {
+  font: inherit;
+  color: var(--ink);
+}
+.ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 14px;
+}
+.way {
+  background: var(--panel);
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.way p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink2);
+}
+.then {
+  display: grid;
+  gap: 14px;
+  max-width: 760px;
+}
+.then h3 {
+  margin-top: 10px;
+}
+.then p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Copy buttons (added by site.js) */
+.has-copy {
+  position: relative;
+}
+pre.has-copy,
+.prose pre.has-copy {
+  padding-right: 76px;
+}
+.cmd.has-copy {
+  padding-right: 8px;
+  overflow: hidden;
+}
+.cmd.has-copy > code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+.copy-btn {
+  font: 500 12px var(--mono);
+  color: var(--ink2);
+  background: var(--panel);
+  border: 1px solid var(--line2);
+  border-radius: 6px;
+  height: 28px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+.copy-btn:hover {
+  color: var(--ink);
+  border-color: var(--acc2);
+}
+pre.has-copy > .copy-btn {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+}
+.cmd.has-copy > .copy-btn {
+  flex: none;
+  margin-left: 6px;
+}
+
+/* ---- Benchmarks ------------------------------------------------------------------------------------------- */
+
+.bench {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px 24px 96px;
+}
+.bench .prose {
+  max-width: none;
+}
+.bench .lede {
+  margin: 0 0 32px;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.tile {
+  background: var(--panel);
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tile .num {
+  font: 600 34px / 1 var(--sans);
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.tile .what {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+.prose td.n,
+.prose th.n {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.bars {
+  margin: 0 0 16px;
+  display: grid;
+  gap: 14px;
+}
+.bars figcaption {
+  font-size: 14px;
+  color: var(--ink2);
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr) 4.5rem;
+  gap: 12px;
+  align-items: center;
+  font-size: 14px;
+}
+.bar-row svg {
+  display: block;
+  width: 100%;
+  height: 14px;
+}
+.bar-row .track {
+  fill: var(--line);
+}
+.bar-row .fill {
+  fill: var(--acc);
+}
+.bar-row .val {
+  font: 13px var(--mono);
+  color: var(--ink);
+  text-align: right;
+}
+@media (max-width: 600px) {
+  .bar-row {
+    grid-template-columns: minmax(0, 1fr) 4.5rem;
+  }
+  .bar-row svg {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
