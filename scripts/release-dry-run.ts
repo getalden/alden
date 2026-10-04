@@ -5,13 +5,14 @@
  * the way the workflow does, writes checksums and the Homebrew formula (and checks it parses), then packs
  * the npm package, installs that tarball into a throwaway prefix and smoke-tests the installed `alden` under Node.
  * With `--desktop` (macOS, with Rust and the x86_64-apple-darwin target) it also builds the universal Alden.app around
- * both macOS binaries, unsigned, and writes the cask. Everything lands in build/release/, which is what a release would
- * upload.
+ * both macOS binaries, unsigned, and writes the cask; then it unregisters and deletes that unsigned .app, keeping the
+ * DMG. Everything lands in build/release/, which is what a release would upload.
  */
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { forgetApp } from "./unsigned-app.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const OUT = join(ROOT, "build/release");
@@ -90,7 +91,10 @@ if (process.argv.includes("--desktop")) {
   );
   writeFileSync(join(OUT, "alden-desktop.rb"), sh("pnpm", ["-s", "homebrew:cask", version, join(OUT, "SHA256SUMS")]));
   if (has("ruby")) sh("ruby", ["-c", join(OUT, "alden-desktop.rb")]);
-  console.log(`${dmg}: Alden.app ${version}, alden inside is ${archs}`);
+  // The DMG is what a release ships. The unsigned app beside it would register with macOS, open instead of the
+  // installed Alden, and fail to read the keychain, so it goes once it's been checked.
+  forgetApp(join(bundle, "macos/Alden.app"));
+  console.log(`${dmg}: Alden.app ${version}, alden inside is ${archs} (the unsigned .app is unregistered and deleted)`);
 }
 
 step("npm package");
