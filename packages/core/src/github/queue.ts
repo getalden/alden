@@ -132,6 +132,8 @@ export interface QueueOptions {
   orgs?: string[];
   /** Organisations or repos (`owner/name`) to leave out. */
   ignore?: string[];
+  /** Told what's happening as it goes, e.g. "Checking acme/shop (2 of 5)", for a spinner. */
+  onProgress?: (step: string) => void;
 }
 
 const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
@@ -161,14 +163,16 @@ export function queueSearchQuery(
 
 /** Every open PR waiting on the viewer's review, directly or through a team, with the facts ranking needs. */
 export async function fetchReviewQueue(client: GitHubClient, options: QueueOptions = {}): Promise<ReviewQueue> {
-  const { limit = 100, cache, maxAgeMs = 60_000, refresh = false } = options;
+  const { limit = 100, cache, maxAgeMs = 60_000, refresh = false, onProgress = () => {} } = options;
   const q = queueSearchQuery(options);
+  onProgress("Asking GitHub who you are");
   const { viewer, warnings } = await fetchViewer(client);
 
   const cacheKey = `queue:v3:${viewer.login}:${limit}:${q}`;
   const cached = refresh ? undefined : await cache?.get<ReviewQueue>(cacheKey, maxAgeMs);
   if (cached) return cached;
 
+  onProgress("Finding the PRs waiting on you");
   const [raw, orgAccess] = await Promise.all([
     searchPullRequests(client, q, limit),
     // Orgs that hide their PRs from this sign-in make the queue look short without an error: say which.
@@ -181,17 +185,31 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
     );
   }
 
-  // One CODEOWNERS lookup per repo and base branch.
+  // One CODEOWNERS lookup per repo and base branch, all at once; progress names the first repo still going.
   const codeowners = new Map<string, Promise<CodeownersRule[]>>();
+  const pending = new Map<string, string>();
+  const reportPending = () => {
+    const [next] = pending.values();
+    const done = codeowners.size - pending.size;
+    if (next) onProgress(`Checking ${next}${codeowners.size > 1 ? ` (${done + 1} of ${codeowners.size})` : ""}`);
+    else onProgress("Looking for PRs stacked on these");
+  };
   for (const pr of raw) {
     const key = `${pr.repository.nameWithOwner}@${pr.baseRefName}`;
     if (!codeowners.has(key)) {
+      pending.set(key, pr.repository.nameWithOwner);
       codeowners.set(
         key,
-        fetchCodeowners(client, pr.repository.nameWithOwner, pr.baseRefName).catch(() => []),
+        fetchCodeowners(client, pr.repository.nameWithOwner, pr.baseRefName)
+          .catch(() => [])
+          .finally(() => {
+            pending.delete(key);
+            reportPending();
+          }),
       );
     }
   }
+  if (raw.length > 0) reportPending();
 
   const stacked = await fetchStackedCounts(client, raw).catch(() => raw.map(() => 0));
   const pullRequests = await Promise.all(

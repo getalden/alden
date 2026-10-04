@@ -13,6 +13,7 @@ import {
 import type { Command } from "commander";
 import { describeGitHubError } from "../github-errors.js";
 import { learningForQueue } from "../learning.js";
+import { startProgress } from "../progress.js";
 import { renderQueue, shouldColor } from "../render/queue.js";
 import { LAST_QUEUE_KEY, type LastQueue } from "./open.js";
 
@@ -46,6 +47,8 @@ export function registerQueueCommand(program: Command): void {
 
       const config = await loadConfig();
       const cache = new JsonCache();
+      // On stderr, and only on a terminal: scripts read stdout.
+      const progress = startProgress("Asking GitHub who you are…");
       let queue: Awaited<ReturnType<typeof fetchReviewQueue>>;
       try {
         queue = await fetchReviewQueue(createGitHubClient(resolved.token), {
@@ -54,11 +57,19 @@ export function registerQueueCommand(program: Command): void {
           cache,
           refresh: options.refresh ?? false,
           ...queueScope(config, { repos: options.repo, orgs: options.org }),
+          onProgress: (step) => progress.update(`${step}…`),
         });
       } catch (error) {
+        progress.stop();
         program.error(describeGitHubError(error, resolved.source));
       }
-      const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
+      progress.update("Seeing what needs your eyes…");
+      let ranked: ReturnType<typeof rankQueue>;
+      try {
+        ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
+      } finally {
+        progress.stop();
+      }
       await track("queue_ranked", queueEvent(ranked));
 
       const lastQueue: LastQueue = {

@@ -31,6 +31,9 @@ Alden looks for a token in this order:
 Ranks the open PRs waiting on your review, within what your queue covers on this machine (`queue.orgs`, `queue.repos`
 and `queue.ignore`; see [Configuration](configuration.md#queue)). See [The review queue](queue.md).
 
+While it works, a spinner on standard error says what it's doing ("Checking acme/shop (2 of 5)…"). It shows only in a
+terminal, and never on standard output, so scripts reading the queue get only the queue.
+
 | Flag | What it does |
 | --- | --- |
 | `--repo <owner/name>` | Only this repo, instead of your queue settings for this run. Repeat for more. |
