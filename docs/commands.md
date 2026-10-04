@@ -2,6 +2,10 @@
 
 Run `alden <command> --help` for the same information in your terminal.
 
+In a terminal, `alden queue`, `alden review` and `alden doctor` end with a dim "Next:" line suggesting the obvious next
+command: `alden review 1` for the top of the queue, `alden open <#>` or `alden ui` after a review, the fix `doctor`
+found. It never appears with `--json` or when the output goes to a pipe or a file.
+
 ## alden --version
 
 Prints Alden's version. When a newer Alden is out, it also says so, with how to upgrade, on standard error so scripts
@@ -144,6 +148,22 @@ Anonymous usage stats, off unless you say yes. `alden telemetry` says whether th
 
 Shows what Alden has spent on models today and over recent days, against your caps. `--json` prints the report as
 data. See [Models, providers and budgets](models.md#budgets).
+
+## alden completion
+
+```sh
+alden completion zsh|bash|fish
+```
+
+Prints a tab-completion script for your shell, covering every command and flag. Install it with:
+
+| Shell | Command |
+| --- | --- |
+| zsh | `alden completion zsh > "${fpath[1]}/_alden"`, then start a new shell. Or add `eval "$(alden completion zsh)"` to `~/.zshrc`, after `compinit`. |
+| bash | `alden completion bash > ~/.local/share/bash-completion/completions/alden`. Or add `eval "$(alden completion bash)"` to `~/.bashrc`. |
+| fish | `alden completion fish > ~/.config/fish/completions/alden.fish` |
+
+Run it again after upgrading Alden, so new commands and flags complete too.
 
 ## alden config
 

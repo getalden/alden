@@ -2,6 +2,7 @@ import { configureTelemetry } from "@alden/core";
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { registerAuthCommand } from "./commands/auth.js";
+import { registerCompletionCommand } from "./commands/completion.js";
 import { registerConfigCommand } from "./commands/config.js";
 import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerFeedbackCommand } from "./commands/feedback.js";
@@ -34,6 +35,7 @@ registerDoctorCommand(program, pkg.version);
 registerUiCommand(program, pkg.version);
 registerMcpCommand(program, pkg.version);
 registerTelemetryCommand(program);
+registerCompletionCommand(program);
 
 configureTelemetry({ version: pkg.version, surface: "cli" });
 instrument(program);

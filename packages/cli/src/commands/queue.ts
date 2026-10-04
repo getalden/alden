@@ -13,6 +13,7 @@ import {
 import type { Command } from "commander";
 import { describeGitHubError } from "../github-errors.js";
 import { learningForQueue } from "../learning.js";
+import { nextLine, queueNext, wantsNext } from "../next.js";
 import { startProgress } from "../progress.js";
 import { renderQueue, shouldColor } from "../render/queue.js";
 import { LAST_QUEUE_KEY, type LastQueue } from "./open.js";
@@ -82,8 +83,12 @@ export function registerQueueCommand(program: Command): void {
         console.log(JSON.stringify(ranked, null, 2));
         return;
       }
-      process.stdout.write(
-        renderQueue(ranked, { width: process.stdout.columns ?? 120, color: shouldColor(process.stdout) }),
-      );
+      const render = { width: process.stdout.columns ?? 120, color: shouldColor(process.stdout) };
+      process.stdout.write(renderQueue(ranked, render));
+      if (wantsNext(options.json)) {
+        process.stdout.write(
+          nextLine(queueNext(lastQueue.urls.length), { ...render, width: Math.min(render.width, 100) }),
+        );
+      }
     });
 }

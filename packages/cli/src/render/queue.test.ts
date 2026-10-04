@@ -77,7 +77,9 @@ describe("renderQueue", () => {
     expect(out).toContain("Fast-track (1)");
     expect(out).toMatch(/3\.\s+getalden\/alden#9/);
     expect(out).toContain("docs only");
-    expect(out).toContain("alden open <#>");
+    // The "Next:" hint comes from the command, and only in a terminal.
+    expect(out).not.toContain("alden open");
+    expect(out.endsWith("docs only\n")).toBe(true);
   });
 
   it("shortens long repo names but always keeps the PR number", () => {

@@ -99,6 +99,6 @@ export function renderQueue(untrusted: RankedQueue, options: RenderOptions): str
     for (const row of group) out.push(line(row));
     out.push("");
   }
-  out.push(paint("Open one with `alden open <#>`.", "dim", color));
-  return `${out.join("\n")}\n`;
+  // A terminal also gets a "Next:" line from the command (see next.ts).
+  return `${out.join("\n").trimEnd()}\n`;
 }
