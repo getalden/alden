@@ -1,6 +1,6 @@
-import type { Briefing, MemoryItem } from "@alden/schema";
+import type { Briefing, MemoryItem, RankedPullRequest, RankedQueue } from "@alden/schema";
 import { describe, expect, it } from "vitest";
-import { briefingMarkdown, briefingPlaces, memoryMarkdown, UNTRUSTED_NOTE } from "./render.js";
+import { briefingMarkdown, briefingPlaces, memoryMarkdown, queueMarkdown, UNTRUSTED_NOTE } from "./render.js";
 
 function briefing(overrides: Partial<Briefing> = {}): Briefing {
   return {
@@ -137,5 +137,37 @@ describe("memoryMarkdown", () => {
       "## What they look for\n- Money is in cents (they said; since 2026-09-01)",
     );
     expect(memoryMarkdown("a/b", [], false)).toContain("Nothing yet");
+  });
+});
+
+describe("queueMarkdown", () => {
+  const row = (requestedAt: string | null): RankedPullRequest =>
+    ({
+      pr: {
+        repo: "acme/api",
+        number: 7,
+        title: "Bump carbon",
+        url: "https://github.com/acme/api/pull/7",
+        author: "sam",
+        isDraft: false,
+        additions: 1,
+        deletions: 1,
+        changedFiles: 1,
+        request: { direct: true, teams: [], requestedAt },
+      },
+      lane: "needs-you",
+      reasons: ["waiting 7h", "major bump: nesbot/carbon 3 → 4"],
+      waitingHours: 7.6,
+      waitingOnAuthor: false,
+    }) as unknown as RankedPullRequest;
+  const queue = (r: RankedPullRequest) =>
+    ({ viewer: "you", needsYou: [r], fastTrack: [], warnings: [] }) as unknown as RankedQueue;
+
+  it("gives one waiting time per PR, saying what it counts from", () => {
+    const text = queueMarkdown(queue(row("2026-10-04T01:00:00Z")), 15);
+    expect(text.match(/waiting \d/g)).toHaveLength(1);
+    expect(text).toContain("waiting 7h since you were asked");
+    expect(text).toContain("Why here: major bump: nesbot/carbon 3 → 4");
+    expect(queueMarkdown(queue(row(null)), 15)).toContain("waiting 7h since it opened");
   });
 });

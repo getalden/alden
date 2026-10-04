@@ -1,3 +1,4 @@
+import { formatAge } from "@alden/core";
 import type {
   Anchor,
   Briefing,
@@ -22,7 +23,6 @@ export const UNTRUSTED_NOTE =
 
 const place = (anchor: Anchor | undefined) =>
   anchor ? `\`${anchor.path}${anchor.line ? `:${anchor.line}` : ""}\`` : "";
-const hours = (h: number) => (h < 1 ? "under an hour" : h < 48 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`);
 /** Inline code can't be broken out of with a backtick in a title. */
 const quote = (text: string) => text.replace(/`/g, "'").replace(/\s+/g, " ").trim();
 
@@ -30,10 +30,13 @@ function queueRow(row: RankedPullRequest, n: number): string {
   const { pr } = row;
   const size = `+${pr.additions}/-${pr.deletions} in ${pr.changedFiles} file${pr.changedFiles === 1 ? "" : "s"}`;
   const flags = [row.waitingOnAuthor && "waiting on the author (CI failing)", pr.isDraft && "draft"].filter(Boolean);
+  // One waiting time, on the first line, from the same number and rounding as the reason: it isn't repeated below.
+  const since = pr.request.requestedAt ? "since you were asked" : "since it opened";
+  const reasons = row.reasons.filter((r) => !r.startsWith("waiting "));
   return [
     `${n}. **${pr.repo}#${pr.number}** ${quote(pr.title)}`,
-    `   by @${pr.author ?? "ghost"} · ${size} · waiting ${hours(row.waitingHours)}${flags.length ? ` · ${flags.join(", ")}` : ""}`,
-    `   Why here: ${row.fastTrack ? `${row.fastTrack}; ` : ""}${row.reasons.join("; ") || "nothing stands out"}`,
+    `   by @${pr.author ?? "ghost"} · ${size} · waiting ${formatAge(row.waitingHours)} ${since}${flags.length ? ` · ${flags.join(", ")}` : ""}`,
+    `   Why here: ${row.fastTrack ? `${row.fastTrack}; ` : ""}${reasons.join("; ") || "nothing stands out"}`,
     `   ${pr.url}`,
   ].join("\n");
 }
