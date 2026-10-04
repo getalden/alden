@@ -129,6 +129,7 @@ export async function reviewPullRequest(
     },
     files,
     pr,
+    description: raw.body,
     config,
     ...(manifests ? { manifests } : {}),
     ...graphFields(graph),

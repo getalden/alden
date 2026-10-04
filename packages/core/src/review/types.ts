@@ -12,6 +12,8 @@ export interface ReviewContext {
   files: DiffFile[];
   /** The PR's facts from the queue fetch (CI, labels…). Absent for local changes. */
   pr?: PullRequestFacts;
+  /** The PR's description, written by its author. Absent for local changes. */
+  description?: string;
   config: AldenConfig;
   /**
    * Changed manifests read in full on both sides, so dependency changes come from real parsing rather than diff lines.

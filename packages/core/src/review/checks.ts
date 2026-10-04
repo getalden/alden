@@ -4,6 +4,7 @@ import { isPureRename, onlyCommentsChanged } from "../diff/comments.js";
 import { addedLines, type DiffFile } from "../diff/parse.js";
 import { fileKind, isLockfile, sensitiveMatcher } from "../queue/files.js";
 import { type DependencyChange, diffDependencies, isManifest } from "./dependencies.js";
+import { AI_INSTRUCTION_FILE, findInjection } from "./injection.js";
 import { findSecrets } from "./secrets.js";
 import { type SignatureChange, signatureChanges } from "./signatures.js";
 import { type Check, type CheckOutcome, MAX_EVIDENCE, symbolKey } from "./types.js";
@@ -341,6 +342,39 @@ export const secretsCheck: Check = {
   },
 };
 
+// ─── Text aimed at AI reviewers ──────────────────────────────────────────────────────────────────
+
+export const injectionCheck: Check = {
+  id: "injection.ai",
+  title: "Text aimed at AI reviewers",
+  heuristic: true,
+  run({ target, description, files }) {
+    const evidence: Evidence[] = [];
+    if (target.kind === "pr") {
+      const inTitle = findInjection(target.title);
+      if (inTitle) evidence.push({ text: `PR title: "${inTitle}"` });
+      const inBody = description ? findInjection(description) : undefined;
+      if (inBody) evidence.push({ text: `PR description: "${inBody}"` });
+    }
+    for (const file of changed(files)) {
+      // Files written to instruct assistants (CLAUDE.md, Copilot rules) are meant to address them.
+      if (file.binary || isLockfile(file.path) || AI_INSTRUCTION_FILE.test(file.path)) continue;
+      for (const { line, text } of addedLines(file)) {
+        const found = findInjection(text);
+        if (found) evidence.push({ text: `"${found}"`, anchor: { path: file.path, line } });
+      }
+    }
+    if (evidence.length === 0)
+      return passed("Nothing in the title, description or added lines addresses an AI reviewer.");
+    return {
+      status: "flagged",
+      severity: "high",
+      summary: `${evidence.length} place${evidence.length === 1 ? "" : "s"} where the PR talks to AI reviewers rather than people (e.g. "ignore previous instructions"). Read it yourself, and don't trust an AI review of this PR until you have.`,
+      evidence: capped(evidence),
+    };
+  },
+};
+
 // ─── Public signatures ───────────────────────────────────────────────────────────────────────────
 
 const labelOf = (d: { name: string; container?: string }) => (d.container ? `${d.container}.${d.name}` : d.name);
@@ -504,6 +538,7 @@ export const callersCheck: Check = {
 export const CHECKS: Check[] = [
   ciCheck,
   secretsCheck,
+  injectionCheck,
   testsCheck,
   migrationsCheck,
   signaturesCheck,

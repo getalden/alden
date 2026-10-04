@@ -14,6 +14,7 @@ export const isSevere = (severity: Severity) => severity === "high" || severity 
 /** Among equal severities, what a reviewer should see first. */
 const CHECK_PRIORITY = [
   "secrets.likely",
+  "injection.ai",
   "migrations.changed",
   "callers.outside",
   "signatures.changed",
@@ -31,6 +32,7 @@ const NOT_A_PLACE = new Set(["ci.status"]);
 
 const TITLES: Record<string, (path: string) => string> = {
   "secrets.likely": (p) => `Possible secret in ${p}`,
+  "injection.ai": (p) => `Text aimed at AI reviewers in ${p}`,
   "migrations.changed": (p) => `Migration in ${p}`,
   "signatures.changed": (p) => `Public API change in ${p}`,
   "callers.outside": (p) => `Caller of changed code in ${p}`,
@@ -38,6 +40,12 @@ const TITLES: Record<string, (path: string) => string> = {
   "tests.missing": (p) => `Untested change in ${p}`,
   "config.changed": (p) => `Config change in ${p}`,
   "paths.sensitive": (p) => `Sensitive file ${p}`,
+};
+
+/** Checks whose evidence without a file can still take a place, and its title. */
+const PLACELESS: Record<string, (text: string) => string> = {
+  "injection.ai": (text) =>
+    `Text aimed at AI reviewers in the PR ${text.startsWith("PR title") ? "title" : "description"}`,
 };
 
 type Anchored = Evidence & { anchor: NonNullable<Evidence["anchor"]> };
@@ -63,7 +71,28 @@ export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}
   const picked: LookHere[] = [];
   const usedPaths = new Set<string>();
   const usedDirs = new Set<string>();
+  const usedPlaceless = new Set<string>();
   const take = (check: CheckResult): boolean => {
+    // Text aimed at AI reviewers in the PR's title or description has no file, but is still a place to read.
+    if (PLACELESS[check.id]) {
+      const loose = check.evidence.find(
+        (e) =>
+          !e.anchor &&
+          !usedPlaceless.has(e.text) &&
+          !adjust.skip?.(check, PLACELESS[check.id]?.(e.text) ?? check.title, ""),
+      );
+      if (loose) {
+        usedPlaceless.add(loose.text);
+        const learned = adjust.why?.(check.id);
+        picked.push({
+          title: PLACELESS[check.id]?.(loose.text) ?? check.title,
+          reason: `${loose.text}. ${check.summary}`,
+          checkId: check.id,
+          ...(learned ? { learned } : {}),
+        });
+        return true;
+      }
+    }
     const isSecret = check.id === "secrets.likely";
     const usable = check.evidence.filter(
       (e): e is Anchored =>

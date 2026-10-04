@@ -22,7 +22,7 @@ Nothing here leaves your machine, except your notes: the model gets those with e
 A few rules keep this honest:
 
 - **Nothing is hidden silently.** Every place learning leaves out is listed under the places to look, with why.
-- **Secrets are never quietened**, and no high or critical flag is ever left out.
+- **Secrets and text aimed at AI reviewers are never quietened**, and no high or critical flag is ever left out.
 - **Learning can't outrank a blocker.** A learned boost adds at most 3 points, less than an urgent label or stacked
   PRs. Failing CI still sinks a PR.
 - **Dismiss isn't a lesson.** It hides one place on one PR (or one PR in the queue) and teaches nothing.

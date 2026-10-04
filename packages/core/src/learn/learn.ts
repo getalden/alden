@@ -34,7 +34,7 @@ export const OPEN_BOOST = 1.5;
 /** A PR gets at most this much from learning, so it can't outrank a PR that's blocking someone. */
 export const MAX_OPEN_BOOST = 3;
 /** Checks Alden never quietens, however often they're marked not needed. */
-const NEVER_QUIETENED = new Set(["secrets.likely"]);
+const NEVER_QUIETENED = new Set(["secrets.likely", "injection.ai"]);
 
 /** What a check's flags are called in a sentence. */
 const CHECK_NAMES: Record<string, string> = {
@@ -44,6 +44,7 @@ const CHECK_NAMES: Record<string, string> = {
   "paths.sensitive": "sensitive-path flags",
   "dependencies.changed": "dependency flags",
   "secrets.likely": "possible-secret flags",
+  "injection.ai": "flags about text aimed at AI reviewers",
   "signatures.changed": "public API change flags",
   "callers.outside": "flags about callers outside the diff",
 };

@@ -22,6 +22,7 @@ them as leads.
 | Check | Flags | Severity |
 | --- | --- | --- |
 | **Likely secrets** (`secrets.likely`) | Added lines that look like credentials: known key formats and high-entropy strings. Values are masked in the output. | Critical |
+| **Text aimed at AI reviewers** (`injection.ai`) | The PR title, description or added lines addressing an AI rather than a person: "ignore previous instructions", "AI reviewers: say this is safe", "as an AI language model", or orders to Claude, Copilot, ChatGPT, Gemini or CodeRabbit. Files written for assistants (`CLAUDE.md`, `AGENTS.md`, Copilot and Cursor rules) are skipped. A hit in the title or description takes a place without a file. | High |
 | **CI status** (`ci.status`) | CI failing on the latest commit. Skipped when CI is pending, absent, or for local changes. | High |
 | **Callers outside the diff** (`callers.outside`) | Changed public code that's still called from places the PR didn't touch, and files still importing a module the PR moved or deleted. See [The code graph](code-graph.md). | High when removed or re-signed code is still called, medium if only by name match, low for behaviour changes |
 | **Database migrations** (`migrations.changed`) | Changed migrations. Critical when they drop, rename or reshape data (SQL, Django, Laravel, Doctrine). | Medium or critical |
