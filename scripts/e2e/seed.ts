@@ -180,6 +180,20 @@ async function seed(planned: Planned[]): Promise<void> {
   const exists = await gh("GET", `/repos/${repo}/branches/${base}`, undefined, [404]);
   if (!exists) pushAs(work, `refs/remotes/origin/${from}:refs/heads/${base}`);
 
+  /** Asks for your review: a team with your own sign-in (the test account, an outside collaborator, can't see
+   * org teams), you by name from the test account. Asking again is harmless. */
+  const requestReview = async (number: number, p: Planned) => {
+    if (noRequest) return;
+    const viaTeam = p.team && team;
+    await gh(
+      "POST",
+      `/repos/${repo}/pulls/${number}/requested_reviewers`,
+      viaTeam ? { team_reviewers: [(team as string).split("/")[1]] } : { reviewers: [reviewer] },
+      [],
+      viaTeam ? yourToken() : token,
+    );
+  };
+
   const opened: { id: string; number: number; url: string; title: string; expect: Planned["expect"] }[] = [];
   const branchOf = (id: string) => `alden-e2e-pr/${id}`;
   for (const p of planned) {
@@ -190,6 +204,7 @@ async function seed(planned: Planned[]): Promise<void> {
         `/repos/${repo}/pulls?head=${repo.split("/")[0]}:${branchOf(p.id)}&state=open`,
       )) ?? [];
     if (already && !only) {
+      await requestReview(already.number, p); // in case the earlier run stopped before asking
       opened.push({ id: p.id, number: already.number, url: already.html_url, title: p.title, expect: p.expect });
       console.log(`already open #${already.number}  ${p.id}`);
       continue;
@@ -241,18 +256,7 @@ async function seed(planned: Planned[]): Promise<void> {
       await gh("POST", `/repos/${repo}/labels`, { name: label, color: "ededed" }, [422]);
     }
     if (p.labels?.length) await gh("POST", `/repos/${repo}/issues/${pr.number}/labels`, { labels: p.labels });
-    if (!noRequest) {
-      // A team is requested with your own sign-in: the test account is an outside collaborator, which can't see the
-      // org's teams. Requesting you by name works from the test account.
-      const viaTeam = p.team && team;
-      await gh(
-        "POST",
-        `/repos/${repo}/pulls/${pr.number}/requested_reviewers`,
-        viaTeam ? { team_reviewers: [team.split("/")[1]] } : { reviewers: [reviewer] },
-        [],
-        viaTeam ? yourToken() : token,
-      );
-    }
+    await requestReview(pr.number, p);
 
     opened.push({ id: p.id, number: pr.number, url: pr.html_url, title: p.title, expect: p.expect });
     console.log(`opened #${pr.number}  ${p.id}`);
