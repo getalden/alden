@@ -435,6 +435,24 @@ describe("Python callers", () => {
     ]);
   });
 
+  it("follows relative submodule imports to calls on the module", async () => {
+    const graph = await repo({
+      "shop/services/__init__.py": "",
+      "shop/services/product_sync.py": "def upsert_from_shopify(payload):\n    pass\n",
+      "shop/webhooks.py":
+        "from .services import product_sync\n\ndef handle(p):\n    product_sync.upsert_from_shopify(p)\n",
+      "shop/services/jobs.py": "from . import product_sync as sync\n\nsync.upsert_from_shopify({})\n",
+      "shop/api/views.py": "from ..services import product_sync\n\nproduct_sync.upsert_from_shopify({})\n",
+      "other/views.py": "from shop.services import product_sync\n\nproduct_sync.upsert_from_shopify({})\n",
+    });
+    expect(sites(graph.callersOf({ path: "shop/services/product_sync.py", name: "upsert_from_shopify" }))).toEqual([
+      "other/views.py:3",
+      "shop/api/views.py:3",
+      "shop/services/jobs.py:3",
+      "shop/webhooks.py:4",
+    ]);
+  });
+
   it("reads imports inside functions, and views passed to Django's path()", async () => {
     const graph = await repo({
       "media/voices.py": "def chosen_voice_key(user):\n    pass\n",

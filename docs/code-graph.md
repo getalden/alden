@@ -30,6 +30,8 @@ for fully qualified calls (see [Laravel and Symfony](#laravel-and-symfony)).
    - TypeScript and JavaScript: relative imports (including `.js` imports of `.ts` files), `index` files, `tsconfig`
      path aliases, workspace packages, and re-exports through barrel files.
    - Python: module paths from the repo's source roots, relative imports, and names re-exported through `__init__.py`.
+     A submodule imported from its package (`from .services import product_sync`, `from . import product_sync`) counts
+     as the module, so `product_sync.upsert()` reaches `services/product_sync.py`.
    - Go: import paths under the repo's modules, read from every `go.mod` (nested modules, and local `replace`
      directives such as Kubernetes' `staging/` packages). An import reaches every file in the package, under the name
      its `package` clause declares. Files in one package see each other's names without imports.
