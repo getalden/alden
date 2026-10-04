@@ -47,11 +47,17 @@ const git = (cwd: string, ...a: string[]) =>
   execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", maxBuffer: 1 << 28 }).trim();
 
 const token = process.env.ALDEN_E2E_AUTHOR_TOKEN;
-async function gh<T>(method: string, path: string, body?: unknown, ok: number[] = []): Promise<T | undefined> {
+async function gh<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  ok: number[] = [],
+  as: string | undefined = token,
+): Promise<T | undefined> {
   const res = await fetch(`https://api.github.com${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${as}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "alden-e2e",
@@ -92,6 +98,10 @@ function pushAs(cwd: string, ...refspecs: string[]) {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+/** Your own GitHub CLI token, for the few calls only an org member can make. */
+let yours: string | undefined;
+const yourToken = () => (yours ??= execFileSync("gh", ["auth", "token"], { encoding: "utf8" }).trim());
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -173,7 +183,23 @@ async function seed(planned: Planned[]): Promise<void> {
   const opened: { id: string; number: number; url: string; title: string; expect: Planned["expect"] }[] = [];
   const branchOf = (id: string) => `alden-e2e-pr/${id}`;
   for (const p of planned) {
-    const parent = p.stackOn ? branchOf(p.stackOn) : `origin/${from}`;
+    // A re-run (after a rate limit, say) skips PRs that are already open, unless --only names them.
+    const [already] =
+      (await gh<{ number: number; html_url: string }[]>(
+        "GET",
+        `/repos/${repo}/pulls?head=${repo.split("/")[0]}:${branchOf(p.id)}&state=open`,
+      )) ?? [];
+    if (already && !only) {
+      opened.push({ id: p.id, number: already.number, url: already.html_url, title: p.title, expect: p.expect });
+      console.log(`already open #${already.number}  ${p.id}`);
+      continue;
+    }
+    // A stack's parent may come from an earlier run: then it's only on GitHub.
+    const stackParent = p.stackOn ? branchOf(p.stackOn) : undefined;
+    if (stackParent && !git(work, "branch", "--list", stackParent)) {
+      git(work, "fetch", "--quiet", `https://github.com/${repo}.git`, `${stackParent}:${stackParent}`);
+    }
+    const parent = stackParent ?? `origin/${from}`;
     git(work, "checkout", "--quiet", "--force", "-B", branchOf(p.id), parent);
     for (const edit of p.edits) {
       const path = join(work, edit.path);
@@ -215,8 +241,18 @@ async function seed(planned: Planned[]): Promise<void> {
       await gh("POST", `/repos/${repo}/labels`, { name: label, color: "ededed" }, [422]);
     }
     if (p.labels?.length) await gh("POST", `/repos/${repo}/issues/${pr.number}/labels`, { labels: p.labels });
-    const request = p.team && team ? { team_reviewers: [team.split("/")[1]] } : { reviewers: [reviewer] };
-    if (!noRequest) await gh("POST", `/repos/${repo}/pulls/${pr.number}/requested_reviewers`, request);
+    if (!noRequest) {
+      // A team is requested with your own sign-in: the test account is an outside collaborator, which can't see the
+      // org's teams. Requesting you by name works from the test account.
+      const viaTeam = p.team && team;
+      await gh(
+        "POST",
+        `/repos/${repo}/pulls/${pr.number}/requested_reviewers`,
+        viaTeam ? { team_reviewers: [team.split("/")[1]] } : { reviewers: [reviewer] },
+        [],
+        viaTeam ? yourToken() : token,
+      );
+    }
 
     opened.push({ id: p.id, number: pr.number, url: pr.html_url, title: p.title, expect: p.expect });
     console.log(`opened #${pr.number}  ${p.id}`);
