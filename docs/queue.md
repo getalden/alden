@@ -6,7 +6,8 @@ orders the queue. It never approves, comments on or changes anything on GitHub.
 ## Which PRs are included
 
 Open, non-archived PRs where your review is requested, directly or through a team. Each row shows which one. Drafts are
-left out unless you pass `--include-drafts` or set `queue.includeDrafts`. Narrow the queue with `--repo` and `--org`.
+left out unless you pass `--include-drafts` or set `queue.includeDrafts`; then each is tagged Draft before its title.
+Narrow the queue with `--repo` and `--org`.
 
 ## Needs you
 

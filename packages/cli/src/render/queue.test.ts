@@ -96,6 +96,19 @@ describe("renderQueue", () => {
     expect(row).toContain("…");
   });
 
+  it("tags and dims drafts, and leaves draft out of the reasons", () => {
+    const ready = item(1, { reasons: ["labelled hotfix"] });
+    const draft = item(2, { reasons: ["labelled hotfix", "draft"] }, { isDraft: true, title: "Rework checkout" });
+    const lines = renderQueue(queue([ready, draft]), { width: 100, color: false }).split("\n");
+    expect(lines[2]).toMatch(/^1\.\s+getalden\/alden#1\s+PR 1\s+@sam/);
+    expect(lines[4]).toMatch(/^2\.\s+getalden\/alden#2\s+\[Draft\] Rework checkout\s+@sam/);
+    expect(lines[5]?.trim()).toBe("labelled hotfix");
+
+    const colored = renderQueue(queue([ready, draft]), { width: 100, color: true }).split("\n");
+    expect(colored[2]?.startsWith("\u001b[2m")).toBe(false);
+    expect(colored[4]?.startsWith("\u001b[2m2.")).toBe(true);
+  });
+
   it("shows warnings first, and only colours when asked", () => {
     const plain = renderQueue(queue([item(1)], [], ["Couldn't list your teams"]), { width: 100, color: false });
     expect(plain.startsWith("Warning: Couldn't list your teams\n")).toBe(true);

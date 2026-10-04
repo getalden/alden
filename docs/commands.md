@@ -39,7 +39,7 @@ terminal, and never on standard output, so scripts reading the queue get only th
 | `--repo <owner/name>` | Only this repo, instead of your queue settings for this run. Repeat for more. |
 | `--org <name>` | Only repos in this organisation, instead of your queue settings for this run. Repeat for more. |
 | `--limit <n>` | The most PRs to fetch. Default 100. |
-| `--include-drafts` | Include draft PRs. |
+| `--include-drafts` | Include draft PRs. Each is tagged `[Draft]` before its title and dimmed. |
 | `--refresh` | Ignore the 60-second cache. |
 | `--json` | Print the ranked queue as JSON. Schema: `packages/schema/json/ranked-queue.v1.json`. |
 

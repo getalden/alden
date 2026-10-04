@@ -65,10 +65,11 @@ export function renderQueue(untrusted: RankedQueue, options: RenderOptions): str
     const { pr } = item;
     const ciStyle = CI_STYLE[pr.ci];
     const ci = ciStyle ? paint(CI_LABEL[pr.ci], ciStyle, color) : CI_LABEL[pr.ci];
+    // A draft says so before its title and is dimmed, like the web UI's chip.
     const main = [
       fit(`${rank}.`, cols.rank),
       fitPr(pr.repo, pr.number, cols.pr),
-      fit(pr.title, titleWidth),
+      fit(`${pr.isDraft ? "[Draft] " : ""}${pr.title}`, titleWidth),
       fit(`@${pr.author ?? "ghost"}`, cols.author),
       fit(formatAge(item.waitingHours), cols.waiting),
       fit(`+${pr.additions}/-${pr.deletions}`, cols.size),
@@ -76,9 +77,11 @@ export function renderQueue(untrusted: RankedQueue, options: RenderOptions): str
     ].join("  ");
     // The Waiting column already shows the wait, so the reason line leaves it out (`--json` keeps it).
     const reasons = item.reasons.filter((r) => !r.startsWith("waiting "));
+    // Likewise the tag already says it's a draft.
+    if (pr.isDraft && reasons.includes("draft")) reasons.splice(reasons.indexOf("draft"), 1);
     const why = item.fastTrack ? item.fastTrack : reasons.join(" · ") || "nothing stands out";
     const indent = " ".repeat(cols.rank + 2);
-    return `${main}\n${indent}${paint(fit(why, Math.max(20, options.width - indent.length)).trimEnd(), "dim", color)}`;
+    return `${pr.isDraft ? paint(main, "dim", color) : main}\n${indent}${paint(fit(why, Math.max(20, options.width - indent.length)).trimEnd(), "dim", color)}`;
   };
 
   const out: string[] = [];
