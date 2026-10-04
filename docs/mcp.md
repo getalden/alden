@@ -38,7 +38,7 @@ Sign in to GitHub first (`alden auth login`); the tools say so if you haven't.
 | --- | --- | --- |
 | `alden_queue` | The PRs waiting on your review, ranked, each with why it's there. | `repos`, `orgs`, `limit` 1–100 per lane (15), `refresh` (false) |
 | `alden_review` | A briefing on a PR (a URL, `owner/repo#123`, or its number in the queue), or on your uncommitted changes when no PR is given. Includes what you care about in that repo. | `pr` (none: your local changes), `callers` (true), `use_alden_model` (false), `model`, `effort` `low` to `max` |
-| `alden_feedback` | Records useful, not useful or dismiss on a place in a briefing, by its id (`E1`, `F2`, `C:tests.missing`). | `place`, `verdict` `useful`, `not_useful`, `dismiss` or `clear`, `pr` (the latest briefing) |
+| `alden_feedback` | Records useful, not useful or dismiss on a place in a briefing, by its id (`E1`, `F2`, `C:tests.missing`), and says how close it brought a lesson. | `place`, `verdict` `useful`, `not_useful`, `dismiss` or `clear`, `pr` (the latest briefing) |
 | `alden_missed` | Records something Alden should have flagged. | `note` (up to 2,000 characters), `path`, `line`, `pr` (the latest briefing) |
 | `alden_memory` | What Alden knows about you in a repo. | `repo` (this clone's `origin`) |
 | `alden_remember` | Adds a note to it ("Money is in cents, never floats"). | `text` (up to 500 characters), `repo` (this clone's `origin`) |
