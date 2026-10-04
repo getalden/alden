@@ -104,16 +104,23 @@ async function gh<T>(
   ok: number[] = [],
   as: string | undefined = token,
 ): Promise<T | undefined> {
-  const res = await fetch(`https://api.github.com${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${as}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "alden-e2e",
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const call = () =>
+    fetch(`https://api.github.com${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${as}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "alden-e2e",
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  let res = await call();
+  // GitHub has passing server errors; they go away on a retry a few seconds later.
+  for (let attempt = 1; res.status >= 500 && attempt <= 3; attempt++) {
+    await new Promise((r) => setTimeout(r, 3_000 * attempt));
+    res = await call();
+  }
   if (ok.includes(res.status)) return undefined;
   if (!res.ok) throw new Error(`${method} ${path}: ${res.status} ${(await res.text()).slice(0, 300)}`);
   return res.status === 204 ? undefined : ((await res.json()) as T);
