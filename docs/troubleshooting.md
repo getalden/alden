@@ -30,6 +30,9 @@ do, and the queue warns about them. There are two causes:
 
 Alden itself never needs installing on an organisation: it reads what your own sign-in can read, and posts nothing.
 
+**The queue is slow.** Run `ALDEN_DEBUG=queue alden queue --refresh` to see each step's time and requests on stderr.
+A huge queue (hundreds of PRs) takes longer; narrow it with `--repo`, `--org` or `queue.ignore`.
+
 **Private repos are missing.** The token needs the `repo` scope. `alden auth status` lists its scopes; sign in again
 with `alden auth login --device`, or run `gh auth refresh -s repo`.
 

@@ -24,6 +24,9 @@ Stop it with Ctrl+C.
 - **Queue.** "Needs you" and "Fast-track", with each PR's wait, size, CI and the reasons it ranks where it does (a
   line marked ↑ or ↓ when your own feedback moved it). The selected row takes **Useful**, **Not useful** and
   **Dismiss** (hidden until it changes). Filter by repo, refresh, and pick a PR to see its briefing beside the list.
+  The UI fetches your whole queue (up to the 1,000 PRs a GitHub search returns), so the repo filter lists every repo
+  in it. On opening, it shows the last queue at once (kept for a day), marked "As of 3 min ago, refreshing…" until
+  the current one arrives.
   Until you've answered, a card at the top asks whether to send [anonymous usage stats](telemetry.md). In the desktop
   app, PRs briefed while you were away are marked "Briefing ready".
 - **A PR.** "Brief me" runs the review and shows each stage as it goes (fetching, finding callers, checks, the

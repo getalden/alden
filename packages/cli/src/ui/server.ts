@@ -24,7 +24,8 @@ export type ReviewEvent =
 /** What the server asks of the engine. Tests pass fakes; `alden ui` passes the real thing (see api.ts). */
 export interface UiApi {
   session(): Promise<unknown>;
-  queue(options: { refresh: boolean; repos: string[]; orgs: string[] }): Promise<unknown>;
+  /** `cached`: the last queue (up to a day old) if there is one, instead of waiting for GitHub. */
+  queue(options: { refresh: boolean; repos: string[]; orgs: string[]; cached?: boolean }): Promise<unknown>;
   review(request: ReviewRequest, onStage: (stage: ReviewStage, label: string) => void): Promise<Briefing>;
   /**
    * The desktop app, while you're away: briefs the first of the top PRs waiting on you that has no briefing for its
@@ -210,6 +211,7 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
             refresh: url.searchParams.get("refresh") === "1",
             repos: url.searchParams.getAll("repo"),
             orgs: url.searchParams.getAll("org"),
+            ...(url.searchParams.get("cached") === "1" ? { cached: true } : {}),
           }),
         );
         return;

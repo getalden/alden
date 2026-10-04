@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it } from "vitest";
 import type { Session } from "../api";
 import type { BriefingFeedback, Verdict } from "../feedback";
+import { waitingSince } from "../format";
 import { BriefingView, groupHidden } from "./BriefingView";
 import { MemoryView } from "./MemoryView";
 import { QueueView } from "./QueueView";
@@ -157,6 +158,60 @@ describe("QueueView", () => {
       />,
     );
     expect(container.querySelectorAll("[data-pr]").length).toBe(1);
+  });
+
+  it("lists every repo in the queue for the filter, dismissed PRs' too", () => {
+    render(
+      <QueueView
+        queue={{ ...queue, dismissed: [row("zeta/old", 9)] }}
+        error={undefined}
+        loading={false}
+        repoFilter=""
+        onRepoFilter={noop}
+        onRefresh={noop}
+        selected={undefined}
+      />,
+    );
+    const options = within(screen.getByRole("combobox", { name: "Repository" })).getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["All repos", "acme/api", "acme/web", "zeta/old"]);
+  });
+
+  it("shows an old queue's age while the current one loads, and nothing for a fresh one", () => {
+    const props = {
+      error: undefined,
+      repoFilter: "",
+      onRepoFilter: noop,
+      onRefresh: noop,
+      selected: undefined,
+    };
+    const { rerender } = render(
+      <QueueView {...props} queue={queue} loading now={Date.parse(queue.fetchedAt) + 3 * 60_000} />,
+    );
+    expect(screen.getByText("As of 3 min ago, refreshing…")).toBeTruthy();
+    rerender(<QueueView {...props} queue={queue} loading={false} now={Date.parse(queue.fetchedAt) + 2 * 3_600_000} />);
+    expect(screen.getByText("As of 2h ago")).toBeTruthy();
+    rerender(<QueueView {...props} queue={queue} loading={false} now={Date.parse(queue.fetchedAt) + 20_000} />);
+    expect(screen.queryByText(/^As of/)).toBeNull();
+  });
+
+  it("gives one waiting time, saying what it counts from", () => {
+    const asked = row("acme/api", 1, {
+      waitingHours: 7.6,
+      pr: { ...row("acme/api", 1).pr, request: { direct: true, teams: [], requestedAt: "2026-09-30T02:00:00Z" } },
+    });
+    render(
+      <QueueView
+        queue={{ ...queue, needsYou: [asked], fastTrack: [] }}
+        error={undefined}
+        loading={false}
+        repoFilter=""
+        onRepoFilter={noop}
+        onRefresh={noop}
+        selected={undefined}
+      />,
+    );
+    expect(screen.getByTitle("Waiting 8h since you were asked").textContent).toBe("8h");
+    expect(waitingSince(row("acme/api", 1))).toBe("3d since it opened");
   });
 
   it("says how to sign in instead of showing an error", () => {

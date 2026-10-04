@@ -185,6 +185,9 @@ describe("alden ui server", () => {
   it("passes queue filters through", async () => {
     await call("/api/queue?refresh=1&repo=a/b&repo=c/d&org=acme", { headers: authed });
     expect(calls).toEqual([{ method: "queue", args: { refresh: true, repos: ["a/b", "c/d"], orgs: ["acme"] } }]);
+    calls.length = 0;
+    await call("/api/queue?cached=1", { headers: authed });
+    expect(calls).toEqual([{ method: "queue", args: { refresh: false, repos: [], orgs: [], cached: true } }]);
   });
 
   it("streams a review's stages, then its briefing", async () => {

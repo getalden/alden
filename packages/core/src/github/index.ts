@@ -33,13 +33,21 @@ export {
   type Viewer as QueueViewer,
 } from "./pull-requests.js";
 export {
+  cachedReviewQueue,
   fetchCodeowners,
+  fetchMajorBumps,
+  fetchPullRequestNodes,
   fetchReviewQueue,
   fetchStackedCounts,
   fetchViewer,
+  type PullRequestRef,
+  QUEUE_FRESH_MS,
+  QUEUE_KEEP_MS,
   type QueueOptions,
+  queueDebugEnabled,
   queueSearchQuery,
   type ReviewQueue,
+  searchPullRequestRefs,
   searchPullRequests,
 } from "./queue.js";
 export { ghCliToken, type ResolvedToken, resolveToken, type TokenSource } from "./token.js";
