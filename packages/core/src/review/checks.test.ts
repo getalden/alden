@@ -417,6 +417,24 @@ describe("callers.outside", () => {
     expect(result.evidence).toEqual([{ text: "calls rankQueue (removed)", anchor: { path: "src/cli.ts", line: 12 } }]);
   });
 
+  it("lists callers in code before callers in tests, across symbols, so the cap keeps them", () => {
+    const tests = [1, 2, 3, 4, 5].map((line) => ({
+      path: "tests/test_pricing.py",
+      line,
+      confidence: "import" as const,
+    }));
+    const result = callersCheck.run(
+      ctx([], {
+        graph: graph([change("price", "removed"), change("total", "removed")], {
+          "src/rank.ts#price": tests,
+          "src/rank.ts#total": [{ path: "shop/views.py", line: 40, confidence: "import" }],
+        }),
+      }),
+    );
+    expect(result.evidence[0]?.anchor).toEqual({ path: "shop/views.py", line: 40 });
+    expect(result.evidence).toHaveLength(6);
+  });
+
   it("treats a changed signature line as breaking", () => {
     const files = [
       {

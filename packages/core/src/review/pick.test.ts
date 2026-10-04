@@ -38,6 +38,17 @@ describe("pickLookHere", () => {
     expect(picked.map((p) => p.checkId)).toEqual(["migrations.changed", "callers.outside"]);
   });
 
+  it("prefers code over tests, and never gives a test caller a place", () => {
+    const picked = pickLookHere(
+      [
+        flagged("callers.outside", "high", ["tests/test_pricing.py", "rag/retriever_test.go", "shop/views.py"]),
+        flagged("tests.missing", "medium", ["pricing/tests/helpers.py"]),
+      ],
+      { max: 5 },
+    );
+    expect(picked.map((p) => p.anchor?.path)).toEqual(["shop/views.py", "pricing/tests/helpers.py"]);
+  });
+
   it("gives a file flagged by two checks only one slot", () => {
     const picked = pickLookHere([
       flagged("config.changed", "medium", [".github/workflows/ci.yml", ".github/workflows/nightly.yml"]),

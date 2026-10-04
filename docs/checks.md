@@ -45,6 +45,8 @@ stronger than high in the terminal and the app.
    are exempt.
 3. CI status never takes a slot: a failing build is already at the top of the checks, and the fix is the author's.
 4. Lockfiles never take a slot, except for secrets.
+5. Places in code come before places in tests. A caller in a test file never takes a slot; it stays in the
+   "Callers outside the diff" evidence, which lists callers in code first.
 
 A low-severity check gets one slot at most, so a harmless change with many callers doesn't fill the list.
 

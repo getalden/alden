@@ -400,6 +400,8 @@ export const signaturesCheck: Check = {
 
 // ─── Callers outside the diff ────────────────────────────────────────────────────────────────────
 
+const isTestEvidence = (e: Evidence) => e.anchor !== undefined && fileKind(e.anchor.path) === "test";
+
 export const callersCheck: Check = {
   id: "callers.outside",
   title: "Callers outside the diff",
@@ -451,6 +453,11 @@ export const callersCheck: Check = {
         (isBreaking ? breaking : reaching).push(evidence);
       }
     }
+
+    // Callers in code before callers in tests, across symbols, so the capped evidence keeps the ones that matter.
+    const codeFirst = (list: Evidence[]) => list.sort((a, b) => Number(isTestEvidence(a)) - Number(isTestEvidence(b)));
+    codeFirst(breaking);
+    codeFirst(reaching);
 
     const incomplete = graph.complete ? "" : " The index was cut short, so there may be more.";
     const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;

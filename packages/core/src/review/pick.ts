@@ -1,6 +1,6 @@
 import type { BriefingLearning, CheckResult, Evidence, LookHere, Severity } from "@alden/schema";
 import { checkReason, dismissKey, type Learning } from "../learn/learn.js";
-import { isLockfile } from "../queue/files.js";
+import { fileKind, isLockfile } from "../queue/files.js";
 
 /** How many places "Needs your eyes" holds unless `review.eyes` says otherwise, and the most it can be set to. */
 export const MAX_LOOK_HERE = 3;
@@ -46,7 +46,8 @@ type Anchored = Evidence & { anchor: NonNullable<Evidence["anchor"]> };
  * The few places a human should look, from the flagged checks: most severe first, at most one per file, at most
  * three. Each flagged check gets a slot before any check gets a second, so one noisy check can't crowd out the
  * rest; a file flagged by two checks takes one slot, and so does a directory of similar flags (except secrets). A
- * low-severity check gets one slot at most: it's worth a look, not the whole list.
+ * low-severity check gets one slot at most: it's worth a look, not the whole list. Places in code come before places in
+ * tests, and a caller in a test file never takes one.
  */
 export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}): LookHere[] {
   const preferred = (id: string) => (adjust.prefer?.(id) ? 0 : 1);
@@ -64,7 +65,7 @@ export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}
   const usedDirs = new Set<string>();
   const take = (check: CheckResult): boolean => {
     const isSecret = check.id === "secrets.likely";
-    const evidence = check.evidence.find(
+    const usable = check.evidence.filter(
       (e): e is Anchored =>
         e.anchor !== undefined &&
         !adjust.skip?.(check, titleOf(check, e.anchor.path), e.anchor.path) &&
@@ -74,6 +75,10 @@ export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}
         // One slot per directory, so ten near-identical workflow files don't fill the list. Each secret still counts.
         (isSecret || !usedDirs.has(dirOf(e.anchor.path))),
     );
+    // Code before tests: a caller in views.py matters more than one in test_pricing.py. Test callers stay in the
+    // check's evidence but never take a place; other checks fall back to a test file when that's all they flagged.
+    const isTest = (e: Anchored) => fileKind(e.anchor.path) === "test";
+    const evidence = usable.find((e) => !isTest(e)) ?? (check.id === "callers.outside" ? undefined : usable[0]);
     if (!evidence) return false;
     usedPaths.add(evidence.anchor.path);
     if (!isSecret && dirOf(evidence.anchor.path) !== "") usedDirs.add(dirOf(evidence.anchor.path));
