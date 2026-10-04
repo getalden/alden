@@ -28,6 +28,7 @@ import {
   userConfigPath,
 } from "@alden/core";
 import type { Command } from "commander";
+import { doctorNext, nextLine, wantsNext } from "../next.js";
 import { paint, shouldColor } from "../render/style.js";
 import { updateNotice } from "../version.js";
 
@@ -301,6 +302,10 @@ export function registerDoctorCommand(program: Command, version: string): void {
       const findings = await diagnose(version);
       if (options.json) console.log(JSON.stringify(findings, null, 2));
       else process.stdout.write(renderDoctor(findings, shouldColor(process.stdout)));
+      if (wantsNext(options.json)) {
+        const width = Math.min(process.stdout.columns ?? 100, 120);
+        process.stdout.write(nextLine(doctorNext(findings), { width, color: shouldColor(process.stdout) }));
+      }
       if (findings.some((f) => f.status === "fail")) process.exitCode = 1;
     });
 }

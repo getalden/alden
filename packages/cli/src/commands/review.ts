@@ -21,6 +21,7 @@ import type { Briefing } from "@alden/schema";
 import type { Command } from "commander";
 import { describeGitHubError } from "../github-errors.js";
 import { learningFor, noteOpened } from "../learning.js";
+import { nextLine, reviewNext, wantsNext } from "../next.js";
 import { parsePrRef } from "../pr-ref.js";
 import { startProgress } from "../progress.js";
 import { renderBriefing } from "../render/briefing.js";
@@ -126,11 +127,12 @@ export function registerReviewCommand(program: Command): void {
         console.log(JSON.stringify(briefing, null, 2));
         return;
       }
-      process.stdout.write(
-        renderBriefing(briefing, {
-          width: Math.min(process.stdout.columns ?? 100, 120),
-          color: shouldColor(process.stdout),
-        }),
-      );
+      const render = { width: Math.min(process.stdout.columns ?? 100, 120), color: shouldColor(process.stdout) };
+      process.stdout.write(renderBriefing(briefing, render));
+      if (wantsNext(options.json)) {
+        const rank =
+          prArg !== undefined && /^#?\d+$/.test(prArg.trim()) ? Number(prArg.trim().replace("#", "")) : undefined;
+        process.stdout.write(nextLine(reviewNext(briefing, rank), render));
+      }
     });
 }

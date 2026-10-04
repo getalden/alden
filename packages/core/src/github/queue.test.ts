@@ -247,6 +247,19 @@ describe("fetchReviewQueue", () => {
     for (const step of ["viewer", "search", "details", "codeowners", "stacked"]) expect(reports[0]).toContain(step);
   });
 
+  it("says what it's doing as it goes, naming the repo it's checking, and nothing on a cache hit", async () => {
+    const cache = new JsonCache(cacheDir);
+    const steps: string[] = [];
+    await fetchReviewQueue(fakeClient(prs).client, { cache, onProgress: (step) => steps.push(step) });
+    const repo = prs[0]?.repository.nameWithOwner;
+    expect(steps.slice(0, 2)).toEqual(["Finding the PRs waiting on you", `Checking ${repo} (0 of ${prs.length} PRs)`]);
+    expect(steps.at(-1)).toBe("Looking for PRs stacked on these");
+
+    const again: string[] = [];
+    await fetchReviewQueue(fakeClient(prs).client, { cache, onProgress: (step) => again.push(step) });
+    expect(again).toEqual([]);
+  });
+
   it("counts PRs stacked on each PR in one query, skipping PRs from forks", async () => {
     const mixed = prs.map((p, i) => ({ ...structuredClone(p), isCrossRepository: i === 0 }));
     const { client, calls } = fakeClient(mixed, { stacked: 2 });

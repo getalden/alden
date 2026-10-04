@@ -1,4 +1,4 @@
-import type { Anchor, Briefing, CheckResult, LlmSection } from "@alden/schema";
+import type { Anchor, Briefing, CheckResult, Evidence, LlmSection } from "@alden/schema";
 import { fit, paint, type RenderOptions, type Style, stripControlDeep, wrap } from "./style.js";
 
 const MARK: Record<CheckResult["status"], { symbol: string; style: Style }> = {
@@ -138,6 +138,87 @@ function learnedNote(briefing: Briefing, { width, color }: RenderOptions): strin
   return out;
 }
 
+/** Splits text into lines of at most `room` columns, breaking at spaces where it can: each line's [start, end). */
+function breakLines(text: string, room: number): [number, number][] {
+  const lines: [number, number][] = [];
+  let start = 0;
+  while (text.length - start > room) {
+    const space = text.lastIndexOf(" ", start + room);
+    let end = space > start ? space : start + room;
+    let next = end;
+    while (end > start && text[end - 1] === " ") end--;
+    while (text[next] === " ") next++;
+    lines.push([start, end]);
+    start = next;
+  }
+  lines.push([start, text.length]);
+  return lines;
+}
+
+/** Where two signatures differ, widened to whole words: [start, end) in each. */
+function changedSpan(before: string, after: string): { before: [number, number]; after: [number, number] } {
+  const word = (c: string | undefined) => c !== undefined && /\w/.test(c);
+  let head = 0;
+  while (head < before.length && head < after.length && before[head] === after[head]) head++;
+  while (head > 0 && word(before[head - 1]) && (word(before[head]) || word(after[head]))) head--;
+  let tail = 0;
+  const most = Math.min(before.length, after.length) - head;
+  while (tail < most && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  const fromEnd = (text: string) => text.length - tail;
+  while (
+    tail > 0 &&
+    word(before[fromEnd(before)]) &&
+    (word(before[fromEnd(before) - 1]) || word(after[fromEnd(after) - 1]))
+  )
+    tail--;
+  return { before: [head, before.length - tail], after: [head, after.length - tail] };
+}
+
+/** One side of a changed signature, "- old" or "+ new", wrapped under itself with the changed part in colour. */
+function signatureLines(
+  sign: "-" | "+",
+  signature: string,
+  [from, to]: [number, number],
+  { width, color }: RenderOptions,
+): string[] {
+  const indent = "        ";
+  const style: Style = sign === "-" ? "red" : "green";
+  return breakLines(signature, Math.max(20, width - indent.length - 2)).map(([start, end], i) => {
+    const parts = [
+      [start, Math.min(end, Math.max(start, from))],
+      [Math.max(start, from), Math.min(end, to)],
+      [Math.max(start, to), end],
+    ] as const;
+    const text = parts
+      .map(([a, b], part) => (b > a ? paint(signature.slice(a, b), part === 1 ? style : "dim", color) : ""))
+      .join("");
+    return `${indent}${paint(i === 0 ? `${sign} ` : "  ", "dim", color)}${text}`;
+  });
+}
+
+/**
+ * A flagged check's evidence, wrapped rather than cut at the terminal's edge. A changed signature gets its old and new
+ * forms on lines of their own, the part that changed in colour.
+ */
+function evidenceLines(evidence: Evidence, options: RenderOptions): string[] {
+  const { width, color } = options;
+  // Spacing kept, so "path:line  text" stays apart; continuation lines sit two further in.
+  const hang = (text: string) =>
+    breakLines(text, width - 8).map(([start, end], i) =>
+      paint(`${i === 0 ? "      " : "        "}${text.slice(start, end)}`, "dim", color),
+    );
+  const text = evidence.text.replace(/\s*\n\s*/g, " ");
+  const signature = /^(compatible change|changed): (.+) → (.+)$/.exec(text);
+  if (!signature) return hang(withPlace(text, evidence.anchor));
+  const [, kind = "", before = "", after = ""] = signature;
+  const span = changedSpan(before, after);
+  return [
+    ...hang(withPlace(`${kind}:`, evidence.anchor)),
+    ...signatureLines("-", before, span.before, options),
+    ...signatureLines("+", after, span.after, options),
+  ];
+}
+
 export function renderBriefing(untrusted: Briefing, options: RenderOptions): string {
   // Titles, paths, evidence and model text come from PR authors and the model: no control characters reach the terminal.
   const briefing = stripControlDeep(untrusted);
@@ -190,10 +271,7 @@ export function renderBriefing(untrusted: Briefing, options: RenderOptions): str
     out.push(`  ${paint(mark.symbol, mark.style, color)} ${title}  ${severity} ${first}`);
     for (const line of rest) out.push(`${" ".repeat(summaryColumn)}${line}`);
     if (check.status === "flagged") {
-      for (const evidence of check.evidence) {
-        const text = withPlace(evidence.text, evidence.anchor);
-        out.push(paint(fit(`      ${text}`, width).trimEnd(), "dim", color));
-      }
+      for (const evidence of check.evidence) out.push(...evidenceLines(evidence, options));
     }
   }
   if (briefing.checks.some((c) => c.heuristic)) {

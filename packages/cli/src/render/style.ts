@@ -52,14 +52,32 @@ export function shouldColor(stream: NodeJS.WriteStream, env: NodeJS.ProcessEnv =
   return stream.isTTY === true && env.TERM !== "dumb";
 }
 
+// biome-ignore-start lint/suspicious/noControlCharactersInRegex: matching control characters is the point
 /**
- * Removes terminal control characters (escape sequences, carriage returns, bells…) from text that came from someone
- * else: PR titles, branch names, file paths, model output. Printed raw, an escape sequence in a PR title could rewrite
- * the screen, plant a link, or in some terminals write to the clipboard. Newlines and tabs stay.
+ * Whole escape sequences, so none of one is left behind as text: OSC, DCS, SOS, PM and APC strings (titles, links,
+ * clipboard writes) up to their terminator, CSI sequences (colours, cursor moves, clearing), and the short ESC ones.
+ * The C1 forms (U+009B for ESC [ and so on) count too.
+ */
+const ESCAPE_SEQUENCE = new RegExp(
+  [
+    "(?:\\u001b[\\]PX^_]|[\\u0090\\u0098\\u009d-\\u009f])[^\\u0007\\u001b\\u009c]*(?:\\u0007|\\u001b\\\\|\\u009c)",
+    "(?:\\u001b\\[|\\u009b)[\\u0030-\\u003f]*[\\u0020-\\u002f]*[\\u0040-\\u007e]",
+    "\\u001b[\\u0020-\\u002f]*[\\u0030-\\u007e]",
+  ].join("|"),
+  "g",
+);
+const CONTROL_CHARACTER = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
+// biome-ignore-end lint/suspicious/noControlCharactersInRegex: matching control characters is the point
+
+/**
+ * Removes terminal control sequences and characters (colours, links, carriage returns, bells…) from text that came
+ * from someone else: PR titles, branch names, file paths, model output. Printed raw, an escape sequence in a PR title
+ * could rewrite the screen, plant a link, or in some terminals write to the clipboard. Whole sequences go, so "[31m"
+ * isn't left behind; an unterminated one loses only its control characters, so its text stays visible. Newlines, tabs,
+ * accents and emoji stay.
  */
 export function stripControl(text: string): string {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
-  return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
+  return text.replace(ESCAPE_SEQUENCE, "").replace(CONTROL_CHARACTER, "");
 }
 
 /** `stripControl` on every string in a value (a briefing, a queue), returning a copy. */

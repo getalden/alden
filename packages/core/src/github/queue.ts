@@ -342,6 +342,8 @@ export interface QueueOptions {
   ignore?: string[];
   /** Gets a breakdown of where a fresh queue's time went. Defaults to stderr when `ALDEN_DEBUG` includes `queue`. */
   onTiming?: (report: string) => void;
+  /** Told what's happening as it goes, e.g. "Checking acme/shop (25 of 146 PRs)", for a spinner. */
+  onProgress?: (step: string) => void;
 }
 
 /** How long a fresh queue counts as current. */
@@ -399,13 +401,14 @@ export async function cachedReviewQueue(
  * stacked-PR counts. Paging through the full facts one page at a time is what used to make a big queue slow.
  */
 export async function fetchReviewQueue(client: GitHubClient, options: QueueOptions = {}): Promise<ReviewQueue> {
-  const { limit = 100, cache, maxAgeMs = QUEUE_FRESH_MS, refresh = false } = options;
+  const { limit = 100, cache, maxAgeMs = QUEUE_FRESH_MS, refresh = false, onProgress = () => {} } = options;
   const q = queueSearchQuery(options);
   const cacheKey = await queueCacheKey(client, options);
   const cached = refresh ? undefined : await cache?.get<ReviewQueue>(cacheKey, maxAgeMs);
   if (cached) return cached;
 
   const timing = new QueueTiming();
+  onProgress("Finding the PRs waiting on you");
   const viewerReady = timing.time("viewer", fetchViewer(client));
   const refs = await timing.time("search", searchPullRequestRefs(client, q, limit));
   timing.note("search", `${refs.length} PRs`);
@@ -445,6 +448,13 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
   let bumpsCached = 0;
   const manifestSlot = limiter(CONCURRENCY);
   const manifestReads: Promise<void>[] = [];
+  // Progress names the repo of the first PR whose details are still loading.
+  const loaded = new Set<string>();
+  const reportDetails = () => {
+    const next = refs.find((r) => !loaded.has(r.id));
+    if (next) onProgress(`Checking ${next.repository.nameWithOwner} (${loaded.size} of ${refs.length} PRs)`);
+  };
+  if (refs.length > 0) reportDetails();
   const details = await mapLimit(chunk(refs, DETAIL_BATCH), CONCURRENCY, async (batch) => {
     const nodes = await timing.time(
       "details",
@@ -454,6 +464,8 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
       ),
     );
     const byId = new Map(nodes.map((n) => [n.id, n]));
+    for (const ref of batch) loaded.add(ref.id);
+    reportDetails();
     for (const ref of batch) {
       const pr = byId.get(ref.id);
       const paths = (pr?.files?.nodes ?? []).map((f) => f.path);
@@ -470,6 +482,7 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
     }
     return nodes;
   });
+  if (manifestReads.length > 0) onProgress("Reading changed dependency manifests");
   await Promise.all(manifestReads);
   const raw = new Map(details.flat().map((n) => [n.id, n]));
 
@@ -481,6 +494,7 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
     );
   }
 
+  if (refs.length > 0) onProgress("Looking for PRs stacked on these");
   const counts = await stacked;
   const pullRequests: PullRequestFacts[] = [];
   for (const [i, ref] of refs.entries()) {

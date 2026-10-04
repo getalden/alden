@@ -9,7 +9,9 @@
 - **Needs your eyes**: a few places (3 unless you set `review.eyes`, up to 10), each with a file, a line and the reason. See
   [How Alden picks where to look](#how-alden-picks-where-to-look).
 - **Checked**: every check, with its result (passed, flagged or skipped), a summary and evidence. Evidence is what
-  the check looked at and found, usually anchored to a file and line.
+  the check looked at and found, usually anchored to a file and line. In the terminal it wraps rather than being cut
+  off, and a changed signature shows its old (`-`) and new (`+`) forms on lines of their own, with what changed in
+  colour.
 - **Also noted by the model**: model findings that didn't make the top 3.
 - **Not checked**: what Alden couldn't check, such as callers in languages the code graph doesn't read yet.
 - **Footer**: the model, effort and cost, when a model ran.
