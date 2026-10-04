@@ -7,6 +7,22 @@ export function formatWait(hours: number): string {
   return `${Math.round(days / 7)}w`;
 }
 
+/**
+ * The one waiting time a PR shows: since you were asked to review it, or since it opened when GitHub didn't record
+ * the request. "8h since you were asked".
+ */
+export function waitingSince(row: { waitingHours: number; pr: { request: { requestedAt: string | null } } }): string {
+  return `${formatWait(row.waitingHours)} since ${row.pr.request.requestedAt ? "you were asked" : "it opened"}`;
+}
+
+/** How long ago a queue was fetched, once it's old enough to say: "3 min ago", "2h ago". Undefined under a minute. */
+export function fetchedAgo(fetchedAt: string, now: number = Date.now()): string | undefined {
+  const minutes = Math.floor((now - Date.parse(fetchedAt)) / 60_000);
+  if (!(minutes >= 1)) return undefined;
+  if (minutes < 60) return `${minutes} min ago`;
+  return `${formatWait(minutes / 60)} ago`;
+}
+
 /** "$0.04", "$0.0031", "$12.50". */
 export function formatUsd(usd: number): string {
   return `$${usd.toFixed(usd > 0 && usd < 0.01 ? 4 : 2)}`;

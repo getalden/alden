@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import {
   addNote,
   backgroundModelAllowed,
+  cachedReviewQueue,
   createGitHubClient,
   type Effort,
   editNote,
@@ -21,6 +22,7 @@ import {
   queueEvent,
   queueRows,
   queueScope,
+  type ReviewQueue,
   rankQueue,
   recordReaction,
   repoFromRemote,
@@ -85,6 +87,12 @@ interface Prepared {
   at: string;
 }
 
+/**
+ * PRs the UI fetches: all of them, up to the 1,000 a GitHub search can return, so the repo filter covers the whole
+ * queue rather than its first page.
+ */
+export const UI_QUEUE_LIMIT = 1000;
+
 /** How many of the top "needs you" PRs the desktop app prepares briefings for. */
 const PREPARE_TOP = 3;
 
@@ -113,6 +121,13 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
   const prepared = new Map<string, Prepared>();
   const signIn = createSignIn();
   const keyOf = (repo: string, number: number) => `${repo}#${number}`.toLowerCase();
+  /** Queue fetches under way, so the window, the menu bar and background briefings share one. */
+  const fetching = new Map<string, Promise<ReviewQueue>>();
+  const shared = (key: string, fetch: () => Promise<ReviewQueue>) => {
+    const running = fetching.get(key) ?? fetch().finally(() => fetching.delete(key));
+    fetching.set(key, running);
+    return running;
+  };
   /** The repo memory is about: the one asked for, or the clone `alden ui` was started in. */
   const memoryRepo = async (repo?: string) => {
     const target = repo ?? (await repoOf(options.cwd))?.repos[0];
@@ -174,17 +189,23 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
       };
     },
 
-    async queue({ refresh, repos, orgs }) {
+    async queue({ refresh, repos, orgs, cached = false }) {
       const resolved = await signedIn();
       const config = await loadConfig(options.cwd);
       try {
-        const queue = await fetchReviewQueue(createGitHubClient(resolved.token), {
+        const client = createGitHubClient(resolved.token);
+        const scope = {
           includeDrafts: config.queue.includeDrafts,
-          limit: 100,
+          limit: UI_QUEUE_LIMIT,
           cache,
-          refresh,
           ...queueScope(config, { repos, orgs }),
-        });
+        };
+        // `cached`: the last queue, up to a day old, at once; the UI shows its age and asks again for a fresh one.
+        const queue =
+          (cached ? await cachedReviewQueue(client, scope) : undefined) ??
+          (await shared(JSON.stringify([scope.repos, scope.orgs, scope.ignore, refresh]), () =>
+            fetchReviewQueue(client, { ...scope, refresh }),
+          ));
         const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
         void track("queue_ranked", queueEvent(ranked));
         // Shared with the CLI, so `alden review 3` means the same PR in both.

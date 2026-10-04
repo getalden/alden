@@ -78,6 +78,15 @@ export function rankPullRequest(
     add(2 * WEIGHTS.risk, `touches ${dirs.slice(0, 2).join(", ")}${dirs.length > 2 ? ` +${dirs.length - 2}` : ""}`);
   }
 
+  // A major dependency bump can break callers anywhere, however small its diff.
+  const bumps = pr.majorBumps ?? [];
+  const [bump] = bumps;
+  if (bump) {
+    risk += 2;
+    const more = bumps.length > 1 ? ` +${bumps.length - 1}` : "";
+    add(2 * WEIGHTS.risk, `major bump: ${bump.name} ${bump.from} → ${bump.to}${more}`);
+  }
+
   const kinds = pr.files.map((f) => fileKind(f.path));
   if (kinds.includes("code") && !kinds.includes("test")) {
     risk += 1;
@@ -122,6 +131,7 @@ export function rankPullRequest(
   const ciOk = pr.ci === "success" || (pr.ci === "none" && kind === "docs only");
   const fastTrack =
     kind !== undefined &&
+    bumps.length === 0 &&
     lines < config.fastTrackMaxLines &&
     blockingSensitive.length === 0 &&
     ciOk &&

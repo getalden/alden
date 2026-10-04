@@ -221,6 +221,33 @@
                 "minimum": -9007199254740991,
                 "maximum": 9007199254740991,
                 "description": "open PRs built on top of this one"
+              },
+              "majorBumps": {
+                "description": "dependencies the PR's manifest changes move up a major version (or a 0.x minor one)",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "the package, as its manifest names it"
+                    },
+                    "from": {
+                      "type": "string",
+                      "description": "the major version before, e.g. \"3\", or \"0.2\" for a 0.x version"
+                    },
+                    "to": {
+                      "type": "string",
+                      "description": "the major version after"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
@@ -526,6 +553,33 @@
                 "minimum": -9007199254740991,
                 "maximum": 9007199254740991,
                 "description": "open PRs built on top of this one"
+              },
+              "majorBumps": {
+                "description": "dependencies the PR's manifest changes move up a major version (or a 0.x minor one)",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "the package, as its manifest names it"
+                    },
+                    "from": {
+                      "type": "string",
+                      "description": "the major version before, e.g. \"3\", or \"0.2\" for a 0.x version"
+                    },
+                    "to": {
+                      "type": "string",
+                      "description": "the major version after"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
@@ -832,6 +886,33 @@
                 "minimum": -9007199254740991,
                 "maximum": 9007199254740991,
                 "description": "open PRs built on top of this one"
+              },
+              "majorBumps": {
+                "description": "dependencies the PR's manifest changes move up a major version (or a 0.x minor one)",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "the package, as its manifest names it"
+                    },
+                    "from": {
+                      "type": "string",
+                      "description": "the major version before, e.g. \"3\", or \"0.2\" for a 0.x version"
+                    },
+                    "to": {
+                      "type": "string",
+                      "description": "the major version after"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [

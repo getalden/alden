@@ -12,6 +12,7 @@ import { StatsView } from "./components/StatsView";
 import { TelemetryCard } from "./components/TelemetryCard";
 import { TopBar } from "./components/TopBar";
 import { useFeedback } from "./feedback";
+import { fetchedAgo, waitingSince } from "./format";
 import { useReviews } from "./reviews";
 import { navigate, useRoute } from "./router";
 
@@ -49,20 +50,26 @@ export function App({ api }: { api: Api | undefined }) {
   const feedbackFor = useFeedback(api, session?.repo?.repos[0] ?? null);
 
   const loadQueue = useCallback(
-    (refresh: boolean) => {
+    (refresh: boolean, cached = false) => {
       if (!api) return;
       setQueueLoading(true);
       setQueueError(undefined);
-      api
-        .queue(refresh)
-        .then(setQueue)
+      (async () => {
+        let next = await api.queue({ refresh, cached });
+        setQueue(next);
+        // An old queue shows at once, with its age, while the current one loads.
+        if (cached && fetchedAgo(next.fetchedAt)) {
+          next = await api.queue();
+          setQueue(next);
+        }
+      })()
         .catch((error: unknown) => setQueueError(messageOf(error)))
         .finally(() => setQueueLoading(false));
     },
     [api],
   );
 
-  useEffect(() => loadQueue(false), [loadQueue]);
+  useEffect(() => loadQueue(false, true), [loadQueue]);
 
   // In the desktop app, which briefings are ready from the background: checked with the queue and every minute.
   const [ready, setReady] = useState<Set<string>>(new Set());
@@ -312,7 +319,11 @@ function PrPane(props: {
         row
           ? {
               label: "In your queue because",
-              items: row.reasons.filter((r) => !isLearnedReason(r)).map((r) => r.charAt(0).toUpperCase() + r.slice(1)),
+              // The wait reads the same as on the queue row: one time, since you were asked.
+              items: row.reasons
+                .filter((r) => !isLearnedReason(r))
+                .map((r) => (/^waiting \d/.test(r) ? `waiting ${waitingSince(row)}` : r))
+                .map((r) => r.charAt(0).toUpperCase() + r.slice(1)),
             }
           : undefined
       }

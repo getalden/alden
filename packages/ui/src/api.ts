@@ -156,7 +156,9 @@ export class Api {
 
   session = () => this.request<Session>("/api/session");
 
-  queue = (refresh = false) => this.request<RankedQueue>(`/api/queue${refresh ? "?refresh=1" : ""}`);
+  /** `cached`: the last queue at once, up to a day old (its `fetchedAt` says how old); otherwise a current one. */
+  queue = (options: { refresh?: boolean; cached?: boolean } = {}) =>
+    this.request<RankedQueue>(`/api/queue${options.refresh ? "?refresh=1" : options.cached ? "?cached=1" : ""}`);
 
   spend = () => this.request<SpendReport>("/api/spend");
 

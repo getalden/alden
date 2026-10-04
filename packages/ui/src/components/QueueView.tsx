@@ -1,6 +1,6 @@
 import type { CiState, RankedPullRequest, RankedQueue } from "@alden/schema";
 import { type ReactNode, useMemo, useState } from "react";
-import { formatWait } from "../format";
+import { fetchedAgo, formatWait, waitingSince } from "../format";
 import { onLinkClick, routePath } from "../router";
 import { Mark } from "./Mark";
 import { StateCard } from "./StateCard";
@@ -43,6 +43,8 @@ interface QueueViewProps {
   ready?: Set<string>;
   /** This machine's queue scope, shown so a narrowed queue never looks like an empty one. */
   scope?: { orgs: string[]; repos: string[]; ignore: string[] } | undefined;
+  /** For tests: the time the queue's age is measured from. */
+  now?: number;
 }
 
 /** The PRs waiting on you: "Needs you", ranked, then "Fast-track". Every row says why it ranks where it does. */
@@ -60,12 +62,20 @@ export function QueueView({
   onReact,
   ready,
   scope,
+  now,
 }: QueueViewProps) {
   const [showDismissed, setShowDismissed] = useState(false);
+  // Every repo in the queue (the UI fetches all of it), dismissed PRs included, so any of them can be picked.
   const repos = useMemo(
-    () => [...new Set([...(queue?.needsYou ?? []), ...(queue?.fastTrack ?? [])].map((r) => r.pr.repo))].sort(),
+    () =>
+      [
+        ...new Set(
+          [...(queue?.needsYou ?? []), ...(queue?.fastTrack ?? []), ...(queue?.dismissed ?? [])].map((r) => r.pr.repo),
+        ),
+      ].sort(),
     [queue],
   );
+  const ago = queue ? fetchedAgo(queue.fetchedAt, now) : undefined;
   const keep = (r: RankedPullRequest) => !repoFilter || r.pr.repo === repoFilter;
   const needsYou = queue?.needsYou.filter(keep) ?? [];
   const fastTrack = queue?.fastTrack.filter(keep) ?? [];
@@ -132,6 +142,12 @@ export function QueueView({
           <a href="/settings" onClick={onLinkClick({ view: "settings" })}>
             Change
           </a>
+        </p>
+      )}
+      {ago && (
+        <p className="side-note faint small" role="status">
+          As of {ago}
+          {loading ? ", refreshing…" : ""}
         </p>
       )}
       {(repos.length > 1 || error) && (
@@ -367,10 +383,7 @@ function PrRow(props: {
         <span className={`ci ${pr.ci}`} title={`CI ${pr.ci === "none" ? "not set up" : pr.ci}`}>
           {ci.glyph} {ci.label}
         </span>
-        <span
-          className={`wait${row.waitingHours >= 24 ? " hot" : ""}`}
-          title={`Waiting ${Math.round(row.waitingHours)} hours`}
-        >
+        <span className={`wait${row.waitingHours >= 24 ? " hot" : ""}`} title={`Waiting ${waitingSince(row)}`}>
           {formatWait(row.waitingHours)}
         </span>
       </span>
