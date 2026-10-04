@@ -33,5 +33,5 @@ Start Claude Code in a clone of a repo you review, so Alden can find callers the
 
 ## About this repo
 
-It's published from Alden's main repo on every release, so changes made here are overwritten. Questions and problems:
-beta@getalden.dev.
+It's published from Alden's main repo on every release, so changes made here are overwritten. Questions and problems: the
+[Alden Community on Discord](https://discord.gg/ZtXFX7sxTu).
