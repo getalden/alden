@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AldenConfigSchema } from "@alden/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hasAnthropicCredentials, selectProvider } from "./select.js";
+import type { CredentialStore } from "../github/credentials.js";
+import { selectProvider } from "./select.js";
+
+/** A keychain that has nothing, so no test ever reads the real one. */
+const noKey: CredentialStore = { get: async () => undefined, set: async () => {}, delete: async () => {} };
 
 let dir: string;
 beforeEach(async () => {
@@ -13,68 +17,64 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe("hasAnthropicCredentials", () => {
-  const missing = () => join(dir, "no-profiles");
-
-  it("finds keys, tokens, profiles and workload identity", () => {
-    expect(hasAnthropicCredentials({ ANTHROPIC_API_KEY: "k" }, missing())).toBe(true);
-    expect(hasAnthropicCredentials({ ANTHROPIC_AUTH_TOKEN: "t" }, missing())).toBe(true);
-    expect(
-      hasAnthropicCredentials({ ANTHROPIC_FEDERATION_RULE_ID: "r", ANTHROPIC_IDENTITY_TOKEN_FILE: "/f" }, missing()),
-    ).toBe(true);
-    expect(hasAnthropicCredentials({}, dir)).toBe(true); // an `ant auth login` profile directory
-  });
-
-  it("finds nothing in an empty environment, or with a blank key", () => {
-    expect(hasAnthropicCredentials({}, missing())).toBe(false);
-    expect(hasAnthropicCredentials({ ANTHROPIC_API_KEY: "  " }, missing())).toBe(false);
-  });
-});
-
 describe("selectProvider", () => {
   const config = AldenConfigSchema.parse({});
 
-  it("uses the configured model, or a one-off override", () => {
-    const env = { ANTHROPIC_API_KEY: "k", XDG_CONFIG_HOME: dir };
-    const chosen = selectProvider(config, undefined, env);
+  it("uses the configured model, or a one-off override", async () => {
+    const deps = { env: { ANTHROPIC_API_KEY: "k", XDG_CONFIG_HOME: dir }, store: noKey };
+    const chosen = await selectProvider(config, undefined, deps);
     expect(chosen.ok && chosen.provider.model).toBe("claude-sonnet-5");
-    const override = selectProvider(config, "opus", env);
+    expect(chosen.ok && chosen.key).toEqual({ source: "env", where: "ANTHROPIC_API_KEY" });
+    const override = await selectProvider(config, "opus", deps);
     expect(override.ok && override.provider.model).toBe("claude-opus-5");
   });
 
-  it("explains a missing key", () => {
-    const chosen = selectProvider(config, undefined, { XDG_CONFIG_HOME: join(dir, "none") });
-    expect(chosen).toEqual({ ok: false, reason: expect.stringMatching(/No Anthropic API key found.*--no-llm/) });
+  it("uses the key stored with alden auth model", async () => {
+    const stored: CredentialStore = { ...noKey, get: async () => "sk-ant-api03-stored" };
+    const chosen = await selectProvider(config, undefined, {
+      env: {},
+      store: stored,
+      profileDir: join(dir, "none"),
+    });
+    expect(chosen.ok && chosen.key?.source).toBe("alden");
   });
 
-  it("won't send a Claude model name to a local server", () => {
+  it("explains a missing key", async () => {
+    const chosen = await selectProvider(config, undefined, { env: {}, store: noKey, profileDir: join(dir, "none") });
+    expect(chosen).toEqual({
+      ok: false,
+      reason: expect.stringMatching(/No Anthropic API key found.*alden auth model.*--no-llm/),
+    });
+  });
+
+  it("won't send a Claude model name to a local server", async () => {
     const local = AldenConfigSchema.parse({ model: { provider: "openai-compatible" } });
-    expect(selectProvider(local, undefined, {})).toEqual({
+    expect(await selectProvider(local, undefined, { env: {}, store: noKey })).toEqual({
       ok: false,
       reason: expect.stringMatching(/model\.name is a Claude model \(claude-sonnet-5\).*alden config set model\.name/),
     });
   });
 
-  it("uses an OpenAI-compatible server for local models, defaulting to Ollama", () => {
+  it("uses an OpenAI-compatible server for local models, defaulting to Ollama", async () => {
     const local = AldenConfigSchema.parse({ model: { provider: "openai-compatible", name: "qwen3-coder:30b" } });
-    const chosen = selectProvider(local, undefined, {});
+    const chosen = await selectProvider(local, undefined, { env: {}, store: noKey });
     expect(chosen.ok && [chosen.provider.provider, chosen.provider.model]).toEqual([
       "openai-compatible",
       "qwen3-coder:30b",
     ]);
   });
 
-  it("uses Claude on Bedrock, Vertex or Foundry with each platform's model ID", () => {
-    const on = (provider: string) => {
-      const chosen = selectProvider(
+  it("uses Claude on Bedrock, Vertex or Foundry with each platform's model ID", async () => {
+    const on = async (provider: string) => {
+      const chosen = await selectProvider(
         AldenConfigSchema.parse({ model: { provider, region: "us-east-1" } }),
         undefined,
-        {},
+        { env: {}, store: noKey },
       );
       return chosen.ok ? [chosen.provider.provider, chosen.provider.model] : chosen.reason;
     };
-    expect(on("bedrock")).toEqual(["bedrock", "anthropic.claude-sonnet-5"]);
-    expect(on("vertex")).toEqual(["vertex", "claude-sonnet-5"]);
-    expect(on("foundry")).toEqual(["foundry", "claude-sonnet-5"]);
+    expect(await on("bedrock")).toEqual(["bedrock", "anthropic.claude-sonnet-5"]);
+    expect(await on("vertex")).toEqual(["vertex", "claude-sonnet-5"]);
+    expect(await on("foundry")).toEqual(["foundry", "claude-sonnet-5"]);
   });
 });

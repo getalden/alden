@@ -89,6 +89,16 @@ export const AldenConfigSchema = z.object({
       ignore: z.array(z.string().regex(OWNER_OR_REPO, "an organisation, or owner/name for a repo")).default([]),
     })
     .prefault({}),
+  clones: z
+    .object({
+      /**
+       * Folders your clones live in, e.g. ["~/src"], searched (a few levels down) for a clone of a PR's repo so its
+       * briefing can find callers from anywhere. Alden also remembers each clone it runs in. Read from your user config
+       * only.
+       */
+      folders: z.array(z.string().min(1)).default([]),
+    })
+    .prefault({}),
 });
 
 export type AldenConfig = z.infer<typeof AldenConfigSchema>;

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { Api, type ReviewEvent, takeToken } from "./api";
+import { Api, type ReviewEvent, takeChosenFolder, takeToken } from "./api";
 import { parseRoute, routePath } from "./router";
 
 afterEach(() => {
@@ -20,6 +20,13 @@ describe("takeToken", () => {
 
   it("has nothing without a link", () => {
     expect(takeToken()).toBeUndefined();
+  });
+
+  it("notices the desktop app restarted Alden in a folder you chose, and still takes the token", () => {
+    window.history.replaceState(null, "", "/#t=abc&folder=chosen");
+    expect(takeChosenFolder()).toBe(true);
+    expect(takeToken()).toBe("abc");
+    expect(takeChosenFolder()).toBe(false);
   });
 });
 

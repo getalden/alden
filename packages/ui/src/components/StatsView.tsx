@@ -2,6 +2,7 @@ import type { Distribution, RepoStats } from "@alden/schema";
 import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import type { Api, Session } from "../api";
 import { plural } from "../format";
+import { Segmented } from "./Segmented";
 
 /** "45m", "9h", "2d 12h", "14d+" (at the horizon: at least that long). */
 export function formatHours(hours: number | null, horizon: number): string {
@@ -288,13 +289,13 @@ export function StatsView({ api, session }: { api: Api; session: Session }) {
             <Tile stats={stats} metric="cycleTime" />
           </div>
 
-          <fieldset className="segmented" aria-label="Chart" style={{ margin: 0, alignSelf: "flex-start" }}>
+          <Segmented label="Chart" style={{ alignSelf: "flex-start" }}>
             {(Object.keys(METRICS) as MetricKey[]).map((key) => (
               <button key={key} type="button" aria-pressed={metric === key} onClick={() => setMetric(key)}>
                 {METRICS[key].label}
               </button>
             ))}
-          </fieldset>
+          </Segmented>
           {stats.weeks.length > 0 ? (
             <WeeklyChart stats={stats} metric={metric} />
           ) : (

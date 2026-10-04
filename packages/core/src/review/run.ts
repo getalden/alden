@@ -5,6 +5,7 @@ import type { GitHubClient } from "../github/client.js";
 import { PULL_REQUEST_FIELDS, type RawPullRequest, toFacts } from "../github/pull-requests.js";
 import { fetchViewer } from "../github/queue.js";
 import { checkoutPullRequest, withCheckoutLock } from "../graph/checkout.js";
+import { findClone } from "../graph/clones.js";
 import type { Learning } from "../learn/learn.js";
 import type { SpendLedger } from "../llm/ledger.js";
 import type { Effort, LlmProvider } from "../llm/provider.js";
@@ -88,6 +89,11 @@ async function tryGraph(
   }
 }
 
+/** Why a PR's callers weren't checked when Alden knows no clone of its repo. */
+export function noCloneReason(repo: string): string {
+  return `No local clone of ${repo} found, so callers outside the diff weren't checked. Run Alden once in a clone of it, or tell Alden where your clones live: \`alden config set clones.folders ~/src\`.`;
+}
+
 const graphFields = (g: GraphResult) => ({
   ...(g.graph ? { graph: g.graph.context } : {}),
   ...(g.unavailable ? { graphUnavailable: g.unavailable } : {}),
@@ -113,7 +119,14 @@ export async function reviewPullRequest(
     tryManifests(() => loadPullRequestManifests(client, repo, number, files)),
     graphOptions.enabled === false
       ? Promise.resolve<GraphResult>({})
-      : withCheckoutLock(() => tryGraph(checkoutPullRequest(graphOptions.cwd ?? process.cwd(), repo, number), files)),
+      : withCheckoutLock(async () => {
+          const clone = await findClone(repo, {
+            cwd: graphOptions.cwd ?? process.cwd(),
+            folders: config.clones.folders,
+          }).catch(() => undefined);
+          if (!clone) return { unavailable: noCloneReason(repo) };
+          return tryGraph(checkoutPullRequest(clone.path, repo, number), files);
+        }),
   ]);
   stage("checks", "Running checks");
   const briefing = buildBriefing({

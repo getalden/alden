@@ -44,6 +44,7 @@ const USER_ONLY = [
   ["queue", "orgs"],
   ["queue", "repos"],
   ["queue", "ignore"],
+  ["clones", "folders"],
 ] as const;
 
 /** Defaults, then `~/.alden/config.toml`, then the repo's `.alden.toml` (except the user-only settings). */

@@ -3,6 +3,20 @@ import type { Api, Session, SignInState } from "../api";
 import { StateCard } from "./StateCard";
 
 /**
+ * What failed, when a session is still signed out after you said you'd signed in: GitHub rejected the token, the
+ * keychain refused to answer (an unsigned copy of the app can't read it), or there's no sign-in anywhere.
+ */
+export function signInFailure(session: Session): string | undefined {
+  if (session.user && "login" in session.user) return undefined;
+  if (session.user && "error" in session.user) return `GitHub rejected the sign-in: ${session.user.error}`;
+  const problem = session.signIn?.problem;
+  if (problem?.kind === "keychain") {
+    return `The keychain didn't let Alden read your sign-in (${problem.detail}). An unsigned copy of Alden.app, such as a development build, can't read it: quit this one and open Alden from your Applications folder, or allow Alden when macOS asks.`;
+  }
+  return "Alden still finds no GitHub sign-in: none stored, no ALDEN_GITHUB_TOKEN, and the GitHub CLI isn't signed in. Run alden auth login in a terminal first, or sign in with GitHub here.";
+}
+
+/**
  * Signing in to GitHub without a terminal: the same device flow as `alden auth login --device`, with the code shown
  * here and GitHub's page opened for you. Or, when the GitHub CLI is signed in, switching to its sign-in.
  */
@@ -10,6 +24,7 @@ export function SignInCard({ api, session, onSignedIn }: { api: Api; session: Se
   const [flow, setFlow] = useState<SignInState>({ state: "idle" });
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
+  const [checking, setChecking] = useState(false);
   const rejected = session.user && "error" in session.user ? session.user.error : undefined;
   const canUseGh = session.signIn?.gitHubCli === true && session.signIn.source !== "gh";
 
@@ -39,6 +54,23 @@ export function SignInCard({ api, session, onSignedIn }: { api: Api; session: Se
       (e: Error) => setError(e.message),
     );
   };
+  // Signed in elsewhere (a terminal): look again, and say what failed rather than showing the same card.
+  const check = () => {
+    setError(undefined);
+    setChecking(true);
+    api
+      .session()
+      .then(
+        (next) => {
+          const failure = signInFailure(next);
+          if (failure) setError(failure);
+          else onSignedIn();
+        },
+        (e: Error) => setError(e.message),
+      )
+      .finally(() => setChecking(false));
+  };
+  const keychain = session.signIn?.problem?.kind === "keychain" ? signInFailure(session) : undefined;
   const useGh = () => {
     setError(undefined);
     api.useGitHubCli().then(
@@ -98,10 +130,18 @@ export function SignInCard({ api, session, onSignedIn }: { api: Api; session: Se
               ? "GitHub no longer accepts the sign-in Alden saved; it may have been revoked."
               : "Alden uses your own GitHub sign-in to read the PRs waiting on you. It posts nothing."}
           </p>
+          {keychain && !error && <p className="error-text">{keychain}</p>}
           {flow.state === "failed" && <p className="error-text">{flow.message}</p>}
-          {error && <p className="error-text">{error}</p>}
+          {error && (
+            <p className="error-text" role="alert">
+              {error}
+            </p>
+          )}
           <p className="faint small">
-            Or in a terminal: <code>alden auth login</code>
+            Or in a terminal: <code>alden auth login</code>, then{" "}
+            <button type="button" className="link-button small" onClick={check} disabled={checking}>
+              {checking ? "checking…" : "I've signed in"}
+            </button>
           </p>
         </>
       }

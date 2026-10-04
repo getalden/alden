@@ -1,6 +1,7 @@
 export { createGitHubClient, type GitHubClient, getViewer, type Viewer } from "./client.js";
 export { CODEOWNERS_PATHS, type CodeownersRule, isOwner, ownersOf, parseCodeowners } from "./codeowners.js";
 export {
+  type CredentialName,
   type CredentialStore,
   credentialsFilePath,
   DefaultCredentialStore,
@@ -50,4 +51,11 @@ export {
   searchPullRequestRefs,
   searchPullRequests,
 } from "./queue.js";
-export { ghCliToken, type ResolvedToken, resolveToken, type TokenSource } from "./token.js";
+export {
+  ghCliToken,
+  type ResolvedToken,
+  resolveToken,
+  type SignInProblem,
+  type TokenSource,
+  whyNoToken,
+} from "./token.js";

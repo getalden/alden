@@ -1,6 +1,6 @@
 import type { RankedPullRequest, RankedQueue } from "@alden/schema";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type Api, ApiError, type Session } from "./api";
+import { type Api, ApiError, type CloneInfo, type Session } from "./api";
 import { MemoryView } from "./components/MemoryView";
 import { isLearnedReason, prKey, QueueView, type Reaction } from "./components/QueueView";
 import { type Choices, initialChoices, ReviewOptions, toRequest } from "./components/ReviewOptions";
@@ -19,7 +19,11 @@ import { navigate, useRoute } from "./router";
 /** Messages worth showing as they are: the server words them for a person. */
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : "Something went wrong.");
 
-export function App({ api }: { api: Api | undefined }) {
+/**
+ * `choseFolder`: the desktop app just restarted Alden in a folder you picked, so the queue starts on that repo, and
+ * says where callers now come from.
+ */
+export function App({ api, choseFolder = false }: { api: Api | undefined; choseFolder?: boolean }) {
   const route = useRoute();
   const [session, setSession] = useState<Session>();
   const [fatal, setFatal] = useState<string>();
@@ -31,6 +35,7 @@ export function App({ api }: { api: Api | undefined }) {
   const [reactions, setReactions] = useState<Record<string, Reaction | undefined>>({});
   const [reactError, setReactError] = useState<string>();
   const [reactNotes, setReactNotes] = useState<Record<string, string | undefined>>({});
+  const [folderNote, setFolderNote] = useState<FolderNote>();
 
   const loadSession = useCallback(() => {
     if (!api) return;
@@ -47,6 +52,16 @@ export function App({ api }: { api: Api | undefined }) {
   }, [api]);
 
   useEffect(loadSession, [loadSession]);
+
+  // Once, after the desktop app restarted Alden in a folder you chose: show that repo's PRs, and say so.
+  const folderShown = useRef(false);
+  useEffect(() => {
+    if (!choseFolder || !session || folderShown.current) return;
+    folderShown.current = true;
+    const repo = session.repo?.repos[0];
+    if (repo) setRepoFilter(repo);
+    setFolderNote({ root: session.repo?.root ?? session.cwd, repo });
+  }, [choseFolder, session]);
   const reviews = useReviews(api, loadSession);
   const feedbackFor = useFeedback(api, session?.repo?.repos[0] ?? null);
 
@@ -150,6 +165,16 @@ export function App({ api }: { api: Api | undefined }) {
         <div className={`workspace${current ? " has-detail" : ""}`}>
           <aside className="side" aria-label="Your review queue">
             <TelemetryCard api={api} />
+            {folderNote && (
+              <FolderNotice
+                note={folderNote}
+                filtered={repoFilter !== "" && repoFilter === folderNote.repo}
+                onShowAll={() => {
+                  setRepoFilter("");
+                  setFolderNote(undefined);
+                }}
+              />
+            )}
             <QueueView
               queue={queue}
               error={queueError ?? reactError}
@@ -189,6 +214,7 @@ export function App({ api }: { api: Api | undefined }) {
                 reviews={reviews}
                 feedbackFor={feedbackFor}
                 api={desktop ? api : undefined}
+                cloneOf={api.clone}
               />
             ) : (
               <p className="faint" style={{ margin: "auto", padding: "120px 0", fontSize: 13 }}>
@@ -271,6 +297,33 @@ export function App({ api }: { api: Api | undefined }) {
   );
 }
 
+interface FolderNote {
+  root: string;
+  repo: string | undefined;
+}
+
+/** After choosing a folder in the desktop app: where callers come from now, and the way back to every repo. */
+export function FolderNotice(props: { note: FolderNote; filtered: boolean; onShowAll: () => void }) {
+  const { root, repo } = props.note;
+  return (
+    <p className="banner side-note" role="status">
+      {repo ? (
+        <>
+          Callers now come from <code>{root}</code>. {props.filtered ? <>Showing {repo} only. </> : null}
+        </>
+      ) : (
+        <>
+          Alden now runs in <code>{root}</code>, which isn't a clone of a GitHub repo, so callers come from the clones
+          Alden knows.{" "}
+        </>
+      )}
+      <button type="button" className="link-button small" onClick={props.onShowAll}>
+        {props.filtered ? "Show all repos" : "OK"}
+      </button>
+    </p>
+  );
+}
+
 function PrPane(props: {
   prRef: { repo: string; number: number };
   row: RankedPullRequest | undefined;
@@ -281,8 +334,10 @@ function PrPane(props: {
   feedbackFor: ReturnType<typeof useFeedback>;
   /** Only in the desktop app: where briefings prepared in the background come from. */
   api?: Api | undefined;
+  /** The local clone a repo's callers come from (here, one Alden saw before, or one under clones.folders). */
+  cloneOf?: (repo: string) => Promise<CloneInfo>;
 }) {
-  const { prRef, row, reviews, session, api } = props;
+  const { prRef, row, reviews, session, api, cloneOf } = props;
   const key = `${prRef.repo}#${prRef.number}`;
   const pr = row?.pr;
   const hasRun = reviews.runs[key] !== undefined;
@@ -304,7 +359,23 @@ function PrPane(props: {
       live = false;
     };
   }, [api, key, hasRun, seed]);
-  const noClone = props.choices.graph && session && !session.repo?.repos.includes(prRef.repo.toLowerCase());
+  const [clone, setClone] = useState<CloneInfo>();
+  useEffect(() => {
+    if (!cloneOf) return;
+    let live = true;
+    setClone(undefined);
+    cloneOf(prRef.repo).then(
+      (found) => {
+        if (live) setClone(found);
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [cloneOf, prRef.repo]);
+  const elsewhere = clone?.path && clone.path !== session?.repo?.root ? clone.path : undefined;
+  const noClone = props.choices.graph && session && clone !== undefined && clone.path === null;
   return (
     <ReviewPane
       crumbs={
@@ -336,8 +407,13 @@ function PrPane(props: {
       notice={
         noClone ? (
           <>
-            No local clone of <strong>{prRef.repo}</strong> here, so Alden can't find callers. The briefing still runs
-            on the diff alone. To find callers, start <code>alden ui</code> inside a clone of it.
+            No local clone of <strong>{prRef.repo}</strong> found, so Alden can't find callers. The briefing still runs
+            on the diff alone. To find callers, run Alden once in a clone of it, or tell Alden where your clones live:{" "}
+            <code>alden config set clones.folders ~/src</code>.
+          </>
+        ) : props.choices.graph && elsewhere ? (
+          <>
+            Callers come from your clone in <code>{elsewhere}</code>.
           </>
         ) : undefined
       }

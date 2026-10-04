@@ -39,7 +39,7 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 
 | Method and path | What it does |
 | --- | --- |
-| `GET /api/session` | Alden's version, the folder and repo it runs in, the GitHub user, the model, the budget, and whether it's the desktop app and background briefings are on. |
+| `GET /api/session` | Alden's version, the folder and repo it runs in, the GitHub user (or, signed out, why: the keychain refused or there's no sign-in), the model and where its key comes from, the budget, and whether it's the desktop app and background briefings are on. |
 | `GET /api/queue` | The ranked queue. `refresh=1` skips the cache; `repo` and `org` (repeatable) narrow it. |
 | `POST /api/review` | Runs a review of `{ pr?, llm?, graph?, model?, effort? }` and streams it as above. No `pr` reviews local changes. |
 | `POST /api/prepare` | Briefs the next of the top three PRs in the background. Acts only when started with `--json` (the desktop app) and `background.enabled` is on; asks the model only if `background.model` is true in the user config. |
@@ -61,6 +61,8 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | `GET /api/auth/device` | How that sign-in is going: waiting (with the code), done, or failed. |
 | `POST /api/auth/device/open` | Opens GitHub's page for the code in the default browser. |
 | `POST /api/auth/gh` | Drops Alden's stored sign-in, so it uses the GitHub CLI's. |
+| `PUT /api/model-key` | Stores `{ key }` (the Anthropic API key) in the keychain, as `alden auth model` does; `null` removes it. Write-only: answers where the key comes from, never the key. |
+| `GET /api/clone` | The local clone PR briefings on `repo` find callers in (here, remembered, or under `clones.folders`), or null. |
 | `GET /api/cli` | Desktop app: whether the `alden` command is installed, and where. |
 | `POST /api/cli/install` | Desktop app: links its `alden` into `/usr/local/bin` (macOS may ask for a password). |
 | `GET /api/telemetry` | Whether usage stats are on, and what blocks them, if anything. |

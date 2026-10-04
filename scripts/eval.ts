@@ -76,7 +76,7 @@ if (replayed && [...replayed.values()].every((llm) => llm === undefined)) {
   process.exit(1);
 }
 const noLlm = args.includes("--no-llm") || replayed !== undefined;
-const choice = noLlm ? undefined : selectProvider(config, flag("--model"));
+const choice = noLlm ? undefined : await selectProvider(config, flag("--model"));
 if (choice && !choice.ok) {
   console.error(choice.reason);
   process.exit(1);

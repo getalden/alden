@@ -45,11 +45,11 @@ the briefing as data.
 For TypeScript, JavaScript, Python, Go and PHP, Alden also builds a code graph of the repo and lists the callers
 outside the diff of every changed public function, class and method, flagging removed or re-signed code that's still
 called. For PHP it follows Laravel's and Symfony's indirect calls too: container bindings, facades, Eloquent scopes and
-relationships, Blade templates and service config. Local reviews use your working tree. For PR reviews, run
-`alden review` from a clone of the PR's repo: Alden fetches the PR into its own worktree under `~/.alden/worktrees`
+relationships, Blade templates and service config. Local reviews use your working tree. For PR reviews, Alden uses
+a clone of the PR's repo: the one you run it in, one it has seen you use, or one under `clones.folders`. It fetches the PR into its own worktree under `~/.alden/worktrees`
 (your checkout is never touched). `--no-graph` skips it.
 
-With an Anthropic API key (`ANTHROPIC_API_KEY`, or `ant auth login`), the review also asks a model what the change
+With an Anthropic API key (`alden auth model` stores one in the keychain; `ANTHROPIC_API_KEY` works too), the review also asks a model what the change
 does, whether it matches its title, and what else deserves a look. Alden keeps only findings that point at real lines
 in the diff, and never lets them displace high-severity checks. Use `--model opus` for one review, or `--no-llm` to
 skip the model. Every call is checked against your caps before it's sent; `alden spend` shows what you've spent.

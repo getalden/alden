@@ -1,4 +1,4 @@
-import { configureTelemetry } from "@alden/core";
+import { configureTelemetry, noteClone } from "@alden/core";
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { registerAuthCommand } from "./commands/auth.js";
@@ -38,6 +38,10 @@ registerTelemetryCommand(program);
 registerCompletionCommand(program);
 
 configureTelemetry({ version: pkg.version, surface: "cli" });
+// Remember the clone Alden runs in (repo → folder), so briefings on that repo's PRs find callers from anywhere.
+program.hook("preAction", async () => {
+  await noteClone(process.cwd());
+});
 instrument(program);
 
 // `alden --version` also says when a newer Alden exists (on stderr, so scripts reading the version aren't affected).

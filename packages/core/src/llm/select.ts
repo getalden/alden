@@ -1,46 +1,45 @@
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { AldenConfig } from "@alden/schema";
+import Anthropic from "@anthropic-ai/sdk";
 import { AnthropicProvider } from "./anthropic.js";
+import { type ModelKey, type ModelKeyDeps, resolveModelKey } from "./key.js";
 import { resolveModel } from "./models.js";
 import { DEFAULT_BASE_URL, OpenAICompatibleProvider } from "./openai-compatible.js";
 import { createPlatformClient, platformModelId } from "./platforms.js";
 import type { LlmProvider } from "./provider.js";
 
-export type ProviderChoice = { ok: true; provider: LlmProvider } | { ok: false; reason: string };
+/** The provider, and for Anthropic where its key comes from; or why there isn't one. */
+export type ProviderChoice = { ok: true; provider: LlmProvider; key?: ModelKey } | { ok: false; reason: string };
 
 /**
- * Whether the Anthropic SDK will find credentials, without calling anything: an API key or auth token, workload
- * identity federation, or an `ant auth login` profile. (Claude.ai subscription logins are never used.)
+ * The provider the config asks for, or why there isn't one. `modelOverride` is a one-off `--model`. For Anthropic, the
+ * key comes from `resolveModelKey` (the environment, then the key `alden auth model` stored, then the ant CLI).
  */
-export function hasAnthropicCredentials(
-  env: NodeJS.ProcessEnv = process.env,
-  profileDir: string = join(env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "anthropic"),
-): boolean {
-  if (env.ANTHROPIC_API_KEY?.trim() || env.ANTHROPIC_AUTH_TOKEN?.trim() || env.ANTHROPIC_PROFILE?.trim()) return true;
-  if (env.ANTHROPIC_FEDERATION_RULE_ID && (env.ANTHROPIC_IDENTITY_TOKEN || env.ANTHROPIC_IDENTITY_TOKEN_FILE))
-    return true;
-  return existsSync(profileDir);
-}
-
-/** The provider the config asks for, or why there isn't one. `modelOverride` is a one-off `--model`. */
-export function selectProvider(
+export async function selectProvider(
   config: AldenConfig,
   modelOverride?: string,
-  env: NodeJS.ProcessEnv = process.env,
-): ProviderChoice {
+  deps: ModelKeyDeps = {},
+): Promise<ProviderChoice> {
   const model = modelOverride ?? config.model.name;
   switch (config.model.provider) {
-    case "anthropic":
-      if (!hasAnthropicCredentials(env)) {
+    case "anthropic": {
+      const key = await resolveModelKey(deps);
+      if (!key) {
         return {
           ok: false,
           reason:
-            "No Anthropic API key found, so only the checks ran. Set ANTHROPIC_API_KEY (or run `ant auth login`) to add the model's view, or pass --no-llm to hide this.",
+            "No Anthropic API key found, so only the checks ran. Run `alden auth model` (or set ANTHROPIC_API_KEY) to add the model's view, or pass --no-llm to hide this.",
         };
       }
-      return { ok: true, provider: new AnthropicProvider(model) };
+      const { apiKey } = key;
+      return {
+        ok: true,
+        // The SDK finds environment and profile credentials itself; a stored key is handed over.
+        provider: apiKey
+          ? new AnthropicProvider(model, () => Promise.resolve(new Anthropic({ apiKey })))
+          : new AnthropicProvider(model),
+        key,
+      };
+    }
     case "bedrock":
     case "vertex":
     case "foundry": {

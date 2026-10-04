@@ -1,7 +1,8 @@
 //! Alden's desktop app: a window and a menu-bar item around `alden ui`.
 //!
 //! It runs the bundled `alden` binary as `alden ui --json` in the folder you chose (your home folder until you pick a
-//! repo clone, which is what finding callers needs), shows its UI in the window, and polls the local API for the
+//! repo clone: your uncommitted changes come from there, and right after you choose, the window shows that repo's PRs;
+//! PR callers come from any clone Alden knows), shows its UI in the window, and polls the local API for the
 //! menu bar: how many PRs wait on you, the top three, and a notification when someone has waited three days. While
 //! you're away from the Mac, it asks the server to brief the top PRs ahead of time and says when one is ready. Closing
 //! the window keeps Alden in the menu bar; Quit stops it and the server with it (the server also exits on its own when
@@ -45,6 +46,8 @@ struct AppState {
     polling: Mutex<bool>,
     /// A background briefing is running; don't start another.
     preparing: Mutex<bool>,
+    /// You just chose a folder: the window's next link says so, and the UI shows that repo's PRs.
+    chose_folder: Mutex<bool>,
 }
 
 #[derive(Deserialize)]
@@ -141,10 +144,12 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("Alden couldn't start")
-        .run(|app, event| {
-            if let RunEvent::Exit = event {
-                stop_server(app);
-            }
+        .run(|app, event| match event {
+            RunEvent::Exit => stop_server(app),
+            // Clicking Alden in the Dock after closing its window brings the window back.
+            #[cfg(target_os = "macos")]
+            RunEvent::Reopen { .. } => show(app, None),
+            _ => {}
         });
 }
 
@@ -246,8 +251,9 @@ fn on_ready(app: &AppHandle, url: &str) {
     let state = app.state::<AppState>();
     *state.base.lock().unwrap() = Some(base);
     *state.token.lock().unwrap() = token;
+    let chose = std::mem::take(&mut *state.chose_folder.lock().unwrap());
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.navigate(parsed);
+        let _ = window.navigate(with_chosen_folder(parsed, chose));
     }
     let first = {
         let mut polling = state.polling.lock().unwrap();
@@ -511,6 +517,25 @@ fn show(app: &AppHandle, route: Option<String>) {
     }
 }
 
+/// After you chose a folder, the link tells the UI (`folder=chosen` in the fragment, beside the session key), so it
+/// shows that repo's PRs and says where callers now come from.
+fn with_chosen_folder(mut url: Url, chose: bool) -> Url {
+    if chose {
+        let fragment = url.fragment().map(|f| format!("{f}&folder=chosen")).unwrap_or_else(|| "folder=chosen".into());
+        url.set_fragment(Some(&fragment));
+    }
+    url
+}
+
+/// "/Users/sam/src/x" → "~/src/x", for messages.
+fn tilde(path: &std::path::Path, home: Option<PathBuf>) -> String {
+    match home.and_then(|home| path.strip_prefix(home).ok().map(|rest| rest.to_path_buf())) {
+        Some(rest) if rest.as_os_str().is_empty() => "~".into(),
+        Some(rest) => format!("~/{}", rest.display()),
+        None => path.display().to_string(),
+    }
+}
+
 fn choose_folder(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
@@ -523,7 +548,8 @@ fn choose_folder(app: &AppHandle) {
             let _ = std::fs::write(dir.join("folder.txt"), path.to_string_lossy().as_bytes());
         }
         stop_server(&app);
-        status(&app, "Starting Alden…");
+        *app.state::<AppState>().chose_folder.lock().unwrap() = true;
+        status(&app, &format!("Starting Alden in {}…", tilde(&path, app.path().home_dir().ok())));
         start_server(&app);
     });
 }
@@ -634,6 +660,21 @@ mod tests {
     fn reads_idle_time_on_macos() {
         let secs = idle_seconds().expect("CoreGraphics answers");
         assert!(secs >= 0.0);
+    }
+
+    #[test]
+    fn marks_the_link_after_you_chose_a_folder() {
+        let url = Url::parse("http://127.0.0.1:4100/#t=abc").unwrap();
+        assert_eq!(with_chosen_folder(url.clone(), false).as_str(), "http://127.0.0.1:4100/#t=abc");
+        assert_eq!(with_chosen_folder(url, true).as_str(), "http://127.0.0.1:4100/#t=abc&folder=chosen");
+    }
+
+    #[test]
+    fn shortens_the_home_folder() {
+        let home = Some(PathBuf::from("/Users/sam"));
+        assert_eq!(tilde(std::path::Path::new("/Users/sam/src/x"), home.clone()), "~/src/x");
+        assert_eq!(tilde(std::path::Path::new("/Users/sam"), home.clone()), "~");
+        assert_eq!(tilde(std::path::Path::new("/opt/x"), home), "/opt/x");
     }
 
     #[test]

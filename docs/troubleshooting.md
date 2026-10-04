@@ -38,8 +38,9 @@ with `alden auth login --device`, or run `gh auth refresh -s repo`.
 
 ## Models
 
-**"No Anthropic API key found, so only the checks ran."** Set `ANTHROPIC_API_KEY`, run `ant auth login`, or pass
-`--no-llm` to hide the note.
+**"No Anthropic API key found, so only the checks ran."** Run `alden auth model` (or set `ANTHROPIC_API_KEY`, or run
+`ant auth login`), or pass `--no-llm` to hide the note. The desktop app doesn't see your shell's `ANTHROPIC_API_KEY`;
+store the key with `alden auth model` or in Settings.
 
 **"Couldn't find Google Cloud credentials for Vertex."** Run `gcloud auth application-default login`, or set
 `GOOGLE_APPLICATION_CREDENTIALS` to a service account key file. Also set `model.projectId`.

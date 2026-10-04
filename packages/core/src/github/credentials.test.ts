@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,4 +61,18 @@ it("removes a leftover file once the keychain works", async () => {
   await new DefaultCredentialStore(keychain, file).set("new");
   expect(saved).toBe("new");
   expect(await file.get()).toBeUndefined();
+});
+
+it("keeps each secret under its own name in the fallback file", async () => {
+  const github = new DefaultCredentialStore(brokenKeychain, new FileCredentialStore("github"));
+  const anthropic = new DefaultCredentialStore(brokenKeychain, new FileCredentialStore("anthropic"));
+  await github.set("gho_test");
+  await anthropic.set("sk-ant-api03-test");
+  expect(await github.get()).toBe("gho_test");
+  expect(await anthropic.get()).toBe("sk-ant-api03-test");
+  await anthropic.delete();
+  expect(await github.get()).toBe("gho_test");
+  expect(await anthropic.get()).toBeUndefined();
+  await github.delete();
+  expect(existsSync(credentialsFilePath())).toBe(false);
 });

@@ -38,6 +38,14 @@ const api: UiApi = {
   signInStatus: async () => ({ state: "idle" }),
   openSignIn: async () => ({ state: "waiting" }),
   useGitHubCli: async () => ({ login: "sam" }),
+  setModelKey: async (key) => {
+    calls.push({ method: "setModelKey", args: key });
+    return { key: key ? { source: "alden", where: "the keychain" } : null };
+  },
+  clone: async (repo) => {
+    calls.push({ method: "clone", args: repo });
+    return { repo, path: null };
+  },
   cliStatus: async () => ({ state: "missing" }),
   installCli: async () => {
     calls.push({ method: "installCli", args: undefined });
@@ -221,6 +229,25 @@ describe("alden ui server", () => {
     expect([bad.status, JSON.parse(bad.text)]).toEqual([400, { error: "Unknown config key: nope" }]);
     await call("/api/config", { method: "PUT", headers: authed, body: { key: "model.name", value: "opus" } });
     expect(calls).toEqual([{ method: "setConfig", args: { key: "model.name", value: "opus" } }]);
+  });
+
+  it("stores the model key without ever sending it back, and checks the body", async () => {
+    const key = `sk-ant-api03-${"a".repeat(40)}`;
+    const res = await call("/api/model-key", { method: "PUT", headers: authed, body: { key } });
+    expect(res.status).toBe(200);
+    expect(res.text).not.toContain(key);
+    await call("/api/model-key", { method: "PUT", headers: authed, body: { key: null } });
+    expect((await call("/api/model-key", { method: "PUT", headers: authed, body: {} })).status).toBe(400);
+    expect(calls).toEqual([
+      { method: "setModelKey", args: key },
+      { method: "setModelKey", args: null },
+    ]);
+  });
+
+  it("says which clone a repo's callers come from", async () => {
+    const res = await call("/api/clone?repo=acme/shop", { headers: authed });
+    expect(JSON.parse(res.text)).toEqual({ repo: "acme/shop", path: null });
+    expect((await call("/api/clone?repo=nope", { headers: authed })).status).toBe(400);
   });
 
   it("passes stats options through", async () => {

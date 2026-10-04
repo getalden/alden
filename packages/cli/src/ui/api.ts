@@ -1,16 +1,17 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
   addNote,
   backgroundModelAllowed,
   cachedReviewQueue,
+  checkModelKey,
   checkProgress,
+  cloneAt,
   createGitHubClient,
   type Effort,
   editNote,
   FeedbackLog,
   fetchReviewQueue,
   fetchViewer,
+  findClone,
   forget,
   forgetAll,
   JsonCache,
@@ -19,6 +20,7 @@ import {
   MODEL_ALIASES,
   memoryItems,
   memoryRepos,
+  modelKeyStore,
   openStore,
   queueEvent,
   queueRows,
@@ -27,8 +29,8 @@ import {
   rankQueue,
   reactionProgress,
   recordReaction,
-  repoFromRemote,
   resolveModel,
+  resolveModelKey,
   resolveToken,
   restore,
   reviewEvent,
@@ -47,6 +49,7 @@ import {
   unsetConfigValue,
   userConfigPath,
   type WithModel,
+  whyNoToken,
 } from "@alden/core";
 import type { Briefing, RankedQueue } from "@alden/schema";
 import { LAST_QUEUE_KEY, type LastQueue } from "../commands/open.js";
@@ -58,19 +61,11 @@ import { parsePrRef } from "../pr-ref.js";
 import { ApiError, type ReviewRequest, type UiApi } from "./server.js";
 import { cliStatus, createSignIn, gitHubCliSignedIn, installCli } from "./setup.js";
 
-const run = promisify(execFile);
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 /** The GitHub repos the directory `alden ui` started in points at: where PR reviews can find callers. */
-export async function repoOf(cwd: string): Promise<{ root: string; repos: string[] } | undefined> {
-  try {
-    const { stdout: root } = await run("git", ["rev-parse", "--show-toplevel"], { cwd });
-    const { stdout: remotes } = await run("git", ["remote", "-v"], { cwd });
-    const repos = [...new Set(remotes.split("\n").flatMap((l) => repoFromRemote(l.split(/\s+/)[1] ?? "") ?? []))];
-    return { root: root.trim(), repos };
-  } catch {
-    return undefined;
-  }
+export function repoOf(cwd: string): Promise<{ root: string; repos: string[] } | undefined> {
+  return cloneAt(cwd);
 }
 
 async function signedIn() {
@@ -158,14 +153,19 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
           user = { error: describeGitHubError(error, resolved.source) };
         }
       }
-      const choice = selectProvider(config);
+      const choice = await selectProvider(config);
       const resolvedModel = resolveModel(config.model.name);
       const ledger = new SpendLedger();
       return {
         version: options.version,
         cwd: options.cwd,
         desktop: options.desktop === true,
-        signIn: { source: resolved?.source ?? null, gitHubCli: await gitHubCliSignedIn() },
+        signIn: {
+          source: resolved?.source ?? null,
+          gitHubCli: await gitHubCliSignedIn(),
+          // Signed out: why, so "I've signed in" can say what failed rather than ask again.
+          ...(resolved ? {} : { problem: await whyNoToken() }),
+        },
         queueScope: queueScope(config),
         eyes: config.review.eyes,
         ...(options.desktop ? { cli: cliStatus() } : {}),
@@ -180,6 +180,8 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
           supportsEffort: config.model.provider !== "openai-compatible" && supportsEffort(resolvedModel),
           available: choice.ok,
           ...(choice.ok ? {} : { reason: choice.reason }),
+          // Where the Anthropic key comes from; never the key.
+          key: choice.ok && choice.key ? { source: choice.key.source, where: choice.key.where } : null,
         },
         aliases: MODEL_ALIASES,
         efforts: EFFORTS,
@@ -237,6 +239,29 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
       return signIn.status();
     },
     useGitHubCli: () => signIn.useGitHubCli(),
+    async setModelKey(key) {
+      const store = modelKeyStore();
+      if (key === null) await store.delete();
+      else {
+        const trimmed = key.trim();
+        const problem = checkModelKey(trimmed);
+        if (problem) throw new ApiError(400, problem);
+        try {
+          await store.set(trimmed);
+        } catch (error) {
+          throw new ApiError(500, `Couldn't store the key (${(error as Error).message.slice(0, 160)}).`);
+        }
+      }
+      const now = await resolveModelKey();
+      return { key: now ? { source: now.source, where: now.where } : null };
+    },
+
+    async clone(repo) {
+      const config = await loadConfig(options.cwd);
+      const found = await findClone(repo, { cwd: options.cwd, folders: config.clones.folders }).catch(() => undefined);
+      return { repo, path: found?.path ?? null, how: found?.how ?? null };
+    },
+
     cliStatus: async () => cliStatus(),
     async installCli() {
       if (!options.desktop) throw new ApiError(400, "Only the desktop app installs the alden command.");
@@ -458,7 +483,7 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
     let model: WithModel | undefined;
     let unavailable: string | undefined;
     if (request.llm !== false) {
-      const choice = selectProvider(config, request.model);
+      const choice = await selectProvider(config, request.model);
       if (choice.ok) model = { provider: choice.provider, ledger: new SpendLedger(), ...(effort ? { effort } : {}) };
       else unavailable = choice.reason;
     }

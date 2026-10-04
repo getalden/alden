@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { type CredentialStore, DefaultCredentialStore } from "./credentials.js";
+import { type CredentialStore, DefaultCredentialStore, KeychainCredentialStore } from "./credentials.js";
 
 const run = promisify(execFile);
 
@@ -44,4 +44,19 @@ export async function resolveToken(deps: ResolveDeps = {}): Promise<ResolvedToke
   if (fromGh) return { token: fromGh, source: "gh" };
 
   return undefined;
+}
+
+/**
+ * Why there's no token, for a sign-in screen that would otherwise just ask again: the keychain refused to answer (as
+ * it does for an unsigned copy of Alden.app, such as a development build), or nothing is signed in anywhere.
+ */
+export type SignInProblem = { kind: "keychain"; detail: string } | { kind: "none" };
+
+export async function whyNoToken(keychain: CredentialStore = new KeychainCredentialStore()): Promise<SignInProblem> {
+  try {
+    await keychain.get();
+    return { kind: "none" };
+  } catch (error) {
+    return { kind: "keychain", detail: ((error as Error).message || String(error)).slice(0, 200) };
+  }
 }

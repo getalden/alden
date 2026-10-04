@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CredentialStore } from "./credentials.js";
-import { resolveToken } from "./token.js";
+import { resolveToken, whyNoToken } from "./token.js";
 
 function store(token?: string): CredentialStore {
   return { get: async () => token, set: async () => {}, delete: async () => {} };
@@ -33,5 +33,18 @@ describe("resolveToken", () => {
       ghToken: async () => undefined,
     });
     expect(result).toBeUndefined();
+  });
+});
+
+describe("whyNoToken", () => {
+  it("tells a keychain that refused from one that has nothing", async () => {
+    expect(await whyNoToken(store())).toEqual({ kind: "none" });
+    const refusing: CredentialStore = {
+      ...store(),
+      get: async () => {
+        throw new Error("User interaction is not allowed.");
+      },
+    };
+    expect(await whyNoToken(refusing)).toEqual({ kind: "keychain", detail: "User interaction is not allowed." });
   });
 });

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Api, Session } from "../api";
-import { SignInCard } from "./SignIn";
+import { SignInCard, signInFailure } from "./SignIn";
 
 afterEach(cleanup);
 
@@ -51,5 +51,35 @@ describe("SignInCard", () => {
     await vi.advanceTimersByTimeAsync(2_100);
     await waitFor(() => expect(onSignedIn).toHaveBeenCalled());
     vi.useRealTimers();
+  });
+
+  it("says what failed when you've signed in but Alden still can't see it", async () => {
+    const keychain = session({
+      signIn: { source: null, gitHubCli: false, problem: { kind: "keychain", detail: "denied" } },
+    });
+    const api = { session: vi.fn(async () => keychain) } as unknown as Api;
+    const onSignedIn = vi.fn();
+    render(
+      <SignInCard
+        api={api}
+        session={session({ signIn: { source: null, gitHubCli: false } })}
+        onSignedIn={onSignedIn}
+      />,
+    );
+    fireEvent.click(screen.getByText("I've signed in"));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/keychain.*denied.*Applications/));
+    expect(onSignedIn).not.toHaveBeenCalled();
+  });
+
+  it("finishes when the session is signed in, and words each failure", async () => {
+    const api = { session: vi.fn(async () => session({ user: { login: "sam", source: "alden" } })) } as unknown as Api;
+    const onSignedIn = vi.fn();
+    render(<SignInCard api={api} session={session({})} onSignedIn={onSignedIn} />);
+    fireEvent.click(screen.getByText("I've signed in"));
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalled());
+    expect(signInFailure(session({ user: { error: "Bad credentials" } }))).toMatch(/rejected.*Bad credentials/);
+    expect(signInFailure(session({ signIn: { source: null, gitHubCli: false, problem: { kind: "none" } } }))).toMatch(
+      /no GitHub sign-in/,
+    );
   });
 });

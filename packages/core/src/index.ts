@@ -33,6 +33,17 @@ export {
 } from "./graph/changes.js";
 export { type Checkout, checkoutPullRequest, repoFromRemote } from "./graph/checkout.js";
 export {
+  type Clone,
+  type CloneFound,
+  cloneAt,
+  clonesUnder,
+  expandHome,
+  findClone,
+  noteClone,
+  rememberClone,
+  rememberedClone,
+} from "./graph/clones.js";
+export {
   type Definition,
   type DefinitionKind,
   extractSymbols,
@@ -81,6 +92,14 @@ export {
   estimateTokens,
 } from "./llm/budget.js";
 export { BudgetExceededError, type BudgetedOptions, type BudgetedResult, budgetedGenerate } from "./llm/budgeted.js";
+export {
+  checkModelKey,
+  type ModelKey,
+  type ModelKeyDeps,
+  type ModelKeySource,
+  modelKeyStore,
+  resolveModelKey,
+} from "./llm/key.js";
 export { localDay, type SpendEntry, SpendLedger } from "./llm/ledger.js";
 export {
   costUsd,
@@ -103,7 +122,7 @@ export {
   type LlmProvider,
   type StopReason,
 } from "./llm/provider.js";
-export { hasAnthropicCredentials, type ProviderChoice, selectProvider } from "./llm/select.js";
+export { type ProviderChoice, selectProvider } from "./llm/select.js";
 export { type MajorBump, majorBumps } from "./queue/bumps.js";
 export { type FileKind, fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";
 export {
