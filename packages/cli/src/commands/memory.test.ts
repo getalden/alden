@@ -43,7 +43,7 @@ describe("renderMemory", () => {
         "    you said; given to the model with every review · since 2026-09-20 · id note:1",
         "",
         "What you skip",
-        "  You skip PRs touching db/[31m",
+        "  You skip PRs touching db/",
         "    marked not useful 3 times; Ranked lower in your queue · since 2026-09-21 · id queue:path:db/:down",
         "",
         "Forget any of these with `alden memory forget <id>`. Nothing here leaves your machine.",

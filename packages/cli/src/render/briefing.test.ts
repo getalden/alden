@@ -273,6 +273,8 @@ describe("untrusted text", () => {
       return (code < 32 && c !== "\n" && c !== "\t") || (code >= 0x7f && code <= 0x9f);
     });
     expect(control).toEqual([]);
-    expect(out).toContain("]52;c;cGF3bmVk[2JFix itnow");
+    expect(out).toContain("Fix itnow");
+    expect(out).not.toContain("[2J");
+    expect(out).not.toContain("]52;");
   });
 });

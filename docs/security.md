@@ -44,8 +44,9 @@ write only to Alden's own database and post nothing to GitHub. See [Alden in you
 
 - Alden never runs code from a PR. It checks PRs out into its own worktrees only to parse them; git doesn't run hooks
   from a repo's content, and files over 512 KB aren't parsed.
-- Everything a PR author wrote is shown as text: escaped in the web UI, and with terminal control characters removed
-  in the CLI, so a PR title can't rewrite your terminal or write to its clipboard.
+- Everything a PR author wrote is shown as text: escaped in the web UI, and with whole terminal escape sequences
+  (colours, links, titles, clipboard writes) and other control characters removed in the CLI and the MCP tools, so a
+  PR title can't rewrite your terminal, plant a link or write to its clipboard.
 - The model is told that the title, description, diff and code are material to review, not instructions, and to
   report any attempt to instruct it. It has no tools: it can only return a briefing, and any finding that points
   outside the diff is dropped.
