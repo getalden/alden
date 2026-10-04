@@ -1,15 +1,22 @@
 import { createInterface } from "node:readline";
 import {
+  checkModelKey,
   createGitHubClient,
+  credentialsFilePath,
   DefaultCredentialStore,
+  FileCredentialStore,
   getViewer,
   ghCliToken,
   githubClientId,
+  loadConfig,
+  modelKeyStore,
   pollForToken,
   requestDeviceCode,
+  resolveModelKey,
   resolveToken,
   type TokenSource,
   type Viewer,
+  whyNoToken,
 } from "@alden/core";
 import type { Command } from "commander";
 import { openInBrowser } from "./open.js";
@@ -26,13 +33,60 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8").trim();
 }
 
+/**
+ * Reads a line without echoing it, for secrets: the terminal in raw mode, so nothing typed or pasted shows (not even
+ * as dots). Not a terminal (a pipe): reads it as it comes. Ctrl+C cancels.
+ */
+export function readSecret(
+  prompt: string,
+  input: NodeJS.ReadStream = process.stdin,
+  output: NodeJS.WritableStream = process.stderr,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    output.write(prompt);
+    const raw = input.isTTY === true;
+    if (raw) input.setRawMode(true);
+    input.setEncoding("utf8");
+    let value = "";
+    const finish = (error?: Error) => {
+      input.off("data", onData);
+      if (raw) input.setRawMode(false);
+      input.pause();
+      output.write("\n");
+      if (error) reject(error);
+      else resolve(value.trim());
+    };
+    const onData = (chunk: string) => {
+      for (const ch of chunk) {
+        if (ch === "\r" || ch === "\n" || ch === "\u0004") return finish();
+        if (ch === "\u0003") return finish(new Error("Cancelled."));
+        if (ch === "\u007f" || ch === "\b") value = value.slice(0, -1);
+        else if (ch >= " ") value += ch;
+      }
+    };
+    input.on("data", onData);
+    input.resume();
+  });
+}
+
+/** Where the model key comes from, for `alden auth status`. Never the key itself. */
+async function modelKeyLine(): Promise<string> {
+  const config = await loadConfig().catch(() => undefined);
+  const provider = config?.model.provider ?? "anthropic";
+  if (provider !== "anthropic") return `Model: ${provider}, with its own credentials (see \`alden doctor\`).`;
+  const key = await resolveModelKey();
+  return key
+    ? `Anthropic API key: from ${key.where}.`
+    : "Anthropic API key: none, so reviews run the checks only. Run `alden auth model` to add one.";
+}
+
 function scopeWarning(viewer: Viewer): string | undefined {
   if (viewer.missingScopes.length === 0) return undefined;
   return `Warning: this token is missing ${viewer.missingScopes.join(", ")}. Alden may not see private repos or team review requests.`;
 }
 
 export function registerAuthCommand(program: Command): void {
-  const auth = program.command("auth").description("Sign in to GitHub.");
+  const auth = program.command("auth").description("Sign in to GitHub, and store your Anthropic API key.");
 
   auth
     .command("login")
@@ -100,11 +154,17 @@ export function registerAuthCommand(program: Command): void {
 
   auth
     .command("status")
-    .description("Show which GitHub account Alden is using and where the token comes from.")
+    .description("Show which GitHub account Alden is using, and where the GitHub token and the model key come from.")
     .action(async () => {
       const resolved = await resolveToken();
       if (!resolved) {
-        program.error("Not signed in. Run `alden auth login`.");
+        const problem = await whyNoToken();
+        console.log(await modelKeyLine());
+        program.error(
+          problem.kind === "keychain"
+            ? `Not signed in: the keychain refused to answer (${problem.detail}). Run \`alden auth login\`, and allow Alden when macOS asks.`
+            : "Not signed in. Run `alden auth login`.",
+        );
       }
       try {
         const viewer = await getViewer(createGitHubClient(resolved.token));
@@ -114,7 +174,48 @@ export function registerAuthCommand(program: Command): void {
         if (warning) console.warn(warning);
       } catch {
         const fix = resolved.source === "env" ? "Fix or unset ALDEN_GITHUB_TOKEN." : "Run `alden auth login`.";
+        console.log(await modelKeyLine());
         program.error(`The token from ${SOURCE_LABEL[resolved.source]} was rejected by GitHub. ${fix}`);
+      }
+      console.log(await modelKeyLine());
+    });
+
+  auth
+    .command("model")
+    .description(
+      "Store your Anthropic API key in the keychain, for the CLI, alden ui, alden mcp and the desktop app. Asks for it without showing it, or reads it from standard input.",
+    )
+    .option("--remove", "remove the key Alden stored")
+    .action(async (options: { remove?: boolean }) => {
+      const store = modelKeyStore();
+      if (options.remove) {
+        await store.delete();
+        console.log("Removed the Anthropic API key Alden stored.");
+        const remaining = await resolveModelKey();
+        if (remaining) console.log(`Alden will still use ${remaining.where}.`);
+        return;
+      }
+      let key: string;
+      try {
+        key = process.stdin.isTTY
+          ? await readSecret("Anthropic API key (it won't show as you paste): ")
+          : await readStdin();
+      } catch (error) {
+        program.error((error as Error).message);
+      }
+      if (!key) program.error("No key given.");
+      const problem = checkModelKey(key);
+      if (problem) program.error(problem);
+      await store.set(key);
+      const inFile = (await new FileCredentialStore("anthropic").get().catch(() => undefined)) !== undefined;
+      console.log(
+        inFile
+          ? `Stored your Anthropic API key in ${credentialsFilePath()} (owner-only), since there's no keychain here.`
+          : "Stored your Anthropic API key in the keychain.",
+      );
+      const first = await resolveModelKey();
+      if (first && first.source === "env") {
+        console.log(`${first.where} is set here and comes first; Alden uses the stored key where it isn't set.`);
       }
     });
 

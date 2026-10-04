@@ -169,6 +169,10 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
             </div>
           </form>
 
+          {session.model.provider === "anthropic" && (
+            <ModelKeySettings api={api} initial={session.model.key ?? null} onSaved={onSaved} />
+          )}
+
           <div className="card panel">
             <div className="section-head">
               <h2 className="label">Your feedback</h2>
@@ -288,6 +292,75 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
         </aside>
       </div>
     </section>
+  );
+}
+
+/**
+ * The Anthropic API key, stored in the keychain as `alden auth model` does, so the desktop app (which never sees your
+ * shell's ANTHROPIC_API_KEY) can ask the model. Write-only: the page never gets the key back, only where it comes from.
+ */
+function ModelKeySettings(props: { api: Api; initial: Session["model"]["key"] | null; onSaved: () => void }) {
+  const [key, setKey] = useState("");
+  const [current, setCurrent] = useState(props.initial);
+  const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string }>();
+  const [busy, setBusy] = useState(false);
+  const change = (value: string | null) => {
+    setBusy(true);
+    setStatus(undefined);
+    props.api
+      .setModelKey(value)
+      .then(
+        (result) => {
+          setCurrent(result.key ?? null);
+          setKey("");
+          setStatus({ tone: "ok", text: value === null ? "Removed the stored key." : "Stored in your keychain." });
+          props.onSaved();
+        },
+        (e: Error) => setStatus({ tone: "error", text: e.message }),
+      )
+      .finally(() => setBusy(false));
+  };
+  const save = (event: FormEvent) => {
+    event.preventDefault();
+    if (key.trim()) change(key);
+  };
+  return (
+    <form className="card panel" onSubmit={save}>
+      <h2 className="label">Anthropic API key</h2>
+      <p className="muted small">
+        {current ? `Alden uses ${current.where}.` : "None yet, so briefings run the checks only."} A key here goes to
+        your keychain, like <code>alden auth model</code>, and works in the desktop app, the terminal and{" "}
+        <code>alden mcp</code>. ANTHROPIC_API_KEY, where it's set, comes first.
+      </p>
+      <label className="field">
+        {current?.source === "alden" ? "Replace the key" : "Key"}
+        <input
+          className="input mono"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="sk-ant-api03-…"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+        />
+        <span className="help">From console.anthropic.com. It's never shown again, here or anywhere in Alden.</span>
+      </label>
+      <div className="form-actions">
+        <button type="submit" className="btn primary" disabled={busy || !key.trim()}>
+          Store key
+        </button>
+        {current?.source === "alden" && (
+          <button type="button" className="btn" disabled={busy} onClick={() => change(null)}>
+            Remove stored key
+          </button>
+        )}
+        {status && (
+          <span className={status.tone === "error" ? "error-text" : "muted"} role="status">
+            {status.text}
+          </span>
+        )}
+      </div>
+    </form>
   );
 }
 

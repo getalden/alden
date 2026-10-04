@@ -24,7 +24,7 @@ export const MAX_INPUT_TOKENS = 150_000;
 const TITLE_CHECK = NOT_CHECKED[0] as string;
 
 const ERROR_NOTES: Record<LlmErrorKind, string> = {
-  auth: "The model provider rejected the credentials. Check ANTHROPIC_API_KEY (or your provider's login).",
+  auth: "The model provider rejected the credentials. `alden auth status` says where the key comes from; set a new one with `alden auth model` (or check your provider's login).",
   rate_limit: "The model provider is rate-limiting this key. Try again in a minute.",
   overloaded: "The model provider is overloaded or erroring. Try again shortly.",
   bad_request: "The model provider rejected the request.",

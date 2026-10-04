@@ -65,6 +65,8 @@ export interface Session {
     supportsEffort: boolean;
     available: boolean;
     reason?: string;
+    /** Where the Anthropic key comes from ("env", "alden" for the stored key, "ant"); never the key itself. */
+    key?: { source: "env" | "alden" | "ant"; where: string } | null;
   };
   aliases: Record<string, string>;
   efforts: string[];
@@ -72,7 +74,7 @@ export interface Session {
   /** Running inside the desktop app, which can prepare briefings while you're away. */
   desktop?: boolean;
   /** Where the GitHub sign-in comes from, and whether the GitHub CLI's is there to switch to. */
-  signIn?: { source: "env" | "alden" | "gh" | null; gitHubCli: boolean };
+  signIn?: { source: "env" | "alden" | "gh" | null; gitHubCli: boolean; problem?: SignInProblem };
   /** The desktop app's `alden` command. */
   cli?: CliStatus;
   /** How many places "Needs your eyes" holds (`review.eyes`). */
@@ -81,6 +83,9 @@ export interface Session {
   queueScope?: { orgs: string[]; repos: string[]; ignore: string[] };
   background?: { enabled: boolean; model: boolean };
 }
+
+/** Why there's no GitHub sign-in: the keychain refused (an unsigned build of the app), or there's none anywhere. */
+export type SignInProblem = { kind: "keychain"; detail: string } | { kind: "none" };
 
 export type SignInState =
   | { state: "idle" }
@@ -190,6 +195,10 @@ export class Api {
   openSignIn = () => this.request<SignInState>("/api/auth/device/open", { method: "POST" });
 
   useGitHubCli = () => this.request<{ login: string } | { error: string }>("/api/auth/gh", { method: "POST" });
+
+  /** Stores the Anthropic API key (null removes it). The answer says where the key comes from, never the key. */
+  setModelKey = (key: string | null) =>
+    this.request<{ key: Session["model"]["key"] }>("/api/model-key", { method: "PUT", body: JSON.stringify({ key }) });
 
   cliStatus = () => this.request<CliStatus>("/api/cli");
 

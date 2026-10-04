@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import {
   addNote,
   backgroundModelAllowed,
+  checkModelKey,
   createGitHubClient,
   type Effort,
   editNote,
@@ -17,6 +18,7 @@ import {
   MODEL_ALIASES,
   memoryItems,
   memoryRepos,
+  modelKeyStore,
   openStore,
   queueEvent,
   queueRows,
@@ -25,6 +27,7 @@ import {
   recordReaction,
   repoFromRemote,
   resolveModel,
+  resolveModelKey,
   resolveToken,
   restore,
   reviewEvent,
@@ -43,6 +46,7 @@ import {
   unsetConfigValue,
   userConfigPath,
   type WithModel,
+  whyNoToken,
 } from "@alden/core";
 import type { Briefing, RankedQueue } from "@alden/schema";
 import { LAST_QUEUE_KEY, type LastQueue } from "../commands/open.js";
@@ -141,14 +145,19 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
           user = { error: describeGitHubError(error, resolved.source) };
         }
       }
-      const choice = selectProvider(config);
+      const choice = await selectProvider(config);
       const resolvedModel = resolveModel(config.model.name);
       const ledger = new SpendLedger();
       return {
         version: options.version,
         cwd: options.cwd,
         desktop: options.desktop === true,
-        signIn: { source: resolved?.source ?? null, gitHubCli: await gitHubCliSignedIn() },
+        signIn: {
+          source: resolved?.source ?? null,
+          gitHubCli: await gitHubCliSignedIn(),
+          // Signed out: why, so "I've signed in" can say what failed rather than ask again.
+          ...(resolved ? {} : { problem: await whyNoToken() }),
+        },
         queueScope: queueScope(config),
         eyes: config.review.eyes,
         ...(options.desktop ? { cli: cliStatus() } : {}),
@@ -163,6 +172,8 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
           supportsEffort: config.model.provider !== "openai-compatible" && supportsEffort(resolvedModel),
           available: choice.ok,
           ...(choice.ok ? {} : { reason: choice.reason }),
+          // Where the Anthropic key comes from; never the key.
+          key: choice.ok && choice.key ? { source: choice.key.source, where: choice.key.where } : null,
         },
         aliases: MODEL_ALIASES,
         efforts: EFFORTS,
@@ -214,6 +225,23 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
       return signIn.status();
     },
     useGitHubCli: () => signIn.useGitHubCli(),
+    async setModelKey(key) {
+      const store = modelKeyStore();
+      if (key === null) await store.delete();
+      else {
+        const trimmed = key.trim();
+        const problem = checkModelKey(trimmed);
+        if (problem) throw new ApiError(400, problem);
+        try {
+          await store.set(trimmed);
+        } catch (error) {
+          throw new ApiError(500, `Couldn't store the key (${(error as Error).message.slice(0, 160)}).`);
+        }
+      }
+      const now = await resolveModelKey();
+      return { key: now ? { source: now.source, where: now.where } : null };
+    },
+
     cliStatus: async () => cliStatus(),
     async installCli() {
       if (!options.desktop) throw new ApiError(400, "Only the desktop app installs the alden command.");
@@ -424,7 +452,7 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
     let model: WithModel | undefined;
     let unavailable: string | undefined;
     if (request.llm !== false) {
-      const choice = selectProvider(config, request.model);
+      const choice = await selectProvider(config, request.model);
       if (choice.ok) model = { provider: choice.provider, ledger: new SpendLedger(), ...(effort ? { effort } : {}) };
       else unavailable = choice.reason;
     }

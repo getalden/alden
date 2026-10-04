@@ -70,7 +70,7 @@ export function registerReviewCommand(program: Command): void {
       let model: WithModel | undefined;
       let unavailable: string | undefined;
       if (options.llm) {
-        const choice = selectProvider(config, options.model);
+        const choice = await selectProvider(config, options.model);
         if (choice.ok) model = { provider: choice.provider, ledger: new SpendLedger(), ...(effort ? { effort } : {}) };
         else unavailable = choice.reason;
       }

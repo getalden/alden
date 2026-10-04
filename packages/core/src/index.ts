@@ -73,6 +73,14 @@ export {
   estimateTokens,
 } from "./llm/budget.js";
 export { BudgetExceededError, type BudgetedOptions, type BudgetedResult, budgetedGenerate } from "./llm/budgeted.js";
+export {
+  checkModelKey,
+  type ModelKey,
+  type ModelKeyDeps,
+  type ModelKeySource,
+  modelKeyStore,
+  resolveModelKey,
+} from "./llm/key.js";
 export { localDay, type SpendEntry, SpendLedger } from "./llm/ledger.js";
 export {
   costUsd,
@@ -95,7 +103,7 @@ export {
   type LlmProvider,
   type StopReason,
 } from "./llm/provider.js";
-export { hasAnthropicCredentials, type ProviderChoice, selectProvider } from "./llm/select.js";
+export { type ProviderChoice, selectProvider } from "./llm/select.js";
 export { type FileKind, fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";
 export {
   type FastTrackKind,

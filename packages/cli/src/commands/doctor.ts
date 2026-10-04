@@ -26,6 +26,7 @@ import {
   telemetryBlocked,
   telemetryConsent,
   userConfigPath,
+  whyNoToken,
 } from "@alden/core";
 import type { Command } from "commander";
 import { paint, shouldColor } from "../render/style.js";
@@ -154,7 +155,17 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
   // GitHub.
   const resolved = await resolveToken().catch(() => undefined);
   if (!resolved) {
-    add({ area: "GitHub", status: "fail", detail: "not signed in", fix: "Run `alden auth login`." });
+    const problem = await whyNoToken();
+    add(
+      problem.kind === "keychain"
+        ? {
+            area: "GitHub",
+            status: "fail",
+            detail: `couldn't read the keychain (${problem.detail})`,
+            fix: "Allow Alden when macOS asks, or run `alden auth login` again. An unsigned development build of Alden.app can't read the keychain: open the installed app instead.",
+          }
+        : { area: "GitHub", status: "fail", detail: "not signed in", fix: "Run `alden auth login`." },
+    );
   } else {
     const from = { env: "ALDEN_GITHUB_TOKEN", alden: "Alden's stored sign-in", gh: "the GitHub CLI" }[resolved.source];
     try {
@@ -204,7 +215,7 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
 
   // The model.
   if (config) {
-    const choice = selectProvider(config);
+    const choice = await selectProvider(config);
     const id = resolveModel(config.model.name);
     if (choice.ok) {
       const effort =
@@ -213,7 +224,8 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
           : config.model.effort
             ? `, effort ${config.model.effort}`
             : "";
-      add({ area: "Model", status: "ok", detail: `${id} via ${config.model.provider}${effort}` });
+      const key = choice.key ? `, key from ${choice.key.where}` : "";
+      add({ area: "Model", status: "ok", detail: `${id} via ${config.model.provider}${effort}${key}` });
     } else {
       add({
         area: "Model",
@@ -221,7 +233,7 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
         detail: "none set up, so reviews run the checks only",
         fix:
           config.model.provider === "anthropic"
-            ? "Set ANTHROPIC_API_KEY or run `ant auth login`; or use Bedrock, Vertex, Foundry or a local model (docs/models.md)."
+            ? "Run `alden auth model` to store an API key (or set ANTHROPIC_API_KEY); or use Bedrock, Vertex, Foundry or a local model (docs/models.md)."
             : choice.reason,
       });
     }

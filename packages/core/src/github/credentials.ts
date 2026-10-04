@@ -5,9 +5,11 @@ import type { Entry } from "@napi-rs/keyring";
 import { aldenHome } from "../config.js";
 
 const SERVICE = "alden";
-const ACCOUNT = "github";
 
-/** Where Alden keeps its own GitHub token. The OS keychain first, a 0600 file if there is no keychain. */
+/** What Alden keeps: its own GitHub token, and the Anthropic API key from `alden auth model`. */
+export type CredentialName = "github" | "anthropic";
+
+/** Where Alden keeps a secret. The OS keychain first, a 0600 file if there is no keychain. */
 export interface CredentialStore {
   get(): Promise<string | undefined>;
   set(token: string): Promise<void>;
@@ -18,23 +20,39 @@ export function credentialsFilePath(): string {
   return join(aldenHome(), "credentials.json");
 }
 
+/** One file for every secret, by name, so storing the model key keeps the GitHub token (and the other way round). */
 export class FileCredentialStore implements CredentialStore {
-  async get(): Promise<string | undefined> {
+  constructor(private readonly name: CredentialName = "github") {}
+
+  private async read(): Promise<Partial<Record<CredentialName, string>>> {
     const path = credentialsFilePath();
-    if (!existsSync(path)) return undefined;
-    const data = JSON.parse(await readFile(path, "utf8")) as { github?: string };
-    return data.github;
+    if (!existsSync(path)) return {};
+    return JSON.parse(await readFile(path, "utf8")) as Partial<Record<CredentialName, string>>;
   }
 
-  async set(token: string): Promise<void> {
+  private async write(data: Partial<Record<CredentialName, string>>): Promise<void> {
     const path = credentialsFilePath();
+    if (Object.keys(data).length === 0) {
+      await rm(path, { force: true });
+      return;
+    }
     await mkdir(aldenHome(), { recursive: true });
-    await writeFile(path, JSON.stringify({ github: token }), { mode: 0o600 });
+    await writeFile(path, JSON.stringify(data), { mode: 0o600 });
     await chmod(path, 0o600);
   }
 
+  async get(): Promise<string | undefined> {
+    return (await this.read())[this.name];
+  }
+
+  async set(token: string): Promise<void> {
+    await this.write({ ...(await this.read().catch(() => ({}))), [this.name]: token });
+  }
+
   async delete(): Promise<void> {
-    await rm(credentialsFilePath(), { force: true });
+    const data = await this.read().catch(() => ({}));
+    delete data[this.name];
+    await this.write(data);
   }
 }
 
@@ -45,8 +63,10 @@ export class FileCredentialStore implements CredentialStore {
 export class KeychainCredentialStore implements CredentialStore {
   private entry: Promise<Entry> | undefined;
 
+  constructor(private readonly name: CredentialName = "github") {}
+
   private open(): Promise<Entry> {
-    this.entry ??= import("@napi-rs/keyring").then(({ Entry }) => new Entry(SERVICE, ACCOUNT));
+    this.entry ??= import("@napi-rs/keyring").then(({ Entry }) => new Entry(SERVICE, this.name));
     return this.entry;
   }
 
@@ -69,6 +89,11 @@ export class DefaultCredentialStore implements CredentialStore {
     private readonly keychain: CredentialStore = new KeychainCredentialStore(),
     private readonly file: CredentialStore = new FileCredentialStore(),
   ) {}
+
+  /** The store for one secret; the default one is the GitHub token's. */
+  static for(name: CredentialName): DefaultCredentialStore {
+    return new DefaultCredentialStore(new KeychainCredentialStore(name), new FileCredentialStore(name));
+  }
 
   async get(): Promise<string | undefined> {
     try {
