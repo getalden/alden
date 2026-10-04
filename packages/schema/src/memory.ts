@@ -19,8 +19,16 @@ export const OpenEventSchema = z.object({
   repo: z.string().describe("owner/name"),
   number: z.number().int(),
   position: z.number().int().min(-1),
-  /** What the PR is about, as learning features: "path:db/migrations/", "author:octocat", "label:api", "kind:dependency". */
+  /**
+   * What the PR is about, as learning features: "path:db/migrations/", "area:app/api", "by:agents",
+   * "author:agent:copilot", "author:octocat", "label:api", "kind:dependency".
+   */
   features: z.array(z.string()),
+  /**
+   * The features it was opened ahead of the rank for: those missing from at least one PR it passed over. Absent on
+   * events from before this was recorded, which count every feature as jumped when `position` > 0.
+   */
+  jumped: z.array(z.string()).optional(),
   via: z.enum(["cli", "ui"]),
 });
 

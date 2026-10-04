@@ -2,7 +2,7 @@
  * Phase 1's gate, from what design partners send each week: `pnpm gate <folder of exports> [--md]`.
  *
  * Each file in the folder is one team's `alden feedback --export` (name it after the team: acme.json). The gate is
- * "10 teams use Alden weekly, and reviewers agree with most 'needs your eyes' flags". A team counts as active when it
+ * "10 teams use Alden weekly, and reviewers find most 'needs your eyes' flags useful". A team counts as active when it
  * gave feedback in the 7 days before its export. The agree rate pools every team's verdicts on "needs your eyes",
  * from each export's own summary (made before redaction, so it's exact). With POSTHOG_PERSONAL_API_KEY set, it also
  * reads weekly active installs and the useful rate from usage stats, for teams that opted in. `--md` prints a table

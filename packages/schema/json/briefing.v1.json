@@ -318,7 +318,7 @@
             ]
           },
           "learned": {
-            "description": "why your feedback put it here, e.g. 'you usually agree with migration flags'",
+            "description": "why your feedback put it here, e.g. 'you usually mark migration flags useful'",
             "type": "string"
           }
         },
@@ -400,6 +400,10 @@
             "type": "object",
             "properties": {
               "title": {
+                "type": "string"
+              },
+              "checkId": {
+                "description": "the check whose topic the model tagged it with (e.g. tests.missing), so feedback on it teaches that lesson",
                 "type": "string"
               },
               "detail": {
@@ -519,6 +523,26 @@
             "additionalProperties": false
           },
           "description": "places that would have been picked, left out because of your feedback"
+        },
+        "quietened": {
+          "description": "flagged checks your feedback quietened: still run and listed, but left out of the places to look, e.g. 'quietened by your feedback: you usually mark untested-change flags not useful (3 of 3)'",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "checkId": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "checkId",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
         },
         "memory": {
           "type": "integer",

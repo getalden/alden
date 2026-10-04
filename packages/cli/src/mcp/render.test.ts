@@ -73,7 +73,7 @@ function briefing(overrides: Partial<Briefing> = {}): Briefing {
           severity: "medium",
           anchors: [{ path: "db/migrate.ts", line: 9 }],
         },
-        { title: "Log says user", detail: "Nit.", severity: "low", anchors: [] },
+        { title: "Log says user", checkId: "tests.missing", detail: "Nit.", severity: "low", anchors: [] },
       ],
       droppedFindings: 0,
       omittedFiles: [],
@@ -105,7 +105,13 @@ describe("briefingPlaces", () => {
       placement: "eyes",
     });
     expect(places.get("E2")).toMatchObject({ source: "llm", placement: "eyes" });
-    expect(places.get("F1")).toMatchObject({ source: "llm", title: "Log says user", placement: "finding" });
+    // A finding tagged with a check's topic carries it, so feedback on it teaches that lesson.
+    expect(places.get("F1")).toMatchObject({
+      source: "llm",
+      checkId: "tests.missing",
+      title: "Log says user",
+      placement: "finding",
+    });
     expect(places.get("C:migrations.destructive")).toMatchObject({ placement: "check" });
   });
 });
@@ -124,6 +130,16 @@ describe("briefingMarkdown", () => {
 
   it("keeps a title's backticks from breaking the Markdown", () => {
     expect(briefingMarkdown(briefing(), [], false)).toContain("Add the 'review' command");
+  });
+
+  it("says which checks the reviewer's feedback quietened", () => {
+    const reason = "quietened by your feedback: you usually mark migration flags not useful (3 of 3)";
+    const text = briefingMarkdown(
+      briefing({ learning: { hidden: [], quietened: [{ checkId: "migrations.destructive", reason }], memory: 0 } }),
+      [],
+      false,
+    );
+    expect(text).toContain(`[C:migrations.destructive]: A column is dropped.\n  - ${reason}`);
   });
 
   it("doesn't tell the host to read the diff itself when Alden's model ran", () => {

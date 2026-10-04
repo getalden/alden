@@ -32,6 +32,30 @@ Every row gives its reasons, for example `waiting 3d · touches migrations/ · n
 **Failing CI sinks a PR.** When a PR's CI is failing, the author has to act before you do, so it drops to the bottom
 with `CI failing: ping @author`.
 
+**What you do moves PRs.** Alden learns which PRs you open ahead of their rank and which you mark useful or not
+useful, and ranks PRs like them higher or lower, with the reason on the row ("ranked higher: you usually open PRs
+touching app/api first", "ranked lower: you usually skip Dependabot PRs (4 marked not useful)"). See
+[Learning and memory](memory.md).
+
+### Bots and AI agents
+
+Alden tells four kinds of author apart, and learns how you treat each, and each bot or agent:
+
+- **You**: your own PRs.
+- **People.**
+- **Bots**: anything GitHub calls a bot or whose login ends in `[bot]` (Dependabot, Renovate, GitHub Actions, …),
+  plus the `renovate-bot` and `snyk-bot` accounts.
+- **AI agents**: the GitHub apps of Copilot (`Copilot`, `copilot-swe-agent`), Claude (`claude[bot]`), Devin
+  (`devin-ai-integration[bot]`), Cursor (`cursor[bot]`), Codex (`chatgpt-codex-connector[bot]`), Jules
+  (`google-labs-jules[bot]`), Amazon Q (`amazon-q-developer[bot]`) and Sweep (`sweep-ai[bot]`), and the
+  `openhands-agent` account. A person's PR from an agent's branch (`claude/…`, `copilot/…`, `codex/…`, `cursor/…`,
+  `devin/…`) counts as that agent's too. An agent's name only counts on a bot account, so a person whose login is
+  `claude` stays a person.
+
+The list lives in `packages/core/src/learn/authors.ts`. Alden reads only what the queue already fetches (the author's
+login and type, and the branch name), so this costs no extra API calls; it doesn't read PR descriptions or commit
+trailers ("Generated with Claude Code", `Co-authored-by`).
+
 ## Fast-track
 
 A PR is fast-tracked when all of these hold:

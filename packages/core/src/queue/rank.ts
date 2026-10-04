@@ -51,7 +51,7 @@ function fastTrackKind(pr: PullRequestFacts): FastTrackKind | undefined {
 export function rankPullRequest(
   pr: PullRequestFacts,
   config: AldenConfig["queue"],
-  context: { now: number; authorQueueSize: number; learning?: Learning | undefined },
+  context: { now: number; authorQueueSize: number; learning?: Learning | undefined; viewer?: string },
 ): RankedPullRequest {
   const reasons: { weight: number; text: string }[] = [];
   const add = (weight: number, text: string) => reasons.push({ weight, text });
@@ -139,7 +139,7 @@ export function rankPullRequest(
     !pr.isDraft;
 
   // How you treat PRs like this one, from your own history in this repo. Shown, never silent.
-  const learned = queueBoost(context.learning, prFeatures(pr, config.sensitivePaths));
+  const learned = queueBoost(context.learning, prFeatures(pr, config.sensitivePaths, context.viewer));
   if (learned.reason) add(Math.abs(learned.points), learned.reason);
 
   const total = risk * WEIGHTS.risk + wait * WEIGHTS.wait + blocking * WEIGHTS.blocking + learned.points;
@@ -174,6 +174,7 @@ export function rankQueue(
       now,
       authorQueueSize: pr.author ? (perAuthor.get(pr.author) ?? 0) : 0,
       learning: learning(pr.repo),
+      viewer: queue.viewer,
     }),
   );
 
@@ -216,7 +217,7 @@ export function queueRows(ranked: RankedQueue, config: AldenConfig["queue"]): Qu
     url: r.pr.url,
     repo: r.pr.repo,
     number: r.pr.number,
-    features: prFeatures(r.pr, config.sensitivePaths),
+    features: prFeatures(r.pr, config.sensitivePaths, ranked.viewer),
     base: r.lane === "needs-you" && base.includes(r) ? base.indexOf(r) : -1,
     updatedAt: r.pr.updatedAt,
   }));

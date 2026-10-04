@@ -132,7 +132,7 @@ export function aldenTools(options: { version: string; cwd: string }): McpTool[]
       name: "alden_feedback",
       title: "Feedback on a place",
       description:
-        "Record the reviewer's reaction to a place in a briefing from this session, by its id: useful or not_useful teach Alden what this reviewer looks for (after three alike, it ranks those flags up or leaves them out); dismiss only hides it on this PR; clear takes a reaction back. Only record what the reviewer said or clearly meant, never your own opinion.",
+        "Record the reviewer's reaction to a place in a briefing from this session, by its id: useful or not_useful teach Alden what this reviewer looks for (after three alike, at least three to one, it puts those flags first or quietens them; the response says how close a lesson is); dismiss only hides it on this PR; clear takes a reaction back. Only record what the reviewer said or clearly meant, never your own opinion.",
       input: z.object({
         place: z.string().min(1).describe("the place's id from alden_review: E1, F2 or C:<check id>"),
         verdict: z.enum(["useful", "not_useful", "dismiss", "clear"]),
@@ -150,11 +150,11 @@ export function aldenTools(options: { version: string; cwd: string }): McpTool[]
         if (!item)
           throw new Error(`No place ${place} in that briefing. Its ids: ${[...places.keys()].join(", ") || "none"}.`);
         const input: FeedbackInput = { kind: "verdict", ...base(found), item, verdict: VERDICTS[verdict] };
-        await api.addFeedback(input);
+        const saved = (await api.addFeedback(input)) as { progress?: string };
         const said = { useful: "useful", not_useful: "not useful", dismiss: "dismissed on this PR", clear: "cleared" }[
           verdict
         ];
-        return `Recorded: "${item.title}" ${said}.${verdict === "useful" || verdict === "not_useful" ? " Alden adjusts once a pattern repeats three times." : ""}`;
+        return `Recorded: "${item.title}" ${said}.${saved.progress ? ` ${saved.progress}` : ""}`;
       },
     }),
 

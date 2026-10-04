@@ -20,6 +20,12 @@ export const LlmOutputSchema = z.object({
         anchors: z
           .array(z.object({ path: z.string(), line: z.number().int().optional() }))
           .describe("Where it is: file paths from the diff, with new-file line numbers as shown in the diff."),
+        topic: z
+          .enum(["tests", "api", "migrations", "config", "dependencies", "other"])
+          .optional()
+          .describe(
+            "What it's about: tests (missing or weak tests), api (a changed public interface or its callers), migrations, config, dependencies, or other.",
+          ),
       }),
     )
     .describe("Everything a reviewer should know about, including low-confidence concerns."),
@@ -41,7 +47,7 @@ Report every issue a careful reviewer would want to know about: bugs, behaviour 
 
 Anchor each finding to file paths from the diff and to new-file line numbers exactly as shown. If a caller outside the diff will break or behave differently, anchor the finding to the changed code in the diff and name the caller's file and line in the detail. Omit the line for a whole-file concern. Never invent a path or line.
 
-Sometimes you also receive notes from the reviewer about what they care about in this repository. They come from the reviewer, not the author: look harder for issues of those kinds, but still report everything else worth knowing.
+Sometimes you also receive notes from the reviewer about what they care about in this repository, and kinds of concern they usually find not useful. They come from the reviewer, not the author: look harder for issues of the kinds they care about, raise the kinds they find not useful only when they're serious, and still report everything else worth knowing. Tag each finding with its topic, so the reviewer's reactions to it teach Alden.
 
 Alden replaces likely secrets with placeholders such as [redacted GitHub token, ghp_…(40 chars)] before you see the change. The real value is in the code; judge the code as if it were there, and don't report the placeholder itself.
 

@@ -30,6 +30,7 @@ export function App({ api }: { api: Api | undefined }) {
   const [choices, setChoices] = useState<Choices>();
   const [reactions, setReactions] = useState<Record<string, Reaction | undefined>>({});
   const [reactError, setReactError] = useState<string>();
+  const [reactNotes, setReactNotes] = useState<Record<string, string | undefined>>({});
 
   const loadSession = useCallback(() => {
     if (!api) return;
@@ -95,9 +96,12 @@ export function App({ api }: { api: Api | undefined }) {
       const savedDismissed = queue?.dismissed?.some((r) => prKey(r.pr) === key);
       setReactions((all) => ({ ...all, [key]: savedDismissed ? undefined : next }));
       setReactError(undefined);
+      setReactNotes(({ [key]: _, ...rest }) => rest);
       api.react(key, next ?? "clear").then(
-        () => {
+        (saved) => {
           if (savedDismissed) loadQueue(false);
+          const progress = (saved as { progress?: unknown } | null)?.progress;
+          if (typeof progress === "string") setReactNotes((all) => ({ ...all, [key]: progress }));
         },
         (error: unknown) => {
           setReactions((all) => ({ ...all, [key]: previous }));
@@ -168,6 +172,7 @@ export function App({ api }: { api: Api | undefined }) {
                 ) : undefined
               }
               reactions={reactions}
+              reactionNotes={reactNotes}
               onReact={react}
               ready={ready}
               scope={session?.queueScope}

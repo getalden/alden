@@ -1,5 +1,6 @@
 import type { Anchor, LlmFinding } from "@alden/schema";
 import type { DiffFile } from "../../diff/parse.js";
+import { MODEL_TOPICS } from "../../learn/learn.js";
 import type { LlmOutput } from "./prompt.js";
 
 /**
@@ -55,7 +56,15 @@ export function validateFindings(output: LlmOutput, shownFiles: DiffFile[]): Val
       dropped++;
       continue;
     }
-    findings.push({ title: finding.title, detail: finding.detail, severity: finding.severity, anchors: valid });
+    // The topic the model tagged it with, as the check it counts toward when the reviewer reacts to it.
+    const checkId = finding.topic && finding.topic !== "other" ? MODEL_TOPICS[finding.topic] : undefined;
+    findings.push({
+      title: finding.title,
+      ...(checkId ? { checkId } : {}),
+      detail: finding.detail,
+      severity: finding.severity,
+      anchors: valid,
+    });
   }
   return { findings, dropped };
 }

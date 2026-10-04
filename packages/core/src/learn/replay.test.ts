@@ -56,7 +56,7 @@ function briefing(name: string, number: number, learning?: Learning): Briefing {
 }
 
 let n = 0;
-/** "Not needed" (or agree) on the place a briefing showed, as the UI sends it. */
+/** "Not useful" (or useful) on the place a briefing showed, as the UI sends it. */
 function verdictOn(b: Briefing, index: number, verdict: "agree" | "not_needed" | "dismiss"): FeedbackEvent {
   const item = b.needsYourEyes[index];
   if (!item || b.target.kind !== "pr") throw new Error("no such place");
@@ -82,18 +82,18 @@ const learned = (repo: string, feedback: FeedbackEvent[], opens: OpenEvent[] = [
   learn({ repo, feedback, opens, memory: [], now: new Date("2026-09-28T12:00:00Z") });
 
 describe("replaying feedback on recorded PRs", () => {
-  it("vercel/next.js: three untested-change flags marked not needed, then the next PR's are hidden, with a reason", () => {
+  it("vercel/next.js: three untested-change flags marked not useful, then the next PR's are hidden, with a reason", () => {
     const before = briefing("nextjs", 99367);
     expect(before.needsYourEyes.map((e) => e.checkId)).toEqual(["tests.missing", "tests.missing", "tests.missing"]);
 
-    // The same reviewer said "not needed" to that flag on three other next.js PRs.
+    // The same reviewer said "not useful" to that flag on three other next.js PRs.
     const earlier = [99369, 85741, 85741].map((number, i) =>
       verdictOn(briefing(number === 99369 ? "nextjs" : "reg-nextjs", number), i === 2 ? 1 : 0, "not_needed"),
     );
     const after = briefing("nextjs", 99367, learned("vercel/next.js", earlier));
     expect(after.needsYourEyes).toEqual([]);
     expect(after.learning?.hidden).toHaveLength(3);
-    expect(after.learning?.hidden[0]?.reason).toBe("You usually mark untested-change flags not needed (3 of 3)");
+    expect(after.learning?.hidden[0]?.reason).toBe("You usually mark untested-change flags not useful (3 of 3)");
     // The check itself still ran and still says what it found.
     expect(after.checks.find((c) => c.id === "tests.missing")?.status).toBe("flagged");
   });
@@ -111,7 +111,7 @@ describe("replaying feedback on recorded PRs", () => {
     ]);
   });
 
-  it("django/django: a high-severity migration flag is never quietened, however often it's marked not needed", () => {
+  it("django/django: a high-severity migration flag is never quietened, however often it's marked not useful", () => {
     const before = briefing("reg-django", 19057);
     const flag = verdictOn(before, 0, "not_needed");
     const others = [1, 2, 3, 4].map(

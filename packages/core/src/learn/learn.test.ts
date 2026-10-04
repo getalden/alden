@@ -17,6 +17,7 @@ import { pickWithLearning } from "../review/pick.js";
 import { AldenStore, openStore } from "../store/db.js";
 import {
   addNote,
+  checkProgress,
   describeFeature,
   editNote,
   forget,
@@ -28,6 +29,7 @@ import {
   prFeatures,
   promptNotes,
   queueBoost,
+  reactionProgress,
   recordOpen,
   recordReaction,
   restore,
@@ -191,7 +193,9 @@ describe("learn: opens", () => {
       labels: ["API"],
     } as PullRequestFacts;
     expect(prFeatures(pr, config.queue.sensitivePaths)).toEqual([
+      "area:src",
       "author:sam",
+      "by:people",
       "kind:dependency",
       "label:api",
       "path:db/migrations/",
@@ -232,7 +236,7 @@ describe("the store, memory and opens", () => {
     const items = memoryItems(await loadLearning(store, REPO, NOW));
     expect(items.map((i) => [i.source, i.text])).toEqual([
       ["you", "Check that new endpoints have auth"],
-      ["learned", "You usually don't need untested-change flags"],
+      ["learned", "You usually find untested-change flags not useful"],
     ]);
     expect(items[1]).toMatchObject({
       id: "check:tests.missing:down",
@@ -306,12 +310,12 @@ describe("the store, memory and opens", () => {
     ]);
     expect(queueBoost(learning, ["label:docs"])).toEqual({
       points: -OPEN_BOOST,
-      reason: "ranked lower: you marked 3 PRs labelled docs not useful",
+      reason: "ranked lower: you usually skip PRs labelled docs (3 marked not useful)",
     });
     expect(queueBoost(learning, ["path:db/"]).reason).toBe("ranked higher: you marked 3 PRs touching db/ useful");
     expect([...learning.dismissedPrs]).toEqual([[`${REPO}#7`, at(10)]]);
     expect(memoryItems(learning).map((i) => [i.group, i.text])).toEqual([
-      ["skip", "You skip PRs labelled docs"],
+      ["skip", "You usually skip PRs labelled docs"],
       ["look", "You look at PRs touching db/ first"],
     ]);
   });
@@ -362,7 +366,7 @@ describe("using what was learned", () => {
     check("migrations.changed", "high", ["db/migrations/1.sql"]),
   ];
 
-  it("hides what you dismissed or don't need, says so, and puts what you care about first", () => {
+  it("hides what you dismissed or find not useful, says so, and puts what you care about first", () => {
     const learning = learn({
       repo: REPO,
       feedback: [
@@ -377,11 +381,11 @@ describe("using what was learned", () => {
     const { eyes, hidden } = pickWithLearning(checks, learning, "acme/shop#9");
     // High severity is never quietened; config goes before other mediums; tests are left out, with the reason.
     expect(eyes.map((e) => e.checkId)).toEqual(["migrations.changed", "config.changed"]);
-    expect(eyes[1]?.learned).toBe("You usually agree with config-change flags (3 of 3)");
+    expect(eyes[1]?.learned).toBe("You usually mark config-change flags useful (3 of 3)");
     expect(hidden).toEqual([
       {
         title: "Untested change in src/a.ts",
-        reason: "You usually mark untested-change flags not needed (3 of 3)",
+        reason: "You usually mark untested-change flags not useful (3 of 3)",
         anchor: { path: "src/a.ts" },
       },
     ]);
@@ -445,5 +449,295 @@ describe("using what was learned", () => {
         maxInputTokens: 10_000,
       }).user,
     ).not.toContain("cares about");
+  });
+});
+
+describe("learning from who wrote a PR and where it changes", () => {
+  const files = (...paths: [string, number][]) =>
+    paths.map(([path, lines]) => ({ path, additions: lines, deletions: 0 }));
+  const facts = (over: Partial<PullRequestFacts>) =>
+    ({ files: [], author: "sam", authorIsBot: false, headRef: "feature", labels: [], ...over }) as PullRequestFacts;
+
+  it("reads bot and agent PRs: kind, identity and code areas", () => {
+    const dependabot = facts({
+      author: "dependabot",
+      authorIsBot: true,
+      files: files(["package.json", 2], ["pnpm-lock.yaml", 400]),
+    });
+    expect(prFeatures(dependabot, config.queue.sensitivePaths)).toEqual([
+      "area:.",
+      "author:bot:dependabot",
+      "by:bots",
+      "kind:dependency",
+    ]);
+    const copilot = facts({
+      author: "Copilot",
+      authorIsBot: true,
+      files: files(["app/api/users/route.ts", 40], ["py/pricing/calc.py", 10]),
+    });
+    expect(prFeatures(copilot, [])).toEqual(["area:app/api", "area:py/pricing", "author:agent:copilot", "by:agents"]);
+    // A person's PR from Claude's branch is Claude's, and theirs.
+    expect(prFeatures(facts({ headRef: "claude/issue-4", files: files(["py/x.py", 1]) }), [])).toEqual([
+      "area:py",
+      "author:agent:claude",
+      "author:sam",
+      "by:agents",
+    ]);
+    expect(prFeatures(facts({ author: "Me" }), [], "me")).toEqual(["by:you"]);
+  });
+
+  it("keeps the three code areas with the most changed lines, and doesn't repeat a sensitive directory", () => {
+    const pr = facts({
+      files: files(["a/x/1.ts", 5], ["b/y/1.ts", 50], ["c/1.ts", 20], ["d/z/q/1.ts", 30], ["db/migrations/1.sql", 1]),
+    });
+    expect(prFeatures(pr, ["db/migrations/**"]).filter((f) => f.startsWith("area:") || f.startsWith("path:"))).toEqual([
+      "area:b/y",
+      "area:c",
+      "area:d/z",
+      "path:db/migrations/",
+    ]);
+  });
+
+  it("describes them the way the queue says them", () => {
+    expect(
+      [
+        "area:app/api",
+        "area:.",
+        "by:bots",
+        "by:agents",
+        "by:people",
+        "by:you",
+        "author:bot:dependabot",
+        "author:agent:copilot",
+      ].map(describeFeature),
+    ).toEqual([
+      "PRs touching app/api",
+      "PRs touching files at the repo root",
+      "bot PRs",
+      "PRs from AI agents",
+      "PRs from people",
+      "your own PRs",
+      "Dependabot PRs",
+      "Copilot PRs",
+    ]);
+  });
+
+  it("learns you skip Dependabot PRs, without counting it twice as a bot PR", () => {
+    const reactions = [1, 2, 3].map((number) => ({
+      schemaVersion: MEMORY_SCHEMA_VERSION as typeof MEMORY_SCHEMA_VERSION,
+      id: `r${number}`,
+      at: at(20),
+      repo: REPO,
+      number,
+      reaction: "down" as const,
+      features: ["area:.", "author:bot:dependabot", "by:bots", "kind:dependency"],
+      updatedAt: at(20),
+    }));
+    const learning = learn({ repo: REPO, feedback: [], opens: [], memory: [], reactions, now: NOW });
+    expect(queueBoost(learning, ["author:bot:dependabot", "by:bots"])).toEqual({
+      points: -OPEN_BOOST,
+      reason: "ranked lower: you usually skip Dependabot PRs (3 marked not useful)",
+    });
+    // Who wrote it and what it touches are different things, and do add up, to the cap.
+    expect(queueBoost(learning, ["author:bot:dependabot", "kind:dependency"]).points).toBe(-2 * OPEN_BOOST);
+  });
+
+  it("learns you open PRs touching app/api first, only from jumps past PRs that don't touch it", () => {
+    const opened = (number: number, features: string[], jumped: string[]): OpenEvent => ({
+      ...open(features, 2),
+      number,
+      jumped,
+    });
+    const opens = [1, 2, 3].map((i) => opened(i, ["area:app/api", "by:people"], ["area:app/api"]));
+    const learning = learn({ repo: REPO, feedback: [], opens, memory: [], now: NOW });
+    // Every PR in the queue was from people, so passing over them said nothing about people.
+    expect(learning.queue.map((l) => l.feature)).toEqual(["area:app/api"]);
+    expect(queueBoost(learning, ["area:app/api"]).reason).toBe(
+      "ranked higher: you usually open PRs touching app/api first",
+    );
+  });
+
+  it("counts one PR opened ahead on three days as one PR", () => {
+    const opens = [20, 21, 22].map((day) => ({ ...open(["area:py/pricing"], 2, day), number: 7 }));
+    const learning = learn({ repo: REPO, feedback: [], opens, memory: [], now: NOW });
+    expect(learning.queue).toEqual([]);
+    expect(learning.queueTallies.get("area:py/pricing")).toEqual({ opens: 1, jumps: 1, ups: 0, downs: 0 });
+  });
+
+  it("records which features an open jumped for", () => {
+    const dir = mkdtempSync(join(tmpdir(), "alden-learn-"));
+    const store = openStore(join(dir, "alden.db"));
+    try {
+      const row = (number: number, base: number, features: string[]) => ({
+        url: `https://github.com/${REPO}/pull/${number}`,
+        repo: REPO,
+        number,
+        features,
+        base,
+      });
+      const rows = [row(1, 0, ["by:people", "area:docs"]), row(2, 1, ["by:people", "area:app/api"])];
+      expect(recordOpen(store, rows, rows[1] as never, "ui", NOW)).toMatchObject({
+        position: 1,
+        jumped: ["area:app/api"],
+      });
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("learning by topic", () => {
+  const llmVerdict = (
+    checkId: string | undefined,
+    v: "agree" | "not_needed",
+    pr: number,
+    title = "x",
+  ): FeedbackEvent => ({
+    schemaVersion: FEEDBACK_SCHEMA_VERSION,
+    id: `l${n++}`,
+    at: at(20),
+    kind: "verdict",
+    target: { kind: "pr", repo: REPO, number: pr },
+    briefingAt: at(20),
+    item: { source: "llm", ...(checkId ? { checkId } : {}), title, anchor: { path: "x" }, placement: "finding" },
+    verdict: v,
+  });
+
+  it("counts public signatures and callers outside the diff as one API change lesson", () => {
+    const feedback = [
+      verdict("signatures.changed", "not_needed"),
+      verdict("signatures.changed", "not_needed"),
+      verdict("callers.outside", "not_needed"),
+    ];
+    const learning = learn({ repo: REPO, feedback, opens: [], memory: [], now: NOW });
+    expect(learning.checks.get("api")).toMatchObject({ id: "check:api:down", notNeeded: 3 });
+    const callers: CheckResult = {
+      id: "callers.outside",
+      title: "Callers",
+      status: "flagged",
+      severity: "medium",
+      summary: "s",
+      evidence: [{ text: "t", anchor: { path: "src/b.ts" } }],
+      heuristic: true,
+    };
+    const picked = pickWithLearning([callers], learning, "acme/shop#99");
+    expect(picked.eyes).toEqual([]);
+    expect(picked.quietened).toEqual([
+      {
+        checkId: "callers.outside",
+        reason: "quietened by your feedback: you usually mark API change flags not useful (3 of 3)",
+      },
+    ]);
+    expect(memoryItems(learning)[0]).toMatchObject({
+      text: "You usually find API change flags not useful",
+      evidence: "you marked 3 of 3 not useful (public signature and caller flags count together)",
+    });
+  });
+
+  it("keeps a forget made by check id, from before topics, in force", () => {
+    const feedback = [1, 2, 3].map(() => verdict("signatures.changed", "not_needed"));
+    const memory = [
+      {
+        schemaVersion: MEMORY_SCHEMA_VERSION as typeof MEMORY_SCHEMA_VERSION,
+        id: "m",
+        at: at(21),
+        repo: REPO,
+        action: "forget" as const,
+        item: "check:signatures.changed:down",
+      },
+    ];
+    expect(learn({ repo: REPO, feedback, opens: [], memory, now: NOW }).checks.size).toBe(0);
+  });
+
+  it("lets model findings tagged with a topic teach, once per briefing", () => {
+    const three = [1, 2, 3].map((pr) => llmVerdict("tests.missing", "not_needed", pr));
+    expect(
+      learn({ repo: REPO, feedback: three, opens: [], memory: [], now: NOW }).checks.get("tests.missing"),
+    ).toMatchObject({
+      direction: "down",
+      notNeeded: 3,
+    });
+    const chatty = ["a", "b", "c"].map((title) => llmVerdict("tests.missing", "not_needed", 5, title));
+    expect(
+      learn({ repo: REPO, feedback: chatty, opens: [], memory: [], now: NOW }).checkTallies.get("tests.missing"),
+    ).toEqual({
+      agree: 0,
+      notNeeded: 1,
+    });
+    const untagged = [1, 2, 3].map((pr) => llmVerdict(undefined, "not_needed", pr));
+    expect(learn({ repo: REPO, feedback: untagged, opens: [], memory: [], now: NOW }).checks.size).toBe(0);
+  });
+
+  it("tells the model what you usually find not useful", () => {
+    const feedback = [1, 2, 3].map(() => verdict("tests.missing", "not_needed"));
+    expect(promptNotes(learn({ repo: REPO, feedback, opens: [], memory: [], now: NOW }))).toEqual([
+      "Usually finds untested-change concerns not useful: raise them only when they're serious.",
+    ]);
+  });
+});
+
+describe("saying how close a lesson is", () => {
+  const learned = (feedback: FeedbackEvent[]) => learn({ repo: REPO, feedback, opens: [], memory: [], now: NOW });
+
+  it("counts toward a check lesson, and says when it's learned", () => {
+    const two = learned([verdict("callers.outside", "not_needed"), verdict("signatures.changed", "not_needed")]);
+    expect(checkProgress(two, { source: "check", checkId: "callers.outside" }, "not_needed")).toBe(
+      "2 of 3: one more not useful on API change flags (public signature and caller flags count together) and Alden will quieten them.",
+    );
+    const one = learned([verdict("tests.missing", "agree")]);
+    expect(checkProgress(one, { source: "check", checkId: "tests.missing" }, "agree")).toBe(
+      "1 of 3: 2 more useful on untested-change flags and Alden will put them first among the places to look.",
+    );
+    const three = learned([1, 2, 3].map(() => verdict("tests.missing", "not_needed")));
+    expect(checkProgress(three, { source: "check", checkId: "tests.missing" }, "not_needed")).toBe(
+      "3 of 3 not useful on untested-change flags: Alden quietens them in this repo.",
+    );
+    const mixed = learned([
+      ...[1, 2, 3].map(() => verdict("config.changed", "not_needed")),
+      verdict("config.changed", "agree"),
+      verdict("config.changed", "agree"),
+    ]);
+    expect(checkProgress(mixed, { source: "check", checkId: "config.changed" }, "not_needed")).toBe(
+      "2 useful, 3 not useful: 3 more not useful on config-change flags and Alden will quieten them.",
+    );
+  });
+
+  it("says when nothing will be learned", () => {
+    const none = learned([]);
+    expect(checkProgress(none, { source: "check", checkId: "secrets.likely" }, "not_needed")).toMatch(/never quietens/);
+    expect(checkProgress(none, { source: "llm" }, "not_needed")).toMatch(/teaches no lesson/);
+    expect(checkProgress({ ...none, paused: true }, { source: "check", checkId: "tests.missing" }, "agree")).toMatch(
+      /paused/,
+    );
+    expect(checkProgress(none, { source: "check", checkId: "tests.missing" }, "dismiss")).toBeUndefined();
+  });
+
+  it("counts toward a queue lesson", () => {
+    const reaction = (number: number) => ({
+      schemaVersion: MEMORY_SCHEMA_VERSION as typeof MEMORY_SCHEMA_VERSION,
+      id: `q${number}`,
+      at: at(20),
+      repo: REPO,
+      number,
+      reaction: "down" as const,
+      features: ["author:bot:dependabot", "by:bots"],
+      updatedAt: at(20),
+    });
+    const two = learn({ repo: REPO, feedback: [], opens: [], memory: [], reactions: [1, 2].map(reaction), now: NOW });
+    expect(reactionProgress(two, ["author:bot:dependabot", "by:bots"], "down")).toBe(
+      "Dependabot PRs: 2 not useful so far. One more and Alden will rank them lower.",
+    );
+    const three = learn({
+      repo: REPO,
+      feedback: [],
+      opens: [],
+      memory: [],
+      reactions: [1, 2, 3].map(reaction),
+      now: NOW,
+    });
+    expect(reactionProgress(three, ["author:bot:dependabot", "by:bots"], "down")).toBe(
+      "Alden ranks Dependabot PRs lower in this repo.",
+    );
   });
 });

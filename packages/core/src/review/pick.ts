@@ -1,5 +1,5 @@
 import type { BriefingLearning, CheckResult, Evidence, LookHere, Severity } from "@alden/schema";
-import { checkReason, dismissKey, type Learning } from "../learn/learn.js";
+import { checkLesson, checkReason, dismissKey, type Learning, quietenedReason } from "../learn/learn.js";
 import { isLockfile } from "../queue/files.js";
 
 /** How many places "Needs your eyes" holds unless `review.eyes` says otherwise, and the most it can be set to. */
@@ -119,32 +119,33 @@ export interface PickAdjustments {
 }
 
 /**
- * The places to look, with what you've taught Alden: a flag you marked "not needed" on this PR stays down on a
- * re-review, a check you usually don't need gives up its slots (never a high-severity one), and a check you usually
- * agree with goes first among equals. What learning left out is returned as hidden, so the briefing can say so.
+ * The places to look, with what you've taught Alden: a flag you dismissed on this PR stays down on a re-review, a
+ * check you usually mark not useful gives up its slots (never a high-severity one), and a check you usually mark
+ * useful goes first among equals. What learning left out is returned as hidden, and the flagged checks it quietened
+ * as quietened, so the briefing can say so in both places.
  */
 export function pickWithLearning(
   checks: CheckResult[],
   learning: Learning | undefined,
   target: string,
   max: number = MAX_LOOK_HERE,
-): { eyes: LookHere[]; hidden: BriefingLearning["hidden"] } {
-  if (!learning) return { eyes: pickLookHere(checks, { max }), hidden: [] };
+): { eyes: LookHere[]; hidden: BriefingLearning["hidden"]; quietened: NonNullable<BriefingLearning["quietened"]> } {
+  if (!learning) return { eyes: pickLookHere(checks, { max }), hidden: [], quietened: [] };
   const hiddenWhy = (check: CheckResult, title: string, path: string): string | undefined => {
     const at = learning.dismissed.get(
       dismissKey(target, { source: "check", checkId: check.id, title, anchor: { path } }),
     );
     if (at) return `You dismissed it on ${at.slice(0, 10)}`;
-    const lesson = learning.paused ? undefined : learning.checks.get(check.id);
+    const lesson = checkLesson(learning, check.id);
     if (lesson?.direction === "down" && check.severity !== "high") return checkReason(lesson);
     return undefined;
   };
   const eyes = pickLookHere(checks, {
     max,
     skip: (check, title, path) => hiddenWhy(check, title, path) !== undefined,
-    prefer: (id) => !learning.paused && learning.checks.get(id)?.direction === "up",
+    prefer: (id) => checkLesson(learning, id)?.direction === "up",
     why: (id) => {
-      const lesson = learning.paused ? undefined : learning.checks.get(id);
+      const lesson = checkLesson(learning, id);
       return lesson?.direction === "up" ? checkReason(lesson) : undefined;
     },
   });
@@ -155,7 +156,13 @@ export function pickWithLearning(
     const reason = hiddenWhy(check, item.title, item.anchor.path);
     return reason ? [{ title: item.title, reason, anchor: item.anchor }] : [];
   });
-  return { eyes, hidden };
+  const quietened = checks.flatMap((check) => {
+    const lesson = checkLesson(learning, check.id);
+    return check.status === "flagged" && lesson?.direction === "down" && check.severity !== "high"
+      ? [{ checkId: check.id, reason: quietenedReason(lesson) }]
+      : [];
+  });
+  return { eyes, hidden, quietened };
 }
 
 /** "a/b/c.ts" → "a/b/"; root-level files have no directory ("") and never share a slot limit. */

@@ -12,7 +12,13 @@ function fromFinding(finding: LlmFinding, used: Set<string>): LookHere | undefin
     finding.anchors.length > 1
       ? ` (and ${finding.anchors.length - 1} more place${finding.anchors.length > 2 ? "s" : ""})`
       : "";
-  return { title: finding.title, reason: `${finding.detail}${more}`, anchor, source: "llm" };
+  return {
+    title: finding.title,
+    reason: `${finding.detail}${more}`,
+    anchor,
+    source: "llm",
+    ...(finding.checkId ? { checkId: finding.checkId } : {}),
+  };
 }
 
 /**

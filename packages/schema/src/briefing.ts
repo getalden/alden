@@ -40,7 +40,7 @@ export const LookHereSchema = z.object({
   learned: z
     .string()
     .optional()
-    .describe("why your feedback put it here, e.g. 'you usually agree with migration flags'"),
+    .describe("why your feedback put it here, e.g. 'you usually mark migration flags useful'"),
 });
 
 /** What the reviewer's feedback changed in this briefing, so nothing is hidden silently. */
@@ -48,12 +48,24 @@ export const BriefingLearningSchema = z.object({
   hidden: z
     .array(z.object({ title: z.string(), reason: z.string(), anchor: AnchorSchema.optional() }))
     .describe("places that would have been picked, left out because of your feedback"),
+  quietened: z
+    .array(z.object({ checkId: z.string(), reason: z.string() }))
+    .optional()
+    .describe(
+      "flagged checks your feedback quietened: still run and listed, but left out of the places to look, e.g. 'quietened by your feedback: you usually mark untested-change flags not useful (3 of 3)'",
+    ),
   memory: z.number().int().describe("notes about you that were given to the model"),
 });
 
 /** What the model found, after Alden has thrown away anything pointing at a line that isn't in the diff. */
 export const LlmFindingSchema = z.object({
   title: z.string(),
+  checkId: z
+    .string()
+    .optional()
+    .describe(
+      "the check whose topic the model tagged it with (e.g. tests.missing), so feedback on it teaches that lesson",
+    ),
   detail: z.string().describe("what's wrong or worth checking, and why, in one or two sentences"),
   severity: SeveritySchema,
   /** One finding can cover several places, e.g. the same change repeated across ten files. */

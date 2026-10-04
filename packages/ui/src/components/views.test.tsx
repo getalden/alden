@@ -145,6 +145,25 @@ describe("QueueView", () => {
     expect(reactions.at(-1)).toBe("acme/old#9:dismiss");
   });
 
+  it("says how close a reaction brought a lesson", () => {
+    const note = "Dependabot PRs: 2 not useful so far. One more and Alden will rank them lower.";
+    render(
+      <QueueView
+        queue={queue}
+        error={undefined}
+        loading={false}
+        repoFilter=""
+        onRepoFilter={noop}
+        onRefresh={noop}
+        selected="acme/api#1"
+        reactions={{ "acme/api#1": "down" }}
+        reactionNotes={{ "acme/api#1": note }}
+        onReact={noop}
+      />,
+    );
+    expect(screen.getByText(note)).toBeTruthy();
+  });
+
   it("filters by repo", () => {
     const { container } = render(
       <QueueView
@@ -337,31 +356,43 @@ describe("what learning changed in a briefing", () => {
       needsYourEyes: [
         {
           ...(briefing.needsYourEyes[0] as Briefing["needsYourEyes"][0]),
-          learned: "You usually agree with flags about callers outside the diff (4 of 4)",
+          learned: "You usually mark API change flags useful (4 of 4)",
         },
       ],
       learning: {
         hidden: [
-          { title: "Untested change in a.ts", reason: "You usually mark untested-change flags not needed (3 of 3)" },
-          { title: "Untested change in b.ts", reason: "You usually mark untested-change flags not needed (3 of 3)" },
+          { title: "Untested change in a.ts", reason: "You usually mark untested-change flags not useful (3 of 3)" },
+          { title: "Untested change in b.ts", reason: "You usually mark untested-change flags not useful (3 of 3)" },
           { title: "Config change in .env", reason: "You dismissed it on 2026-09-27" },
         ],
         memory: 2,
       },
     };
     const { container } = render(<BriefingView briefing={learned} />);
-    expect(screen.getByText(/↑ You usually agree with flags about callers/)).toBeTruthy();
+    expect(screen.getByText(/↑ You usually mark API change flags useful/)).toBeTruthy();
     const shaped = container.querySelector(".shaped")?.textContent ?? "";
     expect(shaped).toContain("Shaped by your feedback.");
-    expect(shaped).toContain(
-      "#1 is here because you usually agree with flags about callers outside the diff (4 of 4).",
-    );
-    expect(shaped).toContain("2 places are hidden: you usually mark untested-change flags not needed (3 of 3).");
+    expect(shaped).toContain("#1 is here because you usually mark API change flags useful (4 of 4).");
+    expect(shaped).toContain("2 places are hidden: you usually mark untested-change flags not useful (3 of 3).");
     expect(shaped).toContain("1 place is hidden: you dismissed it on 2026-09-27.");
     expect(shaped).toContain("The model had 2 of your notes for this repo.");
     fireEvent.click(screen.getByRole("button", { name: /3 hidden by your feedback/ }));
     expect(screen.getByText("Config change in .env")).toBeTruthy();
     expect(groupHidden(learned.learning?.hidden ?? []).map((g) => g.items.length)).toEqual([2, 1]);
+  });
+
+  it("marks a check row quietened by your feedback, with why", () => {
+    const flagged = briefing.checks.find((c) => c.status === "flagged") as Briefing["checks"][0];
+    const reason = "quietened by your feedback: you usually mark API change flags not useful (3 of 3)";
+    render(
+      <BriefingView
+        briefing={{ ...briefing, learning: { hidden: [], quietened: [{ checkId: flagged.id, reason }], memory: 0 } }}
+      />,
+    );
+    expect(
+      screen.getByTitle("Quietened by your feedback: you usually mark API change flags not useful (3 of 3)"),
+    ).toBeTruthy();
+    expect(screen.getByText(/↓ Quietened by your feedback: you usually mark API change flags not useful/)).toBeTruthy();
   });
 });
 
@@ -382,7 +413,7 @@ describe("MemoryView", () => {
     let items = [
       item("note:1", "you", "look", "Cents, not floats"),
       item("check:x:up", "learned", "look", "You care about migration flags"),
-      item("check:y:down", "learned", "skip", "You usually don't need untested-change flags"),
+      item("check:y:down", "learned", "skip", "You usually find untested-change flags not useful"),
     ];
     let paused = false;
     const calls: string[] = [];
@@ -452,6 +483,10 @@ describe("feedback in a briefing", () => {
     const calls: string[] = [];
     const feedback: BriefingFeedback = {
       verdictOf: (item) => verdicts.get(item.title),
+      progressOf: (item) =>
+        item.placement === "check" && verdicts.get(item.title) === "not_needed"
+          ? "2 of 3: one more not useful on API change flags and Alden will quieten them."
+          : undefined,
       toggle(item, verdict) {
         calls.push(`${item.placement}:${item.checkId}:${verdict}`);
         if (verdicts.get(item.title) === verdict) verdicts.delete(item.title);
@@ -472,6 +507,11 @@ describe("feedback in a briefing", () => {
     fireEvent.click(screen.getByRole("button", { name: "× Dismiss" }));
     // A flagged check takes its own verdict ("worth flagging?").
     fireEvent.click(screen.getByRole("button", { name: "↓ Not useful" }));
+    rerender(<BriefingView briefing={briefing} feedback={feedback} />);
+    // Each reaction says how close it brought a lesson.
+    expect(
+      screen.getByText("2 of 3: one more not useful on API change flags and Alden will quieten them."),
+    ).toBeTruthy();
     expect(calls).toEqual([
       "eyes:callers.outside:agree",
       "eyes:callers.outside:agree",

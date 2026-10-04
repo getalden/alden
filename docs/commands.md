@@ -117,7 +117,9 @@ Shows a repo's time to first review and review cycle time, before and after Alde
 
 ## alden feedback
 
-Shows how often you found Alden's flags useful, and what it missed. `--json` prints the summary.
+Shows how often you found Alden's flags useful, and what it missed, then where each lesson stands in every repo you've
+given feedback in ("2 of 3: one more not useful on API change flags and Alden will quieten them"). `--json` prints the
+summary only.
 
 `--export <file>` writes your feedback to a file you can share. Repo names become a hash salted with a value that never
 leaves your machine (the same one [usage stats](telemetry.md) use), and each flag's title becomes a code salted fresh

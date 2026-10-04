@@ -1,6 +1,6 @@
 import type { AldenConfig, Briefing, LlmSection } from "@alden/schema";
 import type { DiffFile } from "../../diff/parse.js";
-import { dismissKey, type Learning, promptNotes } from "../../learn/learn.js";
+import { checkLesson, checkReason, dismissKey, type Learning, promptNotes } from "../../learn/learn.js";
 import { supportsEffort } from "../../llm/anthropic.js";
 import { affordableInputTokens } from "../../llm/budget.js";
 import { BudgetExceededError, type BudgetedResult, budgetedGenerate } from "../../llm/budgeted.js";
@@ -223,12 +223,32 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
         ]
       : [];
   });
+  // A finding on a topic your feedback quietened stays in the model's list but takes no place to look, unless it's
+  // high severity: the same rule as the check's own flags.
+  const quietLesson = (f: (typeof findings)[number]) => {
+    const lesson = f.checkId && f.severity !== "high" ? checkLesson(options.learning, f.checkId) : undefined;
+    return lesson?.direction === "down" ? lesson : undefined;
+  };
+  const quietFindings = findings.flatMap((f) => {
+    const lesson = quietLesson(f);
+    return lesson
+      ? [{ title: f.title, reason: checkReason(lesson), ...(f.anchors[0] ? { anchor: f.anchors[0] } : {}) }]
+      : [];
+  });
   const notes = prompt.reviewerNotes;
-  const hidden = [...(briefing.learning?.hidden ?? []), ...hiddenFindings];
+  const hidden = [...(briefing.learning?.hidden ?? []), ...hiddenFindings, ...quietFindings];
+  const quietened = briefing.learning?.quietened ?? [];
   return {
     ...briefing,
-    ...(hidden.length > 0 || notes > 0 ? { learning: { hidden, memory: notes } } : {}),
-    needsYourEyes: mergeLookHere(briefing.needsYourEyes, briefing.checks, findings, config.review.eyes),
+    ...(hidden.length > 0 || notes > 0 || quietened.length > 0
+      ? { learning: { hidden, ...(quietened.length > 0 ? { quietened } : {}), memory: notes } }
+      : {}),
+    needsYourEyes: mergeLookHere(
+      briefing.needsYourEyes,
+      briefing.checks,
+      findings.filter((f) => !quietLesson(f)),
+      config.review.eyes,
+    ),
     notChecked: [
       ...briefing.notChecked.filter((item) => item !== TITLE_CHECK),
       ...prompt.omittedFiles.map((path) => `${path}: left out of the model's view to fit the budget`),

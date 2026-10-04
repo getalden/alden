@@ -4,6 +4,7 @@ import {
   addNote,
   backgroundModelAllowed,
   cachedReviewQueue,
+  checkProgress,
   createGitHubClient,
   type Effort,
   editNote,
@@ -24,6 +25,7 @@ import {
   queueScope,
   type ReviewQueue,
   rankQueue,
+  reactionProgress,
   recordReaction,
   repoFromRemote,
   resolveModel,
@@ -309,6 +311,15 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
             source: event.item.source,
             check_id: event.item.checkId ?? null,
           });
+          // How close this brought a lesson, so learning is never invisible while it builds.
+          if (event.target.repo) {
+            const progress = checkProgress(
+              await loadLearning(openStore(), event.target.repo),
+              event.item,
+              event.verdict,
+            );
+            if (progress) return { ...event, progress };
+          }
         }
         return event;
       } catch (error) {
@@ -364,9 +375,11 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
       const last = await cache.get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
       const row = last?.rows?.find((r) => `${r.repo}#${r.number}`.toLowerCase() === pr.toLowerCase());
       if (!row) throw new ApiError(404, `${pr} isn't in your last queue. Refresh the queue and try again.`);
-      recordReaction(openStore(), row, reaction, row.updatedAt ?? new Date().toISOString());
+      const store = openStore();
+      recordReaction(store, row, reaction, row.updatedAt ?? new Date().toISOString());
       void track("reaction_given", { reaction });
-      return { pr, reaction };
+      const progress = reactionProgress(await loadLearning(store, row.repo), row.features, reaction);
+      return { pr, reaction, ...(progress ? { progress } : {}) };
     },
 
     async telemetry() {

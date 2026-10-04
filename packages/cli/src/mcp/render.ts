@@ -90,6 +90,7 @@ export function briefingPlaces(briefing: Briefing): Map<string, FeedbackItem> {
   otherFindings(briefing).forEach((finding, i) => {
     places.set(`F${i + 1}`, {
       source: "llm",
+      ...(finding.checkId ? { checkId: finding.checkId } : {}),
       title: finding.title,
       severity: finding.severity,
       ...(finding.anchors[0] ? { anchor: finding.anchors[0] } : {}),
@@ -108,12 +109,14 @@ export function briefingPlaces(briefing: Briefing): Map<string, FeedbackItem> {
   return places;
 }
 
-function checkLines(check: CheckResult): string[] {
+function checkLines(check: CheckResult, quietened?: string): string[] {
   const mark = { passed: "✓", flagged: "!", skipped: "–" }[check.status];
   const id = check.status === "flagged" ? ` [C:${check.id}]` : "";
   const out = [
     `- ${mark} **${check.title}**${check.heuristic ? " (inferred from the diff, can be wrong)" : ""}${id}: ${quote(check.summary)}`,
   ];
+  // The reviewer taught Alden this: don't raise it again unless it's serious.
+  if (quietened) out.push(`  - ${quote(quietened)}`);
   if (check.status === "flagged") {
     for (const evidence of check.evidence) {
       out.push(`  - ${[place(evidence.anchor), quote(evidence.text)].filter(Boolean).join(" ")}`);
@@ -179,7 +182,8 @@ export function briefingMarkdown(untrusted: Briefing, memory: MemoryItem[], used
     out.push("");
   }
 
-  out.push("## Checked", ...briefing.checks.flatMap(checkLines), "");
+  const quietened = (id: string) => briefing.learning?.quietened?.find((q) => q.checkId === id)?.reason;
+  out.push("## Checked", ...briefing.checks.flatMap((c) => checkLines(c, quietened(c.id))), "");
   out.push("## Not checked", ...briefing.notChecked.map((n) => `- ${quote(n)}`), "");
   out.push("## Files");
   for (const file of briefing.files) {
