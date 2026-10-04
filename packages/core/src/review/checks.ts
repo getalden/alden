@@ -1,5 +1,6 @@
 import type { Evidence } from "@alden/schema";
 import picomatch from "picomatch";
+import { isPureRename, onlyCommentsChanged } from "../diff/comments.js";
 import { addedLines, type DiffFile } from "../diff/parse.js";
 import { fileKind, isLockfile, sensitiveMatcher } from "../queue/files.js";
 import { type DependencyChange, diffDependencies, isManifest } from "./dependencies.js";
@@ -62,9 +63,15 @@ export const testsCheck: Check = {
   title: "Code changed without tests",
   heuristic: true,
   run({ files }) {
-    const code = changed(files).filter((f) => fileKind(f.path) === "code");
+    const touched = changed(files).filter((f) => fileKind(f.path) === "code");
+    // A comment, a blank line or a move can't change behaviour, so it needs no test.
+    const code = touched.filter((f) => !isPureRename(f) && !onlyCommentsChanged(f));
     const tests = files.filter((f) => fileKind(f.path) === "test");
-    if (code.length === 0) return skipped("No code changed.");
+    if (code.length === 0) {
+      return skipped(
+        touched.length > 0 ? "Only comments, blank lines or file moves changed in code." : "No code changed.",
+      );
+    }
     if (tests.length > 0) {
       return passed(
         `${tests.length} test file${tests.length === 1 ? "" : "s"} changed alongside ${code.length} code file${code.length === 1 ? "" : "s"}.`,

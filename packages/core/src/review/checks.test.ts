@@ -94,6 +94,22 @@ describe("tests.missing", () => {
     expect(testsCheck.run(ctx([file("docs/intro.md")])).status).toBe("skipped");
   });
 
+  it("ignores comment-only changes and pure moves", () => {
+    const comment = file("src/queue.ts", ["// Ranks the queue by age.", ""]);
+    const moved = file("src/lib/pricing.ts", [], {
+      status: "renamed",
+      previousPath: "src/pricing.ts",
+      additions: 0,
+      hunks: [],
+    });
+    expect(testsCheck.run(ctx([comment, moved]))).toMatchObject({
+      status: "skipped",
+      summary: "Only comments, blank lines or file moves changed in code.",
+    });
+    const result = testsCheck.run(ctx([comment, file("src/cart.ts", ["total += tax;"])]));
+    expect(result.evidence.map((e) => e.anchor?.path)).toEqual(["src/cart.ts"]);
+  });
+
   it("ignores deleted code", () => {
     expect(testsCheck.run(ctx([file("src/old.go", [], { status: "removed" })])).status).toBe("skipped");
   });
