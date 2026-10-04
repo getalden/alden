@@ -2,7 +2,8 @@
  * Builds getalden.dev into site/dist: `pnpm site:build`.
  *
  * The landing page is static (site/src). The docs are the repo's own docs/*.md, rendered into the site's look, in the
- * order docs/README.md lists them, so the site and the repo never disagree. Cloudflare Pages serves site/dist as is
+ * order docs/README.md lists them, so the site and the repo never disagree. /benchmarks/ is src/benchmarks.html in the
+ * same frame. Every page loads site.js (page view counts and copy buttons). Cloudflare Pages serves site/dist as is
  * (`pnpm site:deploy`), with the security headers in _headers.
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -14,9 +15,11 @@ const SRC = join(import.meta.dirname, "src");
 const OUT = join(import.meta.dirname, "dist");
 const DOCS = join(ROOT, "docs");
 const GITHUB = "https://github.com/getalden/alden/blob/main";
+const DISCORD = "https://discord.gg/ZtXFX7sxTu";
 
 rmSync(OUT, { recursive: true, force: true });
-cpSync(SRC, OUT, { recursive: true });
+// benchmarks.html is the body of /benchmarks/, wrapped in the page below.
+cpSync(SRC, OUT, { recursive: true, filter: (path) => !path.endsWith("benchmarks.html") });
 mkdirSync(join(OUT, "assets/fonts"), { recursive: true });
 for (const font of ["Geist-Variable.woff2", "GeistMono-Variable.woff2", "OFL.txt"]) {
   cpSync(join(ROOT, "packages/ui/src/fonts", font), join(OUT, "assets/fonts", font));
@@ -70,7 +73,7 @@ const header = `<header class="top">
     <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect x=".5" y=".5" width="31" height="31" rx="8" fill="#101B20" stroke="#263c44"/><path d="M8 24 L16 8 L24 24" fill="none" stroke="#14B8A6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="24" r="2" fill="#5EEAD4"/><circle cx="16" cy="8" r="2" fill="#5EEAD4"/><circle cx="24" cy="24" r="2" fill="#5EEAD4"/><circle cx="16" cy="19" r="2.4" fill="#F0FDFA"/></svg>
     <span>alden</span>
   </a>
-  <nav><a href="/docs/">Docs</a><a class="btn small" href="mailto:beta@getalden.dev?subject=Alden%20beta">Join the beta</a></nav>
+  <nav><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="${DISCORD}" rel="noopener">Discord</a><a class="btn small" href="/docs/getting-started/" data-track="install" data-label="nav">Install</a></nav>
 </header>`;
 
 function page(title: string, description: string, body: string): string {
@@ -88,7 +91,8 @@ function page(title: string, description: string, body: string): string {
 <body>
 ${header}
 ${body}
-<footer class="foot"><span class="word">alden</span><span>from the Old English for “old friend”</span><span class="links"><a href="/docs/">Docs</a><a href="/docs/privacy/">Privacy</a><span>getalden.dev</span></span></footer>
+<footer class="foot"><span class="word">alden</span><span>This site counts page views, no cookies.</span><span class="links"><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a><a href="/docs/privacy/#this-website">Privacy</a><span>getalden.dev</span></span></footer>
+<script src="/site.js" defer></script>
 </body>
 </html>
 `;
@@ -131,7 +135,19 @@ writeFileSync(
   ),
 );
 
+// --- Benchmarks ---------------------------------------------------------------------------------------------------
+
+mkdirSync(join(OUT, "benchmarks"), { recursive: true });
+writeFileSync(
+  join(OUT, "benchmarks", "index.html"),
+  page(
+    "Benchmarks · Alden",
+    "How Alden did on 150 test PRs in four repos and on recorded public PRs that later broke: what it got right, what it missed, how fast, what it cost, and how to run it again.",
+    readFileSync(join(SRC, "benchmarks.html"), "utf8"),
+  ),
+);
+
 if (!existsSync(join(OUT, "assets/screens/briefing-dark.png"))) {
   throw new Error("site/src/assets/screens is missing its screenshots. Run `pnpm screenshots`.");
 }
-console.log(`Built ${files.length} docs pages and the home page into site/dist.`);
+console.log(`Built ${files.length} docs pages, the benchmarks and the home page into site/dist.`);

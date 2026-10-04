@@ -53,3 +53,17 @@ model stay. `--full` keeps everything. Settings → Your feedback in `alden ui` 
 Off unless you say yes. With your OK, Alden sends anonymous usage stats (which commands and views you use, review
 counts and timings, which way your feedback points) to PostHog in the EU. Never code, titles, paths, repo or user
 names. See [Usage stats](telemetry.md) for every event and how to turn it off.
+
+## This website
+
+To help us improve it, getalden.dev counts page views, and clicks on its install, copy and Discord links. It sets no
+cookies, stores nothing in your browser and loads no third-party script: a few lines in the site's own `site.js` send
+each count straight to PostHog in the EU (`eu.i.posthog.com`), the same project as Alden's opt-in usage stats.
+
+Each count carries the page's path (never its query string), the domain of the site that linked you (not the full
+address), a rough screen width (phone, tablet, laptop or wide), and for a click, which link. Each page load gets a new
+random id, so visits can't be tied together, and no person profile is made. Like any web request, it reaches PostHog
+from your IP address; the project is set to discard IP addresses, and the site asks it not to look up a location.
+Nothing is sent when your browser sends
+Do Not Track or Global Privacy Control. The website is separate from Alden itself: the app sends nothing unless you
+opt in.

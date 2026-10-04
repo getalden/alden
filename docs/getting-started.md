@@ -2,26 +2,36 @@
 
 ## Install
 
-With Homebrew, on macOS or Linux (the standalone binary, which needs nothing else):
+Alden is in open beta: anyone can install it, and it's free during the beta. Pick one of these.
+
+**The desktop app, on macOS.** Alden in a window and the menu bar, which briefs your top PRs while you're away. It's
+signed and notarized, runs on Apple silicon and Intel (macOS 12 or later), and installs the `alden` command too, so it
+can be your only install. See [The desktop app](desktop.md).
+
+```sh
+brew install --cask getalden/tap/alden-desktop
+```
+
+Or download `Alden-<version>-universal.dmg` from the [releases page](https://github.com/getalden/homebrew-tap/releases).
+
+**Homebrew, on macOS or Linux.** The `alden` command as a standalone binary, which needs nothing else.
 
 ```sh
 brew install getalden/tap/alden
 ```
 
-Or with npm, which needs Node 22.13 or later:
+**npm, anywhere with Node 22.13 or later.** During the beta, releases are published under the `next` tag.
 
 ```sh
 npm install -g alden@next
 npx alden@next --help                # or run it without installing
 ```
 
-During the private beta, npm releases are published under the `next` tag. The examples below assume `alden` is
-installed; with `npx`, put `npx alden@next` in place of `alden`. There are also standalone binaries for macOS, Linux
-and Windows on the [releases page](https://github.com/getalden/homebrew-tap/releases).
+**A standalone binary.** For macOS (Apple silicon and Intel), Linux (x64 and arm64) and Windows (x64), from the
+[releases page](https://github.com/getalden/homebrew-tap/releases): `alden-<version>-<platform>.tar.gz`, or `.zip` for
+Windows, with a `SHA256SUMS` to check it against. Unpack it and put `alden` (`alden.exe`) on your PATH.
 
-On a Mac you can also have Alden in a window and the menu bar (the app installs the `alden` command too, so it can
-be your only install), which briefs your top PRs while you're away: see
-[The desktop app](desktop.md).
+The examples below assume `alden` is installed; with `npx`, put `npx alden@next` in place of `alden`.
 
 ## Sign in to GitHub
 
@@ -68,6 +78,14 @@ A briefing has three parts:
 
 See [Briefings and checks](checks.md).
 
+## Or in your browser
+
+```sh
+alden ui
+```
+
+The queue, briefings, your feedback and what Alden learned, in a local web page. See [The web UI](web-ui.md).
+
 ## Add a model (optional)
 
 Without a model, Alden runs only its deterministic checks. With one, the briefing also says what the change does,
@@ -93,3 +111,21 @@ alden review 123
 ```
 
 See [The code graph](code-graph.md).
+
+## In Claude Code
+
+With Alden installed and signed in, add the plugin in Claude Code:
+
+```text
+/plugin marketplace add getalden/claude-plugin
+/plugin install alden@getalden
+```
+
+(Or from a terminal: `claude plugin marketplace add getalden/claude-plugin`, then
+`claude plugin install alden@getalden`.) Then `/alden:review` and `/alden:queue`. See
+[Claude Code plugin](claude-code.md).
+
+## Get help
+
+Ask in the [Alden Community on Discord](https://discord.gg/ZtXFX7sxTu), where you can also tell us what works and what
+doesn't. For errors, start with `alden doctor` and [Troubleshooting](troubleshooting.md).

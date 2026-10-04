@@ -41,22 +41,24 @@
         </a>
         <nav>
           <a href="/docs/">Docs</a>
+          <a href="/benchmarks/">Benchmarks</a>
+          <a href="https://discord.gg/ZtXFX7sxTu" rel="noopener">Discord</a>
           <span class="mono faint">open source after the beta</span>
-          <a class="btn small" href="mailto:beta@getalden.dev?subject=Alden%20beta">Join the beta</a>
+          <a class="btn small" href="#install" data-track="install" data-label="nav">Install</a>
         </nav>
       </header>
 
       <section class="hero">
         <div class="hero-copy">
-          <span class="kicker"><span class="dot" aria-hidden="true"></span>private beta · macOS, Linux and Windows</span>
+          <span class="kicker"><span class="dot" aria-hidden="true"></span>open beta · free during the beta · macOS, Linux and Windows</span>
           <h1>The review companion that knows what you look for.</h1>
           <p class="lede">
             Alden ranks the PRs waiting on you and writes each one a briefing with the callers and checks the diff leaves
             out. Every place you mark useful or not useful teaches it a little more about how you review.
           </p>
           <div class="actions">
-            <a class="btn big glow-btn" href="mailto:beta@getalden.dev?subject=Alden%20beta">Ask to join</a>
-            <span class="cmd"><span class="acc">$</span>brew install getalden/tap/alden</span>
+            <a class="btn big glow-btn" href="#install" data-track="install" data-label="hero">Install Alden</a>
+            <span class="cmd" data-copy="brew-cli"><span class="acc" aria-hidden="true">$</span><code>brew install getalden/tap/alden</code></span>
           </div>
         </div>
 
@@ -118,8 +120,9 @@
           <h2>In week one it flags a lot. By week six it flags what you would.</h2>
           <p>
             Mark a place useful and Alden gives that kind of flag more weight next time. Mark it not useful and it backs
-            off. Open some PRs first and they rank higher. Everything it learns is listed, with where it came from, and you
-            can edit or forget any of it.
+            off. Keep opening PRs in one area of the code, or from one author, bot or AI agent, ahead of where Alden ranked
+            them, and PRs like that rank higher. Everything it learns is listed, with where it came from, and you can edit or forget any
+            of it.
           </p>
           <fieldset class="weeks" id="weeks" aria-label="Pick a week"></fieldset>
         </div>
@@ -153,13 +156,72 @@
       </div>
     </section>
 
+    <section class="band tint" id="install">
+      <div class="install">
+        <div class="copy">
+          <span class="kicker-num">04 / install</span>
+          <h2>Install it now. It's free during the beta.</h2>
+          <p>
+            Alden is in open beta: anyone can install it. Pick one of four ways, then sign in with GitHub. Full steps are in
+            <a href="/docs/getting-started/">Getting started</a>.
+          </p>
+        </div>
+        <div class="ways">
+          <div class="way">
+            <h3>Desktop app <span class="mono faint small">macOS</span></h3>
+            <p>Signed and notarized, for Apple silicon and Intel. Your queue in a window and the menu bar, and the <code>alden</code> command too.</p>
+            <pre data-copy="brew-cask"><code>brew install --cask getalden/tap/alden-desktop</code></pre>
+            <p class="small faint">Or download the .dmg from the <a href="https://github.com/getalden/homebrew-tap/releases" rel="noopener" data-track="install" data-label="dmg">releases page</a>.</p>
+          </div>
+          <div class="way">
+            <h3>Homebrew <span class="mono faint small">macOS · Linux</span></h3>
+            <p>The <code>alden</code> command as a standalone binary. Needs nothing else.</p>
+            <pre data-copy="brew-cli"><code>brew install getalden/tap/alden</code></pre>
+          </div>
+          <div class="way">
+            <h3>npm <span class="mono faint small">Node 22.13+</span></h3>
+            <p>During the beta, releases are published under the <code>next</code> tag.</p>
+            <pre data-copy="npm"><code>npm install -g alden@next</code></pre>
+          </div>
+          <div class="way">
+            <h3>Binary <span class="mono faint small">macOS · Linux · Windows</span></h3>
+            <p>
+              For macOS (Apple silicon, Intel), Linux (x64, arm64) and Windows (x64). Unpack it and put <code>alden</code> on
+              your PATH.
+            </p>
+            <p><a class="btn" href="https://github.com/getalden/homebrew-tap/releases" rel="noopener" data-track="install" data-label="binaries">Download a binary</a></p>
+          </div>
+        </div>
+        <div class="then">
+          <h3>Then</h3>
+          <pre data-copy="first-run"><code>alden auth login     # reuses your GitHub CLI sign-in if you have one
+alden queue          # the PRs waiting on your review, ranked
+alden review 1       # a briefing on #1
+alden ui             # or all of it in your browser</code></pre>
+          <h3>In Claude Code</h3>
+          <pre data-copy="claude-plugin"><code>/plugin marketplace add getalden/claude-plugin
+/plugin install alden@getalden</code></pre>
+          <p class="small faint">
+            Then <code>/alden:review</code> and <code>/alden:queue</code>. Alden itself must be installed and signed in first.
+            See <a href="/docs/claude-code/">Claude Code plugin</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
     <section class="band cta">
       <div class="glow bottom" aria-hidden="true"></div>
       <div class="split">
         <div class="copy">
           <h2 class="huge">Your next review is already waiting.</h2>
-          <p>We're letting in a few teams at a time. Expect a short call each week while we tune it to how you work.</p>
-          <a class="btn big light" href="mailto:beta@getalden.dev?subject=Alden%20beta">Ask to join the beta</a>
+          <p>
+            Alden is free while it's in beta. Tell us what works and what doesn't in the Alden Community on Discord, and see
+            how it did on 150 test PRs in the <a href="/benchmarks/">benchmarks</a>.
+          </p>
+          <div class="actions">
+            <a class="btn big light" href="#install" data-track="install" data-label="cta">Install Alden</a>
+            <a class="btn big ghost" href="https://discord.gg/ZtXFX7sxTu" rel="noopener" data-label="cta">Join the Discord</a>
+          </div>
         </div>
         <div class="terminal" id="terminal" aria-label="A terminal running alden queue and alden review" role="img">
           <div id="term-lines"></div>
@@ -169,8 +231,12 @@
     </section>
 
     <footer class="foot">
-      <span class="word">alden</span><span>from the Old English for “old friend”</span>
-      <span class="links"><a href="/docs/">Docs</a><a href="/docs/privacy/">Privacy</a><span>getalden.dev</span></span>
+      <span class="word">alden</span><span>This site counts page views, no cookies.</span>
+      <span class="links"
+        ><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a
+        ><a href="https://discord.gg/ZtXFX7sxTu" rel="noopener" data-label="footer">Discord</a
+        ><a href="/docs/privacy/#this-website">Privacy</a><span>getalden.dev</span></span
+      >
     </footer>
 
     <script src="/site.js" defer></script>

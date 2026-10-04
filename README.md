@@ -2,24 +2,40 @@
 
 The review companion that knows what you look for. Alden ranks the PRs waiting on you, shows what the diff doesn't (who calls the changed code), and points you at the few places that need your eyes. It learns from your feedback as you go, and it runs on your machine.
 
-> **Status: private beta.** `alden queue`, `review`, `ui`, `stats`, `memory` and `mcp` work today. Commands and output
-> formats may still change before 1.0.
+> **Status: open beta.** Anyone can install it, and it's free during the beta. `alden queue`, `review`, `ui`, `stats`,
+> `memory` and `mcp` work today. Commands and output formats may still change before 1.0. Questions and ideas: the
+> [Alden Community on Discord](https://discord.gg/ZtXFX7sxTu).
 
 ![Alden's queue beside a briefing for a Django PR](https://getalden.dev/assets/screens/briefing-dark.png)
 
-## Quickstart
+## Install
 
-Requires Node 22.13+.
+Pick one ([Getting started](https://getalden.dev/docs/getting-started/) has the details):
 
 ```sh
-npx alden@next auth login   # reuses your GitHub CLI sign-in if you have one
-npx alden@next queue        # the PRs waiting on your review, ranked
-npx alden@next open 1       # open the top one in your browser
-
-npx alden@next review 1     # brief yourself on #1 from the queue
-npx alden@next review       # or on your own uncommitted changes, before opening a PR
-npx alden@next ui           # or do all of it in your browser
+brew install --cask getalden/tap/alden-desktop   # the macOS desktop app, which includes the alden command
+brew install getalden/tap/alden                  # the command line tool, on macOS or Linux
+npm install -g alden@next                        # with npm, on Node 22.13+ (the beta is under the next tag)
 ```
+
+Or download the desktop app's .dmg or a standalone binary for macOS, Linux or Windows from the
+[releases page](https://github.com/getalden/homebrew-tap/releases). In Claude Code, add the
+[plugin](https://getalden.dev/docs/claude-code/) with `/plugin marketplace add getalden/claude-plugin` and
+`/plugin install alden@getalden`.
+
+## Quickstart
+
+```sh
+alden auth login   # reuses your GitHub CLI sign-in if you have one
+alden queue        # the PRs waiting on your review, ranked
+alden open 1       # open the top one in your browser
+
+alden review 1     # brief yourself on #1 from the queue
+alden review       # or on your own uncommitted changes, before opening a PR
+alden ui           # or do all of it in your browser
+```
+
+Without installing, put `npx alden@next` in place of `alden`.
 
 `alden review` takes a PR URL, `owner/repo#123`, or a # from your last queue. It prints the few places that need
 your eyes, every check Alden ran with its evidence (secrets, migrations, public signatures, dependencies, tests,

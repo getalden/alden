@@ -53,3 +53,9 @@ To [PostHog](https://posthog.com) in the EU (`eu.i.posthog.com`), in batches: af
 while `alden ui` runs. Each install has a random id (not derived from you or your machine), and events are sent
 without a person profile. Events wait in `~/.alden/alden.db` while you're offline, up to 5,000; turning stats off
 deletes them.
+
+## The website
+
+getalden.dev counts page views and clicks on its install, copy and Discord links, without cookies or anything stored
+in your browser, and not when your browser sends Do Not Track or Global Privacy Control. That's separate from Alden's
+usage stats, and your answer here doesn't change it. See [Privacy: this website](privacy.md#this-website).
