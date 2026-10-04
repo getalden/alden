@@ -130,6 +130,14 @@ describe("briefingMarkdown", () => {
     expect(text).toContain("- ! **critical** **Migration may lose data**");
   });
 
+  it("says where a moved file came from", () => {
+    const base = briefing();
+    const files = base.files.map((f) => ({ ...f, previousPath: "db/old.ts", status: "renamed" as const }));
+    expect(briefingMarkdown({ ...base, files }, [], false)).toContain(
+      "- `db/migrate.ts` (moved from `db/old.ts`): renamed",
+    );
+  });
+
   it("keeps a title's backticks from breaking the Markdown", () => {
     expect(briefingMarkdown(briefing(), [], false)).toContain("Add the 'review' command");
   });

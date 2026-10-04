@@ -35,6 +35,15 @@ export interface GraphContext {
   complete: boolean;
   /** Changed files the graph parsed (before or after), whose symbols and signatures it knows. */
   covered?: Set<string>;
+  /** Code files the change moved or deleted, with the places still importing them by their old path. */
+  modules?: ModuleChange[];
+}
+
+/** A module gone from its old path: moved (`movedTo`) or deleted. Its importers break like a removed symbol's callers. */
+export interface ModuleChange {
+  path: string;
+  movedTo?: string;
+  importers: CallSite[];
 }
 
 /** "path#Class.method" or "path#name". */

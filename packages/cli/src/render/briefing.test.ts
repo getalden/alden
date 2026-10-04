@@ -149,6 +149,22 @@ describe("renderBriefing", () => {
     expect(out).toContain("~ inferred from the diff alone");
   });
 
+  it("lists moved files with where they came from", () => {
+    const moved = {
+      path: "src/lib/pricing.ts",
+      previousPath: "src/pricing.ts",
+      status: "renamed" as const,
+      kind: "code" as const,
+      additions: 0,
+      deletions: 0,
+      binary: false,
+      patchMissing: false,
+    };
+    const out = plain(briefing({ files: [...briefing().files, moved] }));
+    expect(out).toContain("Moved\n  src/lib/pricing.ts moved from src/pricing.ts (no edits)\n");
+    expect(plain(briefing())).not.toContain("Moved");
+  });
+
   it("labels critical checks in full", () => {
     const flagged = check({
       id: "secrets.likely",

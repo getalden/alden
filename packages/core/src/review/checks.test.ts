@@ -451,6 +451,31 @@ describe("callers.outside", () => {
     expect(result.evidence).toHaveLength(6);
   });
 
+  it("flags files that still import a moved or deleted module by its old path", () => {
+    const result = callersCheck.run(
+      ctx([], {
+        graph: {
+          ...graph([], {}),
+          modules: [
+            {
+              path: "src/pricing.ts",
+              movedTo: "src/lib/pricing.ts",
+              importers: [{ path: "src/cart.ts", line: 1, confidence: "import" }],
+            },
+            { path: "src/legacy.ts", importers: [{ path: "src/checkout.ts", line: 3, confidence: "import" }] },
+            { path: "src/unused.ts", importers: [] },
+          ],
+        },
+      }),
+    );
+    expect(result).toMatchObject({ status: "flagged", severity: "high" });
+    expect(result.summary).toMatch(/^2 moved, removed or re-signed files or symbols still used from 2 places/);
+    expect(result.evidence).toEqual([
+      { text: "imports src/pricing.ts (moved to src/lib/pricing.ts)", anchor: { path: "src/cart.ts", line: 1 } },
+      { text: "imports src/legacy.ts (deleted)", anchor: { path: "src/checkout.ts", line: 3 } },
+    ]);
+  });
+
   it("treats a changed signature line as breaking", () => {
     const files = [
       {

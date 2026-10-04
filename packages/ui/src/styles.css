@@ -1195,6 +1195,9 @@ textarea.input {
   direction: ltr;
   unicode-bidi: plaintext;
 }
+.file .path .moved {
+  display: block;
+}
 .bar {
   display: flex;
   height: 6px;

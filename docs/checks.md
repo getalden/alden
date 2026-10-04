@@ -4,7 +4,7 @@
 
 ## What a briefing contains
 
-- **Summary**: the PR's title, author, size and files. With a model, also what the change does and whether it matches
+- **Summary**: the PR's title, author, size and files, with where any moved file came from. With a model, also what the change does and whether it matches
   its title.
 - **Needs your eyes**: a few places (3 unless you set `review.eyes`, up to 10), each with a file, a line and the reason. See
   [How Alden picks where to look](#how-alden-picks-where-to-look).
@@ -23,7 +23,7 @@ them as leads.
 | --- | --- | --- |
 | **Likely secrets** (`secrets.likely`) | Added lines that look like credentials: known key formats and high-entropy strings. Values are masked in the output. | Critical |
 | **CI status** (`ci.status`) | CI failing on the latest commit. Skipped when CI is pending, absent, or for local changes. | High |
-| **Callers outside the diff** (`callers.outside`) | Changed public code that's still called from places the PR didn't touch. See [The code graph](code-graph.md). | High when removed or re-signed code is still called, medium if only by name match, low for behaviour changes |
+| **Callers outside the diff** (`callers.outside`) | Changed public code that's still called from places the PR didn't touch, and files still importing a module the PR moved or deleted. See [The code graph](code-graph.md). | High when removed or re-signed code is still called, medium if only by name match, low for behaviour changes |
 | **Database migrations** (`migrations.changed`) | Changed migrations. Critical when they drop, rename or reshape data (SQL, Django, Laravel, Doctrine). | Medium or critical |
 | **Changed public signatures** (`signatures.changed`) | Exported functions, classes and methods whose signature changed or that were removed, in TS/JS, Python, PHP and Go. Go and PHP use the code graph; TS/JS and Python read the diff. | Low or medium |
 | **Code changed without tests** (`tests.missing`) | Code changes with no test changes alongside them. Changes that are only comments or blank lines (TS/JS, Python including docstrings, Go, PHP and other C-style or `#` languages), and files moved without edits, don't count. | Medium |

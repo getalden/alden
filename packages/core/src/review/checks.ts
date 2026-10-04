@@ -421,7 +421,9 @@ export const callersCheck: Check = {
       );
     }
     const publicChanges = graph.changes.filter((c) => c.exported && c.change !== "added");
-    if (publicChanges.length === 0) return passed("No public functions, classes or methods changed.");
+    const goneModules = (graph.modules ?? []).filter((m) => m.importers.length > 0);
+    if (publicChanges.length === 0 && goneModules.length === 0)
+      return passed("No public functions, classes or methods changed.");
 
     // A removed definition, or one whose signature changed, can break its callers outright. Graph-based changes
     // name their type; diff-based ones only a name, which then matches any symbol of that name in the file.
@@ -461,6 +463,15 @@ export const callersCheck: Check = {
       }
     }
 
+    // A moved or deleted file breaks whatever still imports it by its old path, like a removed symbol.
+    for (const module of goneModules) {
+      breakingSymbols++;
+      const why = module.movedTo ? `moved to ${module.movedTo}` : "deleted";
+      for (const site of module.importers) {
+        breaking.push({ text: `imports ${module.path} (${why})`, anchor: { path: site.path, line: site.line } });
+      }
+    }
+
     // Callers in code before callers in tests, across symbols, so the capped evidence keeps the ones that matter.
     const codeFirst = (list: Evidence[]) => list.sort((a, b) => Number(isTestEvidence(a)) - Number(isTestEvidence(b)));
     codeFirst(breaking);
@@ -473,7 +484,7 @@ export const callersCheck: Check = {
       return {
         status: "flagged",
         severity: sure ? "high" : "medium",
-        summary: `${count(breakingSymbols, "removed or re-signed public symbol")} still called from ${count(breaking.length, "place")} this PR didn't change. Check each caller still works.${incomplete}`,
+        summary: `${goneModules.length > 0 ? `${breakingSymbols} moved, removed or re-signed ${breakingSymbols === 1 ? "file or symbol" : "files or symbols"} still used from` : `${count(breakingSymbols, "removed or re-signed public symbol")} still called from`} ${count(breaking.length, "place")} this PR didn't change. Check each caller still works.${incomplete}`,
         evidence: capped([...breaking, ...reaching]),
       };
     }

@@ -547,8 +547,9 @@ export function BriefingView({
             const scale = Math.min(1, total / Math.min(totalLines, 60)) * 100;
             return (
               <li key={f.path} className="file">
-                <span className="path" title={f.path}>
+                <span className="path" title={f.previousPath ? `${f.path}, moved from ${f.previousPath}` : f.path}>
                   <Place anchor={{ path: f.path }} links={links} />
+                  {f.previousPath && <span className="moved faint small">moved from {f.previousPath}</span>}
                 </span>
                 <span>
                   <span className="add">+{f.additions}</span> <span className="del">−{f.deletions}</span>

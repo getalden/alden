@@ -40,6 +40,12 @@ for fully qualified calls (see [Laravel and Symfony](#laravel-and-symfony)).
      in the class's namespace path. Classes in the same namespace see each other without `use`. Type hints count as
      uses, since frameworks mostly use a class by injecting it.
 
+5. **Moved and deleted files.** A file the change moves or deletes is treated like a removed symbol: files that still
+   import it by its old path (and that the PR didn't change) are listed under "Callers outside the diff" as
+   `imports src/pricing.ts (moved to src/lib/pricing.ts)`. An import that still resolves after the move (`./pricing`
+   now finding `pricing/index.ts`) isn't counted. In Go, an import breaks only when no package is left in the old
+   directory. A move with no edits isn't untested code, and the briefing says where each moved file came from.
+
 Indexing stops after 60 seconds. When that happens, the briefing says the results may be incomplete. As a guide,
 Kubernetes (13,500 Go files outside `vendor/`) indexes in about 18 seconds the first time and 1.5 seconds after that,
 and symfony/symfony (12,000 PHP files) in about 12 seconds and 1 second.

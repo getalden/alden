@@ -267,6 +267,14 @@ describe("BriefingView", () => {
     });
   });
 
+  it("says where a moved file came from", () => {
+    const files = [
+      { ...briefing.files[0], path: "src/lib/charge.ts", previousPath: "src/charge.ts", status: "renamed" as const },
+    ];
+    render(<BriefingView briefing={{ ...briefing, files: files as Briefing["files"] }} />);
+    expect(screen.getByText("moved from src/charge.ts")).toBeTruthy();
+  });
+
   it("labels a critical check in words and styles it apart from high", () => {
     const checks = [
       check("secrets.likely", "flagged", { title: "Likely secrets", severity: "critical" }),

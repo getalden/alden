@@ -67,6 +67,18 @@ const VERDICT_STYLE: Record<NonNullable<LlmSection["matchesTitle"]>["verdict"], 
 
 const place = (anchor: Anchor) => `${anchor.path}${anchor.line ? `:${anchor.line}` : ""}`;
 
+/** Files the change moved or renamed, with where from: the diff alone shows them as a new path. */
+function moves(briefing: Briefing, { color }: RenderOptions): string[] {
+  const moved = briefing.files.filter((f) => f.previousPath);
+  if (moved.length === 0) return [];
+  const shown = moved.slice(0, 5).map((f) => {
+    const edits = f.additions + f.deletions === 0 ? "no edits" : `+${f.additions}/-${f.deletions}`;
+    return `  ${f.path} ${paint(`moved from ${f.previousPath} (${edits})`, "dim", color)}`;
+  });
+  const more = moved.length > 5 ? [paint(`  and ${moved.length - 5} more`, "dim", color)] : [];
+  return [paint("Moved", "bold", color), ...shown, ...more, ""];
+}
+
 /** The model's summary and whether the change matches its title, right under the header. */
 function whatItDoes(llm: LlmSection, options: RenderOptions): string[] {
   const { color, width } = options;
@@ -154,6 +166,7 @@ export function renderBriefing(untrusted: Briefing, options: RenderOptions): str
     return `${out.join("\n")}\n`;
   }
 
+  out.push(...moves(briefing, options));
   if (briefing.llm) out.push(...whatItDoes(briefing.llm, options));
 
   out.push(paint("Needs your eyes", "bold", color));

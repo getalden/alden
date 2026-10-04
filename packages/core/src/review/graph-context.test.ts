@@ -43,6 +43,34 @@ afterEach(async () => {
 });
 
 describe("local review with the code graph", () => {
+  it("flags files still importing a moved module, and doesn't call a pure move untested", async () => {
+    await mkdir(join(repo, "src/lib"));
+    git(repo, "mv", "src/rank.ts", "src/lib/rank.ts");
+    const briefing = await reviewLocalChanges(config, repo);
+
+    expect(briefing.files).toContainEqual(
+      expect.objectContaining({ path: "src/lib/rank.ts", previousPath: "src/rank.ts", status: "renamed" }),
+    );
+    const callers = briefing.checks.find((c) => c.id === "callers.outside");
+    expect(callers).toMatchObject({ status: "flagged", severity: "high" });
+    expect(callers?.evidence[0]).toEqual({
+      text: "imports src/rank.ts (moved to src/lib/rank.ts)",
+      anchor: { path: "src/cli.ts", line: 1 },
+    });
+    expect(briefing.checks.find((c) => c.id === "tests.missing")?.status).toBe("skipped");
+    expect(briefing.needsYourEyes.map((i) => i.anchor?.path)).toEqual(["src/cli.ts"]);
+  });
+
+  it("doesn't flag importers the change updated, or that still resolve", async () => {
+    await mkdir(join(repo, "src/lib"));
+    git(repo, "mv", "src/rank.ts", "src/lib/rank.ts");
+    await writeFile(join(repo, "src/cli.ts"), 'import { rankQueue } from "./lib/rank";\nrankQueue([]);\n');
+    const briefing = await reviewLocalChanges(config, repo);
+    expect(briefing.checks.find((c) => c.id === "callers.outside")?.evidence).not.toContainEqual(
+      expect.objectContaining({ text: expect.stringMatching(/^imports /) }),
+    );
+  });
+
   it("flags a re-signed function's callers and says what the graph couldn't cover", async () => {
     await writeFile(join(repo, "src/rank.ts"), "export function rankQueue(queue, now) {\n  return queue;\n}\n");
     await writeFile(join(repo, "src/other.rb"), "def main\n  puts 1\nend\n");

@@ -183,7 +183,7 @@ export function briefingMarkdown(untrusted: Briefing, memory: MemoryItem[], used
   out.push("## Not checked", ...briefing.notChecked.map((n) => `- ${quote(n)}`), "");
   out.push("## Files");
   for (const file of briefing.files) {
-    const renamed = file.previousPath ? ` (from ${file.previousPath})` : "";
+    const renamed = file.previousPath ? ` (moved from \`${file.previousPath}\`)` : "";
     const missing = file.patchMissing ? ", diff too large to fetch" : "";
     out.push(
       `- \`${file.path}\`${renamed}: ${file.status}, ${file.kind}, +${file.additions}/-${file.deletions}${missing}`,
