@@ -22,3 +22,41 @@ describe("nextToPrepare", () => {
     expect(nextToPrepare(queue(row(1), row(2), row(3), row(4)), () => "2026-10-01T00:00:00Z")).toBeUndefined();
   });
 });
+
+describe("feedback through the UI's API", () => {
+  it("says how close each useful or not useful brought a lesson", async () => {
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { closeStores } = await import("@alden/core");
+    const { createUiApi } = await import("./api.js");
+    const home = mkdtempSync(join(tmpdir(), "alden-api-"));
+    const saved = { home: process.env.ALDEN_HOME, track: process.env.DO_NOT_TRACK };
+    process.env.ALDEN_HOME = home;
+    process.env.DO_NOT_TRACK = "1";
+    try {
+      const api = createUiApi({ version: "test", cwd: home });
+      const verdict = (number: number, checkId: string) =>
+        api.addFeedback({
+          kind: "verdict",
+          target: { kind: "pr", repo: "acme/shop", number },
+          briefingAt: "2026-10-01T00:00:00.000Z",
+          item: { source: "check", checkId, title: "t", placement: "eyes" },
+          verdict: "not_needed",
+        }) as Promise<{ progress?: string }>;
+      expect((await verdict(1, "signatures.changed")).progress).toBe(
+        "1 of 3: 2 more not useful on API change flags (public signature and caller flags count together) and Alden will quieten them.",
+      );
+      expect((await verdict(2, "callers.outside")).progress).toMatch(/^2 of 3: one more not useful/);
+      expect((await verdict(3, "callers.outside")).progress).toBe(
+        "3 of 3 not useful on API change flags (public signature and caller flags count together): Alden quietens them in this repo.",
+      );
+    } finally {
+      closeStores();
+      process.env.ALDEN_HOME = saved.home;
+      if (saved.home === undefined) delete process.env.ALDEN_HOME;
+      if (saved.track === undefined) delete process.env.DO_NOT_TRACK;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});

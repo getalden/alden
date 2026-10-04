@@ -14,9 +14,10 @@ const CI: Record<CiState, { glyph: string; label: string }> = {
   none: { glyph: "–", label: "no CI" },
 };
 
+/** Until the server says how close a lesson is. */
 const REACTED: Record<Reaction, string> = {
-  up: "Noted. PRs like this rank higher.",
-  down: "Noted. PRs like this rank lower.",
+  up: "Noted. More like this.",
+  down: "Noted. Fewer like this.",
   dismiss: "Hidden until it changes",
 };
 
@@ -39,6 +40,8 @@ interface QueueViewProps {
   signIn?: ReactNode;
   reactions?: Record<string, Reaction | undefined>;
   onReact?: (key: string, reaction: Reaction) => void;
+  /** What each reaction did to learning, by PR: "Dependabot PRs: 2 not useful so far. One more and …". */
+  reactionNotes?: Record<string, string | undefined>;
   /** PRs (lowercased "owner/repo#12") with a briefing ready from the desktop app's background run. */
   ready?: Set<string>;
   /** This machine's queue scope, shown so a narrowed queue never looks like an empty one. */
@@ -58,6 +61,7 @@ export function QueueView({
   signIn,
   reactions = {},
   onReact,
+  reactionNotes = {},
   ready,
   scope,
 }: QueueViewProps) {
@@ -194,6 +198,7 @@ export function QueueView({
                   rank={i + 1}
                   selected={selected === prKey(row.pr)}
                   reaction={reactions[prKey(row.pr)]}
+                  note={reactionNotes[prKey(row.pr)]}
                   onReact={onReact}
                   ready={ready?.has(prKey(row.pr).toLowerCase()) ?? false}
                 />
@@ -279,10 +284,11 @@ function PrRow(props: {
   rank: number;
   selected: boolean;
   reaction: Reaction | undefined;
+  note?: string | undefined;
   onReact: ((key: string, reaction: Reaction) => void) | undefined;
   ready?: boolean;
 }) {
-  const { row, rank, selected, reaction, onReact, ready = false } = props;
+  const { row, rank, selected, reaction, note, onReact, ready = false } = props;
   const { pr } = row;
   const key = prKey(pr);
   const route = { view: "queue" as const, pr: { repo: pr.repo, number: pr.number } };
@@ -357,7 +363,7 @@ function PrRow(props: {
             </button>
             {reaction && (
               <span className="react-note" role="status">
-                {REACTED[reaction]}
+                {(reaction !== "dismiss" && note) || REACTED[reaction]}
               </span>
             )}
           </span>

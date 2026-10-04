@@ -2,8 +2,8 @@ import { z } from "zod";
 import { AnchorSchema, SeveritySchema } from "./briefing.js";
 
 /**
- * What a reviewer said about a briefing: agree or "not needed" on one of its flags, or "you missed something". This
- * is how phase 1's gate is measured (reviewers agree with most "needs your eyes" flags), so it's kept, locally, as
+ * What a reviewer said about a briefing: useful or not useful on one of its flags, or "you missed something". This
+ * is how phase 1's gate is measured (reviewers find most "needs your eyes" flags useful), so it's kept, locally, as
  * an append-only log. Bump `FEEDBACK_SCHEMA_VERSION` on any breaking change.
  */
 export const FEEDBACK_SCHEMA_VERSION = 1;
@@ -75,7 +75,7 @@ export const FeedbackSummarySchema = z.object({
   modelFindings: counts,
   bySource: z.object({ check: counts, llm: counts }),
   byCheck: z.record(z.string(), counts),
-  dismissed: z.number().int().describe("places dismissed on one PR; not counted as agree or not needed"),
+  dismissed: z.number().int().describe("places dismissed on one PR; not counted as useful or not useful"),
   missed: z.number().int(),
   briefings: z.number().int().describe("briefings with any feedback"),
   since: z.iso.datetime().nullable(),

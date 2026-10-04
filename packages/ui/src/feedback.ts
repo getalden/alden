@@ -22,6 +22,8 @@ export function feedbackTarget(briefing: Briefing, localRepo: string | null): Fe
 
 export interface BriefingFeedback {
   verdictOf(item: FeedbackItem): Verdict | undefined;
+  /** What the latest verdict on an item did to learning: "2 of 3: one more not useful on … and Alden will …". */
+  progressOf(item: FeedbackItem): string | undefined;
   /** Sets a verdict; the same one again takes it back. */
   toggle(item: FeedbackItem, verdict: Verdict): void;
   reportMissed(note: string, anchor?: Anchor): Promise<void>;
@@ -34,6 +36,7 @@ export function useFeedback(api: Api | undefined, localRepo: string | null) {
   const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
   const [missed, setMissed] = useState<Record<string, number>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [progress, setProgress] = useState<Record<string, string>>({});
 
   const forBriefing = useCallback(
     (briefing: Briefing): BriefingFeedback => {
@@ -43,11 +46,12 @@ export function useFeedback(api: Api | undefined, localRepo: string | null) {
         briefingAt: briefing.generatedAt,
         ...(briefing.llm?.status === "ok" && briefing.llm.model ? { model: briefing.llm.model } : {}),
       };
-      const send = async (input: FeedbackInput) => {
-        if (!api) return;
+      const send = async (input: FeedbackInput): Promise<string | undefined> => {
+        if (!api) return undefined;
         try {
-          await api.addFeedback(input);
+          const saved = (await api.addFeedback(input)) as { progress?: unknown } | null;
           setErrors(({ [id]: _, ...rest }) => rest);
+          return typeof saved?.progress === "string" ? saved.progress : undefined;
         } catch (error) {
           setErrors((all) => ({ ...all, [id]: `Couldn't save that feedback: ${(error as Error).message}` }));
           throw error;
@@ -55,13 +59,18 @@ export function useFeedback(api: Api | undefined, localRepo: string | null) {
       };
       return {
         verdictOf: (item) => verdicts[`${id}|${itemKey(item)}`],
+        progressOf: (item) => progress[`${id}|${itemKey(item)}`],
         toggle(item, verdict) {
           const key = `${id}|${itemKey(item)}`;
           const previous = verdicts[key];
           const next = previous === verdict ? undefined : verdict;
           setVerdicts(({ [key]: _, ...rest }) => (next ? { ...rest, [key]: next } : rest));
-          send({ kind: "verdict", ...base, item, verdict: next ?? "clear" }).catch(() =>
-            setVerdicts(({ [key]: _, ...rest }) => (previous ? { ...rest, [key]: previous } : rest)),
+          setProgress(({ [key]: _, ...rest }) => rest);
+          send({ kind: "verdict", ...base, item, verdict: next ?? "clear" }).then(
+            (line) => {
+              if (line) setProgress((all) => ({ ...all, [key]: line }));
+            },
+            () => setVerdicts(({ [key]: _, ...rest }) => (previous ? { ...rest, [key]: previous } : rest)),
           );
         },
         async reportMissed(note, anchor) {
@@ -72,7 +81,7 @@ export function useFeedback(api: Api | undefined, localRepo: string | null) {
         error: errors[id],
       };
     },
-    [api, localRepo, verdicts, missed, errors],
+    [api, localRepo, verdicts, missed, errors, progress],
   );
 
   return forBriefing;

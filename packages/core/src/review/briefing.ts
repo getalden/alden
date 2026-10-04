@@ -63,7 +63,7 @@ export const learningTarget = (target: BriefingTarget) =>
 export function buildBriefing(context: ReviewContext, now: Date = new Date()): Briefing {
   const reviewable = context.files.filter((f) => !isLockfile(f.path));
   const checks = runChecks(context);
-  const { eyes, hidden } = pickWithLearning(
+  const { eyes, hidden, quietened } = pickWithLearning(
     checks,
     context.learning,
     learningTarget(context.target),
@@ -96,6 +96,8 @@ export function buildBriefing(context: ReviewContext, now: Date = new Date()): B
       ...notCheckedFor(context),
       ...context.files.filter((f) => f.patchMissing).map((f) => `${f.path}: too large for GitHub to send its diff`),
     ],
-    ...(hidden.length > 0 ? { learning: { hidden, memory: 0 } } : {}),
+    ...(hidden.length > 0 || quietened.length > 0
+      ? { learning: { hidden, ...(quietened.length > 0 ? { quietened } : {}), memory: 0 } }
+      : {}),
   };
 }

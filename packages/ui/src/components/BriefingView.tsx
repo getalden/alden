@@ -85,6 +85,7 @@ function eyesItem(item: LookHere, checks: CheckResult[]): FeedbackItem {
 function findingItem(finding: LlmFinding): FeedbackItem {
   return {
     source: "llm",
+    ...(finding.checkId ? { checkId: finding.checkId } : {}),
     title: finding.title,
     severity: finding.severity,
     ...(finding.anchors[0] ? { anchor: finding.anchors[0] } : {}),
@@ -122,7 +123,7 @@ function Verdicts({ item, feedback }: { item: FeedbackItem; feedback: BriefingFe
       {button("dismiss", "× Dismiss", "Undo", "quiet")}
       {current && (
         <span className="verdict-note" role="status">
-          {NOTES[current]}
+          {current === "dismiss" ? NOTES[current] : (feedback.progressOf(item) ?? NOTES[current])}
         </span>
       )}
     </fieldset>
@@ -140,6 +141,7 @@ function SmallVerdicts({
   dismiss?: boolean;
 }) {
   const current = feedback.verdictOf(item);
+  const progress = current && current !== "dismiss" ? feedback.progressOf(item) : undefined;
   const icon = (verdict: Verdict, glyph: string, label: string) => (
     <button
       type="button"
@@ -157,6 +159,11 @@ function SmallVerdicts({
       {icon("agree", "↑", "Useful")}
       {icon("not_needed", "↓", "Not useful")}
       {dismiss && icon("dismiss", "×", "Dismiss")}
+      {progress && (
+        <span className="react-note" role="status">
+          {progress}
+        </span>
+      )}
     </>
   );
 }
@@ -311,6 +318,7 @@ export function BriefingView({
   const memory = briefing.learning?.memory ?? 0;
   const shaped = shapedBy.length > 0 || hiddenLines.length > 0 || memory > 0;
   const heuristic = new Set(briefing.checks.filter((c) => c.heuristic).map((c) => c.id));
+  const quietened = new Map((briefing.learning?.quietened ?? []).map((q) => [q.checkId, q.reason]));
   const totalLines = Math.max(...briefing.files.map((f) => f.additions + f.deletions), 1);
 
   return (
@@ -362,7 +370,7 @@ export function BriefingView({
             {briefing.needsYourEyes.map((item, i) => {
               const fbItem = eyesItem(item, briefing.checks);
               const verdict = feedback?.verdictOf(fbItem);
-              const guess = item.checkId !== undefined && heuristic.has(item.checkId);
+              const guess = item.source !== "llm" && item.checkId !== undefined && heuristic.has(item.checkId);
               return (
                 <li
                   key={`${item.title}${item.anchor ? anchorKey(item.anchor) : ""}`}
@@ -459,6 +467,7 @@ export function BriefingView({
             const isOpen = !!open[check.id];
             const status = STATUS[check.status];
             const canOpen = check.evidence.length > 0 || check.status === "flagged";
+            const quiet = quietened.get(check.id);
             return (
               <div key={check.id} className="check">
                 <button
@@ -484,8 +493,8 @@ export function BriefingView({
                     )}
                   </span>
                   <span className="sev">{check.status === "flagged" ? SEVERITY[check.severity] : "—"}</span>
-                  <span className={`status ${check.status}`}>
-                    {status.label} {canOpen ? (isOpen ? "▾" : "▸") : ""}
+                  <span className={`status ${check.status}`} title={quiet ? upperFirst(quiet) : undefined}>
+                    {quiet ? "Quietened" : status.label} {canOpen ? (isOpen ? "▾" : "▸") : ""}
                   </span>
                 </button>
                 {isOpen && (
@@ -493,6 +502,7 @@ export function BriefingView({
                     <span className="muted small" style={{ fontSize: 13 }}>
                       {check.summary}
                     </span>
+                    {quiet && <span className="learned-why">↓ {upperFirst(quiet)}</span>}
                     {check.evidence.length > 0 && (
                       <ul className="evidence">
                         {check.evidence.map((e) => (
@@ -573,8 +583,8 @@ function CheckVerdicts({ check, feedback }: { check: CheckResult; feedback: Brie
   const item = checkItem(check);
   const current = feedback.verdictOf(item);
   const notes: Partial<Record<Verdict, string>> = {
-    agree: "Noted. Kept high.",
-    not_needed: "Noted. Ranked lower next time.",
+    agree: "Noted. Alden will look for more like this.",
+    not_needed: "Noted. Fewer like this here.",
   };
   return (
     <>
@@ -594,7 +604,7 @@ function CheckVerdicts({ check, feedback }: { check: CheckResult; feedback: Brie
       >
         ↓ Not useful
       </button>
-      {current && <span className="react-note">{notes[current]}</span>}
+      {current && <span className="react-note">{feedback.progressOf(item) ?? notes[current]}</span>}
     </>
   );
 }
@@ -632,3 +642,4 @@ function Footer({ briefing, perReviewUsd }: { briefing: Briefing; perReviewUsd?:
 }
 
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+const upperFirst = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);

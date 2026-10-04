@@ -44,9 +44,15 @@ export { EXTRACTOR_VERSION, type IndexOptions, indexCachePath, indexRepo, type R
 export { type GraphLanguage, grammarPath, languageOf, parserFor } from "./graph/parser.js";
 export { type CallSite, CodeGraph, type SymbolRef } from "./graph/query.js";
 export { createResolver, loadResolverConfig, type Resolver, type ResolverConfig } from "./graph/resolve.js";
+export { AI_AGENT_LOGINS, type AuthorKind, authorName, prAuthor } from "./learn/authors.js";
 export {
   addNote,
+  checkLesson,
+  checkName,
+  checkProgress,
   checkReason,
+  checkTopic,
+  codeArea,
   describeFeature,
   editNote,
   forget,
@@ -59,6 +65,8 @@ export {
   prFeatures,
   type QueueRow,
   queueBoost,
+  quietenedReason,
+  reactionProgress,
   recordOpen,
   recordReaction,
   restore,

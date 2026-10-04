@@ -1,12 +1,34 @@
 import { writeFile } from "node:fs/promises";
-import { FeedbackLog } from "@alden/core";
+import { checkProgress, FeedbackLog, type Learning, loadLearning, openStore } from "@alden/core";
 import type { FeedbackSummary } from "@alden/schema";
 import type { Command } from "commander";
 import { paint, shouldColor } from "../render/style.js";
 
 const percent = (rate: number | null) => (rate === null ? "no verdicts yet" : `${Math.round(rate * 100)}%`);
 
-export function renderFeedback(summary: FeedbackSummary, color: boolean): string {
+/**
+ * Where each check lesson stands in a repo, from the side your verdicts lean to: "2 of 3: one more not useful on API
+ * change flags … and Alden will quieten them", or what it already does.
+ */
+export function learningLines(learning: Learning): string[] {
+  return [...learning.checkTallies]
+    .filter(([, t]) => t.agree + t.notNeeded > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([topic, t]) => {
+      const lesson = learning.checks.get(topic);
+      const verdict = (lesson ? lesson.direction === "up" : t.agree > t.notNeeded) ? "agree" : "not_needed";
+      // A topic's own id is a check id, except "api", which signature flags stand for.
+      const checkId = topic === "api" ? "signatures.changed" : topic;
+      const line = checkProgress(learning, { source: "check", checkId }, verdict);
+      return line && !line.startsWith("Saved.") ? [line] : [];
+    });
+}
+
+export function renderFeedback(
+  summary: FeedbackSummary,
+  color: boolean,
+  progress: { repo: string; lines: string[] }[] = [],
+): string {
   if (summary.briefings === 0) {
     return "No feedback yet. Mark flags useful or not useful in `alden ui` (or through `alden mcp`), and report what Alden missed.\n";
   }
@@ -25,6 +47,14 @@ export function renderFeedback(summary: FeedbackSummary, color: boolean): string
     out.push(
       `  ${id.padEnd(width)}  ${String(c.agree).padStart(3)} useful  ${String(c.notNeeded).padStart(3)} not useful  ${percent(rate)}`,
     );
+  }
+  const learning = progress.filter((p) => p.lines.length > 0);
+  if (learning.length > 0) {
+    out.push("", paint("What Alden is learning", "bold", color));
+    for (const { repo, lines } of learning) {
+      out.push(`  ${repo}`, ...lines.map((l) => `    ${l}`));
+    }
+    out.push("  Lessons need three alike, at least three to one. `alden memory` lists what's learned.");
   }
   return `${out.join("\n")}\n`;
 }
@@ -63,6 +93,21 @@ export function registerFeedbackCommand(program: Command): void {
         console.log(JSON.stringify(summary, null, 2));
         return;
       }
-      process.stdout.write(renderFeedback(summary, shouldColor(process.stdout)));
+      process.stdout.write(renderFeedback(summary, shouldColor(process.stdout), await progressByRepo(log)));
     });
+}
+
+/** Where lessons stand in each repo you've given feedback in. Never stops the command. */
+async function progressByRepo(log: FeedbackLog): Promise<{ repo: string; lines: string[] }[]> {
+  try {
+    const repos = [
+      ...new Set((await log.events()).flatMap((e) => (e.target.repo ? [e.target.repo.toLowerCase()] : []))),
+    ].sort();
+    const store = openStore();
+    const out = [];
+    for (const repo of repos) out.push({ repo, lines: learningLines(await loadLearning(store, repo)) });
+    return out;
+  } catch {
+    return [];
+  }
 }

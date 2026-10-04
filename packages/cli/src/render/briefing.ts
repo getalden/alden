@@ -189,6 +189,8 @@ export function renderBriefing(untrusted: Briefing, options: RenderOptions): str
     const [first = "", ...rest] = wrap(check.summary, width - summaryColumn);
     out.push(`  ${paint(mark.symbol, mark.style, color)} ${title}  ${severity} ${first}`);
     for (const line of rest) out.push(`${" ".repeat(summaryColumn)}${line}`);
+    const quiet = briefing.learning?.quietened?.find((q) => q.checkId === check.id);
+    if (quiet) out.push(paint(fit(`      ↓ ${quiet.reason}`, width).trimEnd(), "cyan", color));
     if (check.status === "flagged") {
       for (const evidence of check.evidence) {
         const text = withPlace(evidence.text, evidence.anchor);

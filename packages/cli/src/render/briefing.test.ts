@@ -93,24 +93,35 @@ describe("renderBriefing", () => {
             reason: "Adds a column. Migrations changed.",
             anchor: { path: "db/1.sql" },
             checkId: "migrations.changed",
-            learned: "You usually agree with migration flags (4 of 4)",
+            learned: "You usually mark migration flags useful (4 of 4)",
           },
         ],
         learning: {
           hidden: ["a.ts", "b.ts", "c.ts"].map((path) => ({
             title: `Untested change in ${path}`,
-            reason: "You usually mark untested-change flags not needed (3 of 3)",
+            reason: "You usually mark untested-change flags not useful (3 of 3)",
             anchor: { path },
           })),
           memory: 1,
         },
       }),
     );
-    expect(out).toContain("     ↑ You usually agree with migration flags (4 of 4)");
+    expect(out).toContain("     ↑ You usually mark migration flags useful (4 of 4)");
     expect(out).toContain(
-      "  Hidden: 3 places (a.ts, b.ts +1). You usually mark untested-change flags not needed (3 of 3).",
+      "  Hidden: 3 places (a.ts, b.ts +1). You usually mark untested-change flags not useful (3 of 3).",
     );
     expect(out).toContain("  The model was given 1 note on what you care about here (`alden memory`).");
+  });
+
+  it("marks a check your feedback quietened in the checks list", () => {
+    const reason = "quietened by your feedback: you usually mark untested-change flags not useful (3 of 3)";
+    const out = plain(
+      briefing({
+        checks: [check({ status: "flagged", severity: "medium", summary: "1 code file changed without tests." })],
+        learning: { hidden: [], quietened: [{ checkId: "tests.missing", reason }], memory: 0 },
+      }),
+    );
+    expect(out).toContain(`      ↓ ${reason}`);
   });
 
   it("numbers the places to look, with their lines and reasons", () => {

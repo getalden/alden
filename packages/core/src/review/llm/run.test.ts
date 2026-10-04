@@ -5,6 +5,7 @@ import { AldenConfigSchema, BriefingSchema, type CheckResult, type LookHere } fr
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { fromRestFile } from "../../diff/sources.js";
 import { type RawPullRequest, toFacts } from "../../github/pull-requests.js";
+import { learn } from "../../learn/learn.js";
 import { SpendLedger } from "../../llm/ledger.js";
 import { type GenerateResult, LlmError, type LlmProvider } from "../../llm/provider.js";
 import { closeStores } from "../../store/db.js";
@@ -130,6 +131,52 @@ describe("addModelReview on a real PR", () => {
     expect(result.notChecked.some((n) => n.startsWith("Whether the change does what its title says"))).toBe(false);
     expect(await ledger.entries()).toHaveLength(1);
     expect(BriefingSchema.safeParse(JSON.parse(JSON.stringify(result))).error).toBeUndefined();
+  });
+
+  it("tags findings with a check topic, and keeps a quietened topic's findings out of the places to look", async () => {
+    const { briefing, files } = recorded("grafana", 133736);
+    const path = "public/app/features/explore/SignalExplorer/data/metricResourceClient.ts";
+    const { provider, sent } = model({
+      output: {
+        summary: "s",
+        matchesTitle: { verdict: "yes", reason: "r" },
+        findings: [
+          { title: "No test for the new path", detail: "d", severity: "medium", anchors: [{ path }], topic: "tests" },
+          { title: "Callers break", detail: "d", severity: "medium", anchors: [{ path, line: 191 }], topic: "api" },
+        ],
+      },
+    });
+    const verdict = (number: number) => ({
+      schemaVersion: 1 as const,
+      id: `v${number}`,
+      at: "2026-09-20T12:00:00.000Z",
+      kind: "verdict" as const,
+      target: { kind: "pr" as const, repo: "acme/shop", number },
+      briefingAt: "2026-09-20T12:00:00.000Z",
+      item: { source: "check" as const, checkId: "tests.missing", title: "t", placement: "eyes" as const },
+      verdict: "not_needed" as const,
+    });
+    const learning = learn({ repo: "acme/shop", feedback: [1, 2, 3].map(verdict), opens: [], memory: [] });
+    const result = await addModelReview(briefing, {
+      provider,
+      config,
+      ledger: new SpendLedger(join(dir, "alden.db")),
+      files,
+      learning,
+    });
+    expect(sent[0]).toContain(
+      "Usually finds untested-change concerns not useful: raise them only when they're serious.",
+    );
+    expect(result.llm?.findings.map((f) => f.checkId)).toEqual(["tests.missing", "signatures.changed"]);
+    expect(result.needsYourEyes.find((e) => e.title === "Callers break")).toMatchObject({
+      checkId: "signatures.changed",
+    });
+    expect(result.needsYourEyes.some((e) => e.title === "No test for the new path")).toBe(false);
+    expect(result.learning?.hidden).toContainEqual({
+      title: "No test for the new path",
+      reason: "You usually mark untested-change flags not useful (3 of 3)",
+      anchor: { path },
+    });
   });
 
   it("sends the effort from config, or a one-off override, and records it", async () => {
