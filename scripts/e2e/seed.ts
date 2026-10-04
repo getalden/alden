@@ -7,8 +7,15 @@
  *   pnpm e2e:seed --repo owner/name --clone <path> --cleanup      # close them and delete their branches
  *
  * Alden's queue is "PRs waiting on your review", and GitHub won't let you request your own review, so the PRs come
- * from another account: ALDEN_E2E_AUTHOR_TOKEN is that account's classic token (scopes: repo, workflow), and it needs
- * write access to the repo (a collaborator, or a member of the org). Its pushes and PRs never use your own sign-in.
+ * from someone else:
+ *
+ * - A GitHub App (recommended): ALDEN_E2E_APP_ID and ALDEN_E2E_APP_KEY (the path to its private key .pem). The app
+ *   needs Contents, Pull requests, Issues and Workflows read and write, installed on the repo. PRs come from
+ *   <app>[bot]. Apps are made for automation, so GitHub doesn't flag them; a new account opening 50 PRs gets flagged
+ *   as spam and everything it made disappears.
+ * - Or another account: ALDEN_E2E_AUTHOR_TOKEN, its classic token (scopes repo and workflow) with write access.
+ *
+ * Its pushes and PRs never use your own sign-in, except team review requests, which need an org member.
  *
  * PRs go to a base branch of their own (`alden-e2e`, made from --from), so the repo's CI, which usually runs only for
  * PRs to main, stays quiet and main never sees them. Branches are made in a temporary worktree of --clone, so your
@@ -16,6 +23,7 @@
  * `pnpm e2e:verify`.
  */
 import { execFileSync } from "node:child_process";
+import { createSign } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -46,7 +54,49 @@ const manifestPath = join(ROOT, "eval/e2e", `${repo.replace("/", "__")}.json`);
 const git = (cwd: string, ...a: string[]) =>
   execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", maxBuffer: 1 << 28 }).trim();
 
-const token = process.env.ALDEN_E2E_AUTHOR_TOKEN;
+/** The author's token: the GitHub App installation's (see `authenticate`), or ALDEN_E2E_AUTHOR_TOKEN. */
+let token = process.env.ALDEN_E2E_AUTHOR_TOKEN;
+
+/** A GitHub App's JSON Web Token, to ask GitHub for an installation token. */
+function appJwt(appId: string, keyFile: string): string {
+  const now = Math.floor(Date.now() / 1000);
+  const b64 = (v: object) => Buffer.from(JSON.stringify(v)).toString("base64url");
+  const unsigned = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iat: now - 60, exp: now + 540, iss: appId })}`;
+  const signature = createSign("RSA-SHA256").update(unsigned).sign(readFileSync(keyFile, "utf8"), "base64url");
+  return `${unsigned}.${signature}`;
+}
+
+/** Sets the author's token and identity: from the GitHub App when one is configured, else the account's token. */
+async function authenticate(): Promise<{ login: string; id: number }> {
+  const appId = process.env.ALDEN_E2E_APP_ID;
+  const keyFile = process.env.ALDEN_E2E_APP_KEY;
+  if (appId && keyFile) {
+    const jwt = appJwt(appId, keyFile);
+    const installation = await gh<{ id: number }>("GET", `/repos/${repo}/installation`, undefined, [404], jwt);
+    if (!installation) throw new Error(`The GitHub App isn't installed on ${repo}. Install it there, then try again.`);
+    const access = await gh<{ token: string }>(
+      "POST",
+      `/app/installations/${installation.id}/access_tokens`,
+      {},
+      [],
+      jwt,
+    );
+    const app = await gh<{ slug: string }>("GET", "/app", undefined, [], jwt);
+    if (!access || !app) throw new Error("Couldn't get a token for the GitHub App.");
+    token = access.token;
+    const login = `${app.slug}[bot]`;
+    const user = await gh<{ id: number }>("GET", `/users/${encodeURIComponent(login)}`, undefined, [], token);
+    return { login, id: user?.id ?? 0 };
+  }
+  if (!token) {
+    throw new Error(
+      "Set ALDEN_E2E_APP_ID and ALDEN_E2E_APP_KEY (a GitHub App, recommended), or ALDEN_E2E_AUTHOR_TOKEN (another account's classic token).",
+    );
+  }
+  const me = await gh<{ login: string; id: number }>("GET", "/user");
+  if (!me) throw new Error("Couldn't read the author account.");
+  return me;
+}
 async function gh<T>(
   method: string,
   path: string,
@@ -73,7 +123,7 @@ async function gh<T>(
 function pushAs(cwd: string, ...refspecs: string[]) {
   const dir = mkdtempSync(join(tmpdir(), "alden-e2e-askpass-"));
   const askpass = join(dir, "askpass.sh");
-  writeFileSync(askpass, '#!/bin/sh\nprintf "%s" "$ALDEN_E2E_AUTHOR_TOKEN"\n');
+  writeFileSync(askpass, '#!/bin/sh\nprintf "%s" "$ALDEN_E2E_PUSH_TOKEN"\n');
   chmodSync(askpass, 0o700);
   try {
     execFileSync(
@@ -86,10 +136,13 @@ function pushAs(cwd: string, ...refspecs: string[]) {
         "push",
         "--force",
         "--quiet",
-        `https://alden-e2e@github.com/${repo}.git`,
+        `https://x-access-token@github.com/${repo}.git`,
         ...refspecs,
       ],
-      { env: { ...process.env, GIT_ASKPASS: askpass, GIT_TERMINAL_PROMPT: "0" }, stdio: ["ignore", "ignore", "pipe"] },
+      {
+        env: { ...process.env, ALDEN_E2E_PUSH_TOKEN: token, GIT_ASKPASS: askpass, GIT_TERMINAL_PROMPT: "0" },
+        stdio: ["ignore", "ignore", "pipe"],
+      },
     );
   } catch (error) {
     const stderr = String((error as { stderr?: Buffer }).stderr ?? "").trim();
@@ -107,7 +160,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ─── Cleanup ───
 if (flag("cleanup")) {
-  if (!token) throw new Error("Set ALDEN_E2E_AUTHOR_TOKEN (the author account's token).");
+  await authenticate();
   let closed = 0;
   for (let page = 1; ; page++) {
     const prs =
@@ -154,11 +207,7 @@ try {
 }
 
 async function seed(planned: Planned[]): Promise<void> {
-  if (!token)
-    throw new Error("Set ALDEN_E2E_AUTHOR_TOKEN (the author account's classic token, scopes repo and workflow).");
-
-  const author = await gh<{ login: string; id: number }>("GET", "/user");
-  if (!author) throw new Error("Couldn't read the author account.");
+  const author = await authenticate();
   const reviewer =
     option("reviewer") ?? execFileSync("gh", ["api", "user", "--jq", ".login"], { encoding: "utf8" }).trim();
   // --no-request tests the kit itself: PRs from your own account, with no review requested (they won't be in a queue).

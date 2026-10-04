@@ -96,8 +96,10 @@ pnpm e2e:verify --repo owner/name --clone <path> [--only id,id]
   `ci/FAIL`. It lives at `getalden/alden-e2e-sandbox`; the script is how it was made, so it can be made again.
 - **`e2e:seed`** opens one PR per scenario (a migration, a dependency bump, a public signature change, a stacked PR, a
   conflict and so on; scenarios that don't fit the repo are skipped) and requests your review. GitHub won't let you
-  request your own review, so the PRs come from a second account: set `ALDEN_E2E_AUTHOR_TOKEN` to that account's
-  classic token, with the `repo` and `workflow` scopes, and give the account write access to the repo. The PRs go to a
+  request your own review, so the PRs come from a GitHub App: set `ALDEN_E2E_APP_ID` and `ALDEN_E2E_APP_KEY` (the path
+  to its private key), with the app installed on the repo and given Contents, Pull requests, Issues and Workflows read
+  and write. (A second account's classic token in `ALDEN_E2E_AUTHOR_TOKEN` works too, but GitHub flags a new account
+  that opens dozens of PRs as spam and hides everything it made; apps are made for this.) The PRs go to a
   base branch of their own (`--base`, default `alden-e2e`, made from `--from`), so the repo's CI stays quiet and main
   never sees them. Branches are made in a temporary worktree of `--clone`, so your working copy isn't touched.
   `--reviewer` defaults to the GitHub CLI's account; `--team` is the team asked to review the team scenario.
