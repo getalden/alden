@@ -74,6 +74,8 @@ describe("clones", () => {
 
   it("keeps clones in the store's meta table", async () => {
     rememberClone("a/b", "/x");
-    expect(openStore().get<{ value: string }>("SELECT value FROM meta WHERE key = 'clone:a/b'")?.value).toBe(resolve("/x"));
+    expect(openStore().get<{ value: string }>("SELECT value FROM meta WHERE key = 'clone:a/b'")?.value).toBe(
+      resolve("/x"),
+    );
   });
 });
