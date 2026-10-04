@@ -52,6 +52,14 @@ export function takeToken(win: Window = window): string | undefined {
   }
 }
 
+/**
+ * Whether the desktop app just restarted Alden in a folder you chose (it adds `folder=chosen` to the link's fragment).
+ * Read before `takeToken`, which clears the fragment.
+ */
+export function takeChosenFolder(win: Window = window): boolean {
+  return /(?:^#|&)folder=chosen(?:&|$)/.test(win.location.hash);
+}
+
 export interface Session {
   version: string;
   cwd: string;
@@ -86,6 +94,13 @@ export interface Session {
 
 /** Why there's no GitHub sign-in: the keychain refused (an unsigned build of the app), or there's none anywhere. */
 export type SignInProblem = { kind: "keychain"; detail: string } | { kind: "none" };
+
+/** The clone a repo's callers come from, and how Alden found it. */
+export interface CloneInfo {
+  repo: string;
+  path: string | null;
+  how: "here" | "remembered" | "folders" | null;
+}
 
 export type SignInState =
   | { state: "idle" }
@@ -199,6 +214,8 @@ export class Api {
   /** Stores the Anthropic API key (null removes it). The answer says where the key comes from, never the key. */
   setModelKey = (key: string | null) =>
     this.request<{ key: Session["model"]["key"] }>("/api/model-key", { method: "PUT", body: JSON.stringify({ key }) });
+
+  clone = (repo: string) => this.request<CloneInfo>(`/api/clone?repo=${encodeURIComponent(repo)}`);
 
   cliStatus = () => this.request<CliStatus>("/api/cli");
 

@@ -33,6 +33,17 @@ export {
 } from "./graph/changes.js";
 export { type Checkout, checkoutPullRequest, repoFromRemote } from "./graph/checkout.js";
 export {
+  type Clone,
+  type CloneFound,
+  cloneAt,
+  clonesUnder,
+  expandHome,
+  findClone,
+  noteClone,
+  rememberClone,
+  rememberedClone,
+} from "./graph/clones.js";
+export {
   type Definition,
   type DefinitionKind,
   extractSymbols,

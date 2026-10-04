@@ -1,15 +1,15 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
   addNote,
   backgroundModelAllowed,
   checkModelKey,
+  cloneAt,
   createGitHubClient,
   type Effort,
   editNote,
   FeedbackLog,
   fetchReviewQueue,
   fetchViewer,
+  findClone,
   forget,
   forgetAll,
   JsonCache,
@@ -25,7 +25,6 @@ import {
   queueScope,
   rankQueue,
   recordReaction,
-  repoFromRemote,
   resolveModel,
   resolveModelKey,
   resolveToken,
@@ -58,19 +57,11 @@ import { parsePrRef } from "../pr-ref.js";
 import { ApiError, type ReviewRequest, type UiApi } from "./server.js";
 import { cliStatus, createSignIn, gitHubCliSignedIn, installCli } from "./setup.js";
 
-const run = promisify(execFile);
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 /** The GitHub repos the directory `alden ui` started in points at: where PR reviews can find callers. */
-export async function repoOf(cwd: string): Promise<{ root: string; repos: string[] } | undefined> {
-  try {
-    const { stdout: root } = await run("git", ["rev-parse", "--show-toplevel"], { cwd });
-    const { stdout: remotes } = await run("git", ["remote", "-v"], { cwd });
-    const repos = [...new Set(remotes.split("\n").flatMap((l) => repoFromRemote(l.split(/\s+/)[1] ?? "") ?? []))];
-    return { root: root.trim(), repos };
-  } catch {
-    return undefined;
-  }
+export function repoOf(cwd: string): Promise<{ root: string; repos: string[] } | undefined> {
+  return cloneAt(cwd);
 }
 
 async function signedIn() {
@@ -240,6 +231,12 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
       }
       const now = await resolveModelKey();
       return { key: now ? { source: now.source, where: now.where } : null };
+    },
+
+    async clone(repo) {
+      const config = await loadConfig(options.cwd);
+      const found = await findClone(repo, { cwd: options.cwd, folders: config.clones.folders }).catch(() => undefined);
+      return { repo, path: found?.path ?? null, how: found?.how ?? null };
     },
 
     cliStatus: async () => cliStatus(),

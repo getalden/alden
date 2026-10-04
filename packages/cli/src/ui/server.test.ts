@@ -42,6 +42,10 @@ const api: UiApi = {
     calls.push({ method: "setModelKey", args: key });
     return { key: key ? { source: "alden", where: "the keychain" } : null };
   },
+  clone: async (repo) => {
+    calls.push({ method: "clone", args: repo });
+    return { repo, path: null };
+  },
   cliStatus: async () => ({ state: "missing" }),
   installCli: async () => {
     calls.push({ method: "installCli", args: undefined });
@@ -235,6 +239,12 @@ describe("alden ui server", () => {
       { method: "setModelKey", args: key },
       { method: "setModelKey", args: null },
     ]);
+  });
+
+  it("says which clone a repo's callers come from", async () => {
+    const res = await call("/api/clone?repo=acme/shop", { headers: authed });
+    expect(JSON.parse(res.text)).toEqual({ repo: "acme/shop", path: null });
+    expect((await call("/api/clone?repo=nope", { headers: authed })).status).toBe(400);
   });
 
   it("passes stats options through", async () => {

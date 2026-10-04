@@ -43,6 +43,8 @@ export interface UiApi {
    * says where the key now comes from, never the key.
    */
   setModelKey(key: string | null): Promise<unknown>;
+  /** The local clone PR briefings on `repo` ("owner/name") find callers in, or null when there's none. */
+  clone(repo: string): Promise<unknown>;
   /** The desktop app's `alden` command: whether it's installed, and installing it. */
   cliStatus(): Promise<unknown>;
   installCli(): Promise<unknown>;
@@ -328,6 +330,12 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
           throw new ApiError(400, "Send { key }: the API key, or null to remove the stored one.");
         }
         send(res, 200, await api.setModelKey(body.key));
+        return;
+      }
+      case "GET /api/clone": {
+        const repo = url.searchParams.get("repo");
+        if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new ApiError(400, "Send ?repo=owner/name.");
+        send(res, 200, await api.clone(repo));
         return;
       }
       case "GET /api/cli":
