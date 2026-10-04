@@ -155,6 +155,41 @@ describe("size and bots", () => {
     expect(r).toMatchObject({ lane: "fast-track", fastTrack: "dependency patch bump" });
   });
 
+  it("ranks a major dependency bump up and says which package, even with a tiny diff", () => {
+    const bump = facts({
+      title: "Bump nesbot/carbon to 4",
+      author: "dependabot",
+      authorIsBot: true,
+      additions: 1,
+      deletions: 1,
+      files: [{ path: "composer.json", additions: 1, deletions: 1 }],
+    });
+    const quiet = rank(bump);
+    expect(quiet.reasons).toEqual([]);
+    const loud = rank({ ...bump, majorBumps: [{ name: "nesbot/carbon", from: "3", to: "4" }] });
+    expect(loud.score.risk).toBe(quiet.score.risk + 2);
+    expect(loud.reasons).toEqual(["major bump: nesbot/carbon 3 → 4"]);
+    const several = rank({
+      ...bump,
+      majorBumps: [
+        { name: "nesbot/carbon", from: "3", to: "4" },
+        { name: "symfony/console", from: "6", to: "7" },
+      ],
+    });
+    expect(several.reasons).toEqual(["major bump: nesbot/carbon 3 → 4 +1"]);
+  });
+
+  it("never fast-tracks a major bump, whatever its title says", () => {
+    const r = rank(
+      facts({
+        title: "Bump left-pad from 1.0.4 to 1.0.5",
+        files: [{ path: "package.json", additions: 1, deletions: 1 }],
+        majorBumps: [{ name: "react", from: "18", to: "19" }],
+      }),
+    );
+    expect(r.lane).toBe("needs-you");
+  });
+
   it("doesn't treat a bot's pile of PRs as a teammate waiting", () => {
     expect(rank(facts({ author: "dependabot", authorIsBot: true }), 28).reasons).toEqual([]);
 

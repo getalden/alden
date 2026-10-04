@@ -47,6 +47,33 @@ describe("parseManifest", () => {
     ]);
   });
 
+  it("reads Cargo.toml tables, workspace versions and target tables, skipping path-only crates", () => {
+    const text = `
+[dependencies]
+serde = "1.0"
+tokio = { version = "1.40", features = ["full"] }
+local = { path = "../local" }
+shared = { workspace = true }
+
+[dev-dependencies]
+insta = "1.41"
+
+[workspace.dependencies]
+anyhow = "1"
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.29"
+`;
+    expect(names("Cargo.toml", text)).toEqual([
+      "dev:insta@1.41",
+      "runtime:anyhow@1",
+      "runtime:nix@0.29",
+      "runtime:serde@1.0",
+      "runtime:tokio@1.40",
+    ]);
+    expect(isManifest("crates/core/Cargo.toml")).toBe(true);
+  });
+
   it("reads requirements files, treating -dev files as dev", () => {
     const text =
       "# pinned\nDjango==5.2.4\ncelery[redis]>=5.4 ; python_version >= '3.11'\n-r base.txt\n--index-url https://x\n";

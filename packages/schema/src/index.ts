@@ -58,6 +58,8 @@ export {
   FastTrackKindSchema,
   type Lane,
   LaneSchema,
+  type MajorBump,
+  MajorBumpSchema,
   type PullRequestFacts,
   PullRequestFactsSchema,
   QUEUE_SCHEMA_VERSION,

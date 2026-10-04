@@ -23,7 +23,7 @@ export type DependencyChange =
 
 /** Manifests Alden can read, one per supported ecosystem. */
 export const isManifest = picomatch(
-  ["**/package.json", "**/composer.json", "**/go.mod", "**/requirements*.txt", "**/pyproject.toml"],
+  ["**/package.json", "**/composer.json", "**/go.mod", "**/requirements*.txt", "**/pyproject.toml", "**/Cargo.toml"],
   { dot: true },
 );
 
@@ -147,6 +147,38 @@ function parsePyproject(text: string): Parsed {
   return map;
 }
 
+type CargoDeps = Record<string, unknown>;
+interface CargoToml {
+  dependencies?: CargoDeps;
+  "dev-dependencies"?: CargoDeps;
+  "build-dependencies"?: CargoDeps;
+  workspace?: { dependencies?: CargoDeps };
+  target?: Record<
+    string,
+    { dependencies?: CargoDeps; "dev-dependencies"?: CargoDeps; "build-dependencies"?: CargoDeps }
+  >;
+}
+
+/** Cargo.toml: the main, dev and build tables, the workspace's shared versions, and per-target tables. */
+function parseCargoToml(text: string): Parsed {
+  const toml = parseToml(text) as CargoToml;
+  const map: Parsed = new Map();
+  const deps = (section: CargoDeps | undefined, group: DependencyGroup) => {
+    for (const [name, value] of Object.entries(section ?? {})) {
+      // `{ path = "..." }` and `{ workspace = true }` carry no version of their own.
+      const version = typeof value === "string" ? value : (value as { version?: unknown })?.version;
+      if (typeof version === "string") add(map, name, version, group);
+    }
+  };
+  for (const tables of [toml, ...Object.values(toml.target ?? {})]) {
+    deps(tables.dependencies, "runtime");
+    deps(tables["dev-dependencies"], "dev");
+    deps(tables["build-dependencies"], "dev");
+  }
+  deps(toml.workspace?.dependencies, "runtime");
+  return map;
+}
+
 /** Reads a manifest's dependencies. Throws on unparseable content, which the check reports as skipped. */
 export function parseManifest(path: string, text: string): Parsed {
   const name = path.split("/").at(-1) ?? path;
@@ -155,11 +187,12 @@ export function parseManifest(path: string, text: string): Parsed {
   if (name === "go.mod") return parseGoMod(text);
   if (name === "pyproject.toml") return parsePyproject(text);
   if (/^requirements.*\.txt$/.test(name)) return parseRequirements(text, path);
+  if (name === "Cargo.toml") return parseCargoToml(text);
   return new Map();
 }
 
-/** The first number in a version spec, or [major, minor] for 0.x (where minor bumps break). */
-function breakingPart(version: string): string | undefined {
+/** The first number in a version spec, or "0.minor" for 0.x (where minor bumps break). */
+export function breakingPart(version: string): string | undefined {
   const match = /(\d+)(?:\.(\d+))?/.exec(version);
   if (!match) return undefined;
   return match[1] === "0" ? `0.${match[2] ?? "0"}` : match[1];

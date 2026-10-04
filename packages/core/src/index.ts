@@ -96,6 +96,7 @@ export {
   type StopReason,
 } from "./llm/provider.js";
 export { hasAnthropicCredentials, type ProviderChoice, selectProvider } from "./llm/select.js";
+export { type MajorBump, majorBumps } from "./queue/bumps.js";
 export { type FileKind, fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";
 export {
   type FastTrackKind,

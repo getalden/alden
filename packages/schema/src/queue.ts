@@ -8,6 +8,12 @@ export const QUEUE_SCHEMA_VERSION = 1;
 
 export const CiStateSchema = z.enum(["success", "failure", "pending", "none"]);
 
+export const MajorBumpSchema = z.object({
+  name: z.string().describe("the package, as its manifest names it"),
+  from: z.string().describe('the major version before, e.g. "3", or "0.2" for a 0.x version'),
+  to: z.string().describe("the major version after"),
+});
+
 export const PullRequestFactsSchema = z.object({
   repo: z.string().describe("owner/name"),
   number: z.number().int(),
@@ -38,6 +44,10 @@ export const PullRequestFactsSchema = z.object({
   }),
   codeownedFiles: z.array(z.string()).describe("changed files the viewer owns through CODEOWNERS"),
   stackedPrs: z.number().int().describe("open PRs built on top of this one"),
+  majorBumps: z
+    .array(MajorBumpSchema)
+    .optional()
+    .describe("dependencies the PR's manifest changes move up a major version (or a 0.x minor one)"),
 });
 
 export const LaneSchema = z.enum(["needs-you", "fast-track"]);
@@ -73,6 +83,7 @@ export const RankedQueueSchema = z.object({
 });
 
 export type CiState = z.infer<typeof CiStateSchema>;
+export type MajorBump = z.infer<typeof MajorBumpSchema>;
 export type PullRequestFacts = z.infer<typeof PullRequestFactsSchema>;
 export type Lane = z.infer<typeof LaneSchema>;
 export type FastTrackKind = z.infer<typeof FastTrackKindSchema>;
