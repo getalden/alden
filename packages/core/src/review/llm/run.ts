@@ -228,7 +228,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   return {
     ...briefing,
     ...(hidden.length > 0 || notes > 0 ? { learning: { hidden, memory: notes } } : {}),
-    needsYourEyes: mergeLookHere(briefing.needsYourEyes, briefing.checks, findings),
+    needsYourEyes: mergeLookHere(briefing.needsYourEyes, briefing.checks, findings, config.review.eyes),
     notChecked: [
       ...briefing.notChecked.filter((item) => item !== TITLE_CHECK),
       ...prompt.omittedFiles.map((path) => `${path}: left out of the model's view to fit the budget`),

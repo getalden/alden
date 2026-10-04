@@ -63,7 +63,12 @@ export const learningTarget = (target: BriefingTarget) =>
 export function buildBriefing(context: ReviewContext, now: Date = new Date()): Briefing {
   const reviewable = context.files.filter((f) => !isLockfile(f.path));
   const checks = runChecks(context);
-  const { eyes, hidden } = pickWithLearning(checks, context.learning, learningTarget(context.target));
+  const { eyes, hidden } = pickWithLearning(
+    checks,
+    context.learning,
+    learningTarget(context.target),
+    context.config.review.eyes,
+  );
   return {
     schemaVersion: BRIEFING_SCHEMA_VERSION,
     target: context.target,

@@ -127,7 +127,7 @@ export const BriefingSchema = z.object({
   }),
   files: z.array(BriefingFileSchema),
   checks: z.array(CheckResultSchema),
-  needsYourEyes: z.array(LookHereSchema).max(3),
+  needsYourEyes: z.array(LookHereSchema).max(10).describe("the places to look first, `review.eyes` of them at most"),
   notChecked: z.array(z.string()).describe("what Alden did not check, stated plainly"),
   llm: LlmSectionSchema.optional().describe("the model's view; absent when no model was asked"),
   learning: BriefingLearningSchema.optional().describe("what your feedback and memory changed; absent when nothing"),

@@ -366,6 +366,13 @@ describe("mergeLookHere", () => {
     expect(merged[0]?.reason).toBe("d (and 2 more places)");
   });
 
+  it("holds as many places as review.eyes asks for", () => {
+    const findings = ["a", "b", "c", "d", "e", "f"].map((f) => finding(`Bug in ${f}`, "high", [`${f}.ts`]));
+    expect(mergeLookHere([], [], findings)).toHaveLength(3);
+    expect(mergeLookHere([], [], findings, 5)).toHaveLength(5);
+    expect(mergeLookHere([], [], findings, 10)).toHaveLength(6);
+  });
+
   it("never gives one file two slots", () => {
     const merged = mergeLookHere(
       [item("tests.missing", "a.ts")],

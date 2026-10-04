@@ -51,6 +51,12 @@ export const AldenConfigSchema = z.object({
       enabled: z.boolean().optional(),
     })
     .prefault({}),
+  review: z
+    .object({
+      /** How many places "Needs your eyes" holds: the few a careful reviewer would look at first. */
+      eyes: z.number().int().min(1).max(10).default(3),
+    })
+    .prefault({}),
   background: z
     .object({
       /** The desktop app briefs the top PRs waiting on you while you're away, so they're ready when you're back. */

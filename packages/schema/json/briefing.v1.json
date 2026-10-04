@@ -275,7 +275,7 @@
       }
     },
     "needsYourEyes": {
-      "maxItems": 3,
+      "maxItems": 10,
       "type": "array",
       "items": {
         "type": "object",
@@ -327,7 +327,8 @@
           "reason"
         ],
         "additionalProperties": false
-      }
+      },
+      "description": "the places to look first, `review.eyes` of them at most"
     },
     "notChecked": {
       "type": "array",

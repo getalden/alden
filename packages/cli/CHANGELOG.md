@@ -4,6 +4,9 @@
 
 ### Patch Changes
 
+- Choose how many places "Needs your eyes" holds: `review.eyes`, 1 to 10 (3 by default), in Settings or with
+  `alden config set review.eyes 5`.
+
 - When the model's thinking uses up all its room before it answers (one PR in six in the latest eval, whatever the
   PR's size), Alden now asks once more with low effort and less room, within what's left of your per-review cap (sending only the files that fit, for
   a big PR), instead of discarding the review. The briefing says when it did. Failed model calls now say what went wrong.

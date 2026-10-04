@@ -150,6 +150,7 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
         desktop: options.desktop === true,
         signIn: { source: resolved?.source ?? null, gitHubCli: await gitHubCliSignedIn() },
         queueScope: queueScope(config),
+        eyes: config.review.eyes,
         ...(options.desktop ? { cli: cliStatus() } : {}),
         background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
         repo: (await repoOf(options.cwd)) ?? null,

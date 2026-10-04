@@ -62,7 +62,7 @@ alden review                         # or your own uncommitted changes
 
 A briefing has three parts:
 
-1. **Needs your eyes**: at most 3 places, each with a file, a line and the reason.
+1. **Needs your eyes**: a few places (3 unless you change `review.eyes`), each with a file, a line and the reason.
 2. **Checked**: every check Alden ran, what it found, and the evidence.
 3. **Not checked**: what Alden couldn't check, so you know what's still on you.
 

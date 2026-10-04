@@ -24,6 +24,7 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
   const [effort, setEffort] = useState(session.model.effort ?? "");
   const [perReview, setPerReview] = useState(String(session.budget.perReviewUsd));
   const [daily, setDaily] = useState(String(session.budget.dailyUsd));
+  const [eyes, setEyes] = useState(String(session.eyes ?? 3));
   const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string }>();
   const [saving, setSaving] = useState(false);
   const [theme, setTheme] = useState<Theme>(readTheme);
@@ -48,6 +49,7 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
     if (effort !== (session.model.effort ?? "")) changes.push(["model.effort", effort || null]);
     if (Number(perReview) !== session.budget.perReviewUsd) changes.push(["budget.perReviewUsd", perReview]);
     if (Number(daily) !== session.budget.dailyUsd) changes.push(["budget.dailyUsd", daily]);
+    if (Number(eyes) !== (session.eyes ?? 3)) changes.push(["review.eyes", eyes]);
     try {
       for (const [key, value] of changes) await api.setConfig(key, value);
       setStatus({ tone: "ok", text: changes.length > 0 ? "Saved to your user config." : "Nothing changed." });
@@ -140,6 +142,19 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
                 </span>
               </label>
             </div>
+            <h2 className="label sep">Briefings</h2>
+            <label className="field" style={{ maxWidth: 260 }}>
+              Places in "Needs your eyes"
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={10}
+                value={eyes}
+                onChange={(e) => setEyes(e.target.value)}
+              />
+              <span className="help">The few places to look first, 1 to 10. Default 3.</span>
+            </label>
             <p className="muted small">
               When a briefing would pass its cap, Alden doesn't ask the model and shows the checks. Changes go to your
               user config, like <code>alden config set</code>; a repo's <code>.alden.toml</code> still overrides them

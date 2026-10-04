@@ -16,17 +16,22 @@ function fromFinding(finding: LlmFinding, used: Set<string>): LookHere | undefin
 }
 
 /**
- * The final three places to look. Deterministic high-severity picks (secrets, destructive migrations) always keep
+ * The final places to look (`max` of them, three unless `review.eyes` says otherwise). Deterministic high-severity picks (secrets, destructive migrations) always keep
  * their slots; then the model's findings, most severe first; then the remaining deterministic picks. One slot per file.
  */
-export function mergeLookHere(deterministic: LookHere[], checks: CheckResult[], findings: LlmFinding[]): LookHere[] {
+export function mergeLookHere(
+  deterministic: LookHere[],
+  checks: CheckResult[],
+  findings: LlmFinding[],
+  max: number = MAX_LOOK_HERE,
+): LookHere[] {
   const severityOf = (item: LookHere): Severity => checks.find((c) => c.id === item.checkId)?.severity ?? "info";
   const withSource = deterministic.map((item) => ({ ...item, source: item.source ?? ("check" as const) }));
 
   const picked: LookHere[] = [];
   const used = new Set<string>();
   const take = (item: LookHere | undefined) => {
-    if (!item || picked.length >= MAX_LOOK_HERE) return;
+    if (!item || picked.length >= max) return;
     if (item.anchor) {
       if (used.has(item.anchor.path)) return;
       used.add(item.anchor.path);

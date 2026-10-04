@@ -2,7 +2,9 @@ import type { BriefingLearning, CheckResult, Evidence, LookHere, Severity } from
 import { checkReason, dismissKey, type Learning } from "../learn/learn.js";
 import { isLockfile } from "../queue/files.js";
 
+/** How many places "Needs your eyes" holds unless `review.eyes` says otherwise, and the most it can be set to. */
 export const MAX_LOOK_HERE = 3;
+export const MOST_LOOK_HERE = 10;
 
 const SEVERITY_RANK: Record<Severity, number> = { high: 3, medium: 2, low: 1, info: 0 };
 
@@ -20,7 +22,7 @@ const CHECK_PRIORITY = [
 
 /**
  * Not places to look: failing CI is the author's move (the queue already says "ping @author"), so it never takes
- * one of the three slots.
+ * one of the slots.
  */
 const NOT_A_PLACE = new Set(["ci.status"]);
 
@@ -84,12 +86,13 @@ export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}
     return true;
   };
 
-  // Round-robin in severity order until three are picked or nothing new can be taken.
+  // Round-robin in severity order until enough are picked or nothing new can be taken.
+  const limit = adjust.max ?? MAX_LOOK_HERE;
   let progress = true;
-  while (picked.length < MAX_LOOK_HERE && progress) {
+  while (picked.length < limit && progress) {
     progress = false;
     for (const check of flagged) {
-      if (picked.length >= MAX_LOOK_HERE) break;
+      if (picked.length >= limit) break;
       if (check.severity === "low" && picked.some((p) => p.checkId === check.id)) continue;
       if (take(check)) progress = true;
     }
@@ -111,6 +114,8 @@ export interface PickAdjustments {
   skip?: (check: CheckResult, title: string, path: string) => boolean;
   prefer?: (checkId: string) => boolean;
   why?: (checkId: string) => string | undefined;
+  /** How many places to pick (`review.eyes`); MAX_LOOK_HERE when unset. */
+  max?: number;
 }
 
 /**
@@ -122,8 +127,9 @@ export function pickWithLearning(
   checks: CheckResult[],
   learning: Learning | undefined,
   target: string,
+  max: number = MAX_LOOK_HERE,
 ): { eyes: LookHere[]; hidden: BriefingLearning["hidden"] } {
-  if (!learning) return { eyes: pickLookHere(checks), hidden: [] };
+  if (!learning) return { eyes: pickLookHere(checks, { max }), hidden: [] };
   const hiddenWhy = (check: CheckResult, title: string, path: string): string | undefined => {
     const at = learning.dismissed.get(
       dismissKey(target, { source: "check", checkId: check.id, title, anchor: { path } }),
@@ -134,6 +140,7 @@ export function pickWithLearning(
     return undefined;
   };
   const eyes = pickLookHere(checks, {
+    max,
     skip: (check, title, path) => hiddenWhy(check, title, path) !== undefined,
     prefer: (id) => !learning.paused && learning.checks.get(id)?.direction === "up",
     why: (id) => {
@@ -142,7 +149,7 @@ export function pickWithLearning(
     },
   });
   const shown = new Set(eyes.map((e) => `${e.checkId}|${e.anchor?.path}`));
-  const hidden = pickLookHere(checks).flatMap((item) => {
+  const hidden = pickLookHere(checks, { max }).flatMap((item) => {
     const check = checks.find((c) => c.id === item.checkId);
     if (!check || !item.anchor || shown.has(`${item.checkId}|${item.anchor.path}`)) return [];
     const reason = hiddenWhy(check, item.title, item.anchor.path);

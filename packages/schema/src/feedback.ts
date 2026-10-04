@@ -22,7 +22,7 @@ export const FeedbackItemSchema = z.object({
   severity: SeveritySchema.optional(),
   anchor: AnchorSchema.optional(),
   /**
-   * "eyes" when it was one of the (at most three) places to look, "finding" for the model's other findings, "check"
+   * "eyes" when it was one of the few places to look, "finding" for the model's other findings, "check"
    * for a check's own row ("worth flagging?").
    */
   placement: z.enum(["eyes", "finding", "check"]),

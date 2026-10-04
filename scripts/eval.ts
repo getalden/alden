@@ -4,7 +4,12 @@
  *
  * `--no-llm` measures the checks and code graph alone: free, no key needed, and the baseline the model adds to.
  * `--only reg` runs just the regression cases (PRs a later PR had to fix); `--only reg-cli,hugo` takes several, and
- * `--pr gohugoio/hugo#15231,cli/cli#13009` picks single PRs.
+ * `--pr gohugoio/hugo#15231,cli/cli#13009` picks single PRs. `--eyes <n>` sets how many places "Needs your eyes"
+ * holds (`review.eyes`).
+ *
+ * `--replay <results file>` re-scores a saved run without calling the model: the same model answers, re-picked with
+ * today's code and `--eyes`, so tuning how places are picked costs nothing. It needs a run saved since replays
+ * existed (each row keeps the model's findings).
  *
  * Without --yes it only prints what the run could cost. With --yes it calls the configured provider (spending against
  * your caps and ledger like any review) and writes eval/results/<time>-<model>.json. Measures what needs no labels
@@ -23,6 +28,7 @@ import {
   fromRestFile,
   loadConfig,
   MAX_OUTPUT_TOKENS,
+  mergeLookHere,
   type RawPullRequest,
   type ReviewContext,
   renderFileDiff,
@@ -31,7 +37,7 @@ import {
   toFacts,
   worstCaseUsd,
 } from "../packages/core/src/index.js";
-import type { Briefing } from "../packages/schema/src/index.js";
+import type { Briefing, LlmSection } from "../packages/schema/src/index.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const FIXTURES = join(ROOT, "packages/core/src/github/__fixtures__");
@@ -53,7 +59,23 @@ const expectations = JSON.parse(readFileSync(join(ROOT, "eval/expectations.json"
 >;
 
 const config = await loadConfig();
-const noLlm = args.includes("--no-llm");
+const eyesFlag = flag("--eyes");
+if (eyesFlag) config.review.eyes = Number(eyesFlag);
+const replayFile = flag("--replay");
+/** A saved run's model answers, by PR, for --replay. */
+const replayed = replayFile
+  ? new Map(
+      (JSON.parse(readFileSync(replayFile, "utf8")) as { rows: { id: string; llm?: LlmSection }[] }).rows.map((r) => [
+        r.id,
+        r.llm,
+      ]),
+    )
+  : undefined;
+if (replayed && [...replayed.values()].every((llm) => llm === undefined)) {
+  console.error(`${replayFile} has no saved model answers to replay: it was saved before replays existed.`);
+  process.exit(1);
+}
+const noLlm = args.includes("--no-llm") || replayed !== undefined;
 const choice = noLlm ? undefined : selectProvider(config, flag("--model"));
 if (choice && !choice.ok) {
   console.error(choice.reason);
@@ -132,6 +154,10 @@ if (provider) {
     console.log("Nothing sent. Add --yes to run it, or --no-llm to measure the checks alone for free.");
     process.exit(0);
   }
+} else if (replayed) {
+  console.log(
+    `${cases.length} recorded PRs, replaying the model's answers from ${replayFile} with ${config.review.eyes} places to look (no cost).`,
+  );
 } else {
   console.log(`${cases.length} recorded PRs, checks and code graph only (no model, no cost).`);
 }
@@ -144,6 +170,7 @@ interface EvalRow {
   broke: { path: string; inEyes: boolean; flagged: boolean }[];
   /** The first answer ran out of room while thinking, and a low-effort retry answered. */
   retried?: boolean;
+  llm?: LlmSection;
   status: string | undefined;
   note: string | undefined;
   seconds: number;
@@ -176,17 +203,27 @@ const rows: EvalRow[] = [];
 for (const c of cases) {
   const started = Date.now();
   const { briefing: base, callerSnippets } = await withGraph(c);
-  const result: Briefing = provider
-    ? await addModelReview(base, {
-        provider,
-        config,
-        ledger,
-        files: c.files,
-        description: c.description,
-        ...(callerSnippets ? { callerSnippets } : {}),
-        ...(effort ? { effort } : {}),
-      })
-    : base;
+  const saved = replayed?.get(c.id);
+  const result: Briefing = saved
+    ? {
+        ...base,
+        llm: saved,
+        needsYourEyes:
+          saved.status === "ok"
+            ? mergeLookHere(base.needsYourEyes, base.checks, saved.findings, config.review.eyes)
+            : base.needsYourEyes,
+      }
+    : provider
+      ? await addModelReview(base, {
+          provider,
+          config,
+          ledger,
+          files: c.files,
+          description: c.description,
+          ...(callerSnippets ? { callerSnippets } : {}),
+          ...(effort ? { effort } : {}),
+        })
+      : base;
   const seconds = (Date.now() - started) / 1000;
   const llm = result.llm;
   const places = [
@@ -233,6 +270,8 @@ for (const c of cases) {
     slotCapOk: slotCap ? (slotsOnGlob ?? 0) <= slotCap.max : undefined,
     summary: llm?.summary,
     titles: llm?.findings.map((f) => `[${f.severity}] ${f.title}`) ?? [],
+    // The whole model answer, so --replay can re-pick places from it later without calling the model.
+    ...(llm ? { llm } : {}),
     retried: llm?.status === "ok" && llm.effort === "low" && llm.note !== undefined,
   });
   const row = rows.at(-1);
@@ -262,7 +301,8 @@ const byLanguage = Object.fromEntries(
   }),
 );
 const summary = {
-  model: provider?.model ?? "checks only",
+  model: provider?.model ?? (replayed ? `replay of ${replayFile}` : "checks only"),
+  eyes: config.review.eyes,
   provider: provider?.provider ?? "none",
   graph: clones ? "with clones" : "diff only",
   regressions: {
@@ -291,7 +331,7 @@ mkdirSync(join(ROOT, "eval/results"), { recursive: true });
 const file = join(
   ROOT,
   "eval/results",
-  `${summary.at.replace(/[:.]/g, "-")}-${provider ? `${provider.model}-${summary.effort}` : "checks-only"}.json`,
+  `${summary.at.replace(/[:.]/g, "-")}-${provider ? `${provider.model}-${summary.effort}` : replayed ? `replay-eyes${config.review.eyes}` : "checks-only"}.json`,
 );
 writeFileSync(file, `${JSON.stringify({ summary, rows }, null, 2)}\n`);
 console.log(`Saved ${file}`);

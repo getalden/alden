@@ -71,6 +71,12 @@ Default sensitive paths:
 **/composer.lock      **/go.sum          **/poetry.lock
 ```
 
+## review
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `review.eyes` | `3` | How many places "Needs your eyes" holds, 1 to 10: the few a careful reviewer would look at first. More catches more, and asks more of your attention. |
+
 ## background
 
 For the [desktop app](desktop.md#while-youre-away), which briefs your top PRs while you're away.

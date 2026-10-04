@@ -6,7 +6,7 @@
 
 - **Summary**: the PR's title, author, size and files. With a model, also what the change does and whether it matches
   its title.
-- **Needs your eyes**: at most 3 places, each with a file, a line and the reason. See
+- **Needs your eyes**: a few places (3 unless you set `review.eyes`, up to 10), each with a file, a line and the reason. See
   [How Alden picks where to look](#how-alden-picks-where-to-look).
 - **Checked**: every check, with its result (passed, flagged or skipped), a summary and evidence. Evidence is what
   the check looked at and found, usually anchored to a file and line.
@@ -33,7 +33,7 @@ them as leads.
 
 ## How Alden picks where to look
 
-"Needs your eyes" holds at most 3 places:
+"Needs your eyes" holds 3 places unless you set `review.eyes` (1 to 10, in Settings or `alden config set review.eyes 5`):
 
 1. The most severe findings come first. Alden takes them in turn across checks, so one noisy check can't fill every
    slot.
