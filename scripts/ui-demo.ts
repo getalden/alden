@@ -200,6 +200,9 @@ let demoConsent: "on" | "off" | "unset" = "unset";
 const DEMO_DESKTOP = process.env.ALDEN_DEMO_DESKTOP === "1";
 let demoBackground = { enabled: true, model: false };
 const preparedAt = new Date(Date.now() - 25 * 60_000).toISOString();
+// ALDEN_DEMO_NO_MODEL=1 starts with no model, to show "Set up a model". Its key test and Ollama download are pretend:
+// a key ending in "bad" is refused, one ending in "offline" can't be checked, and Ollama "downloads" in a few seconds.
+let demoModel = process.env.ALDEN_DEMO_NO_MODEL !== "1";
 // What the queue last showed, so reactions find their row as the real API does.
 let lastRows: ReturnType<typeof queueRows> = [];
 
@@ -223,7 +226,8 @@ const api: UiApi = {
       id: "claude-sonnet-5",
       effort: "medium",
       supportsEffort: true,
-      available: true,
+      available: demoModel,
+      ...(demoModel ? {} : { reason: "No Anthropic API key found, so only the checks ran." }),
     },
     aliases: { sonnet: "claude-sonnet-5", opus: "claude-opus-5", haiku: "claude-haiku-4-5", fable: "claude-fable-5-1" },
     efforts: ["low", "medium", "high", "xhigh", "max"],
@@ -232,6 +236,50 @@ const api: UiApi = {
     background: demoBackground,
   }),
   prepareNext: async () => ({ prepared: null, reason: "demo" }),
+  setModelKey: async (key) => {
+    demoModel = key !== null;
+    return { key: demoModel ? { source: "alden", where: "the key you stored with `alden auth model`" } : null };
+  },
+  modelSetup: {
+    state: async () => ({
+      current: { provider: "anthropic", model: "claude-sonnet-5", available: demoModel, reason: null },
+      key: null,
+      ollama: {
+        reachable: true,
+        url: "http://localhost:11434",
+        version: "0.12.3",
+        models: [{ name: "llama3.2:3b", sizeBytes: 2_019_393_189, parameterSize: "3.2B" }],
+        reason: null,
+      },
+      memoryGb: 24,
+      recommendation: {
+        model: "qwen2.5-coder:14b",
+        download: "9 GB",
+        why: "fits 16 to 32 GB of memory",
+        installed: false,
+      },
+    }),
+    testKey: async (key, untested) => {
+      await sleep(900);
+      if (key.endsWith("bad")) return { ok: false, reason: "invalid", message: "Anthropic didn't accept that key." };
+      if (key.endsWith("offline") && !untested) {
+        return { ok: false, reason: "network", message: "Couldn't reach api.anthropic.com to check the key." };
+      }
+      demoModel = true;
+      return { ok: true, key: { source: "alden", where: "the key you stored with `alden auth model`" } };
+    },
+    useLocal: async (model, onEvent, signal) => {
+      onEvent({ type: "progress", status: "pulling manifest", completed: null, total: null });
+      for (let i = 1; i <= 20 && !signal.aborted; i++) {
+        await sleep(250);
+        onEvent({ type: "progress", status: "pulling ac3d1ba8aa77", completed: i * 0.45e9, total: 9e9 });
+      }
+      if (signal.aborted) return;
+      demoModel = true;
+      onEvent({ type: "done", model, baseUrl: "http://localhost:11434/v1" });
+    },
+    open: async (page) => ({ opened: page }),
+  },
   startSignIn: async () => ({
     state: "waiting",
     userCode: "DEMO-1234",

@@ -42,6 +42,7 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
         "doctor",
         "telemetry",
         "mcp",
+        "setup",
         "other",
       ]),
       ok: z.boolean(),

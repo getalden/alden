@@ -26,6 +26,7 @@ const KNOWN = new Set<string>([
   "doctor",
   "telemetry",
   "mcp",
+  "setup",
 ]);
 
 /** The top-level command (`memory` for `alden memory add`). */
@@ -70,7 +71,15 @@ export async function askTelemetryOnce(command: Command): Promise<void> {
       color,
     ),
   );
+  // The first run is also the moment to say a model is one command away, unless that's what's being run.
+  const name = commandName(command);
+  if (name !== "setup" && name !== "auth" && !process.env.ANTHROPIC_API_KEY) {
+    console.log(paint(`${SETUP_HINT}\n`, "dim", color));
+  }
 }
+
+export const SETUP_HINT =
+  "Alden runs its checks with no model. To have a model read each change too, `alden setup` sets one up in a minute.";
 
 /** Times every command and records it (when opted in), then sends what's queued, briefly. */
 export function instrument(program: Command): void {

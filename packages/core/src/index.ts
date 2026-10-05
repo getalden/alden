@@ -102,6 +102,17 @@ export {
 } from "./llm/key.js";
 export { localDay, type SpendEntry, SpendLedger } from "./llm/ledger.js";
 export {
+  detectOllama,
+  isLocalModelName,
+  LOCAL_MODEL_TABLE,
+  OLLAMA_URL,
+  ollamaUrl,
+  type PullProgress,
+  pullOllamaModel,
+  recommendLocalModel,
+  useLocalModel,
+} from "./llm/local.js";
+export {
   costUsd,
   MODEL_ALIASES,
   NO_USAGE,
@@ -123,6 +134,19 @@ export {
   type StopReason,
 } from "./llm/provider.js";
 export { type ProviderChoice, selectProvider } from "./llm/select.js";
+export {
+  ALDEN_CLOUD_URL,
+  ANTHROPIC_KEYS_URL,
+  KEY_TEST_MODEL,
+  type KeySetupDeps,
+  type KeyTestClient,
+  modelSetupState,
+  OLLAMA_DOWNLOAD_URL,
+  type SetupStateDeps,
+  setUpModelKey,
+  testModelKey,
+  useAnthropic,
+} from "./llm/setup.js";
 export { type MajorBump, majorBumps } from "./queue/bumps.js";
 export { type FileKind, fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";
 export {

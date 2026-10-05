@@ -108,6 +108,7 @@
                     "doctor",
                     "telemetry",
                     "mcp",
+                    "setup",
                     "other"
                   ]
                 },

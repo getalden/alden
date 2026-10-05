@@ -47,16 +47,27 @@ export function reviewNext(briefing: Briefing, rank: number | undefined): NextSt
   return steps;
 }
 
-/** After `alden doctor`: the command its first problem's fix names, failures first, or the queue when all is well. */
+/**
+ * After `alden doctor`: the command its first problem's fix names, failures first, or the queue when all is well. With
+ * no model, `alden setup` is suggested too, whatever comes first.
+ */
 export function doctorNext(findings: Finding[]): NextStep[] {
   const problems = [...findings.filter((f) => f.status === "fail"), ...findings.filter((f) => f.status === "warn")];
   if (problems.length === 0) return [{ command: "alden queue", why: "see what's waiting on you" }];
+  const steps: NextStep[] = [];
   for (const problem of problems) {
     // Only a whole command to copy: not a template like `alden config set budget.dailyUsd …`.
     const command = [...(problem.fix ?? "").matchAll(/`([^`]+)`/g)]
       .map((m) => m[1] as string)
       .find((c) => !c.includes("…"));
-    if (command) return [{ command, why: `the fix for ${problem.area}` }];
+    if (command) {
+      steps.push({ command, why: `the fix for ${problem.area}` });
+      break;
+    }
   }
-  return [];
+  const noModel = problems.some((f) => f.area === "Model" && f.detail.startsWith("none set up"));
+  if (noModel && !steps.some((s) => s.command === "alden setup")) {
+    steps.push({ command: "alden setup", why: "set up a model in a minute" });
+  }
+  return steps;
 }
