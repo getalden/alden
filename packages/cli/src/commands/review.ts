@@ -80,6 +80,7 @@ export function registerReviewCommand(program: Command): void {
       const progress = startProgress(model ? `Reviewing ${what} with ${model.provider.model}…` : `Checking ${what}…`);
       let briefing: Briefing;
       let source: TokenSource | undefined;
+      let picked: string | undefined;
       try {
         if (prArg === undefined) {
           const learning = await learningFor(await originRepo(process.cwd()));
@@ -90,6 +91,15 @@ export function registerReviewCommand(program: Command): void {
         } else {
           const last = await new JsonCache().get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
           const ref = parsePrRef(prArg, last?.urls);
+          // A bare number is a place in the last queue, which isn't the PR with that number: say which PR it was.
+          if (/^#?\d+$/.test(prArg.trim())) {
+            const n = prArg.trim().replace("#", "");
+            const here = await originRepo(process.cwd());
+            picked = `#${n} in your last queue is ${ref.repo}#${ref.number}.`;
+            if (here && here.toLowerCase() !== ref.repo.toLowerCase()) {
+              picked += ` For PR #${n} in ${here}: alden review ${here}#${n}`;
+            }
+          }
           const resolved = await resolveToken();
           if (!resolved) {
             progress.stop();
@@ -108,6 +118,7 @@ export function registerReviewCommand(program: Command): void {
         program.error(source ? describeGitHubError(error, source) : (error as Error).message);
       }
       progress.stop();
+      if (picked) console.error(picked);
       // `alden stats` splits before and after at the first use on each repo.
       const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : await originRepo(briefing.target.repoRoot);
       if (usedOn) await new UsageLog().markUsed(usedOn).catch(() => {});

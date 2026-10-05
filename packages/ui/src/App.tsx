@@ -87,6 +87,19 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
 
   useEffect(() => loadQueue(false, true), [loadQueue]);
 
+  // A PR dismissed in this window comes back when it changes: once the server lists it again, it isn't dismissed here.
+  useEffect(() => {
+    if (!queue) return;
+    const back = new Set([...queue.needsYou, ...queue.fastTrack].map((r) => prKey(r.pr)));
+    setReactions((all) => {
+      const stale = Object.keys(all).filter((key) => all[key] === "dismiss" && back.has(key));
+      if (stale.length === 0) return all;
+      const next = { ...all };
+      for (const key of stale) delete next[key];
+      return next;
+    });
+  }, [queue]);
+
   // In the desktop app, which briefings are ready from the background: checked with the queue and every minute.
   const [ready, setReady] = useState<Set<string>>(new Set());
   const desktop = session?.desktop === true;
