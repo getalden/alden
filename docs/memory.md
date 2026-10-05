@@ -14,6 +14,7 @@ Nothing here leaves your machine, except your notes: the model gets those with e
 | --- | --- | --- |
 | Useful on a check's flags | 3 or more, at least 3 to 1 | That check goes first among places to look, marked "↑ You usually mark … useful". The model is told you care about it. |
 | Not useful on a check's flags | 3 or more, at least 3 to 1 | That check is quietened: its flags are left out of places to look, unless high or critical severity, and listed as hidden with the reason. Its row in the checks says "quietened by your feedback" (terminal, `alden ui`, `alden_review`), and the model is told to raise those concerns only when they're serious. |
+| A comment you send near a place to look | Once per place per PR | Counts as Useful on that place's check, toward the lesson above. See [Comments you send](#comments-you-send). |
 | Dismiss on one place in a PR | Once | A re-review of that PR leaves that place out, and says so. Other PRs are unaffected, and nothing is learned from it. |
 | PRs you open, or mark Useful in the queue | 3 or more, at least 60% of the time, in the last 90 days | PRs like that rank higher, with a reason such as "ranked higher: you usually open PRs touching db/migrations/ first". |
 | PRs you mark Not useful in the queue | 3 or more, at least 3 to 1 | PRs like that rank lower: "ranked lower: you usually skip Dependabot PRs (4 marked not useful)". |
@@ -60,6 +61,21 @@ Alden's model tags each finding with a topic (tests, api, migrations, config, de
 useful on a tagged finding counts toward that topic's lesson, once per briefing however many findings share it, and a
 finding on a quietened topic takes no place to look unless it's high severity. Untagged ("other") findings count
 toward your useful rate but teach no lesson.
+
+## Comments you send
+
+When you send a review ([Comments and sending a review](comments.md)), each place to look in the PR's latest briefing
+that one of your line comments is near (on the same file, within three lines of it, or anywhere in the file for a
+place without a line) counts as **Useful** on that place: you didn't only agree it was worth a look, you had something
+to say about it. It's recorded as an ordinary verdict, marked `via: "comment"` in the feedback log, so it counts toward
+the check's lesson like a click on Useful and shows in `alden feedback`.
+
+- **Once per place per PR.** A second review of the same PR, or another comment near the same place, adds nothing.
+- **Your own verdict wins.** If you already marked that place useful, not useful or dismissed, the comment changes
+  nothing. Clearing a verdict and then commenting doesn't count it again either.
+- **Only sent comments count.** Drafts you delete, or never send, teach nothing. General notes have no place, so they
+  teach nothing either.
+- Comments by Claude Code count the same once you send them: you sent them.
 
 ## Seeing it build
 
@@ -111,7 +127,8 @@ To take back a reaction, press the same button again in `alden ui` (it toggles o
 
 In `~/.alden/alden.db`, a SQLite database (WAL mode, so the CLI and the UI can write at once). Feedback, opens and
 notes are stored as append-only events with unique ids, so a future sync can upload just what it hasn't sent. The same
-file holds spending and when you first used Alden on each repo.
+file holds spending, when you first used Alden on each repo, and the comments you're drafting (until you send or delete
+them).
 
 Alden needs Node 22.13 or later for the database (the standalone binary has it built in). The first run on an older
 `~/.alden` imports the old JSON files (`feedback/`, `spend/`, `usage.json`) once and moves them to `~/.alden/legacy/`.

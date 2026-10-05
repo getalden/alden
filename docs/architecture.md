@@ -57,6 +57,11 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | `GET /api/memory/repos` | Each repo Alden has memory for. |
 | `POST /api/memory/change` | `{ action, repo? }`: `edit` (with `id`, `text`), `restore` (with `id`), `learning` (with `on`) or `forget-all`. |
 | `POST /api/memory/forget` | Forgets one item: `{ id, repo? }`. |
+| `GET /api/drafts` | `pr=owner/repo#12`'s pending review: `{ drafts, unaddressed }`, the drafts brought to the PR's current head (moved with their lines, or `outdated`), and the places its latest briefing flagged that no draft is near. |
+| `POST /api/drafts` | Adds a draft at the PR's head: `{ pr, path?, line?, side?, body }`; without `path` and `line`, a general note. Always yours (`source: "you"`). 422 when the line isn't in the diff. |
+| `PATCH /api/drafts/:id` | Changes a draft's `{ body }`, or places it on a line again with `{ path, line, side? }`, which brings an outdated draft back. |
+| `DELETE /api/drafts/:id` | Deletes a draft: `{ ok: true }`. |
+| `POST /api/review/send` | Sends the PR's drafts to GitHub as one review: `{ pr, event: COMMENT \| APPROVE \| REQUEST_CHANGES, body? }` → `{ url, posted, review }`. The only route that writes to GitHub. Refuses (409) when a draft is outdated or the PR moved since the drafts were listed, 422 when a line isn't in the diff, 403 with the fix when the sign-in can't write reviews. Sent drafts are deleted. |
 | `POST /api/auth/device` | Starts GitHub sign-in with a one-time code (the device flow); the server waits for approval. |
 | `GET /api/auth/device` | How that sign-in is going: waiting (with the code), done, or failed. |
 | `POST /api/auth/device/open` | Opens GitHub's page for the code in the default browser. |
@@ -88,5 +93,5 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 - **Evidence for every claim.** A check that flags something says what it looked at and where.
 - **Degrade, don't fail.** No token, no model, no clone, an unsupported language: the review still prints, and says
   what it couldn't do.
-- **Never touch the user's work.** PR checkouts live in Alden's own worktrees. Alden posts nothing to GitHub.
+- **Never touch the user's work.** PR checkouts live in Alden's own worktrees. Alden posts only what you send: one review, on your click or command.
 - **Bounded cost and time.** Model calls are capped before they're sent; indexing has a time budget.

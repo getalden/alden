@@ -8,6 +8,7 @@ Alden runs on your machine. There is no Alden server, and nothing is sent to Ald
 | Goes to | What | When |
 | --- | --- | --- |
 | GitHub | API requests with your token: review requests, PR details, diffs, CI status, CODEOWNERS. Git fetches of PRs for the code graph. | `alden queue`, `alden review <pr>`, `alden stats`, `alden ui`, the desktop app, `alden mcp` |
+| GitHub, only when you send | The review you send: its body, comments and verdict, exactly as shown before you confirmed. Alden posts only what you send. | The UI's Send button, `alden send` |
 | PostHog (EU), only if you said yes | Anonymous usage stats: see [Usage stats](telemetry.md) | After each command; every minute while `alden ui` runs |
 | Your model provider | The PR's title and description, the diff, a few lines around callers outside the diff, and your [notes](memory.md#your-notes) for the repo. | `alden review`, unless `--no-llm` |
 | Your AI coding tool, through `alden mcp` | Queue rows, briefings including PR text and code, and your notes. From there they reach that tool's model provider. | When the tool calls Alden's tools |
@@ -32,7 +33,8 @@ API data by default.
 ## What stays on your machine
 
 Feedback, the PRs you open and what Alden learns from them stay in `~/.alden/alden.db` ([Learning and
-memory](memory.md)). So do your notes, what you've spent on models, usage stats waiting to be sent (only if you said
+memory](memory.md)). So do the comments you're drafting, until you send or delete them; they're never in usage stats
+or the feedback export ([Comments and sending a review](comments.md)). So do your notes, what you've spent on models, usage stats waiting to be sent (only if you said
 yes), and this install's anonymous id and the salt for repo hashes. Checkouts of PRs for the code graph are in
 `~/.alden/worktrees`. See [Files Alden keeps](configuration.md#files-alden-keeps). Your GitHub token is stored in the
 OS keychain, or, where there's no keychain, in a file only your user can read. `alden auth logout` removes it. So is an

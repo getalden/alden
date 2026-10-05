@@ -28,7 +28,7 @@ do, and the queue warns about them. There are two causes:
   it already allows: many companies approve the GitHub CLI, so `alden auth logout` (which switches Alden to the GitHub
   CLI's sign-in) often works at once; otherwise a classic personal access token (`alden auth login --with-token`).
 
-Alden itself never needs installing on an organisation: it reads what your own sign-in can read, and posts nothing.
+Alden itself never needs installing on an organisation: it reads what your own sign-in can read, and posts only the reviews you send.
 
 **The queue is slow.** Run `ALDEN_DEBUG=queue alden queue --refresh` to see each step's time and requests on stderr.
 A huge queue (hundreds of PRs) takes longer; narrow it with `--repo`, `--org` or `queue.ignore`.

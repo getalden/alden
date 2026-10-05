@@ -36,6 +36,8 @@ dropped.
 | `feedback_given` | Useful, not useful or dismiss; on a place, finding or check; which of Alden's checks |
 | `missed_reported` | That you reported a miss, and whether you said where (not what) |
 | `reaction_given`, `pr_opened`, `memory_changed` | The reaction; the opened PR's rank; add, edit, forget, pause… |
+| `draft_changed` | That a comment was drafted, edited or discarded; by you or Claude Code; on a line or a general note. Never its text |
+| `review_sent` | Comment, approve or request changes; how many line comments and general notes, how many drafted by you and by Claude Code; whether there was a body; how many flagged places it didn't comment near |
 | `stats_viewed` | A salted repo hash, how many PRs, whether there's a before and after, and median time to first review and cycle time before and after |
 | `telemetry_enabled` | That you said yes |
 
@@ -43,8 +45,8 @@ Each also carries the schema version, Alden's version, where it ran (terminal, U
 through `alden mcp`), Node or the standalone binary, the OS and CPU type, and how many days since this install first
 ran.
 
-**Never sent:** code, diffs, PR titles or descriptions, file paths, repo names, user names, your notes, model output,
-tokens or keys. A repo appears only as a hash salted with a random value that never leaves your machine, so we can
+**Never sent:** code, diffs, PR titles or descriptions, file paths, repo names, user names, your notes, your comments,
+model output, tokens or keys. A repo appears only as a hash salted with a random value that never leaves your machine, so we can
 count repos but can't work out which ones they are.
 
 ## Where it goes
