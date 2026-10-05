@@ -1,6 +1,6 @@
 [package]
 name = "alden-desktop"
-version = "0.3.1"
+version = "0.3.2"
 description = "Alden in the menu bar: a shell around `alden ui`"
 edition = "2021"
 license = "Apache-2.0"
