@@ -36,6 +36,20 @@ Stop it with Ctrl+C.
   **Not useful** on each place, finding and flagged check teach Alden; **Dismiss** hides one place on this PR. "Shaped
   by your feedback" says what your feedback changed. Briefing a PR from
   the queue counts as opening it, for learning.
+- **Comment from Alden.** Write your review in the briefing and send it to GitHub as one review. **Comment** on a place
+  in "Needs your eyes" or on a flagged check's evidence line opens an editor there; **Comment on a line…** takes any
+  line of a changed file (pick the file, give the line; a removed file's line is on the old side), and **Add a general
+  note** writes one that goes into the review's body. Comments are drafts, kept on this machine, until you send them.
+  The **Review** panel at the bottom of the briefing lists them by file, with Edit and Delete. Drafts that Claude Code
+  added are marked "from Claude", so you read them before they go out under your name; Claude can add drafts but never
+  send them. A draft written before the PR's latest commits is marked **Outdated**: **Rewrite** puts it in a new
+  comment on the current code (check the line), or delete it; the review won't send until you've done one or the
+  other. Then the review body, the verdict (**Comment**, **Approve** or **Request changes**, which needs a body) and
+  **Send review · 3 comments**. Nothing posts yet: a summary shows exactly what will, the PR, the verdict, the body
+  (yours, then your general notes) and each comment with its file and line. Before **Approve** it also lists the places
+  Alden flagged that you didn't comment on. Only the button there sends it. Afterwards the panel says "Sent to GitHub"
+  with a link to the review; if GitHub refuses, it shows why and keeps your drafts. A PR you've opened in this window
+  shows "2 drafts" in the queue while it has some.
 - **My changes.** Your uncommitted changes in the repo `alden ui` started in, before you open a PR.
 - **Stats.** Time to first review and cycle time for a repo, before and after you started using Alden.
 - **Memory.** Each repo Alden knows about, then what you look for and what you skip there: where each item came from,
@@ -67,8 +81,13 @@ tab; Settings changes the defaults.
 | `b` | Brief me on this PR |
 | `o` | Open this PR on GitHub |
 | `+` `−` `x` | Useful, Not useful, Dismiss on this PR |
+| `c` | Comment on the place you're on in the briefing (a place in "Needs your eyes" or an evidence line), or else open "Comment on a line…" |
+| `s` | Go to the Review panel |
+| `⌘↵` / `Ctrl+↵` | Save the comment you're writing |
 | `r` | Refresh the queue |
-| `Esc` | Stop a running briefing; in a narrow window, back to the list |
+| `Esc` | Cancel the comment you're writing, or leave the send summary; stop a running briefing; in a narrow window, back to the list |
+
+Keys never fire while you're typing in a text box.
 
 Below 960px wide the list and the briefing take turns: pick a PR to open its briefing, and "← Queue" or `Esc` goes back.
 
