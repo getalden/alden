@@ -78,6 +78,38 @@ Briefs you on a PR, or on your uncommitted local changes when you don't name one
 
 Local reviews cover staged, unstaged and untracked files, compared with `HEAD`.
 
+## alden comment
+
+```sh
+alden comment <pr> [file:line] "text"
+```
+
+Writes a comment on a PR, kept in Alden until you send it with `alden send`. With `file:line`, it's on that line of
+the diff; without, it's a general note for the review's body. With no text, lists the PR's comments, outdated ones
+marked. `pr` takes the same forms as `alden review`. See [Comments and sending a review](comments.md).
+
+| Flag | What it does |
+| --- | --- |
+| `--left` | The line number is in the old file: a comment on a removed line. |
+| `--delete <id>` | Deletes a comment, by the id the list shows. |
+| `--json` | Print the comments (or the new one) as JSON. Schema: `packages/schema/json/review-draft.v1.json`. |
+
+## alden send
+
+```sh
+alden send <pr> --comment | --approve | --request-changes [-m body]
+```
+
+Sends the PR's comments to GitHub as one review. First it shows exactly what will post (the body, then each comment
+with its file and line, and before an approval the places Alden flagged that you didn't comment on), then asks. Nothing
+else in Alden posts to GitHub. See [Comments and sending a review](comments.md#sending).
+
+| Flag | What it does |
+| --- | --- |
+| `--comment`, `--approve`, `--request-changes` | What the review does. Exactly one. |
+| `-m, --message <body>` | The review's body. General notes follow it. |
+| `-y, --yes` | Send without asking. Without a terminal to ask on, Alden won't send unless you pass it. |
+
 ## alden ui
 
 Opens the queue and briefings in your browser, served on 127.0.0.1 only until you stop it. See
@@ -101,10 +133,10 @@ tool closes it. See [Alden in your AI coding tool](mcp.md).
 ## alden doctor
 
 Checks your setup here: the Alden version (and whether a newer one exists), where Alden keeps files, your settings,
-the GitHub sign-in and its scopes, which of your organisations' PRs it can see (and why not, for any that hide
-them), the model and today's budget, whether this folder is a clone (and of which repo),
-and which languages the code graph reads in it. Every problem comes with its fix. `--json` prints the findings as
-data. Exits with 1 when something fails.
+the GitHub sign-in and its scopes (and whether it can post the reviews you send), which of your organisations' PRs it
+can see (and why not, for any that hide them), the model and today's budget, whether this folder is a clone (and of
+which repo), and which languages the code graph reads in it. Every problem comes with its fix. `--json` prints the
+findings as data. Exits with 1 when something fails.
 
 ## alden stats
 

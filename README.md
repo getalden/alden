@@ -60,6 +60,17 @@ Needs your eyes
      changed: export function fetchCatalog(…): Promise<MetricInfo[]> → export function fetchCatalog(…): Promise<Catalog>
 ```
 
+Then say what you think without leaving Alden: write comments on the places to look or any line of the diff, and send
+them to GitHub as one review. Alden posts only what you send, exactly as it shows it to you first; nothing posts in
+the background or from a model.
+
+```sh
+alden comment 1 src/pay.ts:12 "Is fee in cents here?"
+alden send 1 --approve -m "Thanks, looks good."
+```
+
+See [Comments and sending a review](https://getalden.dev/docs/comments/).
+
 `alden queue` splits the PRs waiting on you into two groups:
 
 - **Needs you**, highest priority first. Blocking beats waiting beats risk: urgent labels, PRs stacked on this one, and

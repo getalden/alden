@@ -5,6 +5,7 @@ import {
   type Effort,
   JsonCache,
   loadConfig,
+  ReviewDrafts,
   repoFromRemote,
   resolveToken,
   reviewEvent,
@@ -22,7 +23,7 @@ import type { Command } from "commander";
 import { describeGitHubError } from "../github-errors.js";
 import { learningFor, noteOpened } from "../learning.js";
 import { nextLine, reviewNext, wantsNext } from "../next.js";
-import { parsePrRef } from "../pr-ref.js";
+import { parsePrRef, queuePick } from "../pr-ref.js";
 import { startProgress } from "../progress.js";
 import { renderBriefing } from "../render/briefing.js";
 import { shouldColor } from "../render/style.js";
@@ -92,14 +93,7 @@ export function registerReviewCommand(program: Command): void {
           const last = await new JsonCache().get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
           const ref = parsePrRef(prArg, last?.urls);
           // A bare number is a place in the last queue, which isn't the PR with that number: say which PR it was.
-          if (/^#?\d+$/.test(prArg.trim())) {
-            const n = prArg.trim().replace("#", "");
-            const here = await originRepo(process.cwd());
-            picked = `#${n} in your last queue is ${ref.repo}#${ref.number}.`;
-            if (here && here.toLowerCase() !== ref.repo.toLowerCase()) {
-              picked += ` For PR #${n} in ${here}: alden review ${here}#${n}`;
-            }
-          }
+          if (/^#?\d+$/.test(prArg.trim())) picked = queuePick(prArg, ref, await originRepo(process.cwd()));
           const resolved = await resolveToken();
           if (!resolved) {
             progress.stop();
@@ -112,6 +106,12 @@ export function registerReviewCommand(program: Command): void {
             ...(learning ? { learning } : {}),
           });
           if (briefing.target.kind === "pr") noteOpened(last?.rows, briefing.target.url, "cli");
+          // Its places to look, for `alden send` ("you didn't comment on…") and learning from comments.
+          try {
+            new ReviewDrafts().rememberBriefing(briefing);
+          } catch {
+            // the database is locked or damaged: the review still stands
+          }
         }
       } catch (error) {
         progress.stop();

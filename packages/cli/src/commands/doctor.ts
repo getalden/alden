@@ -26,6 +26,7 @@ import {
   telemetryBlocked,
   telemetryConsent,
   userConfigPath,
+  type Viewer,
   whyNoToken,
 } from "@alden/core";
 import type { Command } from "commander";
@@ -64,6 +65,33 @@ export function graphLanguages(files: string[]): string {
     .sort(([, a], [, b]) => b - a)
     .map(([name, n]) => `${name} (${n.toLocaleString("en")})`)
     .join(", ");
+}
+
+/**
+ * Whether `alden send` can post a review with this sign-in, when that can be known ahead. A classic token reports its
+ * scopes: `repo` covers reviews everywhere, `public_repo` only on public repos. Fine-grained tokens and GitHub App
+ * tokens don't, so for them it says what they need rather than guess.
+ */
+export function reviewAccess(viewer: Pick<Viewer, "scopes" | "missingScopes">): Finding {
+  const area = "Sending reviews";
+  if (viewer.scopes.length === 0 && viewer.missingScopes.length === 0) {
+    return {
+      area,
+      status: "ok",
+      detail:
+        'can\'t be checked ahead for this kind of token: a fine-grained one needs "Pull requests: Read and write" on each repo you send to',
+    };
+  }
+  if (viewer.scopes.includes("repo"))
+    return { area, status: "ok", detail: "your sign-in can post the reviews you send" };
+  return {
+    area,
+    status: "warn",
+    detail: viewer.scopes.includes("public_repo")
+      ? "your sign-in can post reviews on public repos only"
+      : "your sign-in can't post reviews (it lacks the repo scope)",
+    fix: "Run `alden auth login --device`, or `gh auth refresh -s repo` if Alden uses your GitHub CLI sign-in.",
+  };
 }
 
 /** Everything Alden needs, checked in turn. Never throws: a check that can't run is itself a finding. */
@@ -182,6 +210,7 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
         add({ area: "Queue", status: "ok", detail: `${parts.join("; ")} (queue.orgs, queue.repos, queue.ignore)` });
       }
       for (const line of await orgLines(client, resolved.source, scope)) add(line);
+      add(reviewAccess(viewer));
       if (viewer.missingScopes.length > 0) {
         add({
           area: "GitHub scopes",

@@ -26,6 +26,8 @@ const KNOWN = new Set<string>([
   "doctor",
   "telemetry",
   "mcp",
+  "comment",
+  "send",
 ]);
 
 /** The top-level command (`memory` for `alden memory add`). */

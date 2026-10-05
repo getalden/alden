@@ -4,7 +4,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
 import type { ReviewStage } from "@alden/core";
-import type { Briefing } from "@alden/schema";
+import type {
+  Briefing,
+  ReviewDraft,
+  ReviewDrafts,
+  ReviewEvent as ReviewVerdict,
+  SendReviewResult,
+} from "@alden/schema";
 import { stripControlDeep } from "../render/style.js";
 
 /** A review request from the UI. `pr` is a URL, owner/repo#123 or a queue number; without it, local changes. */
@@ -73,6 +79,37 @@ export interface UiApi {
   /** Whether anonymous usage stats are on, off or not yet asked, and anything forcing them off. */
   telemetry(): Promise<unknown>;
   setTelemetry(on: boolean): Promise<unknown>;
+  /**
+   * A PR's pending review ("owner/repo#12", a URL or a queue number): its drafts, brought to the PR's current head
+   * (moved with their lines, or marked outdated), and the places its latest briefing flagged that no draft is near.
+   */
+  drafts(pr: string): Promise<ReviewDrafts>;
+  /** Adds a draft at the PR's current head. The UI's are yours; Claude Code's (through `alden mcp`) are "claude". */
+  addDraft(input: DraftInput, source?: ReviewDraft["source"]): Promise<ReviewDraft>;
+  editDraft(id: string, change: DraftChange): Promise<ReviewDraft>;
+  deleteDraft(id: string): Promise<{ ok: true }>;
+  /**
+   * Sends the PR's drafts to GitHub as one review, and deletes them once it's posted. The only call that writes to
+   * GitHub: it runs on your click or command, never in the background, and Claude Code has no tool for it.
+   */
+  sendReview(input: { pr: string; event: ReviewVerdict; body?: string }): Promise<SendReviewResult>;
+}
+
+/** A new draft: on `path` at `line` (on `side`, default RIGHT), or without them a general note for the review's body. */
+export interface DraftInput {
+  pr: string;
+  path?: string;
+  line?: number;
+  side?: "RIGHT" | "LEFT";
+  body: string;
+}
+
+/** A change to a draft: its text, or (with `path` and `line`) a new place, which brings an outdated draft back. */
+export interface DraftChange {
+  body?: string;
+  path?: string;
+  line?: number;
+  side?: "RIGHT" | "LEFT";
 }
 
 export type MemoryChange =
@@ -156,6 +193,27 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
   throw new ApiError(400, "Expected a JSON object.");
 }
 
+/** A draft's line from a request: `path` and `line` together (and optionally `side`), or nothing. */
+function placeFrom(body: Record<string, unknown>): Pick<DraftInput, "path" | "line" | "side"> | undefined {
+  if (body.path === undefined && body.line === undefined) return undefined;
+  const sides = ["RIGHT", "LEFT"] as const;
+  const side = sides.find((s) => s === body.side);
+  if (
+    typeof body.path !== "string" ||
+    !body.path ||
+    typeof body.line !== "number" ||
+    !Number.isInteger(body.line) ||
+    body.line < 1 ||
+    (body.side !== undefined && !side)
+  ) {
+    throw new ApiError(
+      400,
+      "A line comment needs { path, line } (line a positive whole number), and side RIGHT or LEFT.",
+    );
+  }
+  return { path: body.path, line: body.line, ...(side ? { side } : {}) };
+}
+
 const sameToken = (given: string | undefined, token: string) =>
   given !== undefined && given.length === token.length && timingSafeEqual(Buffer.from(given), Buffer.from(token));
 
@@ -208,6 +266,25 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
   async function route(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const { api } = options;
     const key = `${req.method} ${url.pathname}`;
+    const draft = /^\/api\/drafts\/([\w-]{1,64})$/.exec(url.pathname);
+    if (draft && (req.method === "PATCH" || req.method === "DELETE")) {
+      const id = draft[1] as string;
+      if (req.method === "DELETE") {
+        send(res, 200, await api.deleteDraft(id));
+        return;
+      }
+      const body = await readJsonBody(req);
+      const place = placeFrom(body);
+      if ((body.body !== undefined && typeof body.body !== "string") || (body.body === undefined && !place)) {
+        throw new ApiError(400, "Send { body }, or { path, line, side? } to place it on a line again.");
+      }
+      send(
+        res,
+        200,
+        await api.editDraft(id, { ...(typeof body.body === "string" ? { body: body.body } : {}), ...place }),
+      );
+      return;
+    }
     switch (key) {
       case "GET /api/session":
         send(res, 200, await api.session());
@@ -355,6 +432,35 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         const body = await readJsonBody(req);
         if (typeof body.on !== "boolean") throw new ApiError(400, "Send { on: true | false }.");
         send(res, 200, await api.setTelemetry(body.on));
+        return;
+      }
+      case "GET /api/drafts": {
+        const pr = url.searchParams.get("pr");
+        if (!pr) throw new ApiError(400, "Send ?pr=owner/repo%2312.");
+        send(res, 200, await api.drafts(pr));
+        return;
+      }
+      case "POST /api/drafts": {
+        const body = await readJsonBody(req);
+        if (typeof body.pr !== "string" || typeof body.body !== "string") {
+          throw new ApiError(400, "Send { pr, body }, and { path, line, side? } for a comment on a line.");
+        }
+        // Always yours: only Claude Code (through `alden mcp`) drafts as "claude".
+        send(res, 200, await api.addDraft({ pr: body.pr, body: body.body, ...placeFrom(body) }, "you"));
+        return;
+      }
+      case "POST /api/review/send": {
+        const body = await readJsonBody(req);
+        const events = ["COMMENT", "APPROVE", "REQUEST_CHANGES"] as const;
+        const event = events.find((e) => e === body.event);
+        if (typeof body.pr !== "string" || !event || (body.body !== undefined && typeof body.body !== "string")) {
+          throw new ApiError(400, "Send { pr, event: COMMENT | APPROVE | REQUEST_CHANGES, body? }.");
+        }
+        send(
+          res,
+          200,
+          await api.sendReview({ pr: body.pr, event, ...(typeof body.body === "string" ? { body: body.body } : {}) }),
+        );
         return;
       }
       case "GET /api/feedback/export":

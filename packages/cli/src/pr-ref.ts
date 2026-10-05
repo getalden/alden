@@ -30,3 +30,21 @@ export function parsePrRef(input: string, lastQueueUrls: string[] | undefined): 
 
   throw new Error(`"${input}" isn't a PR. Use a GitHub PR URL, owner/repo#123, or a # from \`alden queue\`.`);
 }
+
+/**
+ * A bare number is a place in the last queue, which isn't the PR with that number: says which PR it picked, and (when
+ * this clone is another repo) how to mean PR #n here instead. Undefined for anything but a bare number.
+ */
+export function queuePick(
+  input: string,
+  ref: PrRef,
+  here: string | undefined,
+  command = "alden review",
+): string | undefined {
+  if (!RANK_FORM.test(input.trim())) return undefined;
+  const n = input.trim().replace("#", "");
+  let note = `#${n} in your last queue is ${ref.repo}#${ref.number}.`;
+  if (here && here.toLowerCase() !== ref.repo.toLowerCase())
+    note += ` For PR #${n} in ${here}: ${command} ${here}#${n}`;
+  return note;
+}

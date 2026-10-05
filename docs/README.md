@@ -18,6 +18,7 @@ sign-in and your own model account.
 - [Alden in your AI coding tool](mcp.md): `alden mcp` for Claude Code, Cursor and other MCP clients.
 - [The review queue](queue.md): how PRs are ranked, and what "fast-track" means.
 - [Briefings and checks](checks.md): what `alden review` checks, and how it picks where to look.
+- [Comments and sending a review](comments.md): write comments in Alden, and send them to GitHub as one review.
 - [Learning and memory](memory.md): what Alden learns from your feedback, your notes, and how to forget.
 - [The code graph](code-graph.md): callers outside the diff, languages, and PR checkouts.
 - [Models, providers and budgets](models.md): choosing a model, cloud platforms, local models, caps and spend.

@@ -42,6 +42,8 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
         "doctor",
         "telemetry",
         "mcp",
+        "comment",
+        "send",
         "other",
       ]),
       ok: z.boolean(),
@@ -102,6 +104,26 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
     event: z.literal("memory_changed"),
     properties: z.object({
       action: z.enum(["add", "edit", "forget", "restore", "pause", "resume", "forget_all"]),
+    }),
+  }),
+  z.object({
+    event: z.literal("draft_changed"),
+    properties: z.object({
+      action: z.enum(["add", "edit", "discard"]),
+      source: z.enum(["you", "claude"]).describe("who wrote the draft: you, or Claude Code drafting for you"),
+      inline: z.boolean().describe("on a line, rather than a general note"),
+    }),
+  }),
+  z.object({
+    event: z.literal("review_sent"),
+    properties: z.object({
+      review: z.enum(["comment", "approve", "request_changes"]),
+      inline: count.describe("comments on lines"),
+      notes: count.describe("general notes, sent in the review's body"),
+      from_you: count,
+      from_claude: count.describe("drafted by Claude Code, then sent by you"),
+      has_body: z.boolean().describe("you wrote a review body"),
+      unaddressed: count.describe("places Alden flagged that the review didn't comment near"),
     }),
   }),
   z.object({

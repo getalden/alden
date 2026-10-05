@@ -108,6 +108,8 @@
                     "doctor",
                     "telemetry",
                     "mcp",
+                    "comment",
+                    "send",
                     "other"
                   ]
                 },
@@ -488,6 +490,121 @@
               },
               "required": [
                 "action"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "draft_changed"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "add",
+                    "edit",
+                    "discard"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "you",
+                    "claude"
+                  ],
+                  "description": "who wrote the draft: you, or Claude Code drafting for you"
+                },
+                "inline": {
+                  "type": "boolean",
+                  "description": "on a line, rather than a general note"
+                }
+              },
+              "required": [
+                "action",
+                "source",
+                "inline"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "review_sent"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "review": {
+                  "type": "string",
+                  "enum": [
+                    "comment",
+                    "approve",
+                    "request_changes"
+                  ]
+                },
+                "inline": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "comments on lines"
+                },
+                "notes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "general notes, sent in the review's body"
+                },
+                "from_you": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "from_claude": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "drafted by Claude Code, then sent by you"
+                },
+                "has_body": {
+                  "type": "boolean",
+                  "description": "you wrote a review body"
+                },
+                "unaddressed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "places Alden flagged that the review didn't comment near"
+                }
+              },
+              "required": [
+                "review",
+                "inline",
+                "notes",
+                "from_you",
+                "from_claude",
+                "has_body",
+                "unaddressed"
               ],
               "additionalProperties": false
             }

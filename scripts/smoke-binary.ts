@@ -81,7 +81,7 @@ try {
     .map((line) => JSON.parse(line) as { id: number; result: Record<string, unknown> });
   const result = (n: number) => replies.find((r) => r.id === n)?.result;
   check("mcp answers the handshake", result(1)?.protocolVersion === "2025-06-18");
-  check("mcp lists its tools", (result(2)?.tools as unknown[] | undefined)?.length === 6);
+  check("mcp lists its tools", (result(2)?.tools as unknown[] | undefined)?.length === 7);
   check("mcp reviews through a tool", JSON.stringify(result(3)).includes("calls rank (signature changed)"));
 
   // The web UI, served from inside the binary.

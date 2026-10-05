@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Briefing } from "@alden/schema";
+import type { Briefing, ReviewDraft } from "@alden/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ApiError, startUiServer, type UiApi, type UiServer } from "./server.js";
 
@@ -93,6 +93,28 @@ const api: UiApi = {
     if (key === "nope") throw new ApiError(400, "Unknown config key: nope");
     calls.push({ method: "setConfig", args: { key, value } });
     return { config: {} };
+  },
+  drafts: async (pr) => {
+    calls.push({ method: "drafts", args: pr });
+    return { drafts: [], unaddressed: [] };
+  },
+  addDraft: async (input, source) => {
+    calls.push({ method: "addDraft", args: { input, source } });
+    return { id: "d1", ...input, headSha: "h", source: source ?? "you" } as unknown as ReviewDraft;
+  },
+  editDraft: async (id, change) => {
+    calls.push({ method: "editDraft", args: { id, change } });
+    return { id } as unknown as ReviewDraft;
+  },
+  deleteDraft: async (id) => {
+    calls.push({ method: "deleteDraft", args: id });
+    if (id === "gone") throw new ApiError(404, "No draft gone.");
+    return { ok: true };
+  },
+  sendReview: async (input) => {
+    calls.push({ method: "sendReview", args: input });
+    if (input.pr === "a/b#403") throw new ApiError(403, "Your GitHub sign-in can't write reviews on a/b.");
+    return { url: "https://github.com/a/b/pull/1#pullrequestreview-1", posted: 2, review: input.event };
   },
 };
 
@@ -290,6 +312,42 @@ describe("alden ui server", () => {
     ]);
     expect((await call("/api/memory", { method: "POST", headers: authed, body: { note: 1 } })).status).toBe(400);
     expect((await call("/api/memory/forget", { method: "POST", headers: authed, body: {} })).status).toBe(400);
+  });
+
+  it("passes drafts and sending through, always as yours, and checks their bodies", async () => {
+    const send = (method: string, path: string, body?: unknown) =>
+      call(path, { method, headers: authed, ...(body === undefined ? {} : { body }) });
+    expect(JSON.parse((await send("GET", "/api/drafts?pr=a%2Fb%231")).text)).toEqual({ drafts: [], unaddressed: [] });
+    // A "source" in the body is ignored: only Claude Code drafts as Claude.
+    await send("POST", "/api/drafts", { pr: "a/b#1", path: "x.ts", line: 3, body: "Hm?", source: "claude" });
+    await send("POST", "/api/drafts", { pr: "a/b#1", body: "Overall fine." });
+    await send("PATCH", "/api/drafts/d1", { body: "Hm!" });
+    await send("PATCH", "/api/drafts/d1", { path: "x.ts", line: 4, side: "LEFT" });
+    await send("DELETE", "/api/drafts/d1");
+    await send("POST", "/api/review/send", { pr: "a/b#1", event: "APPROVE" });
+    expect(calls).toEqual([
+      { method: "drafts", args: "a/b#1" },
+      { method: "addDraft", args: { input: { pr: "a/b#1", body: "Hm?", path: "x.ts", line: 3 }, source: "you" } },
+      { method: "addDraft", args: { input: { pr: "a/b#1", body: "Overall fine." }, source: "you" } },
+      { method: "editDraft", args: { id: "d1", change: { body: "Hm!" } } },
+      { method: "editDraft", args: { id: "d1", change: { path: "x.ts", line: 4, side: "LEFT" } } },
+      { method: "deleteDraft", args: "d1" },
+      { method: "sendReview", args: { pr: "a/b#1", event: "APPROVE" } },
+    ]);
+    expect((await send("GET", "/api/drafts")).status).toBe(400);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1" })).status).toBe(400);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", line: 3 })).status).toBe(400);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", path: "x.ts", line: 0 })).status).toBe(400);
+    expect((await send("PATCH", "/api/drafts/d1", {})).status).toBe(400);
+    expect((await send("DELETE", "/api/drafts/gone")).status).toBe(404);
+    expect((await send("POST", "/api/review/send", { pr: "a/b#1", event: "MERGE" })).status).toBe(400);
+    const refused = await send("POST", "/api/review/send", { pr: "a/b#403", event: "COMMENT", body: "x" });
+    expect(refused.status).toBe(403);
+    expect(JSON.parse(refused.text).error).toMatch(/can't write reviews/);
+    // The same session token as every route.
+    expect((await call("/api/review/send", { method: "POST", body: { pr: "a/b#1", event: "APPROVE" } })).status).toBe(
+      401,
+    );
   });
 
   it("passes memory changes and reactions through, and checks their bodies", async () => {

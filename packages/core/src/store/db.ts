@@ -66,6 +66,31 @@ const MIGRATIONS: ((store: AldenStore) => void)[] = [
       CREATE TABLE telemetry (id TEXT PRIMARY KEY, at TEXT NOT NULL, event TEXT NOT NULL, properties TEXT NOT NULL);
     `);
   },
+  (store) => {
+    store.exec(`
+      -- Comments you're writing on a PR, until you send them as one review or delete them. Never synced or exported.
+      -- pr_key is "owner/repo#123" lowercased; anchor is the line's text and its neighbours, to find it again when
+      -- the PR moves.
+      CREATE TABLE drafts (
+        id TEXT PRIMARY KEY,
+        pr TEXT NOT NULL,
+        pr_key TEXT NOT NULL,
+        head_sha TEXT NOT NULL,
+        path TEXT,
+        line INTEGER,
+        side TEXT,
+        anchor TEXT,
+        body TEXT NOT NULL,
+        source TEXT NOT NULL,
+        state TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX drafts_by_pr ON drafts (pr_key, created_at);
+      -- The places to look in each PR's latest briefing: what a review didn't comment on, and what a comment teaches.
+      CREATE TABLE briefed_places (pr_key TEXT PRIMARY KEY, briefing_at TEXT NOT NULL, places TEXT NOT NULL);
+    `);
+  },
 ];
 
 /** The JSON files Alden kept before the database, read once into it. */
@@ -131,8 +156,9 @@ function localDayOf(date: Date): string {
 }
 
 /**
- * Alden's local database, `~/.alden/alden.db`: feedback, what you open, memory, spending and first use per repo.
- * SQLite in WAL mode, so the CLI and the UI can write at once. Nothing in it leaves the machine.
+ * Alden's local database, `~/.alden/alden.db`: feedback, what you open, memory, spending, first use per repo, and the
+ * comments you're drafting. SQLite in WAL mode, so the CLI and the UI can write at once. Nothing in it leaves the
+ * machine, except the comments you send to GitHub yourself.
  */
 export class AldenStore {
   private constructor(

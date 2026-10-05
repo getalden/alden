@@ -42,9 +42,15 @@ Sign in to GitHub first (`alden auth login`); the tools say so if you haven't.
 | `alden_missed` | Records something Alden should have flagged. | `note` (up to 2,000 characters), `path`, `line`, `pr` (the latest briefing) |
 | `alden_memory` | What Alden knows about you in a repo. | `repo` (this clone's `origin`) |
 | `alden_remember` | Adds a note to it ("Money is in cents, never floats"). | `text` (up to 500 characters), `repo` (this clone's `origin`) |
+| `alden_draft_comment` | Drafts a review comment for you, on a line of the PR's diff or as a general note. It isn't posted: you review it and send it from the UI or with `alden send`. | `pr`, `path` and `line` (none: a general note), `side` `RIGHT` or `LEFT` (RIGHT), `body` |
 
 The assistant records feedback when you react ("that first one wasn't useful"), so Alden keeps learning what you look
 for wherever you review. It's told to record only what you said, never its own opinion.
+
+Ask it to write a comment and it drafts one in Alden with `alden_draft_comment`, marked as drafted by Claude Code
+(or whichever tool you use). Alden posts only what you send from the UI or terminal: the assistant can draft
+comments, you review and send. There is deliberately no tool to send, approve or request changes. See
+[Comments and sending a review](comments.md).
 
 ## The model
 
@@ -58,7 +64,7 @@ Ask for "Alden's model too" and it passes `use_alden_model`, which uses your Ald
 - Everything Alden returns that came from a PR (titles, descriptions, paths, code) is marked as written by the PR's
   author, and the assistant is told to treat it as data, never instructions. A PR can still try to talk to the
   assistant through its text, so keep your tool asking before it runs commands, as it does by default.
-- The tools read from GitHub and write only to Alden's own database on your machine (feedback and notes). Nothing posts
-  to GitHub. Forgetting memory is left to you, in `alden memory` or `alden ui`.
+- The tools read from GitHub and write only to Alden's own database on your machine (feedback, notes and comment
+  drafts). Nothing posts to GitHub: only you send a review, from the UI or `alden send`. Forgetting memory is left to you, in `alden memory` or `alden ui`.
 - With usage stats on, these tools count like any other use, marked as coming from an AI coding tool. See
   [Usage stats](telemetry.md).
