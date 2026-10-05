@@ -66,10 +66,13 @@ export function ReviewOptions({
   session,
   choices,
   onChange,
+  onSetUpModel,
 }: {
   session: Session | undefined;
   choices: Choices;
   onChange: (choices: Choices) => void;
+  /** Opens "Set up a model", offered in place of the model toggle when there's none. */
+  onSetUpModel?: (() => void) | undefined;
 }) {
   if (!session) return null;
   const available = session.model.available;
@@ -83,16 +86,22 @@ export function ReviewOptions({
 
   return (
     <>
-      <button
-        type="button"
-        className={`btn${modelOn ? " on neutral" : ""}`}
-        aria-pressed={modelOn}
-        disabled={!available}
-        title={available ? "Ask the model as well as running the checks" : session.model.reason}
-        onClick={() => onChange({ ...choices, llm: !choices.llm })}
-      >
-        {available ? "Ask the model" : "No model set up"}
-      </button>
+      {!available && onSetUpModel ? (
+        <button type="button" className="btn" title={session.model.reason} onClick={onSetUpModel}>
+          Set up a model
+        </button>
+      ) : (
+        <button
+          type="button"
+          className={`btn${modelOn ? " on neutral" : ""}`}
+          aria-pressed={modelOn}
+          disabled={!available}
+          title={available ? "Ask the model as well as running the checks" : session.model.reason}
+          onClick={() => onChange({ ...choices, llm: !choices.llm })}
+        >
+          {available ? "Ask the model" : "No model set up"}
+        </button>
+      )}
       <span className="divider" aria-hidden="true" />
       <select
         className="input mono"
