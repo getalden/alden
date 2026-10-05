@@ -37,8 +37,9 @@ export function checkModelKey(key: string): string | undefined {
   if (key.startsWith("sk-ant-admin")) {
     return "That's an Admin API key, which can't ask the model. Create an API key at console.anthropic.com.";
   }
-  if (!/^sk-ant-api\d{2}-[\w-]{20,}$/.test(key)) {
-    return "That doesn't look like an Anthropic API key (they start with sk-ant-api). Check you copied all of it.";
+  // Anthropic has more than one kind of API key (sk-ant-api03-…, sk-ant-usr…-…), so only the shape is checked.
+  if (!/^sk-ant-[a-z]+\d*-[\w-]{20,}$/.test(key)) {
+    return "That doesn't look like an Anthropic API key (they start with sk-ant-). Check you copied all of it.";
   }
   return undefined;
 }

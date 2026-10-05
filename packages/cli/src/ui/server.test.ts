@@ -190,6 +190,18 @@ describe("alden ui server", () => {
     expect(calls.map((c) => c.method)).toEqual(["startSignIn", "installCli"]);
   });
 
+  it("strips escape codes from PR text before the UI sees it", async () => {
+    const queue = api.queue;
+    api.queue = async () =>
+      ({ needsYou: [{ pr: { title: "Fix \u001b[31mred\u001b[0m output 🎉" } }], fastTrack: [] }) as never;
+    try {
+      const body = JSON.parse((await call("/api/queue", { headers: authed })).text);
+      expect(body.needsYou[0].pr.title).toBe("Fix red output 🎉");
+    } finally {
+      api.queue = queue;
+    }
+  });
+
   it("passes queue filters through", async () => {
     await call("/api/queue?refresh=1&repo=a/b&repo=c/d&org=acme", { headers: authed });
     expect(calls).toEqual([{ method: "queue", args: { refresh: true, repos: ["a/b", "c/d"], orgs: ["acme"] } }]);

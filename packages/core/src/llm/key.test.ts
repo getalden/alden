@@ -62,6 +62,8 @@ describe("checkModelKey", () => {
     expect(checkModelKey(`sk-ant-admin01-${"a".repeat(40)}`)).toMatch(/Admin API key/);
     expect(checkModelKey(`sk-ant-oat01-${"a".repeat(40)}`)).toMatch(/Claude\.ai/);
     expect(checkModelKey("sk-ant-api03-short")).toMatch(/doesn't look like/);
+    expect(checkModelKey(`sk-ant-usr01-${"a".repeat(40)}`)).toBeUndefined();
+    expect(checkModelKey(`sk-proj-${"a".repeat(40)}`)).toMatch(/doesn't look like/);
     expect(checkModelKey(`${KEY} trailing`)).toMatch(/doesn't look like/);
   });
 });

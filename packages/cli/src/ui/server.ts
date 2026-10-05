@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
 import type { ReviewStage } from "@alden/core";
 import type { Briefing } from "@alden/schema";
+import { stripControlDeep } from "../render/style.js";
 
 /** A review request from the UI. `pr` is a URL, owner/repo#123 or a queue number; without it, local changes. */
 export interface ReviewRequest {
@@ -133,7 +134,8 @@ const MAX_BODY_BYTES = 64 * 1024;
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { ...SECURITY_HEADERS, "Content-Type": "application/json; charset=utf-8" });
-  res.end(JSON.stringify(body));
+  // PR text (titles, branches, paths) can carry terminal escape codes; the UI would show them as text.
+  res.end(JSON.stringify(stripControlDeep(body)));
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -383,7 +385,7 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       ...(typeof body.effort === "string" && body.effort ? { effort: body.effort } : {}),
     };
     res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": "application/x-ndjson; charset=utf-8" });
-    const write = (event: ReviewEvent) => res.write(`${JSON.stringify(event)}\n`);
+    const write = (event: ReviewEvent) => res.write(`${JSON.stringify(stripControlDeep(event))}\n`);
     try {
       const briefing = await options.api.review(request, (stage, label) => write({ type: "stage", stage, label }));
       write({ type: "briefing", briefing });
