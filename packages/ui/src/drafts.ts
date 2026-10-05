@@ -1,50 +1,15 @@
+import type { ReviewDraft, ReviewDrafts, ReviewEvent, SendReviewResult, UnaddressedPlace } from "@alden/schema";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Api } from "./api";
 
 /*
  * Comment from Alden: the comments you write in a briefing, kept on this machine as drafts until you send them to
- * GitHub as one review. These types mirror the local API's contract; they move to @alden/schema with the server side.
+ * GitHub as one review. The types are the local API's, from @alden/schema.
  */
 
-/** A comment waiting to be sent. No path or line: a general note, which goes into the review's body. */
-export interface ReviewDraft {
-  id: string;
-  /** "owner/repo#123" */
-  pr: string;
-  /** The PR's head commit when the draft was written. */
-  headSha: string;
-  path?: string;
-  line?: number;
-  side?: "RIGHT" | "LEFT";
-  body: string;
-  /** "claude" when Claude Code added it; Claude can add drafts but never send them. */
-  source: "you" | "claude";
-  createdAt: string;
-  updatedAt: string;
-  /** "outdated": the PR has new commits since, so the line may have moved. */
-  state: "draft" | "outdated";
-}
-
-export type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
-
-export interface SendReviewResult {
-  url: string;
-  posted: number;
-  review: ReviewEvent;
-}
-
-/** A place Alden flagged that has no comment near it. */
-export interface Unaddressed {
-  checkId: string;
-  title: string;
-  path?: string;
-  line?: number;
-}
-
-export interface DraftsResponse {
-  drafts: ReviewDraft[];
-  unaddressed: Unaddressed[];
-}
+export type { ReviewDraft, ReviewEvent, SendReviewResult };
+export type Unaddressed = UnaddressedPlace;
+export type DraftsResponse = ReviewDrafts;
 
 export interface NewDraft {
   path?: string;
