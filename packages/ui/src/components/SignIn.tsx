@@ -128,7 +128,7 @@ export function SignInCard({ api, session, onSignedIn }: { api: Api; session: Se
           <p>
             {rejected
               ? "GitHub no longer accepts the sign-in Alden saved; it may have been revoked."
-              : "Alden uses your own GitHub sign-in to read the PRs waiting on you. It posts nothing."}
+              : "Alden uses your own GitHub sign-in to read the PRs waiting on you. It posts only the reviews you send."}
           </p>
           {keychain && !error && <p className="error-text">{keychain}</p>}
           {flow.state === "failed" && <p className="error-text">{flow.message}</p>}
