@@ -1,5 +1,17 @@
 # alden
 
+## 0.4.0
+
+### Minor Changes
+
+- b646c29: Comment from Alden: write comments on a PR in Alden (`alden comment <pr> [file:line] "text"`, or in the web UI), and send them to GitHub as one review that comments, approves or requests changes (`alden send <pr> --comment | --approve | --request-changes`). Alden shows exactly what will post and asks first; it posts only what you send, never in the background, from a model or from Claude Code. Comments follow their lines when the PR gets new commits, or are marked outdated when a line changed. Claude Code can draft comments with the new `alden_draft_comment` tool, and has no tool to send. A comment you send near a flagged place counts as "useful" on it. `alden doctor` says whether your sign-in can post reviews. Drafts stay on your machine and are never in usage stats or the feedback export.
+- 85278a0: Comment from Alden in the web UI and desktop app: comment on places, evidence lines or any changed line in a briefing, see Claude Code's drafts marked "from Claude", and send them all to GitHub as one review after a summary of exactly what will post.
+- a51225c: Set up a model in about a minute. `alden setup` offers three choices: paste an Anthropic API key (Alden checks it with one tiny request, which costs a fraction of a cent, says why one doesn't work, and stores it in the keychain), use a local model through Ollama (it recommends a coder model for your machine's memory, downloads it with progress if needed, and writes the config), or checks only. In the web UI and the desktop app, "No model set up" becomes **Set up a model**, with the same choices and no restart afterwards. `alden doctor` suggests `alden setup` when there's no model, and the first run mentions it once.
+
+### Patch Changes
+
+- 50e2681: In a briefing's "Needs your eyes", a file that still imports a moved or deleted module by its old path is headed "Still imports the old path in <file>" instead of "Caller of changed code in <file>". Callers of changed functions keep their title.
+
 ## 0.3.2
 
 ### Patch Changes
