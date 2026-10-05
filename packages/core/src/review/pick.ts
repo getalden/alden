@@ -42,6 +42,13 @@ const TITLES: Record<string, (path: string) => string> = {
   "paths.sensitive": (p) => `Sensitive file ${p}`,
 };
 
+/**
+ * A file that still imports a moved or deleted module by its old path isn't calling changed code: it's importing a
+ * path that's gone. The callers check words that evidence "imports <old path> (moved to …|deleted)".
+ */
+const isOldImport = (check: CheckResult, evidence: Evidence) =>
+  check.id === "callers.outside" && evidence.text.startsWith("imports ");
+
 /** Checks whose evidence without a file can still take a place, and its title. */
 const PLACELESS: Record<string, (text: string) => string> = {
   "injection.ai": (text) =>
@@ -97,7 +104,7 @@ export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}
     const usable = check.evidence.filter(
       (e): e is Anchored =>
         e.anchor !== undefined &&
-        !adjust.skip?.(check, titleOf(check, e.anchor.path), e.anchor.path) &&
+        !adjust.skip?.(check, titleOf(check, e), e.anchor.path) &&
         !usedPaths.has(e.anchor.path) &&
         // Nobody reads a lockfile line by line; what changed in it is the dependency check's job.
         (isSecret || !isLockfile(e.anchor.path)) &&
@@ -111,7 +118,7 @@ export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}
     if (!evidence) return false;
     usedPaths.add(evidence.anchor.path);
     if (!isSecret && dirOf(evidence.anchor.path) !== "") usedDirs.add(dirOf(evidence.anchor.path));
-    const title = titleOf(check, evidence.anchor.path);
+    const title = titleOf(check, evidence);
     const learned = adjust.why?.(check.id);
     picked.push({
       title,
@@ -144,7 +151,11 @@ export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}
   });
 }
 
-const titleOf = (check: CheckResult, path: string) => TITLES[check.id]?.(path) ?? `${check.title}: ${path}`;
+function titleOf(check: CheckResult, evidence: Anchored): string {
+  const path = evidence.anchor.path;
+  if (isOldImport(check, evidence)) return `Still imports the old path in ${path}`;
+  return TITLES[check.id]?.(path) ?? `${check.title}: ${path}`;
+}
 
 /** How learning changes the pick: places to leave out, checks to take first, and why. */
 export interface PickAdjustments {
