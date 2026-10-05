@@ -97,6 +97,19 @@ describe("pickLookHere", () => {
     expect(picked.map((p) => p.anchor?.path)).toEqual(["yarn.lock", "app/auth/session.ts"]);
   });
 
+  it("says a file still importing a moved or deleted module imports the old path, not that it calls changed code", () => {
+    const callers = flagged("callers.outside", "high", []);
+    callers.evidence = [
+      { text: "imports src/old/pricing.ts (moved to src/pricing.ts)", anchor: { path: "src/cart.ts", line: 3 } },
+      { text: "calls applyDiscount (signature changed)", anchor: { path: "app/checkout.ts", line: 41 } },
+    ];
+    const picked = pickLookHere([callers], { max: 5 });
+    expect(picked.map((p) => p.title)).toEqual([
+      "Still imports the old path in src/cart.ts",
+      "Caller of changed code in app/checkout.ts",
+    ]);
+  });
+
   it("never spends a slot on failing CI, passed checks or evidence without a place", () => {
     const ci = flagged("ci.status", "high", []);
     ci.evidence = [{ text: "Status rollup: failing" }];

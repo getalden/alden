@@ -44,3 +44,9 @@ both together.
 `/benchmarks/` is `src/benchmarks.html`, wrapped in the docs' header and footer by `build.ts`. Every number on it comes
 from a result file named on the page (`eval/results/`, `eval/e2e/`) or a measured session it describes; update the
 date and version with the numbers.
+
+## Alden Cloud
+
+`/cloud/` is `src/cloud.html`, in the same frame. Alden Cloud isn't built: the page describes what's planned (marked as
+planned, prices included) and the waitlist is an email to beta@getalden.dev or the Discord, with no form. Change it
+when the plan changes.
