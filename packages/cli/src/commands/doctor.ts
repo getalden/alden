@@ -263,8 +263,8 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
         detail: "none set up, so reviews run the checks only",
         fix:
           config.model.provider === "anthropic"
-            ? "Run `alden auth model` to store an API key (or set ANTHROPIC_API_KEY); or use Bedrock, Vertex, Foundry or a local model (docs/models.md)."
-            : choice.reason,
+            ? "Run `alden setup` to paste an API key or use a local model (or set ANTHROPIC_API_KEY); Bedrock, Vertex and Foundry are in docs/models.md."
+            : `${choice.reason} Or run \`alden setup\`.`,
       });
     }
     const spent = await new SpendLedger().spentOn().catch(() => 0);

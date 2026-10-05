@@ -2,6 +2,7 @@ import type { RankedPullRequest, RankedQueue } from "@alden/schema";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Api, ApiError, type CloneInfo, type Session } from "./api";
 import { MemoryView } from "./components/MemoryView";
+import { ModelSetupDialog } from "./components/ModelSetup";
 import { isLearnedReason, prKey, QueueView, type Reaction } from "./components/QueueView";
 import { type Choices, initialChoices, ReviewOptions, toRequest } from "./components/ReviewOptions";
 import { ReviewPane } from "./components/ReviewPane";
@@ -43,6 +44,7 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
     (key: string, count: number) => setDraftCounts((all) => (all[key] === count ? all : { ...all, [key]: count })),
     [],
   );
+  const [settingUpModel, setSettingUpModel] = useState(false);
 
   const loadSession = useCallback(() => {
     if (!api) return;
@@ -238,6 +240,7 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
                 draftsApi={api}
                 onDraftCount={onDraftCount}
                 cloneOf={api.clone}
+                onSetUpModel={() => setSettingUpModel(true)}
               />
             ) : (
               <p className="faint" style={{ margin: "auto", padding: "120px 0", fontSize: 13 }}>
@@ -286,7 +289,14 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
               request={toRequest(choicesNow, session)}
               onStart={(request) => reviews.start("local", request)}
               onCancel={() => reviews.cancel("local")}
-              controls={<ReviewOptions session={session} choices={choicesNow} onChange={setChoices} />}
+              controls={
+                <ReviewOptions
+                  session={session}
+                  choices={choicesNow}
+                  onChange={setChoices}
+                  onSetUpModel={() => setSettingUpModel(true)}
+                />
+              }
               emptyHint="Review your uncommitted changes (staged, unstaged and untracked) before you open a PR."
               perReviewUsd={session?.budget.perReviewUsd}
             />
@@ -315,6 +325,19 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
             <StateCard tone="spin" title="Loading…" live />
           )}
         </div>
+      )}
+      {settingUpModel && (
+        <ModelSetupDialog
+          api={api}
+          desktop={desktop}
+          onClose={() => setSettingUpModel(false)}
+          onReady={() => {
+            setSettingUpModel(false);
+            // The model picker starts again from the new session, with the model on.
+            setChoices(undefined);
+            loadSession();
+          }}
+        />
       )}
     </div>
   );
@@ -362,6 +385,7 @@ function PrPane(props: {
   /** Where this PR's drafts (Comment from Alden) are read, written and sent. */
   draftsApi?: Api | undefined;
   onDraftCount?: (key: string, count: number) => void;
+  onSetUpModel?: () => void;
 }) {
   const { prRef, row, reviews, session, api, cloneOf, onDraftCount } = props;
   const key = `${prRef.repo}#${prRef.number}`;
@@ -452,7 +476,14 @@ function PrPane(props: {
       request={request}
       onStart={(request) => reviews.start(key, request)}
       onCancel={() => reviews.cancel(key)}
-      controls={<ReviewOptions session={session} choices={props.choices} onChange={props.onChoices} />}
+      controls={
+        <ReviewOptions
+          session={session}
+          choices={props.choices}
+          onChange={props.onChoices}
+          onSetUpModel={props.onSetUpModel}
+        />
+      }
       emptyHint="Alden fetches the PR, finds who calls the code it changes (from a clone of the repo), runs its checks, and asks the model if one is set up."
       feedbackFor={props.feedbackFor}
       perReviewUsd={session?.budget.perReviewUsd}

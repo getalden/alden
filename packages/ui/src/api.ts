@@ -1,4 +1,14 @@
-import type { Briefing, FeedbackInput, FeedbackSummary, MemoryItem, RankedQueue, RepoStats } from "@alden/schema";
+import type {
+  Briefing,
+  FeedbackInput,
+  FeedbackSummary,
+  KeyTestResult,
+  LocalSetupEvent,
+  MemoryItem,
+  ModelSetupState,
+  RankedQueue,
+  RepoStats,
+} from "@alden/schema";
 import type { DraftsResponse, NewDraft, ReviewDraft, ReviewEvent as ReviewVerdict, SendReviewResult } from "./drafts";
 
 export interface Memory {
@@ -218,6 +228,40 @@ export class Api {
   setModelKey = (key: string | null) =>
     this.request<{ key: Session["model"]["key"] }>("/api/model-key", { method: "PUT", body: JSON.stringify({ key }) });
 
+  /** What "Set up a model" offers: any key Alden finds, Ollama and its models, the local model for this machine. */
+  modelSetup = () => this.request<ModelSetupState>("/api/model-setup");
+
+  /** Tests the key with one tiny request and stores it if it works (`untested`: stores it without). Never echoed. */
+  testModelKey = (key: string, untested = false) =>
+    this.request<KeyTestResult>("/api/model-setup/test-key", {
+      method: "POST",
+      body: JSON.stringify({ key, ...(untested ? { untested: true } : {}) }),
+    });
+
+  /** Opens one of the setup step's pages in the default browser, from the server (the desktop window can't). */
+  openSetupPage = (page: SetupPage) =>
+    this.request<{ opened: string }>("/api/model-setup/open", { method: "POST", body: JSON.stringify({ page }) });
+
+  /** Pulls a local model if Ollama doesn't have it, then makes it the model; `onEvent` hears the download's progress. */
+  async setUpLocalModel(
+    model: string,
+    onEvent: (event: LocalSetupEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const res = await this.fetcher("/api/model-setup/local", {
+      method: "POST",
+      headers: { "X-Alden-Token": this.token, "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+      ...(signal ? { signal } : {}),
+    });
+    for await (const event of ndjson<LocalSetupEvent>(res)) {
+      onEvent(event);
+      if (event.type === "done") return event.model;
+      if (event.type === "error") throw new ApiError(500, event.message);
+    }
+    throw new ApiError(500, "Setting up the local model ended without saying how it went.");
+  }
+
   clone = (repo: string) => this.request<CloneInfo>(`/api/clone?repo=${encodeURIComponent(repo)}`);
 
   cliStatus = () => this.request<CliStatus>("/api/cli");
@@ -299,5 +343,26 @@ export class Api {
       }
       if (done) throw new ApiError(500, "The review ended without a briefing.");
     }
+  }
+}
+
+/** The pages the setup step links to: where to create an Anthropic key, Alden Cloud's waitlist, Ollama's download. */
+export type SetupPage = "keys" | "cloud" | "ollama";
+
+/** The lines of a newline-delimited JSON response, parsed; a failed request throws its error. */
+async function* ndjson<T>(res: Response): AsyncGenerator<T> {
+  if (!res.ok || !res.body) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new ApiError(res.status, body.error ?? `The request failed (${res.status}).`);
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += value ?? "";
+    const lines = buffer.split("\n");
+    buffer = done ? "" : (lines.pop() ?? "");
+    for (const line of lines) if (line.trim()) yield JSON.parse(line) as T;
+    if (done) return;
   }
 }

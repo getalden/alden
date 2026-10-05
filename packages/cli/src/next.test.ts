@@ -62,6 +62,23 @@ describe("next steps", () => {
     expect(
       doctorNext([{ area: "Model", status: "warn", detail: "cap", fix: "`alden config set budget.dailyUsd …`" }]),
     ).toEqual([]);
+    // No model: `alden setup` as well as the first fix, or on its own.
+    const noModel = {
+      area: "Model",
+      status: "warn",
+      detail: "none set up, so reviews run the checks only",
+      fix: "Run `alden setup` to paste an API key or use a local model.",
+    } as const;
+    expect(
+      doctorNext([
+        { area: "GitHub", status: "fail", detail: "not signed in", fix: "Run `alden auth login`." },
+        noModel,
+      ]),
+    ).toEqual([
+      { command: "alden auth login", why: "the fix for GitHub" },
+      { command: "alden setup", why: "set up a model in a minute" },
+    ]);
+    expect(doctorNext([noModel])).toEqual([{ command: "alden setup", why: "the fix for Model" }]);
     expect(doctorNext([{ area: "GitHub", status: "ok", detail: "@sam" }])).toEqual([
       { command: "alden queue", why: "see what's waiting on you" },
     ]);

@@ -110,6 +110,7 @@
                     "mcp",
                     "comment",
                     "send",
+                    "setup",
                     "other"
                   ]
                 },

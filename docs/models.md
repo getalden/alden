@@ -6,6 +6,13 @@ does, whether it matches its title, and adds grouped findings anchored to lines 
 Alden uses your own model account. It never uses Claude.ai or Claude Code subscription logins: Anthropic doesn't allow
 third-party tools to use them.
 
+## Setting one up
+
+`alden setup` (or **Set up a model** in the web UI and the desktop app) gets you a working model in about a minute: an
+Anthropic API key, checked with one tiny request and stored in your keychain; a local model through Ollama; or checks
+only. The sections below are the same choices by hand. If you'd rather Alden handled everything, sign up for
+[Alden Cloud (beta)](https://getalden.dev/cloud).
+
 ## Choosing a model
 
 ```sh
@@ -40,9 +47,13 @@ Set the provider with `alden config set model.provider <name>`.
 
 ### Anthropic API (`anthropic`, the default)
 
-Run `alden auth model` and paste your API key (from console.anthropic.com): it's stored in the OS keychain, like the
-GitHub token, and every surface uses it, including the desktop app, which never sees your shell's variables. You can
-also set it in the web UI's Settings. Alden looks for credentials in this order:
+Run `alden setup` (or `alden auth model`) and paste your API key (from
+[console.anthropic.com](https://console.anthropic.com/settings/keys)): it's stored in the OS keychain, like the GitHub
+token, and every surface uses it, including the desktop app, which never sees your shell's variables. `alden setup`
+and the UI's **Set up a model** first check the key with one request to Claude Haiku for a single output token, which
+costs a fraction of a cent, and say why a key doesn't work (mistyped or deleted, no credit, no network). You can also
+set it in the web UI's Settings. Every review looks the key up afresh, so a new key works at once, without
+restarting `alden ui` or the desktop app. Alden looks for credentials in this order:
 
 1. The environment: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`, or workload identity federation.
 2. The key stored with `alden auth model` (in the keychain, or a file only you can read where there's no keychain).
@@ -93,6 +104,20 @@ alden config set model.baseUrl http://localhost:11434/v1   # Ollama's address, t
 If the endpoint needs a key, set `ALDEN_OPENAI_API_KEY` (or `OPENAI_API_KEY`). The model must support structured
 (JSON schema) output. Smaller local models make weaker briefings; Alden still drops any finding that doesn't point at a
 line in the diff.
+
+`alden setup` does this for Ollama: it finds Ollama (at `OLLAMA_HOST`, or `http://localhost:11434`), recommends a model
+for your machine's memory, pulls it if needed, and writes the three settings above (`model.baseUrl` only when Ollama
+isn't at its default address, so the desktop app, which never sees `OLLAMA_HOST`, finds it too). It picks:
+
+| Memory | Model | Download |
+| --- | --- | --- |
+| Under 16 GB | `qwen2.5-coder:7b` | about 4.7 GB |
+| 16 to 32 GB | `qwen2.5-coder:14b` | about 9 GB |
+| 32 GB or more | `qwen3-coder:30b` | about 19 GB |
+
+If Ollama already has the one for your memory, or a smaller one from the table, it uses that instead of downloading.
+Any other model Ollama has can be chosen too. Local models are free and private, but they flag less than Claude: expect
+fewer findings, and more missed.
 
 ## Budgets
 

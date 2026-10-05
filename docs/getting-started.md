@@ -92,11 +92,22 @@ Without a model, Alden runs only its deterministic checks. With one, the briefin
 whether it matches its title, and what else deserves a look.
 
 ```sh
-alden auth model                    # paste your key from console.anthropic.com; it's kept in the keychain
-alden review 1
+alden setup
 ```
 
-`ANTHROPIC_API_KEY` works too, and comes first where it's set.
+It offers three choices, and takes about a minute:
+
+1. **Paste an Anthropic API key** (create one at
+   [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)). Alden checks it with one tiny
+   request, which costs a fraction of a cent, and keeps it in your keychain, where the desktop app finds it too.
+2. **Use a local model** with [Ollama](https://ollama.com). Alden suggests a coder model that fits your machine's
+   memory, downloads it if Ollama doesn't have it, and points its config at it. Free and private, but local models flag
+   less than Claude.
+3. **Checks only.** Nothing to set up.
+
+In the web UI and the desktop app, **Set up a model** (where the briefing options would ask the model) offers the
+same. `alden auth model` stores a key without the check, and `ANTHROPIC_API_KEY` works too, coming first where it's
+set. If you'd rather Alden handled everything, sign up for [Alden Cloud (beta)](https://getalden.dev/cloud).
 
 The default is Claude Sonnet, capped at $0.50 per review and $10 per day. Each briefing shows what it cost, and
 `alden spend` shows the running total. See [Models, providers and budgets](models.md) for other models, AWS Bedrock,

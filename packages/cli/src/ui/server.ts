@@ -6,12 +6,14 @@ import { extname, join, normalize, sep } from "node:path";
 import type { ReviewStage } from "@alden/core";
 import type {
   Briefing,
+  LocalSetupEvent,
   ReviewDraft,
   ReviewDrafts,
   ReviewEvent as ReviewVerdict,
   SendReviewResult,
 } from "@alden/schema";
 import { stripControlDeep } from "../render/style.js";
+import type { ModelSetupApi, SetupPage } from "./model-setup.js";
 
 /** A review request from the UI. `pr` is a URL, owner/repo#123 or a queue number; without it, local changes. */
 export interface ReviewRequest {
@@ -51,6 +53,8 @@ export interface UiApi {
    * says where the key now comes from, never the key.
    */
   setModelKey(key: string | null): Promise<unknown>;
+  /** "Set up a model": what's available, testing and storing a key, a local model through Ollama (see model-setup.ts). */
+  modelSetup: ModelSetupApi;
   /** The local clone PR briefings on `repo` ("owner/name") find callers in, or null when there's none. */
   clone(repo: string): Promise<unknown>;
   /** The desktop app's `alden` command: whether it's installed, and installing it. */
@@ -413,6 +417,31 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         send(res, 200, await api.setModelKey(body.key));
         return;
       }
+      case "GET /api/model-setup":
+        send(res, 200, await api.modelSetup.state());
+        return;
+      case "POST /api/model-setup/test-key": {
+        const body = await readJsonBody(req);
+        if (typeof body.key !== "string")
+          throw new ApiError(400, "Send { key }, and { untested: true } to skip the check.");
+        // The answer says whether it works and where the key now comes from; never the key.
+        send(res, 200, await api.modelSetup.testKey(body.key, body.untested === true));
+        return;
+      }
+      case "POST /api/model-setup/local": {
+        const body = await readJsonBody(req);
+        if (typeof body.model !== "string" || !body.model.trim()) throw new ApiError(400, "Send { model }.");
+        await streamLocalSetup(body.model.trim(), res);
+        return;
+      }
+      case "POST /api/model-setup/open": {
+        const body = await readJsonBody(req);
+        const pages: SetupPage[] = ["keys", "cloud", "ollama"];
+        const page = pages.find((p) => p === body.page);
+        if (!page) throw new ApiError(400, "Send { page: keys | cloud | ollama }.");
+        send(res, 200, await api.modelSetup.open(page));
+        return;
+      }
       case "GET /api/clone": {
         const repo = url.searchParams.get("repo");
         if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new ApiError(400, "Send ?repo=owner/name.");
@@ -495,6 +524,25 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
     try {
       const briefing = await options.api.review(request, (stage, label) => write({ type: "stage", stage, label }));
       write({ type: "briefing", briefing });
+    } catch (error) {
+      write({ type: "error", message: (error as Error).message });
+    }
+    res.end();
+  }
+
+  /**
+   * Newline-delimited JSON, like a review: Ollama's pull progress, then done or an error. Closing the request (the
+   * dialog closed) stops the download.
+   */
+  async function streamLocalSetup(model: string, res: ServerResponse): Promise<void> {
+    const stop = new AbortController();
+    res.on("close", () => {
+      if (!res.writableFinished) stop.abort();
+    });
+    res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": "application/x-ndjson; charset=utf-8" });
+    const write = (event: LocalSetupEvent) => res.write(`${JSON.stringify(stripControlDeep(event))}\n`);
+    try {
+      await options.api.modelSetup.useLocal(model, write, stop.signal);
     } catch (error) {
       write({ type: "error", message: (error as Error).message });
     }

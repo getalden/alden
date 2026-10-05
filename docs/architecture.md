@@ -67,6 +67,10 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | `POST /api/auth/device/open` | Opens GitHub's page for the code in the default browser. |
 | `POST /api/auth/gh` | Drops Alden's stored sign-in, so it uses the GitHub CLI's. |
 | `PUT /api/model-key` | Stores `{ key }` (the Anthropic API key) in the keychain, as `alden auth model` does; `null` removes it. Write-only: answers where the key comes from, never the key. |
+| `GET /api/model-setup` | What "Set up a model" offers: what reviews use now, any Anthropic key Alden finds (where from, never the key), whether Ollama runs and what it has pulled, this machine's memory and the local model recommended for it. |
+| `POST /api/model-setup/test-key` | Tests `{ key }` with one tiny request (Haiku, one output token) and stores it if it works, making Claude the model; `untested: true` stores it without the request. Answers `{ ok, key }` or `{ ok: false, reason, message }`, never the key. |
+| `POST /api/model-setup/local` | Makes `{ model }` (an Ollama model name) the model, pulling it first if Ollama hasn't; streams `progress` lines, then `done` or `error`, as a review does. Closing the request stops the download. |
+| `POST /api/model-setup/open` | Opens one of the setup step's pages (`keys`, `cloud` or `ollama`) in the default browser, for the desktop window. Only those three. |
 | `GET /api/clone` | The local clone PR briefings on `repo` find callers in (here, remembered, or under `clones.folders`), or null. |
 | `GET /api/cli` | Desktop app: whether the `alden` command is installed, and where. |
 | `POST /api/cli/install` | Desktop app: links its `alden` into `/usr/local/bin` (macOS may ask for a password). |

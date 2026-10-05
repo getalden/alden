@@ -67,6 +67,7 @@ import { loadRepoStats } from "../commands/stats.js";
 import { describeGitHubError, reviewWriteFix } from "../github-errors.js";
 import { learningFor, learningForQueue, noteOpened } from "../learning.js";
 import { parsePrRef } from "../pr-ref.js";
+import { createModelSetupApi } from "./model-setup.js";
 import { ApiError, type DraftInput, type ReviewRequest, type UiApi } from "./server.js";
 import { cliStatus, createSignIn, gitHubCliSignedIn, installCli } from "./setup.js";
 
@@ -288,6 +289,8 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
       const now = await resolveModelKey();
       return { key: now ? { source: now.source, where: now.where } : null };
     },
+
+    modelSetup: createModelSetupApi({ cwd: options.cwd }),
 
     async clone(repo) {
       const config = await loadConfig(options.cwd);

@@ -12,6 +12,7 @@ import { registerMemoryCommand } from "./commands/memory.js";
 import { registerOpenCommand } from "./commands/open.js";
 import { registerQueueCommand } from "./commands/queue.js";
 import { registerReviewCommand } from "./commands/review.js";
+import { registerSetupCommand } from "./commands/setup.js";
 import { registerSpendCommand } from "./commands/spend.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerUiCommand } from "./commands/ui.js";
@@ -23,6 +24,7 @@ const program = new Command()
   .description("A code review companion: triages your PR queue and briefs you on what needs your eyes.")
   .version(pkg.version);
 
+registerSetupCommand(program);
 registerAuthCommand(program);
 registerConfigCommand(program);
 registerQueueCommand(program);

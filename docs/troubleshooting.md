@@ -38,9 +38,16 @@ with `alden auth login --device`, or run `gh auth refresh -s repo`.
 
 ## Models
 
-**"No Anthropic API key found, so only the checks ran."** Run `alden auth model` (or set `ANTHROPIC_API_KEY`, or run
-`ant auth login`), or pass `--no-llm` to hide the note. The desktop app doesn't see your shell's `ANTHROPIC_API_KEY`;
-store the key with `alden auth model` or in Settings.
+**"No Anthropic API key found, so only the checks ran."** Run `alden setup` to paste a key (checked, then stored) or use
+a local model; or `alden auth model`, `ANTHROPIC_API_KEY` or `ant auth login`. `--no-llm` hides the note. The desktop
+app doesn't see your shell's `ANTHROPIC_API_KEY`: use **Set up a model** there, or store the key with `alden auth model`
+or in Settings.
+
+**`alden setup` says the key has no credit.** The key is valid, but its Anthropic account can't pay for requests. Add
+credit at [console.anthropic.com/settings/billing](https://console.anthropic.com/settings/billing) and run it again.
+
+**`alden setup` doesn't find Ollama.** Start it (`ollama serve`, or open the Ollama app). If it listens somewhere other
+than `http://localhost:11434`, set `OLLAMA_HOST` in the terminal you run `alden setup` from.
 
 **"Couldn't find Google Cloud credentials for Vertex."** Run `gcloud auth application-default login`, or set
 `GOOGLE_APPLICATION_CREDENTIALS` to a service account key file. Also set `model.projectId`.

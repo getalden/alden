@@ -42,6 +42,25 @@ const api: UiApi = {
     calls.push({ method: "setModelKey", args: key });
     return { key: key ? { source: "alden", where: "the keychain" } : null };
   },
+  modelSetup: {
+    state: async () => ({ current: { available: false } }) as never,
+    testKey: async (key, untested) => {
+      calls.push({ method: "testKey", args: { key, untested } });
+      return key.endsWith("bad")
+        ? { ok: false, reason: "invalid", message: "Anthropic didn't accept that key." }
+        : { ok: true, key: { source: "alden", where: "the key you stored" } };
+    },
+    useLocal: async (model, onEvent) => {
+      calls.push({ method: "useLocal", args: model });
+      if (model === "missing:1b") throw new ApiError(409, "Ollama isn't running.");
+      onEvent({ type: "progress", status: "pulling manifest", completed: null, total: null });
+      onEvent({ type: "done", model, baseUrl: "http://localhost:11434/v1" });
+    },
+    open: async (page) => {
+      calls.push({ method: "open", args: page });
+      return { opened: page };
+    },
+  },
   clone: async (repo) => {
     calls.push({ method: "clone", args: repo });
     return { repo, path: null };
@@ -275,6 +294,46 @@ describe("alden ui server", () => {
     expect(calls).toEqual([
       { method: "setModelKey", args: key },
       { method: "setModelKey", args: null },
+    ]);
+  });
+
+  it("sets up a model: tests a key without sending it back, streams a local model, opens only its own pages", async () => {
+    const post = (path: string, body: unknown) => call(path, { method: "POST", headers: authed, body });
+    expect(JSON.parse((await call("/api/model-setup", { headers: authed })).text)).toEqual({
+      current: { available: false },
+    });
+    const key = `sk-ant-api03-${"z".repeat(40)}`;
+    const tested = await post("/api/model-setup/test-key", { key });
+    expect(JSON.parse(tested.text)).toEqual({ ok: true, key: { source: "alden", where: "the key you stored" } });
+    expect(tested.text).not.toContain(key);
+    expect(JSON.parse((await post("/api/model-setup/test-key", { key: "sk-bad" })).text)).toMatchObject({ ok: false });
+    expect((await post("/api/model-setup/test-key", {})).status).toBe(400);
+    await post("/api/model-setup/test-key", { key, untested: true });
+
+    const local = await post("/api/model-setup/local", { model: "qwen2.5-coder:7b" });
+    expect(local.headers["content-type"]).toContain("application/x-ndjson");
+    expect(
+      local.text
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l).type),
+    ).toEqual(["progress", "done"]);
+    expect(JSON.parse((await post("/api/model-setup/local", { model: "missing:1b" })).text.trim())).toEqual({
+      type: "error",
+      message: "Ollama isn't running.",
+    });
+    expect((await post("/api/model-setup/local", {})).status).toBe(400);
+
+    expect(JSON.parse((await post("/api/model-setup/open", { page: "cloud" })).text)).toEqual({ opened: "cloud" });
+    expect((await post("/api/model-setup/open", { page: "https://evil.example" })).status).toBe(400);
+    expect((await call("/api/model-setup", { method: "GET" })).status).toBe(401);
+    expect(calls).toEqual([
+      { method: "testKey", args: { key, untested: false } },
+      { method: "testKey", args: { key: "sk-bad", untested: false } },
+      { method: "testKey", args: { key, untested: true } },
+      { method: "useLocal", args: "qwen2.5-coder:7b" },
+      { method: "useLocal", args: "missing:1b" },
+      { method: "open", args: "cloud" },
     ]);
   });
 

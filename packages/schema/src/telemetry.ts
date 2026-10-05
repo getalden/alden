@@ -44,6 +44,7 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
         "mcp",
         "comment",
         "send",
+        "setup",
         "other",
       ]),
       ok: z.boolean(),

@@ -49,7 +49,8 @@ relationships, Blade templates and service config. Local reviews use your workin
 a clone of the PR's repo: the one you run it in, one it has seen you use, or one under `clones.folders`. It fetches the PR into its own worktree under `~/.alden/worktrees`
 (your checkout is never touched). `--no-graph` skips it.
 
-With an Anthropic API key (`alden auth model` stores one in the keychain; `ANTHROPIC_API_KEY` works too), the review also asks a model what the change
+With a model (`alden setup` checks and stores an Anthropic API key, or sets up a local one through Ollama;
+`ANTHROPIC_API_KEY` works too), the review also asks a model what the change
 does, whether it matches its title, and what else deserves a look. Alden keeps only findings that point at real lines
 in the diff, and never lets them displace high-severity checks. Use `--model opus` for one review, or `--no-llm` to
 skip the model. Every call is checked against your caps before it's sent; `alden spend` shows what you've spent.

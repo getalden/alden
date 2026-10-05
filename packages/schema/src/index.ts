@@ -52,6 +52,22 @@ export {
   ReactionEventSchema,
 } from "./memory.js";
 export {
+  type KeyTestResult,
+  KeyTestResultSchema,
+  type LocalModel,
+  LocalModelSchema,
+  type LocalRecommendation,
+  LocalRecommendationSchema,
+  type LocalSetupEvent,
+  LocalSetupEventSchema,
+  type ModelKeyInfo,
+  ModelKeyInfoSchema,
+  type ModelSetupState,
+  ModelSetupStateSchema,
+  type OllamaStatus,
+  OllamaStatusSchema,
+} from "./model-setup.js";
+export {
   type CiState,
   CiStateSchema,
   type FastTrackKind,
