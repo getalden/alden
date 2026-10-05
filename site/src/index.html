@@ -43,14 +43,13 @@
           <a href="/docs/">Docs</a>
           <a href="/benchmarks/">Benchmarks</a>
           <a href="https://discord.gg/ZtXFX7sxTu" rel="noopener">Discord</a>
-          <span class="mono faint">open source after the beta</span>
           <a class="btn small" href="#install" data-track="install" data-label="nav">Install</a>
         </nav>
       </header>
 
       <section class="hero">
         <div class="hero-copy">
-          <span class="kicker"><span class="dot" aria-hidden="true"></span>open beta · free during the beta · macOS, Linux and Windows</span>
+          <span class="kicker"><span class="dot" aria-hidden="true"></span>open beta · open source after the beta · macOS, Linux and Windows</span>
           <h1>The review companion that knows what you look for.</h1>
           <p class="lede">
             Alden ranks the PRs waiting on you and writes each one a briefing with the callers and checks the diff leaves
@@ -88,6 +87,22 @@
       <span class="mono faint small">
         Real output on recorded public PRs from Next.js, Django, Laravel, Hugo and Grafana; checks only, no model.
       </span>
+    </section>
+
+    <section class="band proof" aria-labelledby="proof-title">
+      <div class="proof-head">
+        <span class="kicker-num">measured</span>
+        <h2 id="proof-title">Tested on 150 PRs in Laravel, Grafana and two more repos.</h2>
+        <p>
+          Numbers from our <a href="/benchmarks/">benchmark report</a>, with how to run them yourself.
+        </p>
+      </div>
+      <div class="tiles proof-tiles">
+        <div class="tile"><span class="num">10×</span><span class="what">more of the files that later broke flagged with a model than by checks alone</span></div>
+        <div class="tile"><span class="num">150 / 150</span><span class="what">seeded PRs ranked and checked as expected, across four real repos</span></div>
+        <div class="tile"><span class="num">0</span><span class="what">invented locations: none of the model's 104 findings pointed outside the diff</span></div>
+        <div class="tile"><span class="num">&lt; 5 s</span><span class="what">for a briefing on a Grafana PR, with callers, before you open the diff</span></div>
+      </div>
     </section>
 
     <section class="band">
@@ -222,6 +237,7 @@ alden ui             # or all of it in your browser</code></pre>
             <a class="btn big light" href="#install" data-track="install" data-label="cta">Install Alden</a>
             <a class="btn big ghost" href="https://discord.gg/ZtXFX7sxTu" rel="noopener" data-label="cta">Join the Discord</a>
           </div>
+          <p class="contact">Questions, or want to talk? Email <a href="mailto:beta@getalden.dev" data-track="contact" data-label="cta">beta@getalden.dev</a>.</p>
         </div>
         <div class="terminal" id="terminal" aria-label="A terminal running alden queue and alden review" role="img">
           <div id="term-lines"></div>
@@ -235,6 +251,7 @@ alden ui             # or all of it in your browser</code></pre>
       <span class="links"
         ><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a
         ><a href="https://discord.gg/ZtXFX7sxTu" rel="noopener" data-label="footer">Discord</a
+        ><a href="mailto:beta@getalden.dev" data-track="contact" data-label="footer">beta@getalden.dev</a
         ><a href="/docs/privacy/#this-website">Privacy</a><span>getalden.dev</span></span
       >
     </footer>

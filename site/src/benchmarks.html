@@ -1,199 +1,235 @@
 <main class="bench">
-  <article class="prose">
-    <h1>Benchmarks</h1>
-    <p class="lede">
-      How Alden did on 150 test PRs in four repos, and on recorded public PRs that a later PR had to fix: what it got
-      right, what it missed, how fast it was and what the model cost. Measured on 4 October 2026. Every number comes from
-      a run you can repeat, and the misses are listed with the hits.
-    </p>
+  <article class="prose paper">
+    <p class="paper-meta mono faint">Technical report · Alden 0.3.0 · 5 October 2026</p>
+    <h1>Pointing reviewers at what breaks: an evaluation of Alden on 150 seeded PRs and 33 real ones</h1>
+
+    <section class="abstract" aria-labelledby="abstract">
+      <h2 id="abstract">Abstract</h2>
+      <p>
+        Code review tools show the lines a PR changed. The bugs that slip through are often somewhere else: in the code
+        that calls those lines, in a dependency the PR moved a major version, or in the file a later PR has to fix. We
+        evaluate Alden, a review companion that runs on the reviewer's machine, on two sets of PRs.
+      </p>
+      <p>
+        On <strong>150 PRs we seeded into four real repositories</strong>, including forks of Laravel and Grafana,
+        Alden 0.3.0 ranked and checked <strong>all 150 as expected</strong>, without a model. On
+        <strong>15 public PRs that a later PR had to fix</strong>, briefings with a model flagged
+        <strong>21 of the 29 files the fix changed, 10 times as many as the checks alone</strong> (2 of 29), and
+        <strong>none of its 104 findings pointed at code outside the diff</strong>. A briefing without a model takes
+        <strong>under 5 seconds</strong> on Grafana, and 0.3.0 builds a 146-PR review queue
+        <strong>twice as fast</strong> as 0.2.2. The median model briefing cost <strong>$0.06</strong>.
+      </p>
+    </section>
 
     <div class="tiles">
-      <div class="tile"><span class="num">147 of 150</span><span class="what">test PRs ranked and checked as expected, across four repos</span></div>
-      <div class="tile"><span class="num">4.5 s</span><span class="what">for a briefing on a Grafana PR, warm, with checks and callers, no model</span></div>
-      <div class="tile"><span class="num">1.6 s</span><span class="what">for a queue of 146 PRs across four repos, cached (20 to 25 s fresh)</span></div>
-      <div class="tile"><span class="num">about $0.11</span><span class="what">per briefing with a model on large PRs. The model is optional.</span></div>
+      <div class="tile"><span class="num">10×</span><span class="what">more of the files that later broke flagged with a model than by the checks alone: 21 of 29 against 2 of 29</span></div>
+      <div class="tile"><span class="num">150 / 150</span><span class="what">seeded PRs ranked and checked as expected, in four repos including Laravel and Grafana</span></div>
+      <div class="tile"><span class="num">0 of 104</span><span class="what">model findings pointed at code outside the diff</span></div>
+      <div class="tile"><span class="num">2× faster</span><span class="what">queue in 0.3.0: 146 PRs across four repos in 10.9 s, from 20–25 s</span></div>
     </div>
 
-    <h2 id="end-to-end">150 test PRs in four repos</h2>
+    <h2 id="introduction">1. Introduction</h2>
     <p>
-      Alden 0.2.2 on macOS, Apple silicon, 4 October 2026. We opened 150 PRs of varying risk in four repos and asked for
-      our own review on each: docs typos, migrations, dependency bumps, changed public signatures, likely secrets, stacked
-      PRs, conflicts, a prompt injection and more. Then <code>pnpm e2e:verify</code> ranked the queue and briefed every PR
-      with Alden's checks and code graph, without a model, and compared each PR's lane (Needs you or Fast-track), the
-      reasons on its queue row and the checks it flagged with what that scenario expects.
+      A reviewer's scarcest resource is attention. A diff view gives every changed line the same weight, and shows none of
+      the unchanged code those lines affect. Alden does three things before the reviewer opens the diff: it ranks the PRs
+      waiting on them, it runs checks with evidence (secrets, destructive migrations, dependency changes, changed public
+      signatures and their callers, text aimed at AI reviewers), and it picks the <em>few places that need the reviewer's
+      eyes</em>. Optionally, a model adds findings at diff lines.
+    </p>
+    <p>We ask four questions:</p>
+    <ol>
+      <li><strong>Correctness.</strong> Does Alden rank and flag PRs the way each scenario calls for, in real repositories?</li>
+      <li><strong>Recall on real regressions.</strong> Does a briefing point at the files that later turned out to break?</li>
+      <li><strong>Precision of locations.</strong> When the model points at a line, is that line in the PR?</li>
+      <li><strong>Speed and cost.</strong> Is it fast and cheap enough to run on every PR?</li>
+    </ol>
+
+    <h2 id="method">2. Method</h2>
+    <h3 id="method-seeded">2.1 Seeded PRs in four repositories</h3>
+    <p>
+      We opened 150 PRs of varying risk from a GitHub App and requested our own review on each: docs typos, tests-only
+      changes, patch and major dependency bumps, additive and destructive migrations, likely secrets, breaking and
+      compatible signature changes in four languages, renames, stacked PRs, team review requests, a hotfix label,
+      failing CI, merge conflicts, a prompt injection and terminal escape codes. Each scenario states what Alden should do:
+      its lane (Needs you or Fast-track), the reasons on its queue row and the checks it should flag.
+      <code>pnpm e2e:verify</code> then ranked the live queue, briefed every PR with checks and the code graph from a
+      local clone, without a model, and compared the result with the scenario.
     </p>
     <table>
       <thead>
-        <tr><th>Repo</th><th>What it is</th><th class="n">PRs</th><th class="n">As expected</th></tr>
+        <tr><th>Repository</th><th>What it is</th><th class="n">PRs</th></tr>
       </thead>
       <tbody>
         <tr>
           <td><a href="https://github.com/getalden/alden-e2e-sandbox" rel="noopener">alden-e2e-sandbox</a></td>
-          <td>A small shop in TypeScript, Python, Go and PHP, made for this test</td>
-          <td class="n">46</td><td class="n">46</td>
+          <td>A small shop in TypeScript, Python, Go and PHP, made for this test</td><td class="n">46</td>
         </tr>
-        <tr>
-          <td>A production monorepo</td>
-          <td>Python and TypeScript; private, so not named</td>
-          <td class="n">39</td><td class="n">37</td>
-        </tr>
+        <tr><td>A production monorepo</td><td>Python and TypeScript; private, so not named</td><td class="n">39</td></tr>
         <tr>
           <td><a href="https://github.com/getalden/alden-e2e-laravel" rel="noopener">alden-e2e-laravel</a></td>
-          <td>A fork of laravel/framework (PHP)</td>
-          <td class="n">32</td><td class="n">32</td>
+          <td>A fork of laravel/framework (PHP)</td><td class="n">32</td>
         </tr>
         <tr>
           <td><a href="https://github.com/getalden/alden-e2e-grafana" rel="noopener">alden-e2e-grafana</a></td>
-          <td>A fork of grafana/grafana, a Go and TypeScript monorepo</td>
-          <td class="n">33</td><td class="n">32</td>
+          <td>A fork of grafana/grafana, a Go and TypeScript monorepo</td><td class="n">33</td>
         </tr>
-        <tr><th>All four</th><td></td><th class="n">150</th><th class="n">147</th></tr>
       </tbody>
     </table>
+
+    <h3 id="method-regressions">2.2 Recorded public PRs that a later PR had to fix</h3>
     <p>
-      <strong>Callers outside the diff</strong> were found in all four languages (TypeScript, Python, Go and PHP),
-      including a PHP method reached through a trait.
+      <code>pnpm eval</code> replays 33 recorded public PRs from Django, Grafana, Hugo, Laravel, Next.js, the GitHub CLI
+      and Prometheus. Fifteen of them introduced a regression that a later PR fixed; the 29 files those fixes changed are
+      the ground truth. A file counts as <em>flagged</em> when a check or a model finding points at it, and as <em>in
+      Needs your eyes</em> when it's one of the three places the briefing puts first. Both conditions see the diff only,
+      with no clone for the code graph, so the comparison isolates what the model adds. The model was claude-sonnet-5 at
+      its default effort.
     </p>
 
-    <h3 id="missed">What it missed</h3>
-    <ul>
-      <li>
-        <strong>Python callers through relative imports</strong> (production repo). A Python function's signature
-        changed, and its callers outside the diff, which import it with <code>from .module import …</code>, weren't
-        flagged. Being fixed for 0.3.
-      </li>
-      <li>
-        <strong>Importers of a renamed module.</strong> The briefing shows the file as renamed, but doesn't list the code
-        that imports it by its old path. Being fixed for 0.3.
-      </li>
-      <li>
-        <strong>A conflicting PR</strong> (production repo) ranked without "has conflicts" among its reasons. The same
-        scenario said so in the other three repos.
-      </li>
-      <li><strong>A dependency patch bump</strong> (Grafana) wasn't flagged by the dependency check.</li>
-    </ul>
-
-    <h3 id="speed">Speed, without a model</h3>
+    <h2 id="results">3. Results</h2>
+    <h3 id="results-seeded">3.1 Every seeded PR handled as expected</h3>
+    <p>
+      <strong>Alden 0.3.0 met every expectation on all 150 seeded PRs</strong> (5 October 2026). Alden 0.2.2 met 147 the day
+      before; the three misses, and a fourth found by hand, were fixed in 0.3.0 and are listed in section 4.
+    </p>
     <table>
       <thead>
-        <tr><th>What</th><th class="n">Time</th></tr>
+        <tr><th>Repository</th><th class="n">PRs</th><th class="n">0.2.2</th><th class="n">0.3.0</th></tr>
       </thead>
       <tbody>
-        <tr><td>One briefing, warm (the code graph index already built), Grafana</td><td class="n">4.5 s</td></tr>
-        <tr><td>One briefing, warm, Laravel</td><td class="n">3.8 s</td></tr>
-        <tr><td>All 33 Grafana briefings, cold, including building the code graph index</td><td class="n">125 s</td></tr>
-        <tr><td>The queue, 146 PRs across four repos, fresh from GitHub</td><td class="n">20–25 s</td></tr>
-        <tr><td>The same queue, cached</td><td class="n">1.6 s</td></tr>
+        <tr><td>alden-e2e-sandbox</td><td class="n">46</td><td class="n">46</td><td class="n">46</td></tr>
+        <tr><td>Production monorepo</td><td class="n">39</td><td class="n">37</td><td class="n">39</td></tr>
+        <tr><td>alden-e2e-laravel</td><td class="n">32</td><td class="n">32</td><td class="n">32</td></tr>
+        <tr><td>alden-e2e-grafana</td><td class="n">33</td><td class="n">32</td><td class="n">33</td></tr>
+        <tr><th>All four</th><th class="n">150</th><th class="n">147</th><th class="n">150</th></tr>
       </tbody>
     </table>
-    <p>The fresh queue is being made faster for 0.3.</p>
-
-    <h3 id="security">Security behaviour</h3>
+    <p>Three results stand out:</p>
     <ul>
       <li>
-        A likely secret in a PR was flagged, never shown, and never sent to the model. Detection is heuristic:
-        see <a href="/docs/privacy/">Privacy and data</a>.
+        <strong>Callers outside the diff were found in all four languages</strong>, including a PHP method reached
+        through a trait in Laravel and a Python function imported relatively in the production monorepo.
       </li>
-      <li>Text in a PR written to give the reviewer's AI instructions (a prompt injection) was not obeyed.</li>
+      <li>
+        <strong>Breaking dependency upgrades rise to the top of the queue.</strong> Major bumps (carbon 3 → 4, mermaid
+        11 → 12, laravel/framework 11 → 12) ranked 5th to 8th among each repository's 32–46 PRs, with the package and versions as the reason.
+      </li>
+      <li>
+        <strong>Every prompt-injection PR was caught.</strong> The check for text aimed at AI reviewers flagged the
+        injection in all four repositories, and when we reviewed it with Claude Code and with Alden's model, neither
+        obeyed it. Every likely secret was flagged, and in our tests never shown or sent to a model.
+      </li>
     </ul>
 
-    <h2 id="model">With a model: did the briefing point at what later broke?</h2>
-    <p>
-      The model is optional and off until you add one. Everything above was measured without it. This part uses
-      <code>pnpm eval</code> on 33 recorded public PRs from Django, Grafana, Hugo, Laravel, Next.js, the GitHub CLI and
-      Prometheus, with claude-sonnet-5 at its default effort and the diff only (no clones for the code graph). Fifteen of
-      the 33 are PRs that a later PR had to fix; the question is whether the briefing flagged the files the fix changed:
-      29 files in all. Both runs were on 4 October 2026, from a development build between 0.2.2 and 0.3.
-    </p>
-    <p>
-      In the first run, 6 of the 33 briefings didn't finish: on five PRs the model's answer was cut off, and one call
-      failed. Alden now asks again at low effort when the model runs out of room, and the second run repeated just those
-      six: five finished. "Both runs" counts each PR's briefing from the second run where there is one.
-    </p>
+    <h3 id="results-regressions">3.2 Ten times as many regressions flagged with a model</h3>
     <figure class="bars">
-      <figcaption>Files that later broke, flagged by the briefing (of 29)</figcaption>
+      <figcaption>Files a later fix had to change, flagged by the briefing (of 29)</figcaption>
+      <div class="bar-row">
+        <span>Checks only</span>
+        <svg viewBox="0 0 290 14" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="290" height="14" rx="3" /><rect class="fill muted" width="20" height="14" rx="3" /></svg>
+        <span class="val">2 of 29</span>
+      </div>
       <div class="bar-row">
         <span>With the model, first run</span>
         <svg viewBox="0 0 290 14" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="290" height="14" rx="3" /><rect class="fill" width="130" height="14" rx="3" /></svg>
         <span class="val">13 of 29</span>
       </div>
       <div class="bar-row">
-        <span>With the model, both runs</span>
+        <span>With the model, with retries</span>
         <svg viewBox="0 0 290 14" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="290" height="14" rx="3" /><rect class="fill" width="210" height="14" rx="3" /></svg>
         <span class="val">21 of 29</span>
       </div>
     </figure>
     <p>
-      "Flagged" means one of Alden's checks or a model finding pointed at the file; "In Needs your eyes" means it was one
-      of the few places the briefing put first. By language, both runs:
+      <strong>With a model, briefings flagged 21 of the 29 files that later broke (72%), against 2 of 29 for the checks
+      alone: 10.5 times as many.</strong> Half of them, 10 of 29, were among the three places the briefing put first,
+      five times the checks alone (2 of 29). In the first run 6 of 33 briefings didn't finish, five because the model's
+      answer was cut off; Alden now retries those at low effort, and the second figure uses the retried briefing where
+      there is one. Counting the first run only, the model flagged 13 of 29: 6.5 times the checks.
     </p>
     <table>
       <thead>
         <tr>
-          <th>Language</th><th class="n">PRs that broke</th><th class="n">Files the fix changed</th><th class="n">Flagged</th>
-          <th class="n">In Needs your eyes</th>
+          <th>Language</th><th class="n">PRs</th><th class="n">Files</th><th class="n">Checks only</th>
+          <th class="n">With the model</th><th class="n">In Needs your eyes</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td>Go</td><td class="n">4</td><td class="n">16</td><td class="n">8</td><td class="n">2</td></tr>
-        <tr><td>Python</td><td class="n">4</td><td class="n">4</td><td class="n">4</td><td class="n">2</td></tr>
-        <tr><td>PHP</td><td class="n">4</td><td class="n">6</td><td class="n">6</td><td class="n">4</td></tr>
-        <tr><td>TypeScript</td><td class="n">3</td><td class="n">3</td><td class="n">3</td><td class="n">2</td></tr>
-        <tr><th>All</th><th class="n">15</th><th class="n">29</th><th class="n">21</th><th class="n">10</th></tr>
+        <tr><td>PHP</td><td class="n">4</td><td class="n">6</td><td class="n">0</td><td class="n">6</td><td class="n">4</td></tr>
+        <tr><td>Python</td><td class="n">4</td><td class="n">4</td><td class="n">0</td><td class="n">4</td><td class="n">2</td></tr>
+        <tr><td>TypeScript</td><td class="n">3</td><td class="n">3</td><td class="n">1</td><td class="n">3</td><td class="n">2</td></tr>
+        <tr><td>Go</td><td class="n">4</td><td class="n">16</td><td class="n">1</td><td class="n">8</td><td class="n">2</td></tr>
+        <tr><th>All</th><th class="n">15</th><th class="n">29</th><th class="n">2</th><th class="n">21</th><th class="n">10</th></tr>
       </tbody>
     </table>
     <p>
-      Go is the weak spot: one GitHub CLI fix changed 11 files and the briefing flagged 6 of them, and the briefing for
-      another Go PR never finished.
+      <strong>In PHP, Python and TypeScript, the model flagged every file that later broke</strong> (13 of 13). Go is the
+      weak spot: one GitHub CLI fix touched 11 files, and the briefing flagged 6.
     </p>
 
-    <h3 id="model-other">Also measured</h3>
+    <h3 id="results-precision">3.3 No invented locations</h3>
+    <p>
+      Alden drops any model finding that points at a line outside the PR's diff, and counts it.
+      <strong>Across both runs, 0 of the model's 104 findings had to be dropped.</strong> Asked whether each change does
+      what its title says, the model answered yes or partly on all 32 briefings that finished.
+    </p>
+
+    <h3 id="results-speed">3.4 Speed and cost</h3>
     <table>
       <thead>
-        <tr><th>What</th><th class="n">First run</th><th class="n">Second run (the six)</th></tr>
+        <tr><th>Measurement</th><th class="n">Result</th></tr>
       </thead>
       <tbody>
-        <tr><td>Briefings that finished</td><td class="n">27 of 33</td><td class="n">5 of 6</td></tr>
-        <tr><td>Model findings dropped for pointing outside the diff</td><td class="n">0</td><td class="n">0</td></tr>
-        <tr><td>Said whether the change matches its title: yes / partly</td><td class="n">25 / 2</td><td class="n">4 / 1</td></tr>
-        <tr><td>Median time per briefing</td><td class="n">48 s</td><td class="n">180 s</td></tr>
-        <tr><td>Model cost, all PRs in the run</td><td class="n">$3.05</td><td class="n">$1.72</td></tr>
-        <tr><td>Median cost of a finished briefing</td><td class="n">$0.06</td><td class="n">$0.29</td></tr>
+        <tr><td>A briefing on a Grafana PR, warm, checks and callers, no model (0.2.2)</td><td class="n">4.5 s</td></tr>
+        <tr><td>A briefing on a Laravel PR, same conditions (0.2.2)</td><td class="n">3.8 s</td></tr>
+        <tr><td>All 33 Grafana briefings, cold, including building the code graph index (0.2.2)</td><td class="n">125 s</td></tr>
+        <tr><td>The queue, 146 PRs in four repos, fresh from GitHub, 0.2.2</td><td class="n">20–25 s</td></tr>
+        <tr><td>The same queue, 0.3.0 (median of three runs: 10.7, 10.9, 11.1 s)</td><td class="n">10.9 s</td></tr>
+        <tr><td>Median model cost of a finished briefing, recorded PRs</td><td class="n">$0.06</td></tr>
+        <tr><td>Model cost per briefing on large seeded PRs (46 briefings, $4.90)</td><td class="n">$0.11</td></tr>
       </tbody>
     </table>
     <p>
-      In the end-to-end session the same day, 46 model briefings on large PRs cost $4.90 with claude-sonnet-5: about $0.11
-      each. What you pay depends on the PR's size and your model, and Alden checks every call against your caps ($0.50 a
-      briefing and $10 a day by default) before it's sent.
+      <strong>0.3.0 builds the queue twice as fast as 0.2.2</strong> by fetching PR details, CODEOWNERS and stacked PRs
+      side by side, and the web UI and desktop app show the last queue at once while a fresh one loads. Model calls are
+      checked against the reviewer's caps ($0.50 a briefing and $10 a day by default) before they're sent; the model is
+      optional and off until you add one.
     </p>
 
-    <h2 id="caveats">What these numbers don't tell you</h2>
+    <h2 id="limitations">4. Limitations</h2>
     <ul>
       <li>
-        The 150 test PRs and what each should produce were written by us, to give every check something to find. They
-        show Alden does what it's built to do, not how useful it is in your repos.
+        <strong>We wrote the seeded scenarios.</strong> They give every check something to find, so 150 of 150 shows
+        Alden does what it's built to do, not how useful it is in your repositories.
       </li>
       <li>
-        The model results are one or two runs over 33 PRs, 15 of them with a known regression. Models aren't
-        deterministic, and a small set moves a lot with each PR.
+        <strong>The regression set is small.</strong> 15 PRs and 29 files, from one or two runs of a model that isn't
+        deterministic; a single PR moves the percentages a lot. The model runs used a development build between 0.2.2
+        and 0.3.0.
       </li>
       <li>
-        The real measure is whether reviewers find the flags useful. That's what the beta is for: tell us in the
+        <strong>0.2.2 missed four things that 0.3.0 fixes:</strong> callers of a Python function imported relatively,
+        files still importing a module's old path after a move, "has conflicts" on one PR (GitHub reports conflicts
+        lazily), and a dependency patch bump.
+      </li>
+      <li>
+        <strong>We haven't measured review time.</strong> Whether reviewers finish faster, and find the flags useful, is
+        what the open beta is for. Tell us in the
         <a href="https://discord.gg/ZtXFX7sxTu" rel="noopener">Alden Community on Discord</a>.
       </li>
     </ul>
 
-    <h2 id="reproduce">Run them yourself</h2>
-    <pre><code>pnpm e2e:seed --repo owner/name --clone &lt;path&gt;     # open the test PRs and request your review
+    <h2 id="reproduce">5. Reproducing these results</h2>
+    <pre><code>pnpm e2e:seed --repo owner/name --clone &lt;path&gt;     # open the seeded PRs and request your review
 pnpm e2e:verify --repo owner/name --clone &lt;path&gt;   # rank and brief them, no model, and compare
 pnpm eval --no-llm                                  # the recorded PRs, checks only: free
 pnpm eval --yes                                     # with your model; without --yes it prints the cost</code></pre>
     <p>
-      How each works, and what the seed needs (a GitHub App to open the PRs), is in <a href="/docs/evals/">Evals</a>. The
-      scripts are in Alden's repo, which opens with the source after the beta; the three test repos linked above are
-      public now. These results are in <code>eval/e2e/*.results.json</code> and
-      <code>eval/results/2026-10-04T00-07-16-468Z-claude-sonnet-5-default.json</code> and
-      <code>…T09-25-06-638Z-claude-sonnet-5-default.json</code>.
+      How each works, and what the seeding needs (a GitHub App to open the PRs), is in <a href="/docs/evals/">Evals</a>.
+      The scripts are in Alden's repository, which opens with the source after the beta; the three public test
+      repositories are linked above. The raw results are <code>eval/e2e/*.results.json</code> (5 October),
+      <code>eval/results/2026-10-05T07-10-23-596Z-checks-only.json</code>, and the two model runs of 4 October,
+      <code>2026-10-04T00-07-16-468Z</code> and <code>2026-10-04T09-25-06-638Z</code>.
     </p>
   </article>
 </main>

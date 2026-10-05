@@ -1186,3 +1186,63 @@ pre.has-copy > .copy-btn {
     grid-row: 2;
   }
 }
+
+/* ---- Benchmarks as a report -------------------------------------------------------------------------------- */
+
+.paper-meta {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.paper h1 {
+  max-width: 24ch;
+}
+.abstract {
+  border-left: 2px solid var(--acc);
+  padding: 4px 0 4px 20px;
+  margin: 24px 0 32px;
+}
+.abstract h2 {
+  font-size: 13px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink2);
+  margin: 0 0 8px;
+}
+.abstract p {
+  font-size: 17px;
+  line-height: 1.65;
+}
+.bar-row .fill.muted {
+  fill: var(--ink3);
+}
+
+/* ---- Measured, on the landing page ------------------------------------------------------------------------- */
+
+.proof {
+  padding: 88px 24px;
+}
+.proof-head {
+  max-width: 1192px;
+  margin: 0 auto 28px;
+}
+.proof-head h2 {
+  margin: 10px 0 8px;
+}
+.proof-head p {
+  color: var(--ink2);
+  margin: 0;
+}
+.proof-tiles {
+  max-width: 1192px;
+  margin: 0 auto;
+}
+.proof-tiles .num {
+  font-size: 44px;
+  color: var(--acc2);
+}
+.contact {
+  margin-top: 20px;
+  color: var(--ink2);
+  font-size: 15px;
+}

@@ -91,7 +91,7 @@ function page(title: string, description: string, body: string): string {
 <body>
 ${header}
 ${body}
-<footer class="foot"><span class="word">alden</span><span>This site counts page views, no cookies.</span><span class="links"><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a><a href="/docs/privacy/#this-website">Privacy</a><span>getalden.dev</span></span></footer>
+<footer class="foot"><span class="word">alden</span><span>This site counts page views, no cookies.</span><span class="links"><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a><a href="mailto:beta@getalden.dev" data-track="contact" data-label="footer">beta@getalden.dev</a><a href="/docs/privacy/#this-website">Privacy</a><span>getalden.dev</span></span></footer>
 <script src="/site.js" defer></script>
 </body>
 </html>
