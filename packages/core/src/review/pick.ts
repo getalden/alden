@@ -104,7 +104,7 @@ export function pickLookHere(checks: CheckResult[], adjust: PickAdjustments = {}
     const usable = check.evidence.filter(
       (e): e is Anchored =>
         e.anchor !== undefined &&
-        !adjust.skip?.(check, titleOf(check, e), e.anchor.path) &&
+        !adjust.skip?.(check, titleOf(check, e as Anchored), e.anchor.path) &&
         !usedPaths.has(e.anchor.path) &&
         // Nobody reads a lockfile line by line; what changed in it is the dependency check's job.
         (isSecret || !isLockfile(e.anchor.path)) &&
