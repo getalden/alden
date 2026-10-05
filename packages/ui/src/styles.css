@@ -1803,6 +1803,182 @@ details > summary {
   margin-top: 2px;
 }
 
+/* ---- Comment from Alden: drafts written in the briefing, sent as one review ------------------------------- */
+
+.comment-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.comment-slot.compact {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin-left: auto;
+}
+.evidence li.commentable {
+  flex-wrap: wrap;
+}
+.evidence .comment-slot.compact:has(.comment-editor) {
+  flex-basis: 100%;
+  margin-left: 0;
+}
+.comment-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  font: 13px / 1.45 var(--font-ui);
+}
+.comment-editor textarea {
+  width: 100%;
+  min-height: 72px;
+}
+.drafts-here {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+.drafts-here li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 10px;
+  border-left: 2px solid var(--acc);
+  background: var(--sunk);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  font: 13px / 1.45 var(--font-ui);
+}
+.drafts-here .mono {
+  font-size: 11px;
+  flex: none;
+}
+.drafts-here .body,
+.draft-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.chip.from-claude {
+  color: var(--acc);
+  background: var(--acc-soft);
+  flex: none;
+}
+.chip.drafts {
+  color: var(--acc);
+  background: var(--acc-soft);
+}
+.review-panel {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.review-panel h2:focus,
+.review-panel h3:focus {
+  outline: none;
+}
+.drafts {
+  overflow: hidden;
+}
+.draft-group {
+  border-top: 1px solid var(--line);
+}
+.draft-group:first-child {
+  border-top: 0;
+}
+.draft-file {
+  margin: 0;
+  padding: 8px 14px;
+  background: var(--sunk);
+  font: 600 12px / 1.4 var(--font-mono);
+  color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+.draft {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+.draft.outdated {
+  background: var(--warn-soft);
+}
+.draft-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.draft-body {
+  font: 14px / 1.5 var(--font-ui);
+}
+.draft-acts {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.comment-form {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.line-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 10px;
+}
+.line-fields select {
+  width: 100%;
+}
+.send-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.confirm {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-color: var(--acc);
+}
+.confirm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.confirm-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line2);
+}
+.unaddressed {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.unaddressed .place {
+  margin-right: 4px;
+}
+.banner.ok {
+  background: var(--ok-soft);
+}
+.banner:focus {
+  outline: none;
+}
+@media (max-width: 720px) {
+  .line-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* State overrides, last so they win over the base rules above. */
 .pr-row.dismissed .pr-title {
   text-decoration: line-through;
