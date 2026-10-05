@@ -160,6 +160,31 @@ export {
   type ManifestSnapshot,
   parseManifest,
 } from "./review/dependencies.js";
+export {
+  checkBody,
+  checkSendable,
+  commentableLines,
+  composeReviewBody,
+  fetchPullRequestState,
+  findAgain,
+  isNear,
+  type LineAnchor,
+  learnFromComments,
+  MAX_COMMENT_CHARS,
+  NEAR_LINES,
+  type Placement,
+  placeOnDiff,
+  prName,
+  publicDraft,
+  ReviewDrafts,
+  reviewRequest,
+  SendReviewError,
+  type SentCounts,
+  type Side,
+  type StoredDraft,
+  sendReview,
+  unaddressedPlaces,
+} from "./review/drafts.js";
 export { buildGraphReview, filesOutsideGraph, type GraphReview } from "./review/graph-context.js";
 export { mergeLookHere } from "./review/llm/merge.js";
 export {

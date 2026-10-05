@@ -1,0 +1,378 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Briefing, LookHere } from "@alden/schema";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { DiffFile } from "../diff/parse.js";
+import { fromRestFile } from "../diff/sources.js";
+import { FeedbackLog } from "../feedback/log.js";
+import type { GitHubClient } from "../github/client.js";
+import { loadLearning } from "../learn/learn.js";
+import { AldenStore } from "../store/db.js";
+import {
+  composeReviewBody,
+  findAgain,
+  type Placement,
+  placeOnDiff,
+  ReviewDrafts,
+  reviewRequest,
+  SendReviewError,
+  sendReview,
+  unaddressedPlaces,
+} from "./drafts.js";
+
+const REPO = "acme/shop";
+const PR = "acme/shop#7";
+
+/** One file's diff as GitHub's files API returns it. */
+const file = (filename: string, patch: string, extra: { previous_filename?: string; status?: string } = {}) =>
+  fromRestFile({ filename, status: extra.status ?? "modified", additions: 1, deletions: 1, patch, ...extra });
+
+const V1 = file(
+  "src/pay.ts",
+  [
+    "@@ -10,6 +10,7 @@ export function pay()",
+    " const a = 1;",
+    " const b = 2;",
+    "-const total = a + b;",
+    "+const total = a + b + fee;",
+    "+log(total);",
+    " }",
+    " ",
+  ].join("\n"),
+);
+// Two lines added above the hunk: everything moves down by two.
+const V2 = file(
+  "src/pay.ts",
+  [
+    "@@ -10,6 +12,7 @@ export function pay()",
+    " const a = 1;",
+    " const b = 2;",
+    "-const total = a + b;",
+    "+const total = a + b + fee;",
+    "+log(total);",
+    " }",
+    " ",
+  ].join("\n"),
+);
+// The commented line itself changed.
+const V3 = file(
+  "src/pay.ts",
+  [
+    "@@ -10,6 +10,7 @@ export function pay()",
+    " const a = 1;",
+    " const b = 2;",
+    "-const total = a + b;",
+    "+const total = sum(a, b, fee);",
+    "+log(total);",
+    " }",
+    " ",
+  ].join("\n"),
+);
+
+/** A parsed file's patch again, as GitHub would send it. */
+const patchOf = (f: DiffFile) =>
+  f.hunks
+    .map((h) =>
+      [h.header, ...h.lines.map((l) => `${l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}${l.text}`)].join("\n"),
+    )
+    .join("\n");
+
+let home: string;
+let store: AldenStore;
+beforeEach(() => {
+  home = mkdtempSync(join(tmpdir(), "alden-drafts-"));
+  store = AldenStore.open(join(home, "alden.db"));
+});
+afterEach(() => {
+  store.close();
+  rmSync(home, { recursive: true, force: true });
+});
+
+const placed = (files = [V1], line = 12, side: "RIGHT" | "LEFT" = "RIGHT") => {
+  const p = placeOnDiff(files, "src/pay.ts", line, side);
+  if ("problem" in p) throw new Error(p.problem);
+  return p;
+};
+
+describe("placing a comment on the diff", () => {
+  it("takes added and unchanged lines on the right, removed ones on the left, with the line's text", () => {
+    expect(placed()).toEqual({
+      path: "src/pay.ts",
+      line: 12,
+      side: "RIGHT",
+      anchor: { text: "const total = a + b + fee;", before: "const b = 2;", after: "log(total);" },
+    });
+    expect(placed([V1], 11).anchor.text).toBe("const b = 2;");
+    expect(placed([V1], 12, "LEFT").anchor.text).toBe("const total = a + b;");
+  });
+
+  it("says why GitHub wouldn't take a comment elsewhere", () => {
+    expect(placeOnDiff([V1], "src/other.ts", 3)).toEqual({
+      problem: expect.stringMatching(/isn't changed in this PR/),
+    });
+    expect(placeOnDiff([V1], "src/pay.ts", 40)).toEqual({ problem: expect.stringMatching(/isn't in this PR's diff/) });
+    expect(placeOnDiff([V1], "src/pay.ts", 15, "LEFT")).toEqual({ problem: expect.stringMatching(/on the old side/) });
+    const big = fromRestFile({ filename: "big.json", status: "modified", additions: 9000, deletions: 0 });
+    expect(placeOnDiff([big], "big.json", 1)).toEqual({ problem: expect.stringMatching(/general note/) });
+  });
+});
+
+describe("finding a line again after a push", () => {
+  it("follows the line when code above it moves it down", () => {
+    expect(findAgain(placed(), [V2])).toMatchObject({ path: "src/pay.ts", line: 14, side: "RIGHT" });
+  });
+
+  it("gives up when the line itself changed", () => {
+    expect(findAgain(placed(), [V3])).toBeUndefined();
+  });
+
+  it("follows a file that was renamed", () => {
+    const renamed = file("src/payments.ts", patchOf(V2), {
+      previous_filename: "src/pay.ts",
+      status: "renamed",
+    });
+    expect(findAgain(placed(), [renamed])).toMatchObject({ path: "src/payments.ts", line: 14 });
+  });
+
+  it("won't guess between lines that look the same", () => {
+    const twice = file("src/pay.ts", ["@@ -1,0 +1,5 @@", "+}", "+x();", "+}", "+y();", "+}"].join("\n"));
+    const brace: Placement = { path: "src/pay.ts", line: 3, side: "RIGHT", anchor: { text: "}" } };
+    expect(findAgain(brace, [twice])).toBeUndefined();
+    // With its neighbours it's only itself.
+    expect(findAgain({ ...brace, anchor: { text: "}", before: "x();", after: "y();" } }, [twice])?.line).toBe(3);
+  });
+});
+
+describe("the drafts store", () => {
+  it("adds, edits, lists and deletes drafts, oldest first", () => {
+    const drafts = new ReviewDrafts(store);
+    const a = drafts.add({ pr: PR, headSha: "h1", body: "Is fee in cents?", source: "you", place: placed() });
+    const b = drafts.add({ pr: PR, headSha: "h1", body: "Looks good overall.", source: "claude" });
+    expect(a).toMatchObject({ pr: PR, path: "src/pay.ts", line: 12, side: "RIGHT", state: "draft", source: "you" });
+    expect(b.path).toBeUndefined();
+    expect(drafts.edit(a.id, { body: "Is fee in cents, or dollars?" })?.body).toBe("Is fee in cents, or dollars?");
+    expect(drafts.list("ACME/shop#7").map((d) => d.id)).toEqual([a.id, b.id]);
+    expect(drafts.delete(b.id)?.source).toBe("claude");
+    expect(drafts.list(PR)).toHaveLength(1);
+    expect(() => drafts.add({ pr: PR, headSha: "h1", body: "  ", source: "you" })).toThrow(/needs some text/);
+  });
+
+  it("moves drafts with their lines when the PR moves, and marks the rest outdated", () => {
+    const drafts = new ReviewDrafts(store);
+    const moving = drafts.add({ pr: PR, headSha: "h1", body: "a", source: "you", place: placed() });
+    const note = drafts.add({ pr: PR, headSha: "h1", body: "b", source: "you" });
+    expect(drafts.follow(PR, "h2", [V2])).toEqual({ moved: [moving.id], outdated: [] });
+    expect(drafts.get(moving.id)).toMatchObject({ line: 14, headSha: "h2", state: "draft" });
+    expect(drafts.get(note.id)?.headSha).toBe("h2");
+
+    expect(drafts.follow(PR, "h3", [V3])).toEqual({ moved: [], outdated: [moving.id] });
+    // It keeps the place and head it was written for, so you can see what it was about.
+    expect(drafts.get(moving.id)).toMatchObject({ line: 14, headSha: "h2", state: "outdated" });
+    // Placed again, it's a draft again.
+    const again = placeOnDiff([V3], "src/pay.ts", 14);
+    if ("problem" in again) throw new Error(again.problem);
+    expect(drafts.edit(moving.id, { place: { ...again, headSha: "h3" } })).toMatchObject({ state: "draft", line: 14 });
+  });
+});
+
+const places: LookHere[] = [
+  { title: "Money maths changed", reason: "r", anchor: { path: "src/pay.ts", line: 14 }, checkId: "paths.sensitive" },
+  { title: "No tests", reason: "r", checkId: "tests.missing" },
+  { title: "Model worry", reason: "r", anchor: { path: "src/other.ts", line: 3 }, source: "llm" },
+];
+
+describe("what a review covers", () => {
+  it("lists flagged places no comment is near", () => {
+    const drafts = new ReviewDrafts(store);
+    const d = drafts.add({ pr: PR, headSha: "h1", body: "a", source: "you", place: placed() });
+    expect(unaddressedPlaces(places, [d])).toEqual([
+      { checkId: "tests.missing", title: "No tests" },
+      { checkId: "model", title: "Model worry", path: "src/other.ts", line: 3 },
+    ]);
+  });
+
+  it("posts exactly what you wrote: the body, then general notes, and each line comment", () => {
+    const drafts = new ReviewDrafts(store);
+    const inline = drafts.add({ pr: PR, headSha: "h1", body: "Cents?", source: "you", place: placed() });
+    const note = drafts.add({ pr: PR, headSha: "h1", body: "Nice cleanup.", source: "claude" });
+    expect(composeReviewBody(" Thanks! ", [inline, note])).toBe("Thanks!\n\nNice cleanup.");
+    expect(reviewRequest("h1", "APPROVE", undefined, [inline, note])).toEqual({
+      commit_id: "h1",
+      event: "APPROVE",
+      body: "Nice cleanup.",
+      comments: [{ path: "src/pay.ts", line: 12, side: "RIGHT", body: "Cents?" }],
+    });
+  });
+});
+
+/** A fake GitHub: the PR's head and files, and what was posted. Nothing reaches GitHub. */
+function fakeGitHub(state: { head: string; patch: DiffFile; fail?: { status: number; message: string } }) {
+  const posted: Record<string, unknown>[] = [];
+  const raw = (f: DiffFile) => ({
+    filename: f.path,
+    status: "modified",
+    additions: f.additions,
+    deletions: f.deletions,
+    patch: patchOf(f),
+  });
+  const client = {
+    request: async (route: string, params: Record<string, unknown>) => {
+      if (route === "GET /repos/{owner}/{repo}/pulls/{pull_number}") return { data: { head: { sha: state.head } } };
+      if (route === "GET /repos/{owner}/{repo}/pulls/{pull_number}/files") {
+        return { data: params.page === 1 ? [raw(state.patch)] : [] };
+      }
+      if (route === "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews") {
+        if (state.fail) throw Object.assign(new Error(state.fail.message), { status: state.fail.status });
+        posted.push(params);
+        return { data: { html_url: "https://github.com/acme/shop/pull/7#pullrequestreview-1" } };
+      }
+      throw new Error(`unexpected ${route}`);
+    },
+  } as unknown as GitHubClient;
+  return { client, posted };
+}
+
+const briefing = (at: string) =>
+  ({ target: { kind: "pr", repo: REPO, number: 7 }, generatedAt: at, needsYourEyes: places }) as unknown as Briefing;
+
+describe("sending a review", () => {
+  it("posts one review at the head, records it, learns from it and clears the drafts", async () => {
+    const drafts = new ReviewDrafts(store);
+    drafts.rememberBriefing(briefing("2026-10-01T00:00:00.000Z"));
+    drafts.add({ pr: PR, headSha: "h1", body: "Cents?", source: "you", place: placed() });
+    drafts.add({ pr: PR, headSha: "h1", body: "From Claude.", source: "claude" });
+    const gh = fakeGitHub({ head: "h1", patch: V1 });
+
+    const result = await sendReview(gh.client, store, {
+      repo: REPO,
+      number: 7,
+      event: "REQUEST_CHANGES",
+      body: "Fix fees",
+    });
+    expect(result).toMatchObject({
+      url: expect.stringContaining("pullrequestreview"),
+      posted: 2,
+      review: "REQUEST_CHANGES",
+    });
+    expect(result.counts).toEqual({
+      inline: 1,
+      notes: 1,
+      fromYou: 1,
+      fromClaude: 1,
+      hasBody: true,
+      unaddressed: 2,
+      learned: 1,
+    });
+    expect(gh.posted).toEqual([
+      {
+        owner: "acme",
+        repo: "shop",
+        pull_number: 7,
+        commit_id: "h1",
+        event: "REQUEST_CHANGES",
+        body: "Fix fees\n\nFrom Claude.",
+        comments: [{ path: "src/pay.ts", line: 12, side: "RIGHT", body: "Cents?" }],
+        request: { retries: 0 },
+      },
+    ]);
+    expect(drafts.list(PR)).toEqual([]);
+    const sent = store.events<Record<string, unknown>>("review_sent");
+    expect(sent).toHaveLength(1);
+    expect(JSON.stringify(sent)).not.toMatch(/Cents|Claude\.|Fix fees/);
+
+    // The comment near the flagged place counted as "useful", once per place per PR.
+    const verdicts = await new FeedbackLog(store).events(REPO);
+    expect(verdicts).toEqual([
+      expect.objectContaining({
+        verdict: "agree",
+        via: "comment",
+        item: expect.objectContaining({ checkId: "paths.sensitive" }),
+      }),
+    ]);
+    drafts.add({ pr: PR, headSha: "h1", body: "Again", source: "you", place: placed() });
+    const second = await sendReview(gh.client, store, { repo: REPO, number: 7, event: "COMMENT" });
+    expect(second.counts.learned).toBe(0);
+    expect(await new FeedbackLog(store).events(REPO)).toHaveLength(1);
+    expect((await loadLearning(store, REPO)).checkTallies.get("paths.sensitive")).toEqual({ agree: 1, notNeeded: 0 });
+  });
+
+  it("never overrides a verdict you gave the place yourself", async () => {
+    const drafts = new ReviewDrafts(store);
+    drafts.rememberBriefing(briefing("2026-10-01T00:00:00.000Z"));
+    await new FeedbackLog(store).add({
+      kind: "verdict",
+      target: { kind: "pr", repo: REPO, number: 7 },
+      briefingAt: "2026-10-01T00:00:00.000Z",
+      item: {
+        source: "check",
+        checkId: "paths.sensitive",
+        title: "Money maths changed",
+        anchor: places[0]?.anchor,
+        placement: "eyes",
+      },
+      verdict: "not_needed",
+    });
+    drafts.add({ pr: PR, headSha: "h1", body: "Cents?", source: "you", place: placed() });
+    const result = await sendReview(fakeGitHub({ head: "h1", patch: V1 }).client, store, {
+      repo: REPO,
+      number: 7,
+      event: "COMMENT",
+    });
+    expect(result.counts.learned).toBe(0);
+  });
+
+  it("refuses when the PR moved since you last looked, and when a draft is outdated", async () => {
+    const drafts = new ReviewDrafts(store);
+    const d = drafts.add({ pr: PR, headSha: "h1", body: "Cents?", source: "you", place: placed() });
+    const gh = fakeGitHub({ head: "h3", patch: V3 });
+    const moved = sendReview(gh.client, store, { repo: REPO, number: 7, event: "COMMENT" });
+    await expect(moved).rejects.toMatchObject({ status: 409, reason: "moved", drafts: [d.id] });
+    // Now it's outdated at the new head: still refused, naming it.
+    const outdated = sendReview(gh.client, store, { repo: REPO, number: 7, event: "COMMENT" });
+    await expect(outdated).rejects.toThrow(new RegExp(`${d.id} on src/pay.ts:12`));
+    expect(gh.posted).toEqual([]);
+  });
+
+  it("refuses an empty review, and request-changes without a body", async () => {
+    const gh = fakeGitHub({ head: "h1", patch: V1 });
+    await expect(sendReview(gh.client, store, { repo: REPO, number: 7, event: "COMMENT" })).rejects.toMatchObject({
+      reason: "empty",
+    });
+    new ReviewDrafts(store).add({ pr: PR, headSha: "h1", body: "Cents?", source: "you", place: placed() });
+    await expect(
+      sendReview(gh.client, store, { repo: REPO, number: 7, event: "REQUEST_CHANGES" }),
+    ).rejects.toMatchObject({
+      reason: "empty",
+    });
+    // Approving with nothing to say is fine.
+    expect((await sendReview(gh.client, store, { repo: REPO, number: 7, event: "APPROVE" })).posted).toBe(1);
+  });
+
+  it("says what GitHub's refusals mean and keeps the drafts", async () => {
+    const drafts = new ReviewDrafts(store);
+    const d = drafts.add({ pr: PR, headSha: "h1", body: "Cents?", source: "you", place: placed() });
+    const send = (fail: { status: number; message: string }) =>
+      sendReview(fakeGitHub({ head: "h1", patch: V1, fail }).client, store, {
+        repo: REPO,
+        number: 7,
+        event: "COMMENT",
+      });
+    await expect(send({ status: 403, message: "Resource not accessible by integration" })).rejects.toMatchObject({
+      status: 403,
+      reason: "forbidden",
+      message: expect.stringMatching(/can't write reviews on acme\/shop/),
+    });
+    await expect(send({ status: 422, message: "Line could not be resolved" })).rejects.toMatchObject({
+      status: 422,
+      drafts: [d.id],
+    });
+    await expect(
+      send({ status: 422, message: "User can only have one pending review per pull request" }),
+    ).rejects.toMatchObject({
+      reason: "pending",
+    });
+    await expect(send({ status: 500, message: "boom" })).rejects.toBeInstanceOf(SendReviewError);
+    expect(drafts.list(PR)).toHaveLength(1);
+  });
+});

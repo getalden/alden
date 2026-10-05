@@ -70,6 +70,19 @@ export {
   type Score,
 } from "./queue.js";
 export {
+  REVIEW_SCHEMA_VERSION,
+  type ReviewDraft,
+  ReviewDraftSchema,
+  type ReviewDrafts,
+  ReviewDraftsSchema,
+  type ReviewEvent,
+  ReviewEventSchema,
+  type SendReviewResult,
+  SendReviewResultSchema,
+  type UnaddressedPlace,
+  UnaddressedPlaceSchema,
+} from "./review.js";
+export {
   type Distribution,
   DistributionSchema,
   type Metric,

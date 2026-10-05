@@ -149,6 +149,10 @@
             "dismiss",
             "clear"
           ]
+        },
+        "via": {
+          "type": "string",
+          "const": "comment"
         }
       },
       "required": [

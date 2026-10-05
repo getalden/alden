@@ -47,6 +47,11 @@ export const FeedbackEventSchema = z.discriminatedUnion("kind", [
      * on this PR. "clear" takes a verdict back. The latest verdict on an item wins.
      */
     verdict: z.enum(["agree", "not_needed", "dismiss", "clear"]),
+    /**
+     * "comment": not said but done. You commented near this place in a review you sent, which counts as useful (once
+     * per place per PR, and never over a verdict you gave yourself). Absent: you said it.
+     */
+    via: z.literal("comment").optional(),
   }),
   z.object({
     ...common,
@@ -58,7 +63,7 @@ export const FeedbackEventSchema = z.discriminatedUnion("kind", [
 
 /** A new event as a front end sends it; the log adds the id, time and version. */
 export const FeedbackInputSchema = z.discriminatedUnion("kind", [
-  FeedbackEventSchema.options[0].omit({ schemaVersion: true, id: true, at: true }),
+  FeedbackEventSchema.options[0].omit({ schemaVersion: true, id: true, at: true, via: true }),
   FeedbackEventSchema.options[1].omit({ schemaVersion: true, id: true, at: true }),
 ]);
 
