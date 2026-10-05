@@ -1,0 +1,60 @@
+<main class="bench cloud">
+  <article class="prose">
+    <p class="paper-meta mono faint">Beta · not available yet · waitlist open</p>
+    <h1>Alden Cloud (beta)</h1>
+    <p class="lede">
+      The model for Alden's briefings, without an API key. Alden Cloud isn't built yet: this page says what we plan, so
+      you can tell us whether you want it.
+    </p>
+
+    <h2 id="what">What it will be</h2>
+    <p>
+      Sign in at getalden.dev with GitHub and the model just works: no Anthropic key, no setup. Everything else stays as
+      it is today, on your machine and free: the queue, the checks, the callers and what Alden learns about you. Your own
+      key keeps working on every plan.
+    </p>
+
+    <h2 id="your-code">How it will handle your code</h2>
+    <ul>
+      <li>
+        Only model calls go through Alden's service. Alden still reads your local clones, and what it learns about
+        you stays in <code>~/.alden</code>.
+      </li>
+      <li>The diff passes through to Anthropic and isn't stored.</li>
+      <li>
+        Likely secrets are removed before anything leaves your machine, as they are today with your own key (see
+        <a href="/docs/privacy/">Privacy and data</a>).
+      </li>
+      <li>Hosted in the EU and the US.</li>
+    </ul>
+
+    <h2 id="pricing">Planned pricing</h2>
+    <p>Planned, not final: it may change before Alden Cloud opens.</p>
+    <div class="tiles">
+      <div class="tile"><span class="num">$15</span><span class="what">a month, with 100 briefings included</span></div>
+      <div class="tile"><span class="num">$6</span><span class="what">for 50 more briefings</span></div>
+      <div class="tile"><span class="num">25</span><span class="what">briefings in a free trial</span></div>
+    </div>
+    <p>A briefing with a bigger model or at high effort counts as more than one.</p>
+
+    <h2 id="waitlist">Join the waitlist</h2>
+    <p>Send us an email, or say so in the Alden Community on Discord. We'll write when there's a place for you.</p>
+    <div class="actions">
+      <a
+        class="btn big"
+        href="mailto:beta@getalden.dev?subject=Alden%20Cloud%20waitlist"
+        data-track="contact"
+        data-label="cloud-waitlist"
+        >Email beta@getalden.dev</a
+      >
+      <a class="btn big ghost" href="https://discord.gg/ZtXFX7sxTu" rel="noopener" data-label="cloud-waitlist">Join the Discord</a>
+    </div>
+
+    <h2 id="meanwhile">Meanwhile</h2>
+    <p>
+      Alden works today with your own Anthropic key, Bedrock, Vertex, Foundry or a local model, or with checks only and
+      no model. Store a key with <code>alden auth model</code>; in Alden 0.4 and later, <code>alden setup</code> walks
+      you through picking one. See <a href="/docs/models/">Models, providers and budgets</a>.
+    </p>
+  </article>
+</main>

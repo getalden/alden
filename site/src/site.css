@@ -1246,3 +1246,15 @@ pre.has-copy > .copy-btn {
   color: var(--ink2);
   font-size: 15px;
 }
+
+/* ---- Alden Cloud ------------------------------------------------------------------------------------------- */
+
+.cloud .prose {
+  max-width: 760px;
+}
+.cloud .tiles {
+  margin: 8px 0 16px;
+}
+.cloud .actions {
+  margin: 8px 0 16px;
+}

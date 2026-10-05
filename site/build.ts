@@ -2,9 +2,9 @@
  * Builds getalden.dev into site/dist: `pnpm site:build`.
  *
  * The landing page is static (site/src). The docs are the repo's own docs/*.md, rendered into the site's look, in the
- * order docs/README.md lists them, so the site and the repo never disagree. /benchmarks/ is src/benchmarks.html in the
- * same frame. Every page loads site.js (page view counts and copy buttons). Cloudflare Pages serves site/dist as is
- * (`pnpm site:deploy`), with the security headers in _headers.
+ * order docs/README.md lists them, so the site and the repo never disagree. /benchmarks/ and /cloud/ are
+ * src/benchmarks.html and src/cloud.html in the same frame. Every page loads site.js (page view counts and copy
+ * buttons). Cloudflare Pages serves site/dist as is (`pnpm site:deploy`), with the security headers in _headers.
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -18,8 +18,9 @@ const GITHUB = "https://github.com/getalden/alden/blob/main";
 const DISCORD = "https://discord.gg/ZtXFX7sxTu";
 
 rmSync(OUT, { recursive: true, force: true });
-// benchmarks.html is the body of /benchmarks/, wrapped in the page below.
-cpSync(SRC, OUT, { recursive: true, filter: (path) => !path.endsWith("benchmarks.html") });
+// benchmarks.html and cloud.html are the bodies of /benchmarks/ and /cloud/, wrapped in the page below.
+const BODIES = ["benchmarks.html", "cloud.html"];
+cpSync(SRC, OUT, { recursive: true, filter: (path) => !BODIES.some((body) => path.endsWith(body)) });
 mkdirSync(join(OUT, "assets/fonts"), { recursive: true });
 for (const font of ["Geist-Variable.woff2", "GeistMono-Variable.woff2", "OFL.txt"]) {
   cpSync(join(ROOT, "packages/ui/src/fonts", font), join(OUT, "assets/fonts", font));
@@ -91,7 +92,7 @@ function page(title: string, description: string, body: string): string {
 <body>
 ${header}
 ${body}
-<footer class="foot"><span class="word">alden</span><span>This site counts page views, no cookies.</span><span class="links"><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a><a href="mailto:beta@getalden.dev" data-track="contact" data-label="footer">beta@getalden.dev</a><a href="/docs/privacy/#this-website">Privacy</a><span>getalden.dev</span></span></footer>
+<footer class="foot"><span class="word">alden</span><span>This site counts page views, no cookies.</span><span class="links"><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="/cloud/">Alden Cloud</a><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a><a href="mailto:beta@getalden.dev" data-track="contact" data-label="footer">beta@getalden.dev</a><a href="/docs/privacy/#this-website">Privacy</a><span>getalden.dev</span></span></footer>
 <script src="/site.js" defer></script>
 </body>
 </html>
@@ -147,7 +148,19 @@ writeFileSync(
   ),
 );
 
+// --- Alden Cloud --------------------------------------------------------------------------------------------------
+
+mkdirSync(join(OUT, "cloud"), { recursive: true });
+writeFileSync(
+  join(OUT, "cloud", "index.html"),
+  page(
+    "Alden Cloud (beta) · Alden",
+    "Alden Cloud, planned: sign in with GitHub and Alden's model just works, with no API key. Not available yet; join the waitlist.",
+    readFileSync(join(SRC, "cloud.html"), "utf8"),
+  ),
+);
+
 if (!existsSync(join(OUT, "assets/screens/briefing-dark.png"))) {
   throw new Error("site/src/assets/screens is missing its screenshots. Run `pnpm screenshots`.");
 }
-console.log(`Built ${files.length} docs pages, the benchmarks and the home page into site/dist.`);
+console.log(`Built ${files.length} docs pages, the benchmarks, Alden Cloud and the home page into site/dist.`);
