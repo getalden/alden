@@ -254,7 +254,7 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
           : config.model.effort
             ? `, effort ${config.model.effort}`
             : "";
-      const key = choice.key ? `, key from ${choice.key.where}` : "";
+      const key = choice.key ? `, using ${choice.key.where}` : "";
       add({ area: "Model", status: "ok", detail: `${id} via ${config.model.provider}${effort}${key}` });
     } else {
       add({
