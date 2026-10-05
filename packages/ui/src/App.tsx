@@ -11,6 +11,7 @@ import { StateCard } from "./components/StateCard";
 import { StatsView } from "./components/StatsView";
 import { TelemetryCard } from "./components/TelemetryCard";
 import { TopBar } from "./components/TopBar";
+import { useDrafts } from "./drafts";
 import { useFeedback } from "./feedback";
 import { fetchedAgo, waitingSince } from "./format";
 import { useReviews } from "./reviews";
@@ -36,6 +37,12 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
   const [reactError, setReactError] = useState<string>();
   const [reactNotes, setReactNotes] = useState<Record<string, string | undefined>>({});
   const [folderNote, setFolderNote] = useState<FolderNote>();
+  // Drafts per PR ("owner/repo#12"), for the PRs opened in this window: the queue shows them as a chip.
+  const [draftCounts, setDraftCounts] = useState<Record<string, number>>({});
+  const onDraftCount = useCallback(
+    (key: string, count: number) => setDraftCounts((all) => (all[key] === count ? all : { ...all, [key]: count })),
+    [],
+  );
 
   const loadSession = useCallback(() => {
     if (!api) return;
@@ -213,6 +220,7 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
               reactionNotes={reactNotes}
               onReact={react}
               ready={ready}
+              drafts={draftCounts}
               scope={session?.queueScope}
             />
           </aside>
@@ -227,6 +235,8 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
                 reviews={reviews}
                 feedbackFor={feedbackFor}
                 api={desktop ? api : undefined}
+                draftsApi={api}
+                onDraftCount={onDraftCount}
                 cloneOf={api.clone}
               />
             ) : (
@@ -349,9 +359,17 @@ function PrPane(props: {
   api?: Api | undefined;
   /** The local clone a repo's callers come from (here, one Alden saw before, or one under clones.folders). */
   cloneOf?: (repo: string) => Promise<CloneInfo>;
+  /** Where this PR's drafts (Comment from Alden) are read, written and sent. */
+  draftsApi?: Api | undefined;
+  onDraftCount?: (key: string, count: number) => void;
 }) {
-  const { prRef, row, reviews, session, api, cloneOf } = props;
+  const { prRef, row, reviews, session, api, cloneOf, onDraftCount } = props;
   const key = `${prRef.repo}#${prRef.number}`;
+  const comments = useDrafts(props.draftsApi, key);
+  const draftCount = comments && !comments.loading && !comments.error ? comments.drafts.length : undefined;
+  useEffect(() => {
+    if (draftCount !== undefined) onDraftCount?.(key, draftCount);
+  }, [key, draftCount, onDraftCount]);
   const pr = row?.pr;
   const hasRun = reviews.runs[key] !== undefined;
   const request = { pr: key, ...toRequest(props.choices, session) };
@@ -438,6 +456,7 @@ function PrPane(props: {
       emptyHint="Alden fetches the PR, finds who calls the code it changes (from a clone of the repo), runs its checks, and asks the model if one is set up."
       feedbackFor={props.feedbackFor}
       perReviewUsd={session?.budget.perReviewUsd}
+      comments={comments}
     />
   );
 }

@@ -1,4 +1,5 @@
 import type { Briefing, FeedbackInput, FeedbackSummary, MemoryItem, RankedQueue, RepoStats } from "@alden/schema";
+import type { DraftsResponse, NewDraft, ReviewDraft, ReviewEvent as ReviewVerdict, SendReviewResult } from "./drafts";
 
 export interface Memory {
   repo: string;
@@ -250,6 +251,25 @@ export class Api {
   /** `null` removes the setting, so its default applies again. */
   setConfig = (key: string, value: string | null) =>
     this.request<unknown>("/api/config", { method: "PUT", body: JSON.stringify({ key, value }) });
+
+  /** A PR's drafts ("owner/repo#12"), and the places Alden flagged that have no comment near them. */
+  drafts = (pr: string) => this.request<DraftsResponse>(`/api/drafts?pr=${encodeURIComponent(pr)}`);
+
+  addDraft = (draft: NewDraft & { pr: string }) =>
+    this.request<ReviewDraft>("/api/drafts", { method: "POST", body: JSON.stringify(draft) });
+
+  editDraft = (id: string, body: string) =>
+    this.request<ReviewDraft>(`/api/drafts/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+    });
+
+  deleteDraft = (id: string) =>
+    this.request<{ ok: true }>(`/api/drafts/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  /** Posts every draft on the PR to GitHub as one review. Only ever called from the Send you confirmed. */
+  sendReview = (review: { pr: string; event: ReviewVerdict; body?: string }) =>
+    this.request<SendReviewResult>("/api/review/send", { method: "POST", body: JSON.stringify(review) });
 
   /** Runs a review, calling `onEvent` for each stage, then resolving with the briefing. */
   async review(request: ReviewRequest, onEvent: (event: ReviewEvent) => void, signal?: AbortSignal): Promise<Briefing> {

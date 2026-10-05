@@ -8,13 +8,43 @@ import type {
   LookHere,
   Severity,
 } from "@alden/schema";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import type { BriefingComments } from "../drafts";
 import type { BriefingFeedback, Verdict } from "../feedback";
 import { formatUsd, plural, prFileUrl } from "../format";
 import { onLinkClick, routePath } from "../router";
+import { CommentSlot, type Editing, ReviewPanel, typing } from "./Comments";
 import { Mark } from "./Mark";
 
 const anchorKey = (a: Anchor) => `${a.path}:${a.line ?? ""}`;
+
+/** Only a place with a line takes a comment: GitHub puts review comments on lines. */
+const withLine = (a: Anchor | undefined): (Anchor & { line: number }) | undefined =>
+  a?.line ? { ...a, line: a.line } : undefined;
+
+/**
+ * Comments from the keyboard: c comments on the place you're on (focus inside it), or opens "Comment on a line";
+ * s goes to the Review panel. Never while you type.
+ */
+function useCommentKeys(enabled: boolean, onComment: (placeKey: string | undefined) => void, onReview: () => void) {
+  const latest = useRef({ onComment, onReview });
+  latest.current = { onComment, onReview };
+  useEffect(() => {
+    if (!enabled) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
+      if (event.key === "c") {
+        const focused = document.activeElement instanceof Element ? document.activeElement : null;
+        latest.current.onComment(focused?.closest("[data-comment-key]")?.getAttribute("data-comment-key") ?? undefined);
+      } else if (event.key === "s") {
+        latest.current.onReview();
+      } else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [enabled]);
+}
 
 /** Links for every place the briefing points at: into the PR's diff on GitHub. Local changes have no page to link. */
 function useAnchorLinks(briefing: Briefing): Map<string, string> {
@@ -277,12 +307,52 @@ export function BriefingView({
   briefing,
   feedback,
   perReviewUsd,
+  comments: allComments,
 }: {
   briefing: Briefing;
   feedback?: BriefingFeedback | undefined;
   perReviewUsd?: number | undefined;
+  /** Comment from Alden: drafts for this PR, written here and sent as one review. Absent for local changes. */
+  comments?: BriefingComments | undefined;
 }) {
   const links = useAnchorLinks(briefing);
+  const target = briefing.target;
+  // Only on the PR the drafts belong to.
+  const comments =
+    target.kind === "pr" && allComments?.pr.toLowerCase() === `${target.repo}#${target.number}`.toLowerCase()
+      ? allComments
+      : undefined;
+  const [editing, setEditing] = useState<Editing>();
+  const panelHeading = useRef<HTMLHeadingElement>(null);
+  const toPanel = () => {
+    panelHeading.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    panelHeading.current?.focus({ preventScroll: true });
+  };
+  useCommentKeys(
+    comments !== undefined && briefing.files.length > 0,
+    (placeKey) => {
+      if (placeKey) setEditing({ kind: "place", key: placeKey });
+      else {
+        setEditing({ kind: "line" });
+        panelHeading.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+      }
+    },
+    toPanel,
+  );
+  const slot = (key: string, anchor: Anchor | undefined, compact = false) => {
+    const place = withLine(anchor);
+    if (!comments || !place) return null;
+    return (
+      <CommentSlot
+        anchor={place}
+        comments={comments}
+        compact={compact}
+        open={editing?.kind === "place" && editing.key === key}
+        onOpen={() => setEditing({ kind: "place", key })}
+        onClose={() => setEditing(undefined)}
+      />
+    );
+  };
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(briefing.checks.filter((c) => c.status === "flagged").map((c) => [c.id, true])),
   );
@@ -374,6 +444,7 @@ export function BriefingView({
               return (
                 <li
                   key={`${item.title}${item.anchor ? anchorKey(item.anchor) : ""}`}
+                  data-comment-key={comments && withLine(item.anchor) ? `eye:${i}` : undefined}
                   className={`card eye${guess ? " guess" : ""}${verdict === "agree" ? " agreed" : ""}${verdict === "dismiss" ? " dismissed" : ""}`}
                 >
                   <span className="eye-n">{i + 1}</span>
@@ -397,6 +468,7 @@ export function BriefingView({
                     )}
                     {item.learned && <span className="learned-why">↑ {item.learned}</span>}
                     {feedback && <Verdicts item={fbItem} feedback={feedback} />}
+                    {slot(`eye:${i}`, item.anchor)}
                   </div>
                 </li>
               );
@@ -507,12 +579,21 @@ export function BriefingView({
                     {quiet && <span className="learned-why">↓ {upperFirst(quiet)}</span>}
                     {check.evidence.length > 0 && (
                       <ul className="evidence">
-                        {check.evidence.map((e) => (
-                          <li key={`${e.text}${e.anchor ? anchorKey(e.anchor) : ""}`}>
-                            {e.anchor && <Place anchor={e.anchor} links={links} />}
-                            <span className="text">{e.text}</span>
-                          </li>
-                        ))}
+                        {check.evidence.map((e, j) => {
+                          const key = `ev:${check.id}:${j}`;
+                          const commentable = comments && withLine(e.anchor);
+                          return (
+                            <li
+                              key={`${e.text}${e.anchor ? anchorKey(e.anchor) : ""}`}
+                              data-comment-key={commentable ? key : undefined}
+                              className={commentable ? "commentable" : undefined}
+                            >
+                              {e.anchor && <Place anchor={e.anchor} links={links} />}
+                              <span className="text">{e.text}</span>
+                              {slot(key, e.anchor, true)}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                     {check.status === "flagged" && feedback && (
@@ -573,6 +654,16 @@ export function BriefingView({
           })}
         </ul>
       </section>
+
+      {comments && (
+        <ReviewPanel
+          briefing={briefing}
+          comments={comments}
+          editing={editing}
+          onEditing={setEditing}
+          headingRef={panelHeading}
+        />
+      )}
 
       <Footer briefing={briefing} perReviewUsd={perReviewUsd} />
 

@@ -1,6 +1,7 @@
 import type { Briefing } from "@alden/schema";
 import { type ReactNode, useEffect, useState } from "react";
 import type { ReviewRequest } from "../api";
+import type { BriefingComments } from "../drafts";
 import type { BriefingFeedback } from "../feedback";
 import type { ReviewRun } from "../reviews";
 import { onLinkClick } from "../router";
@@ -83,6 +84,8 @@ interface ReviewPaneProps {
   notice?: ReactNode;
   feedbackFor?: ((briefing: Briefing) => BriefingFeedback) | undefined;
   perReviewUsd?: number | undefined;
+  /** This PR's drafts, for Comment from Alden. */
+  comments?: BriefingComments | undefined;
 }
 
 /** A PR (or your local changes) and its briefing: run it, watch it, read it. */
@@ -185,6 +188,7 @@ export function ReviewPane(props: ReviewPaneProps) {
           briefing={run.briefing}
           feedback={props.feedbackFor?.(run.briefing)}
           perReviewUsd={props.perReviewUsd}
+          comments={props.comments}
         />
       )}
       {!run && (

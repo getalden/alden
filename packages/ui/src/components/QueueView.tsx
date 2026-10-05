@@ -1,6 +1,6 @@
 import type { CiState, RankedPullRequest, RankedQueue } from "@alden/schema";
 import { type ReactNode, useMemo, useState } from "react";
-import { fetchedAgo, formatWait, waitingSince } from "../format";
+import { fetchedAgo, formatWait, plural, waitingSince } from "../format";
 import { onLinkClick, routePath } from "../router";
 import { Mark } from "./Mark";
 import { StateCard } from "./StateCard";
@@ -44,6 +44,8 @@ interface QueueViewProps {
   reactionNotes?: Record<string, string | undefined>;
   /** PRs (lowercased "owner/repo#12") with a briefing ready from the desktop app's background run. */
   ready?: Set<string>;
+  /** Unsent comments by PR ("owner/repo#12"), for the PRs opened in this window. */
+  drafts?: Record<string, number>;
   /** This machine's queue scope, shown so a narrowed queue never looks like an empty one. */
   scope?: { orgs: string[]; repos: string[]; ignore: string[] } | undefined;
   /** For tests: the time the queue's age is measured from. */
@@ -65,6 +67,7 @@ export function QueueView({
   onReact,
   reactionNotes = {},
   ready,
+  drafts = {},
   scope,
   now,
 }: QueueViewProps) {
@@ -217,6 +220,7 @@ export function QueueView({
                   note={reactionNotes[prKey(row.pr)]}
                   onReact={onReact}
                   ready={ready?.has(prKey(row.pr).toLowerCase()) ?? false}
+                  drafts={drafts[prKey(row.pr)] ?? 0}
                 />
               </li>
             ))}
@@ -252,6 +256,9 @@ export function QueueView({
                         <span>
                           {row.pr.repo} #{row.pr.number} · {row.fastTrack}
                         </span>
+                        {(drafts[prKey(row.pr)] ?? 0) > 0 && (
+                          <span className="chip drafts">{plural(drafts[prKey(row.pr)] ?? 0, "draft")}</span>
+                        )}
                         <span>
                           <span className="add">+{row.pr.additions}</span>{" "}
                           <span className="del">−{row.pr.deletions}</span>
@@ -303,8 +310,9 @@ function PrRow(props: {
   note?: string | undefined;
   onReact: ((key: string, reaction: Reaction) => void) | undefined;
   ready?: boolean;
+  drafts?: number;
 }) {
-  const { row, rank, selected, reaction, note, onReact, ready = false } = props;
+  const { row, rank, selected, reaction, note, onReact, ready = false, drafts = 0 } = props;
   const { pr } = row;
   const key = prKey(pr);
   const route = { view: "queue" as const, pr: { repo: pr.repo, number: pr.number } };
@@ -334,9 +342,10 @@ function PrRow(props: {
             <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
           </span>
         </span>
-        {(reasons.length > 0 || row.waitingOnAuthor || ready) && (
+        {(reasons.length > 0 || row.waitingOnAuthor || ready || drafts > 0) && (
           <span className="pr-chips">
             {ready && <span className="chip ready">✓ Briefing ready</span>}
+            {drafts > 0 && <span className="chip drafts">{plural(drafts, "draft")}</span>}
             {row.waitingOnAuthor && pr.author && <span className="chip">CI failing: ping @{pr.author}</span>}
             {reasons.map((reason) => (
               <span key={reason} className="chip">

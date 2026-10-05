@@ -37,6 +37,9 @@ the same sign-in, settings, memory and spend.
 - **Open Alden** (⌘⇧A) brings the window forward from anywhere. **Refresh** reloads the queue, which also happens
   every 5 minutes.
 - When someone has waited three days on a PR that isn't waiting on its author, you get one notification for it.
+- [Comment from Alden](web-ui.md#views) works the same in the window: write comments in a briefing, check the summary,
+  and send them to GitHub as one review. Drafts Claude Code added show there too, marked "from Claude". Nothing is
+  sent until you press Send.
 - Closing the window keeps Alden in the menu bar; clicking Alden in the Dock brings the window back. **Quit** stops it.
 
 ## While you're away
