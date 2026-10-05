@@ -1,6 +1,6 @@
 {
   "name": "alden",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A code review companion: triages your PR queue and briefs you on what needs your eyes.",
   "keywords": [
     "code-review",

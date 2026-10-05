@@ -1,5 +1,12 @@
 # alden
 
+## 0.3.1
+
+### Patch Changes
+
+- 4d0b0f8: `alden auth model` and the Settings key field accept every kind of Anthropic API key, not only those starting `sk-ant-api`. Claude.ai sign-in tokens and Admin keys are still refused.
+- 4d0b0f8: The web UI and desktop app strip escape codes from PR titles, branches and paths too, as the terminal does since 0.3.0.
+
 ## 0.3.0
 
 ### Minor Changes
