@@ -12,6 +12,24 @@ Prints Alden's version. When a newer Alden is out, it also says so, with how to 
 reading the version aren't affected. It asks npm at most once a day; `alden config set updates.check false` or
 `ALDEN_NO_UPDATE_CHECK` turns this off. `alden doctor` reports the same.
 
+## alden setup
+
+Sets up a model in about a minute. In a terminal it asks which of three you want:
+
+1. **Paste an Anthropic API key.** It links to where you create one, reads it without showing it, checks it with one
+   tiny request (Claude Haiku, one output token: a fraction of a cent), and stores it as `alden auth model` does. A key
+   Anthropic refuses isn't stored, and it says why: mistyped or deleted, no credit, or no permission. When Anthropic
+   can't be reached, it offers to store the key unchecked. If your config used another provider, Claude becomes the
+   model again.
+2. **Use a local model.** Looks for Ollama (at `OLLAMA_HOST`, or `http://localhost:11434`), lists what it has pulled,
+   and recommends a model for your machine's memory (see [Models](models.md#local-and-openai-compatible-models-openai-compatible)).
+   Choosing one it hasn't pulled downloads it with progress; then it sets `model.provider`, `model.name` and, when
+   Ollama isn't at its default address, `model.baseUrl`.
+3. **Checks only.** Changes nothing.
+
+Outside a terminal (a pipe, a script), it prints what it would offer and the commands to do each by hand. It exits
+with 1 when no model was set up (except for checks only). `alden doctor` suggests it when there's no model.
+
 ## alden auth
 
 Sign in to GitHub, and store your Anthropic API key.
@@ -23,7 +41,7 @@ Sign in to GitHub, and store your Anthropic API key.
 | `alden auth login --with-token` | Reads a token from standard input, e.g. `echo $TOKEN \| alden auth login --with-token`. |
 | `alden auth status` | Shows the account Alden is using, where the token comes from, and its scopes; and where the Anthropic key comes from (never the key). Signed out, it says whether the keychain refused to answer. |
 | `alden auth logout` | Removes the token Alden stored. Doesn't touch the GitHub CLI's sign-in. |
-| `alden auth model` | Asks for your Anthropic API key without showing it (or reads it from standard input, e.g. `pbpaste \| alden auth model`), checks it looks like an API key, and stores it in the OS keychain. The desktop app, `alden ui` and `alden mcp` use it too. |
+| `alden auth model` | Asks for your Anthropic API key without showing it (or reads it from standard input, e.g. `pbpaste \| alden auth model`), checks it looks like an API key, and stores it in the OS keychain. The desktop app, `alden ui` and `alden mcp` use it too. `alden setup` does the same after checking the key works. |
 | `alden auth model --remove` | Removes the key Alden stored. |
 
 Alden looks for a token in this order:
@@ -104,7 +122,8 @@ Checks your setup here: the Alden version (and whether a newer one exists), wher
 the GitHub sign-in and its scopes, which of your organisations' PRs it can see (and why not, for any that hide
 them), the model and today's budget, whether this folder is a clone (and of which repo),
 and which languages the code graph reads in it. Every problem comes with its fix. `--json` prints the findings as
-data. Exits with 1 when something fails.
+data. Exits with 1 when something fails. With no model, its "Next:" line suggests `alden setup` as well as the first
+fix.
 
 ## alden stats
 

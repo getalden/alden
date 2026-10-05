@@ -54,6 +54,13 @@ Stop it with Ctrl+C.
   if Alden still can't see a sign-in, says what failed: the keychain refused to answer (as it does for an unsigned
   development build of the desktop app), GitHub rejected the token, or there's none anywhere.
 
+With no model, the briefing options offer **Set up a model** instead of asking the model. It opens the same three
+choices as `alden setup`, in the same order: paste an Anthropic API key (checked with one tiny request, which costs a
+fraction of a cent, then stored in the keychain; the page never gets it back), use a local model through Ollama
+(recommended for your machine's memory, downloaded with progress if needed; local models flag less than Claude), or
+checks only. Then a line for [Alden Cloud (beta)](https://getalden.dev/cloud). The next briefing uses the new model,
+with no restart.
+
 Each review has its own options: ask the model or not, which model, which effort, and whether to find callers. The
 line beside them shows the per-review cap and what's left of today's budget. These choices last until you close the
 tab; Settings changes the defaults.

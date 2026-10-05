@@ -63,8 +63,12 @@ GitHub CLI's if `gh` is signed in (the app looks for it where Homebrew installs 
 and if Alden still can't see it, says why: the keychain refused to answer, GitHub rejected the token, or there's no
 sign-in anywhere.
 
-An app opened from the Finder never sees your shell's `ANTHROPIC_API_KEY`. Store the key with `alden auth model`, or in
-Settings → Anthropic API key, and the app uses it from the keychain.
+An app opened from the Finder never sees your shell's `ANTHROPIC_API_KEY`. With no model, the briefing options offer
+**Set up a model**: paste an Anthropic key (checked with one tiny request, then kept in the keychain), use a local model
+through Ollama (downloaded for you if needed), or checks only. The app uses the key or model from the next briefing on,
+without a restart. Its links (to the Anthropic Console, Ollama and Alden Cloud) open in your browser. `alden setup` and
+`alden auth model` in a terminal, or Settings → Anthropic API key, work too. The app doesn't see `OLLAMA_HOST` either;
+setting up a local model from a terminal where it's set writes the address into your config.
 
 ## Development builds
 
