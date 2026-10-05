@@ -1,5 +1,53 @@
 # alden
 
+## 0.3.0
+
+### Minor Changes
+
+- 84ee6fa: Sharper checks: a `critical` severity for likely secrets and migrations that can lose data; a new "Text aimed at AI
+  reviewers" check; moved and deleted files flag the files still importing their old path, and show where they moved
+  from; comment-only changes and pure moves no longer count as untested code; package.json `resolutions` and
+  `overrides` count as dependency changes; callers in code take places before callers in tests; and Python callers
+  through `from .services import product_sync` are found.
+- 0e63f1c: PR briefings find callers in your clone of the PR's repo wherever Alden runs: it remembers each clone it runs in, and
+  searches the folders in the new `clones.folders` setting (e.g. `~/src`). The web UI says which clone callers came from.
+- e23c95d: `alden completion zsh|bash|fish` prints a tab-completion script for every command and flag (`alden completion --help`
+  says how to install it). In a terminal, `alden queue`, `alden review` and `alden doctor` end with a dim "Next:" line
+  suggesting the obvious next command; never with `--json` or in a pipe. `alden queue`'s "Open one with `alden open
+  <#>`" line moves into it, so piped output no longer ends with a hint.
+- 8f43f9f: Learning you can see, about the PRs that matter now. The queue learns code areas ("you open PRs touching app/api
+  first") and who wrote a PR: you, people, bots or AI agents (Copilot, Claude, Devin, Cursor, Codex and more), and which
+  one ("you usually skip Dependabot PRs"). Every useful or not useful says how close it brought a lesson ("2 of 3: one
+  more not useful on API change flags and Alden will quieten them"), in `alden ui`, `alden_feedback` and `alden feedback`.
+  Quietened checks say so in the checks list, the model is told to stop raising them, and model findings tagged with a
+  topic teach the same lessons as the checks. Changed signatures and callers outside the diff now count as one API change
+  lesson, and learning text says useful and not useful throughout.
+- 85f4677: `alden auth model` stores your Anthropic API key in the keychain (asked for without showing it, or read from standard
+  input), so the desktop app, `alden ui` and `alden mcp` find it too; `--remove` takes it out, and Settings has a
+  write-only field for it. `alden auth status` and `alden doctor` say where the key comes from, never the key. The order
+  is ANTHROPIC_API_KEY (and the other Anthropic variables), then the stored key, then an `ant auth login` profile.
+- fb8c6aa: The queue loads about three times faster: the search only fetches ids, and PR details, CODEOWNERS and stacked counts
+  load side by side (`ALDEN_DEBUG=queue` shows where the time goes). Major dependency bumps now rank higher, with a reason
+  like "major bump: nesbot/carbon 3 → 4". The web UI and desktop app show the last queue at once while a fresh one
+  loads, fetch the whole queue so the repo filter lists every repo, and each PR shows one waiting time: since you were
+  asked.
+
+### Patch Changes
+
+- 9f2ae1c: Evidence under Checked in `alden review` wraps instead of being cut at the terminal's edge, and a changed signature
+  shows its old and new forms on lines of their own, with the part that changed in colour.
+- fe94827: Desktop and web UI fixes: clicking Alden in the Dock brings the window back; choosing a repo folder says where callers
+  now come from and shows that repo's PRs (with Show all repos); "I've signed in" says what failed (the keychain refused,
+  GitHub rejected the token, or no sign-in anywhere) instead of doing nothing; the Settings toggles fill their box; and
+  `release:dry-run --desktop` unregisters and deletes the unsigned Alden.app it built, which could open instead of the
+  installed app.
+- 570978a: With `--include-drafts`, `alden queue` tags each draft `[Draft]` before its title and dims its row, so drafts stand out
+  from PRs ready for review.
+- cb9ad7e: `alden queue` shows what it's doing while it works ("Checking acme/shop (2 of 5)…", "Seeing what needs your eyes…"),
+  on standard error and only in a terminal, instead of looking hung.
+- 76b5fec: Escape sequences in PR titles, paths, branch names and bodies are removed whole, so a title like `\e[31mFix\e[0m`
+  shows as "Fix", not "[31mFix[0m". Links, window titles and clipboard writes go the same way; accents and emoji stay.
+
 ## 0.2.3
 
 ### Patch Changes

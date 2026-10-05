@@ -17,7 +17,14 @@ const expectedVersion = (
 ).version;
 const home = mkdtempSync(join(tmpdir(), "alden-smoke-home-"));
 const repo = mkdtempSync(join(tmpdir(), "alden-smoke-repo-"));
-const env = { ...process.env, ALDEN_HOME: home, ALDEN_GITHUB_TOKEN: "smoke-test-not-a-token", NO_COLOR: "1" };
+// Both credentials come from the environment, so the binary (unsigned, when built locally) never asks the keychain.
+const env = {
+  ...process.env,
+  ALDEN_HOME: home,
+  ALDEN_GITHUB_TOKEN: "smoke-test-not-a-token",
+  ANTHROPIC_API_KEY: "smoke-test-not-a-key",
+  NO_COLOR: "1",
+};
 const run = (args: string[], cwd = repo) =>
   execFileSync(binary, args, { cwd, env, encoding: "utf8", timeout: 120_000 });
 const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "ignore" });
