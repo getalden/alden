@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { graphLanguages, renderDoctor } from "./doctor.js";
+import { graphLanguages, renderDoctor, reviewAccess } from "./doctor.js";
 
 describe("alden doctor", () => {
   it("names the languages the graph reads, most files first, skipping the rest", () => {
@@ -23,5 +23,24 @@ describe("alden doctor", () => {
     expect(renderDoctor([{ area: "A", status: "ok", detail: "x" }], false)).toContain(
       "Everything Alden needs is in place.",
     );
+  });
+});
+
+describe("reviewAccess", () => {
+  it("says whether the sign-in can post reviews, when the token says", () => {
+    expect(reviewAccess({ scopes: ["repo", "read:org"], missingScopes: [] })).toMatchObject({ status: "ok" });
+    expect(reviewAccess({ scopes: ["public_repo", "read:org"], missingScopes: ["repo"] })).toMatchObject({
+      status: "warn",
+      detail: expect.stringMatching(/public repos only/),
+    });
+    expect(reviewAccess({ scopes: ["read:org"], missingScopes: ["repo"] })).toMatchObject({
+      status: "warn",
+      fix: expect.stringMatching(/gh auth refresh -s repo/),
+    });
+    // Fine-grained tokens report no scopes: say what they need instead of guessing.
+    expect(reviewAccess({ scopes: [], missingScopes: [] })).toMatchObject({
+      status: "ok",
+      detail: expect.stringMatching(/Pull requests: Read and write/),
+    });
   });
 });

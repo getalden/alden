@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePrRef } from "./pr-ref.js";
+import { parsePrRef, queuePick } from "./pr-ref.js";
 
 const queue = ["https://github.com/grafana/grafana/pull/133736", "https://github.com/vercel/next.js/pull/99041"];
 
@@ -27,4 +27,15 @@ describe("parsePrRef", () => {
       expect(() => parsePrRef(input, queue)).toThrow(/isn't a PR/);
     },
   );
+});
+
+describe("queuePick", () => {
+  const ref = { repo: "acme/shop", number: 42 };
+  it("says which PR a queue number picked, and how to mean the PR in this clone", () => {
+    expect(queuePick("3", ref, undefined)).toBe("#3 in your last queue is acme/shop#42.");
+    expect(queuePick("#3", ref, "acme/web", "alden send")).toBe(
+      "#3 in your last queue is acme/shop#42. For PR #3 in acme/web: alden send acme/web#3",
+    );
+    expect(queuePick("acme/shop#42", ref, "acme/web")).toBeUndefined();
+  });
 });

@@ -25,3 +25,15 @@ export function describeGitHubError(error: unknown, source: TokenSource): string
   }
   return error instanceof Error ? error.message : String(error);
 }
+
+const REVIEW_FIX: Record<TokenSource, string> = {
+  env: 'A classic token in ALDEN_GITHUB_TOKEN needs the repo scope; a fine-grained one needs "Pull requests: Read and write" on this repo.',
+  alden:
+    "Alden's sign-in has the repo scope, which covers reviews, so the organisation may restrict OAuth apps: ask an admin to approve Alden, or sign in again with `alden auth login --device`.",
+  gh: "Run `gh auth refresh -s repo`, or sign in to Alden directly with `alden auth login --device`.",
+};
+
+/** What to do when GitHub won't take a review from this sign-in. */
+export function reviewWriteFix(source: TokenSource): string {
+  return REVIEW_FIX[source];
+}

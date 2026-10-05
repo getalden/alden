@@ -9,6 +9,7 @@ import {
   type Effort,
   editNote,
   FeedbackLog,
+  fetchPullRequestState,
   fetchReviewQueue,
   fetchViewer,
   findClone,
@@ -22,9 +23,14 @@ import {
   memoryRepos,
   modelKeyStore,
   openStore,
+  type Placement,
+  placeOnDiff,
+  prName,
+  publicDraft,
   queueEvent,
   queueRows,
   queueScope,
+  ReviewDrafts,
   type ReviewQueue,
   rankQueue,
   reactionProgress,
@@ -36,8 +42,10 @@ import {
   reviewEvent,
   reviewLocalChanges,
   reviewPullRequest,
+  SendReviewError,
   SpendLedger,
   selectProvider,
+  sendReview,
   setConfigValue,
   setLearning,
   setTelemetryConsent,
@@ -46,19 +54,20 @@ import {
   telemetryConsent,
   track,
   UsageLog,
+  unaddressedPlaces,
   unsetConfigValue,
   userConfigPath,
   type WithModel,
   whyNoToken,
 } from "@alden/core";
-import type { Briefing, RankedQueue } from "@alden/schema";
+import type { Briefing, RankedQueue, ReviewDraft } from "@alden/schema";
 import { LAST_QUEUE_KEY, type LastQueue } from "../commands/open.js";
 import { spendReport } from "../commands/spend.js";
 import { loadRepoStats } from "../commands/stats.js";
-import { describeGitHubError } from "../github-errors.js";
+import { describeGitHubError, reviewWriteFix } from "../github-errors.js";
 import { learningFor, learningForQueue, noteOpened } from "../learning.js";
 import { parsePrRef } from "../pr-ref.js";
-import { ApiError, type ReviewRequest, type UiApi } from "./server.js";
+import { ApiError, type DraftInput, type ReviewRequest, type UiApi } from "./server.js";
 import { cliStatus, createSignIn, gitHubCliSignedIn, installCli } from "./setup.js";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -133,6 +142,30 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
     }
     return target;
   };
+  /** A PR as typed (URL, owner/repo#12 or a queue number), named as drafts name it. */
+  const prOf = async (pr: string) => {
+    const last = await cache.get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
+    try {
+      const ref = parsePrRef(pr, last?.urls);
+      return { ...ref, name: prName(ref.repo, ref.number) };
+    } catch (error) {
+      throw new ApiError(400, (error as Error).message);
+    }
+  };
+  /** A PR's head and diff from GitHub, with its drafts brought up to that head. */
+  const followPr = async (ref: { repo: string; number: number; name: string }) => {
+    const resolved = await signedIn();
+    const client = createGitHubClient(resolved.token);
+    try {
+      const state = await fetchPullRequestState(client, ref.repo, ref.number);
+      drafts.follow(ref.name, state.headSha, state.files);
+      return { ...state, client, source: resolved.source };
+    } catch (error) {
+      throw new ApiError(502, describeGitHubError(error, resolved.source));
+    }
+  };
+  const drafts = new ReviewDrafts();
+  const inline = (d: { path?: string | undefined }) => d.path !== undefined;
   const memoryOf = async (repo?: string) => {
     const target = await memoryRepo(repo);
     const store = openStore();
@@ -457,6 +490,102 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
       }
     },
 
+    async drafts(pr) {
+      const ref = await prOf(pr);
+      // Brought to the PR's current head when GitHub can be reached; as they were otherwise (signed out, offline).
+      await followPr(ref).catch(() => undefined);
+      const list = drafts.list(ref.name);
+      return {
+        drafts: list.map(publicDraft),
+        unaddressed: unaddressedPlaces(drafts.briefed(ref.name)?.places ?? [], list),
+      };
+    },
+
+    async addDraft(input: DraftInput, source: ReviewDraft["source"] = "you") {
+      const ref = await prOf(input.pr);
+      const { headSha, files } = await followPr(ref);
+      let place: Placement | undefined;
+      if (input.path !== undefined || input.line !== undefined) {
+        if (input.path === undefined || input.line === undefined) {
+          throw new ApiError(400, "A comment on a line needs both the file and the line.");
+        }
+        const placed = placeOnDiff(files, input.path, input.line, input.side ?? "RIGHT");
+        if ("problem" in placed) throw new ApiError(422, placed.problem);
+        place = placed;
+      }
+      try {
+        const draft = drafts.add({ pr: ref.name, headSha, body: input.body, source, ...(place ? { place } : {}) });
+        void track("draft_changed", { action: "add", source, inline: inline(draft) });
+        return publicDraft(draft);
+      } catch (error) {
+        throw new ApiError(400, (error as Error).message);
+      }
+    },
+
+    async editDraft(id, change) {
+      const draft = drafts.get(id);
+      if (!draft) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
+      let place: (Placement & { headSha: string }) | undefined;
+      if (change.path !== undefined || change.line !== undefined) {
+        if (change.path === undefined || change.line === undefined) {
+          throw new ApiError(400, "Placing a comment on a line needs both the file and the line.");
+        }
+        const { headSha, files } = await followPr(await prOf(draft.pr));
+        const placed = placeOnDiff(files, change.path, change.line, change.side ?? "RIGHT");
+        if ("problem" in placed) throw new ApiError(422, placed.problem);
+        place = { ...placed, headSha };
+      }
+      let edited: ReturnType<ReviewDrafts["edit"]>;
+      try {
+        edited = drafts.edit(id, {
+          ...(change.body !== undefined ? { body: change.body } : {}),
+          ...(place ? { place } : {}),
+        });
+      } catch (error) {
+        throw new ApiError(400, (error as Error).message);
+      }
+      if (!edited) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
+      void track("draft_changed", { action: "edit", source: edited.source, inline: inline(edited) });
+      return publicDraft(edited);
+    },
+
+    async deleteDraft(id) {
+      const deleted = drafts.delete(id);
+      if (!deleted) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
+      void track("draft_changed", { action: "discard", source: deleted.source, inline: inline(deleted) });
+      return { ok: true };
+    },
+
+    async sendReview({ pr, event, body }) {
+      const ref = await prOf(pr);
+      const resolved = await signedIn();
+      try {
+        const sent = await sendReview(createGitHubClient(resolved.token), openStore(), {
+          repo: ref.repo,
+          number: ref.number,
+          event,
+          ...(body !== undefined ? { body } : {}),
+        });
+        const { counts } = sent;
+        void track("review_sent", {
+          review: event === "APPROVE" ? "approve" : event === "REQUEST_CHANGES" ? "request_changes" : "comment",
+          inline: counts.inline,
+          notes: counts.notes,
+          from_you: counts.fromYou,
+          from_claude: counts.fromClaude,
+          has_body: counts.hasBody,
+          unaddressed: counts.unaddressed,
+        });
+        return { url: sent.url, posted: sent.posted, review: sent.review };
+      } catch (error) {
+        if (error instanceof SendReviewError) {
+          const fix = error.reason === "forbidden" ? ` ${reviewWriteFix(resolved.source)}` : "";
+          throw new ApiError(error.status, `${error.message}${fix}`);
+        }
+        throw new ApiError(502, describeGitHubError(error, resolved.source));
+      }
+    },
+
     async setConfig(key, value) {
       try {
         if (value === null) await unsetConfigValue(key);
@@ -515,6 +644,12 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
         throw new ApiError(502, describeGitHubError(error, resolved.source));
       }
       if (!background && briefing.target.kind === "pr") noteOpened(last?.rows, briefing.target.url, "ui");
+    }
+    // Its places to look, for "you didn't comment on…" before a review is sent, and learning from comments.
+    try {
+      drafts.rememberBriefing(briefing);
+    } catch {
+      // the database is locked or damaged: the review still stands
     }
     // `alden stats` splits before and after at the first use on each repo (a background briefing counts when read).
     const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : (await repoOf(options.cwd))?.repos[0];
