@@ -72,6 +72,14 @@ clone of the PR's repo. `cd` into one and run the review again. See [Reviewing P
 **"The index was cut short, so there may be more."** Indexing hit its 60-second limit. Run the review again: the
 parsed files are cached, so the next run gets further.
 
+**"Callers from the PR's branch: it conflicts with main…"** GitHub can't merge the PR onto its base, so there's no
+merge to find callers in, and changes merged since aren't included. Once the author resolves the conflict, brief it
+again. "GitHub hasn't merged it with main yet" means GitHub hasn't made the merge for the latest push: brief again in
+a minute.
+
+**"main has 4 new commits since" right after briefing again.** GitHub remakes a PR's merge a little after its base
+moves, and until then Alden gets the old one. Wait a minute and **Re-brief**.
+
 **A stale PR worktree.** Delete `~/.alden/worktrees` and run `git worktree prune` in your clone. Alden recreates the
 worktree next time.
 

@@ -108,10 +108,36 @@ Local reviews use your working tree. For a PR, Alden needs the PR's code on disk
 
 1. Run `alden review <pr>` from inside a clone of the PR's repo. Any remote may point at it, so a fork with an
    `upstream` remote works.
-2. Alden fetches the PR into `refs/alden/pr-<number>` and checks it out in its own worktree under `~/.alden/worktrees`
-   (one per repo, reused). Your branch, working tree and stash are never touched.
+2. Alden fetches GitHub's merge of the PR onto its base (`refs/pull/<number>/merge`, what CI tests) into
+   `refs/alden/pr-<number>-merge`, and the PR's head into `refs/alden/pr-<number>`, and checks the merge out in its own
+   worktree under `~/.alden/worktrees` (one per repo, reused). Your branch, working tree and stash are never touched.
 
 Outside a clone, the review still runs, and "Callers outside the diff" says why it was skipped. The first checkout of a
 large repo can take a while; later ones reuse the worktree.
 
 Skip the graph with `--no-graph`.
+
+### Keeping up with the base
+
+Others keep merging while a PR waits. A PR's branch holds the rest of the repo as it was when the PR branched, so a
+caller added on main since, or a file moved there, wouldn't be in it. That's why callers are found in GitHub's merge:
+the PR on top of the latest base.
+
+- **What changed is still the PR's own diff**: the PR against where it branched, as GitHub shows it. In the merge, the
+  PR's changed files are put back to the PR's version, so the diff's line numbers match them even where main has
+  edited the same file since. (A caller main added inside one of those files is the one thing this misses.)
+- **No merge.** When the PR conflicts with its base, or GitHub hasn't made the merge for its latest push yet, callers
+  come from the PR's branch, and "Callers outside the diff" says so: "Callers from the PR's branch: it conflicts with
+  main, so changes merged since aren't included."
+- **No fetch when nothing moved.** Alden asks GitHub for the PR's head and merge commits along with the PR, and skips
+  the fetch when it already has both.
+- **What it was briefed against.** Each PR briefing records the head commit it saw (`headSha`), the base commit its
+  graph saw (`baseSha`, the merge's first parent), where callers came from (`graphFrom`: `merge` or `head`) and when
+  it was made. `alden review` ends with "Callers from main at abc1234 + this PR".
+- **Stale briefings.** Comparing those with the PR now takes one GitHub request: a new push makes a briefing stale,
+  and so do new commits on the base for a graph from the merge. The [web UI](web-ui.md#views) says "main has 4 new
+  commits since · Re-brief", and the [desktop app](desktop.md#while-youre-away) prepares a fresh briefing instead of
+  showing a stale one.
+
+The index cache is keyed by each file's content (its blob hash), so the merge and the PR's branch share it safely,
+and only files that differ between them are parsed again.
