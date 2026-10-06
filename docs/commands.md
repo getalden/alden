@@ -68,6 +68,7 @@ terminal, and never on standard output, so scripts reading the queue get only th
 | `--include-drafts` | Include draft PRs. Each is tagged `[Draft]` before its title and dimmed. |
 | `--refresh` | Ignore the 60-second cache. |
 | `--json` | Print the ranked queue as JSON. Schema: `packages/schema/json/ranked-queue.v1.json`. |
+| `--explain` | Under each row, its score by weight and rule, named as `[queue.rank]` names them: `score 6: waiting +3 · risk +2 · ↑ your rule: payments/ first`. See [Your ranking](queue.md#your-ranking). |
 
 ## alden open
 

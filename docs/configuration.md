@@ -57,11 +57,36 @@ See [Models, providers and budgets](models.md).
 | `queue.repos` | `[]` | Only PRs in these repos (`owner/name`); with `queue.orgs`, a PR in either counts. Your user config only. |
 | `queue.ignore` | `[]` | Organisations or repos (`owner/name`) to leave out, even when covered above. Your user config only. |
 
+| `queue.rank.<weight>` | `1` | How much a ranking signal counts, 0 to 10: `urgentLabel`, `stacked`, `sameAuthor`, `ownsFiles`, `waiting`, `size`, `risk`, `noTests`, `learned`. 0 ignores it, 2 doubles it. Your user config only. |
+| `queue.rank.rules` | `[]` | Rules that put PRs first or last, or boost or lower them (`[[queue.rank.rules]]`). Your user config only. |
+
 `queue.orgs`, `queue.repos` and `queue.ignore` set what your queue covers on this machine, everywhere Alden shows it
 (the terminal, the web UI, the desktop app's menu and background briefings, and `alden mcp`): only your company's
 organisation on a work laptop, say, and only your own repos on a personal one. Set them in Settings → Your queue on this
 machine, or with `alden config set queue.orgs "acme"` (lists are comma-separated). `--repo` and `--org` override
 them for one run. A repo's `.alden.toml` can't set them.
+
+`[queue.rank]` is how you rank: a weight per signal and your rules. Set it in Settings → Ranking, which previews your
+queue's top 5 before you save, with `alden config set queue.rank.waiting 2`, or by hand:
+
+```toml
+[queue.rank]
+waiting = 2
+learned = 0
+
+[[queue.rank.rules]]
+when = { path = "payments/" }
+then = "first"
+
+[[queue.rank.rules]]
+when = { author = "bots" }
+then = "last"
+```
+
+Each rule's `when` takes any of `path`, `label`, `author` (a login, or `people`, `bots`, `agents`), `repo`, `base` and
+`title`; `then` is `first`, `last`, `boost` or `lower`, with `by` for the points (default 5) and an optional `name`
+for the row. See [Your ranking](queue.md#your-ranking) for what each weight is worth and how rules apply, and
+`packages/schema/json/rank-settings.v1.json` for the format. A repo's `.alden.toml` can't set them.
 
 Default sensitive paths:
 
@@ -85,6 +110,7 @@ For the [desktop app](desktop.md#while-youre-away), which briefs your top PRs wh
 | --- | --- | --- |
 | `background.enabled` | `true` | Prepare briefings in the background. A repo's `.alden.toml` can turn it off there. |
 | `background.model` | `false` | Ask the model for them too, within your caps. Read from your user config only, so a repo can't make you spend. |
+| `background.prepare` | `3` | How many of the top PRs in Needs you to keep briefed, 0 to 10, in your [ranked order](queue.md#your-ranking). 0 briefs none. |
 
 ## telemetry
 

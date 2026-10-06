@@ -50,6 +50,11 @@ already there, marked "prepared while you were away"; **Brief again** makes a fr
 three, one a minute while you're still away, skips drafts and PRs waiting on their author, and briefs a PR again only
 after it changes. Ready PRs are marked in the menu and the queue.
 
+"Top" is your queue's order, with [your weights and rules](queue.md#your-ranking): a rule that puts PRs touching
+`payments/` first means those are briefed first. Set how many to keep briefed, 0 to 10, in Settings → Ranking ("Keep
+the top PRs briefed in the background"; its preview marks the PRs that will be), or with
+`alden config set background.prepare 5`. 0 briefs none.
+
 These briefings use the checks and the code graph only, which costs nothing. To have them ask the model too, turn on
 **Ask the model too** in Settings → While you're away; each then counts against your caps like any briefing. Turn the
 whole thing off there, or with `alden config set background.enabled false`.
