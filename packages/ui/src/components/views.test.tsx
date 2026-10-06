@@ -83,8 +83,6 @@ describe("QueueView", () => {
         }}
         error={undefined}
         loading={false}
-        repoFilter=""
-        onRepoFilter={noop}
         onRefresh={noop}
         selected="acme/api#1"
       />,
@@ -115,8 +113,6 @@ describe("QueueView", () => {
         queue={queue}
         error={undefined}
         loading={false}
-        repoFilter=""
-        onRepoFilter={noop}
         onRefresh={noop}
         selected="acme/api#1"
         onReact={(key, r) => reactions.push(`${key}:${r}`)}
@@ -131,8 +127,6 @@ describe("QueueView", () => {
         queue={{ ...queue, dismissed: [row("acme/old", 9)] }}
         error={undefined}
         loading={false}
-        repoFilter=""
-        onRepoFilter={noop}
         onRefresh={noop}
         selected="acme/api#1"
         reactions={{ "acme/api#1": "dismiss" }}
@@ -152,8 +146,6 @@ describe("QueueView", () => {
         queue={queue}
         error={undefined}
         loading={false}
-        repoFilter=""
-        onRepoFilter={noop}
         onRefresh={noop}
         selected="acme/api#1"
         reactions={{ "acme/api#1": "down" }}
@@ -170,8 +162,8 @@ describe("QueueView", () => {
         queue={queue}
         error={undefined}
         loading={false}
-        repoFilter="acme/web"
-        onRepoFilter={noop}
+        nav={{ filters: { repo: "acme/web" }, sort: "rank" }}
+        onNav={noop}
         onRefresh={noop}
         selected={undefined}
       />,
@@ -185,21 +177,17 @@ describe("QueueView", () => {
         queue={{ ...queue, dismissed: [row("zeta/old", 9)] }}
         error={undefined}
         loading={false}
-        repoFilter=""
-        onRepoFilter={noop}
         onRefresh={noop}
         selected={undefined}
       />,
     );
     const options = within(screen.getByRole("combobox", { name: "Repository" })).getAllByRole("option");
-    expect(options.map((o) => o.textContent)).toEqual(["All repos", "acme/api", "acme/web", "zeta/old"]);
+    expect(options.map((o) => o.textContent)).toEqual(["Repo", "acme/api", "acme/web", "zeta/old"]);
   });
 
   it("shows an old queue's age while the current one loads, and nothing for a fresh one", () => {
     const props = {
       error: undefined,
-      repoFilter: "",
-      onRepoFilter: noop,
       onRefresh: noop,
       selected: undefined,
     };
@@ -223,8 +211,6 @@ describe("QueueView", () => {
         queue={{ ...queue, needsYou: [asked], fastTrack: [] }}
         error={undefined}
         loading={false}
-        repoFilter=""
-        onRepoFilter={noop}
         onRefresh={noop}
         selected={undefined}
       />,
@@ -239,8 +225,6 @@ describe("QueueView", () => {
         queue={undefined}
         error="Not signed in"
         loading={false}
-        repoFilter=""
-        onRepoFilter={noop}
         onRefresh={noop}
         selected={undefined}
         signedOut

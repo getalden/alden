@@ -1,7 +1,18 @@
 import type { CiState, RankedPullRequest, RankedQueue } from "@alden/schema";
-import { type ReactNode, useMemo, useState } from "react";
+import {
+  activeFilterCount,
+  DEFAULT_QUEUE_NAV,
+  type NavigatedQueue,
+  navigateQueue,
+  type QueueFilters,
+  type QueueNav,
+  type QueueSort,
+  queueFacets,
+  withFilter,
+} from "@alden/schema/queue-nav";
+import { type KeyboardEvent, type ReactNode, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { fetchedAgo, formatWait, plural, waitingSince } from "../format";
-import { onLinkClick, routePath } from "../router";
+import { navigate, onLinkClick, routePath } from "../router";
 import { Mark } from "./Mark";
 import { StateCard } from "./StateCard";
 
@@ -26,12 +37,48 @@ export const prKey = (pr: { repo: string; number: number }) => `${pr.repo}#${pr.
 /** Reasons that came from your own feedback ("ranked higher: …") get their own line, not a chip. */
 export const isLearnedReason = (reason: string) => /^ranked (higher|lower):/.test(reason);
 
+/** Sort orders as the menu names them; the note under the tools says the rest. */
+export const SORT_LABELS: Record<QueueSort, string> = {
+  rank: "Alden's rank",
+  age: "Open longest",
+  waiting: "Waiting longest",
+  updated: "Recently updated",
+  size: "Smallest first",
+};
+
+/** The time the age filter counts from, to the hour, so memoised filtering isn't redone every render. */
+export const queueClock = (now = Date.now()) => Math.floor(now / 3_600_000) * 3_600_000;
+
+/** The queue as the filters, search and sort leave it. Memoised: cheap to call on every render, even for 1,000 PRs. */
+export function useNavigatedQueue(
+  queue: RankedQueue | undefined,
+  nav: QueueNav,
+  search: string,
+  now?: number,
+): NavigatedQueue | undefined {
+  const clock = queueClock(now);
+  return useMemo(
+    () => (queue ? navigateQueue(queue, nav, { now: clock, search }) : undefined),
+    [queue, nav, search, clock],
+  );
+}
+
 interface QueueViewProps {
   queue: RankedQueue | undefined;
   error: string | undefined;
   loading: boolean;
-  repoFilter: string;
-  onRepoFilter: (repo: string) => void;
+  /** Filters and sort; uncontrolled (kept here) when left out. */
+  nav?: QueueNav;
+  onNav?: (nav: QueueNav) => void;
+  /** The search box; uncontrolled when left out. */
+  search?: string;
+  onSearch?: (search: string) => void;
+  /** The queue as `nav` and `search` leave it, when the caller already worked it out (for j/k). */
+  view?: NavigatedQueue | undefined;
+  /** Changes when `/` is pressed: the search box takes focus. */
+  focusSearch?: number;
+  /** Collapses the queue to a rail (wide windows only). */
+  onCollapse?: () => void;
   onRefresh: () => void;
   selected: string | undefined;
   /** No GitHub sign-in: say how to fix it instead of an error. */
@@ -57,8 +104,13 @@ export function QueueView({
   queue,
   error,
   loading,
-  repoFilter,
-  onRepoFilter,
+  nav: navProp,
+  onNav,
+  search: searchProp,
+  onSearch,
+  view: viewProp,
+  focusSearch,
+  onCollapse,
   onRefresh,
   selected,
   signedOut = false,
@@ -72,21 +124,22 @@ export function QueueView({
   now,
 }: QueueViewProps) {
   const [showDismissed, setShowDismissed] = useState(false);
-  // Every repo in the queue (the UI fetches all of it), dismissed PRs included, so any of them can be picked.
-  const repos = useMemo(
-    () =>
-      [
-        ...new Set(
-          [...(queue?.needsYou ?? []), ...(queue?.fastTrack ?? []), ...(queue?.dismissed ?? [])].map((r) => r.pr.repo),
-        ),
-      ].sort(),
-    [queue],
-  );
+  const [ownNav, setOwnNav] = useState(DEFAULT_QUEUE_NAV);
+  const [ownSearch, setOwnSearch] = useState("");
+  const nav = navProp ?? ownNav;
+  const setNav = onNav ?? setOwnNav;
+  const search = searchProp ?? ownSearch;
+  const setSearch = onSearch ?? setOwnSearch;
+  // Typing stays quick on a big queue: the list catches up a moment later.
+  const deferredSearch = useDeferredValue(search);
+  const ownView = useNavigatedQueue(viewProp ? undefined : queue, nav, deferredSearch, now);
+  const view = viewProp ?? ownView;
   const ago = queue ? fetchedAgo(queue.fetchedAt, now) : undefined;
-  const keep = (r: RankedPullRequest) => !repoFilter || r.pr.repo === repoFilter;
-  const needsYou = queue?.needsYou.filter(keep) ?? [];
-  const fastTrack = queue?.fastTrack.filter(keep) ?? [];
-  const dismissed = queue?.dismissed?.filter(keep) ?? [];
+  const needsYou = view?.needsYou ?? [];
+  const fastTrack = view?.fastTrack ?? [];
+  const dismissed = view?.dismissed ?? [];
+  const narrowed = activeFilterCount(nav.filters) > 0 || search.trim() !== "";
+  const listRef = useRef<HTMLElement>(null);
 
   if (signedOut && signIn) return <>{signIn}</>;
   if (signedOut) {
@@ -142,7 +195,7 @@ export function QueueView({
       : undefined;
 
   return (
-    <section aria-labelledby="needs-you">
+    <section aria-labelledby="needs-you" ref={listRef}>
       {scopeNote && (
         <p className="side-note faint small scope-note">
           {scopeNote} on this machine.{" "}
@@ -157,27 +210,22 @@ export function QueueView({
           {loading ? ", refreshing…" : ""}
         </p>
       )}
-      {(repos.length > 1 || error) && (
-        <div className="list-tools">
-          {repos.length > 1 && (
-            <select
-              className="input"
-              aria-label="Repository"
-              value={repoFilter}
-              onChange={(e) => onRepoFilter(e.target.value)}
-            >
-              <option value="">All repos</option>
-              {repos.map((repo) => (
-                <option key={repo} value={repo}>
-                  {repo}
-                </option>
-              ))}
-            </select>
-          )}
-          <button type="button" className="btn sm" onClick={onRefresh} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </button>
-        </div>
+      {queue && (
+        <QueueTools
+          queue={queue}
+          nav={nav}
+          onNav={setNav}
+          search={search}
+          onSearch={setSearch}
+          shown={view?.shown ?? 0}
+          total={view?.total ?? 0}
+          focusSearch={focusSearch}
+          onCollapse={onCollapse}
+          onRefresh={onRefresh}
+          loading={loading}
+          list={listRef}
+          first={needsYou[0] ?? fastTrack[0]}
+        />
       )}
       {error && <p className="banner error side-note">{error}</p>}
       {queue?.warnings.map((w) => (
@@ -186,15 +234,31 @@ export function QueueView({
         </p>
       ))}
 
-      {queue && needsYou.length === 0 && fastTrack.length === 0 && (
+      {queue && narrowed && needsYou.length === 0 && fastTrack.length === 0 && (view?.total ?? 0) > 0 && (
+        <div className="empty-list">
+          <span className="big">No PRs match.</span>
+          <span className="muted small">
+            {plural(view?.total ?? 0, "PR")} waiting on you, none of them{" "}
+            {search.trim() ? `matching "${search.trim()}"` : "matching these filters"}.
+          </span>
+          <button
+            type="button"
+            className="link-button small"
+            onClick={() => {
+              setSearch("");
+              setNav({ ...nav, filters: {} });
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
+
+      {queue && (view?.total ?? 0) === 0 && (
         <div className="empty-list">
           <Mark size={40} outline />
           <span className="big">Nothing is waiting on you.</span>
-          <span className="muted small">
-            {repoFilter
-              ? `No open PRs in ${repoFilter} request your review.`
-              : "No open PRs request your review, directly or through your teams."}
-          </span>
+          <span className="muted small">No open PRs request your review, directly or through your teams.</span>
           <button type="button" className="link-button small" onClick={onRefresh} disabled={loading}>
             {loading ? "Checking…" : "r to refresh now"}
           </button>
@@ -214,7 +278,7 @@ export function QueueView({
               <li key={prKey(row.pr)}>
                 <PrRow
                   row={row}
-                  rank={i + 1}
+                  rank={view?.rank.get(prKey(row.pr)) ?? i + 1}
                   selected={selected === prKey(row.pr)}
                   reaction={reactions[prKey(row.pr)]}
                   note={reactionNotes[prKey(row.pr)]}
@@ -402,6 +466,268 @@ function PrRow(props: {
           {formatWait(row.waitingHours)}
         </span>
       </span>
+    </div>
+  );
+}
+
+/** One filter menu, styled as a chip: its name when off, its value (highlighted) when on. */
+function FilterMenu(props: {
+  label: string;
+  name: string;
+  value: string | undefined;
+  options: [value: string, text: string][];
+  onChange: (value: string) => void;
+}) {
+  const { label, name, value = "", onChange } = props;
+  // A remembered value the queue no longer has (a label nobody uses now) still shows, so it can be cleared.
+  const options =
+    value && !props.options.some(([v]) => v === value)
+      ? [...props.options, [value, value] as [string, string]]
+      : props.options;
+  return (
+    <select
+      className={`chip-select${value ? " on" : ""}`}
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">{name}</option>
+      {options.map(([v, text]) => (
+        <option key={v} value={v}>
+          {text}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+const AUTHOR_OPTIONS: [string, string][] = [
+  ["you", "By you"],
+  ["people", "By people"],
+  ["bots", "By bots"],
+  ["agents", "By AI agents"],
+];
+const CI_OPTIONS: [string, string][] = [
+  ["passing", "CI passing"],
+  ["failing", "CI failing"],
+  ["running", "CI running"],
+  ["none", "No CI"],
+];
+const AGE_OPTIONS: [string, string][] = [
+  ["today", "Opened today"],
+  ["week", "Opened this week"],
+  ["older", "Opened before this week"],
+];
+const DRAFT_OPTIONS: [string, string][] = [
+  ["hide", "Hide drafts"],
+  ["only", "Only drafts"],
+];
+
+/**
+ * Above the list: the search box (`/`), the filter menus in one row, and a line with the count, the sort and the way
+ * back to everything.
+ */
+function QueueTools(props: {
+  queue: RankedQueue;
+  nav: QueueNav;
+  onNav: (nav: QueueNav) => void;
+  search: string;
+  onSearch: (search: string) => void;
+  shown: number;
+  total: number;
+  focusSearch: number | undefined;
+  onCollapse: (() => void) | undefined;
+  onRefresh: () => void;
+  loading: boolean;
+  list: { current: HTMLElement | null };
+  first: RankedPullRequest | undefined;
+}) {
+  const { queue, nav, onNav, search, onSearch, shown, total, focusSearch, list, first } = props;
+  const facets = useMemo(() => queueFacets(queue), [queue]);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focusSearch) input.current?.focus();
+  }, [focusSearch]);
+  const set =
+    <K extends keyof QueueFilters>(key: K) =>
+    (value: string) =>
+      onNav({ ...nav, filters: withFilter(nav.filters, key, value as QueueFilters[K]) });
+  const filtersOn = activeFilterCount(nav.filters);
+  const narrowed = filtersOn > 0 || search.trim() !== "";
+  const changed = narrowed || nav.sort !== "rank";
+
+  // Back to the list: the open PR's row if it's still shown, else the first one. The list may still be catching up
+  // with the search (it's deferred), so this waits for a render that has rows, for a moment at most.
+  const backToList = useRef(0);
+  const focusList = () => {
+    const root = list.current;
+    const target =
+      root?.querySelector<HTMLElement>('[aria-current="true"]') ??
+      root?.querySelector<HTMLElement>(".pr-title, .fast-row");
+    target?.focus();
+    return target !== null && target !== undefined;
+  };
+  useEffect(() => {
+    if (!backToList.current) return;
+    if (focusList() || Date.now() - backToList.current > 1000) backToList.current = 0;
+  });
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (search) {
+        backToList.current = Date.now();
+        onSearch("");
+      } else if (!focusList()) {
+        input.current?.blur();
+      }
+    } else if (event.key === "Enter" && first) {
+      event.preventDefault();
+      backToList.current = Date.now();
+      navigate({ view: "queue", pr: { repo: first.pr.repo, number: first.pr.number } });
+    }
+  };
+
+  const reviewerOptions: [string, string][] = [
+    ["direct", "Asked you directly"],
+    ["teams", "Asked your teams"],
+    ...facets.teams.map((t): [string, string] => [t, `Asked ${t}`]),
+  ];
+  const assigneeOptions: [string, string][] = [
+    ["you", "Assigned to you"],
+    ["none", "Unassigned"],
+    ...facets.assignees
+      .filter((a) => a.toLowerCase() !== queue.viewer.toLowerCase())
+      .map((a): [string, string] => [a, `Assigned to ${a}`]),
+  ];
+
+  return (
+    <div className="queue-tools">
+      <div className="list-tools">
+        <input
+          ref={input}
+          id="queue-search"
+          className="input search"
+          type="search"
+          placeholder="Search title, repo, #, author, branch"
+          aria-label="Search the queue"
+          aria-keyshortcuts="/"
+          value={search}
+          onChange={(e) => onSearch(e.target.value)}
+          onKeyDown={onKeyDown}
+        />
+        {facets.repos.length > 1 && (
+          <FilterMenu
+            label="Repository"
+            name="Repo"
+            value={nav.filters.repo}
+            options={facets.repos.map((r) => [r, r])}
+            onChange={set("repo")}
+          />
+        )}
+        <button
+          type="button"
+          className="btn sm icon"
+          onClick={props.onRefresh}
+          disabled={props.loading}
+          aria-label={props.loading ? "Refreshing…" : "Refresh"}
+          aria-keyshortcuts="r"
+          title="Refresh  r"
+        >
+          <span aria-hidden="true" className={props.loading ? "spin" : undefined}>
+            ↻
+          </span>
+        </button>
+        {props.onCollapse && (
+          <button
+            type="button"
+            className="btn sm icon collapse-queue"
+            onClick={props.onCollapse}
+            aria-label="Collapse the queue"
+            aria-keyshortcuts="["
+            title="Collapse the queue  ["
+          >
+            «
+          </button>
+        )}
+      </div>
+      {/* biome-ignore lint/a11y/useSemanticElements: a fieldset lays its children out in an anonymous box (see Segmented). */}
+      <div className="filter-row" role="group" aria-label="Filters">
+        <FilterMenu
+          label="Author"
+          name="Author"
+          value={nav.filters.author}
+          options={AUTHOR_OPTIONS}
+          onChange={set("author")}
+        />
+        <FilterMenu
+          label="Review requested of"
+          name="Asked"
+          value={nav.filters.reviewer}
+          options={reviewerOptions}
+          onChange={set("reviewer")}
+        />
+        <FilterMenu
+          label="Assignee"
+          name="Assignee"
+          value={nav.filters.assignee}
+          options={assigneeOptions}
+          onChange={set("assignee")}
+        />
+        {(facets.labels.length > 0 || nav.filters.label) && (
+          <FilterMenu
+            label="Label"
+            name="Label"
+            value={nav.filters.label}
+            options={facets.labels.map((l) => [l, l])}
+            onChange={set("label")}
+          />
+        )}
+        {(facets.hasDrafts || nav.filters.drafts) && (
+          <FilterMenu
+            label="Drafts"
+            name="Drafts"
+            value={nav.filters.drafts}
+            options={DRAFT_OPTIONS}
+            onChange={set("drafts")}
+          />
+        )}
+        <FilterMenu label="CI" name="CI" value={nav.filters.ci} options={CI_OPTIONS} onChange={set("ci")} />
+        <FilterMenu label="Opened" name="Age" value={nav.filters.age} options={AGE_OPTIONS} onChange={set("age")} />
+      </div>
+      <div className="count-row">
+        <span className="count" role="status">
+          {narrowed ? `${shown} of ${total}` : plural(total, "PR")}
+        </span>
+        {changed && (
+          <button
+            type="button"
+            className="link-button small"
+            onClick={() => {
+              onSearch("");
+              onNav(DEFAULT_QUEUE_NAV);
+            }}
+          >
+            {narrowed && nav.sort !== "rank" ? "Reset filters and sort" : narrowed ? "Clear filters" : "Reset sort"}
+          </button>
+        )}
+        <label className="sort">
+          <span className="faint">Sort</span>
+          <select
+            className={`chip-select${nav.sort !== "rank" ? " on" : ""}`}
+            aria-label="Sort"
+            value={nav.sort}
+            onChange={(e) => onNav({ ...nav, sort: e.target.value as QueueSort })}
+          >
+            {(Object.keys(SORT_LABELS) as QueueSort[]).map((s) => (
+              <option key={s} value={s}>
+                {SORT_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {nav.sort !== "rank" && <p className="sort-note">Sorted within each lane; dismissed stay last.</p>}
     </div>
   );
 }
