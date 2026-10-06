@@ -101,6 +101,8 @@ export interface Session {
   /** What this machine's queue covers (queue.orgs, queue.repos, queue.ignore); empty lists mean everywhere. */
   queueScope?: { orgs: string[]; repos: string[]; ignore: string[] };
   background?: { enabled: boolean; model: boolean };
+  /** Whether the desktop app's "Briefing ready" notification plays a sound (`notifications.sound`). */
+  notifications?: { sound: boolean };
 }
 
 /** Why there's no GitHub sign-in: the keychain refused (an unsigned build of the app), or there's none anywhere. */
@@ -215,6 +217,20 @@ export class Api {
     this.request<unknown>("/api/reaction", { method: "POST", body: JSON.stringify({ pr, reaction }) });
 
   exportFeedback = () => this.request<unknown[]>("/api/feedback/export");
+
+  /** A briefing as a Markdown document to share (the same as `alden review --markdown`), and the file to save it as. */
+  briefingMarkdown = (briefing: Briefing) =>
+    this.request<{ markdown: string; fileName: string }>("/api/briefing/markdown", {
+      method: "POST",
+      body: JSON.stringify({ briefing }),
+    });
+
+  /** The desktop app's Save as Markdown: the server writes it to Downloads, since the window can't download files. */
+  saveBriefing = (briefing: Briefing) =>
+    this.request<{ path: string; shown: string }>("/api/briefing/save", {
+      method: "POST",
+      body: JSON.stringify({ briefing }),
+    });
 
   startSignIn = () => this.request<SignInState>("/api/auth/device", { method: "POST" });
 

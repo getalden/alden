@@ -1,3 +1,6 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join, sep } from "node:path";
 import {
   addNote,
   backgroundModelAllowed,
@@ -67,6 +70,7 @@ import { loadRepoStats } from "../commands/stats.js";
 import { describeGitHubError, reviewWriteFix } from "../github-errors.js";
 import { learningFor, learningForQueue, noteOpened } from "../learning.js";
 import { parsePrRef } from "../pr-ref.js";
+import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
 import { createModelSetupApi } from "./model-setup.js";
 import { ApiError, type DraftInput, type ReviewRequest, type UiApi } from "./server.js";
 import { cliStatus, createSignIn, gitHubCliSignedIn, installCli } from "./setup.js";
@@ -83,6 +87,33 @@ async function signedIn() {
   // 409, not 401: 401 means the UI's session key is wrong, which the UI handles differently.
   if (!resolved) throw new ApiError(409, "Not signed in to GitHub. Run `alden auth login`, then refresh.");
   return resolved;
+}
+
+/**
+ * Writes an exported briefing to the Downloads folder without replacing anything there: a second export of the same PR
+ * becomes "…-briefing-2.md", as a browser names a repeat download. The Tauri window can't download files itself.
+ */
+export async function saveToDownloads(
+  name: string,
+  text: string,
+  folder = join(homedir(), "Downloads"),
+): Promise<{ path: string; shown: string }> {
+  await mkdir(folder, { recursive: true });
+  const dot = name.lastIndexOf(".");
+  const [stem, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ""];
+  for (let n = 1; n <= 100; n++) {
+    const path = join(folder, n === 1 ? name : `${stem}-${n}${ext}`);
+    try {
+      await writeFile(path, text, { encoding: "utf8", flag: "wx" });
+      const home = homedir();
+      return { path, shown: path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw new ApiError(500, `Couldn't save the briefing in ${folder}: ${(error as Error).message}`);
+      }
+    }
+  }
+  throw new ApiError(409, `${folder} already has 100 copies of ${name}. Move some, then save again.`);
 }
 
 const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
@@ -122,7 +153,13 @@ export function nextToPrepare(
  * The engine, as the UI sees it: the same calls the CLI commands make, with errors worded for a person. `desktop` is
  * set when the desktop app runs it, which turns on background briefings.
  */
-export function createUiApi(options: { version: string; cwd: string; desktop?: boolean }): UiApi {
+export function createUiApi(options: {
+  version: string;
+  cwd: string;
+  desktop?: boolean;
+  /** Where the desktop app saves exported briefings: ~/Downloads, or a temporary folder in tests. */
+  downloads?: string;
+}): UiApi {
   const cache = new JsonCache();
   const feedback = new FeedbackLog();
   const prepared = new Map<string, Prepared>();
@@ -204,6 +241,7 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
         eyes: config.review.eyes,
         ...(options.desktop ? { cli: cliStatus() } : {}),
         background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
+        notifications: { sound: config.notifications.sound },
         repo: (await repoOf(options.cwd)) ?? null,
         user,
         model: {
@@ -299,6 +337,10 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
     },
 
     cliStatus: async () => cliStatus(),
+    async saveBriefing(briefing) {
+      if (!options.desktop) throw new ApiError(400, "Only the desktop app saves briefings; a browser downloads them.");
+      return saveToDownloads(briefingFileName(briefing), briefingMarkdown(briefing), options.downloads);
+    },
     async installCli() {
       if (!options.desktop) throw new ApiError(400, "Only the desktop app installs the alden command.");
       return installCli();
@@ -323,6 +365,8 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
           model: briefing.llm?.status === "ok",
           at: entry.at,
         },
+        // The desktop app's "Briefing ready" notification plays the system sound unless you turned it off.
+        sound: config.notifications.sound,
       };
     },
 

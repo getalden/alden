@@ -70,6 +70,10 @@ const api: UiApi = {
     calls.push({ method: "installCli", args: undefined });
     return { state: "installed", path: "/usr/local/bin/alden" };
   },
+  saveBriefing: async (b) => {
+    calls.push({ method: "saveBriefing", args: b.target });
+    return { path: "/Users/sam/Downloads/a-b-1-briefing.md", shown: "~/Downloads/a-b-1-briefing.md" };
+  },
   spend: async () => ({ spentToday: 0.12 }),
   config: async () => ({ config: {} }),
   addFeedback: async (input) => {
@@ -184,6 +188,29 @@ function call(
 
 const authed = { "X-Alden-Token": TOKEN };
 
+/** A briefing that passes the schema, as a review returns it. */
+const exportable: Briefing = {
+  schemaVersion: 1,
+  target: {
+    kind: "pr",
+    repo: "a/b",
+    number: 1,
+    url: "https://github.com/a/b/pull/1",
+    title: "Fix \u001b[31mthe thing",
+    author: "sam",
+    baseRef: "main",
+    headRef: "fix",
+  },
+  generatedAt: "2026-10-06T09:30:00.000Z",
+  summary: { files: 1, additions: 1, deletions: 0, reviewableAdditions: 1, reviewableDeletions: 0 },
+  files: [
+    { path: "a.ts", status: "modified", kind: "code", additions: 1, deletions: 0, binary: false, patchMissing: false },
+  ],
+  checks: [],
+  needsYourEyes: [],
+  notChecked: [],
+};
+
 describe("alden ui server", () => {
   it("prints a link with the token in the fragment, on 127.0.0.1", () => {
     expect(ui.url).toBe(`http://127.0.0.1:${ui.port}/#t=${TOKEN}`);
@@ -206,6 +233,37 @@ describe("alden ui server", () => {
           headers: { ...authed, Host: `localhost:${ui.port}`, Origin: `http://localhost:${ui.port}` },
         })
       ).status,
+    ).toBe(200);
+  });
+
+  it("turns a briefing into Markdown to copy or download, named after the PR", async () => {
+    const res = await call("/api/briefing/markdown", {
+      method: "POST",
+      headers: authed,
+      body: { briefing: exportable },
+    });
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.text) as { markdown: string; fileName: string };
+    expect(body.fileName).toBe("a-b-1-briefing.md");
+    expect(body.markdown).toContain("# Fix the thing\n");
+    expect(body.markdown).not.toContain("\u001b");
+    const bad = await call("/api/briefing/markdown", { method: "POST", headers: authed, body: { briefing: { x: 1 } } });
+    expect(bad.status).toBe(400);
+  });
+
+  it("saves a briefing through the engine, which says where it went", async () => {
+    const res = await call("/api/briefing/save", { method: "POST", headers: authed, body: { briefing: exportable } });
+    expect(JSON.parse(res.text)).toEqual({
+      path: "/Users/sam/Downloads/a-b-1-briefing.md",
+      shown: "~/Downloads/a-b-1-briefing.md",
+    });
+    expect(calls).toEqual([{ method: "saveBriefing", args: exportable.target }]);
+  });
+
+  it("takes a briefing to export that's larger than other requests may be", async () => {
+    const big = { ...exportable, notChecked: Array.from({ length: 2_000 }, (_, i) => `${"x".repeat(100)} ${i}`) };
+    expect(
+      (await call("/api/briefing/markdown", { method: "POST", headers: authed, body: { briefing: big } })).status,
     ).toBe(200);
   });
 
