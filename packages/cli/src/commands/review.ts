@@ -26,11 +26,13 @@ import { nextLine, reviewNext, wantsNext } from "../next.js";
 import { parsePrRef, queuePick } from "../pr-ref.js";
 import { startProgress } from "../progress.js";
 import { renderBriefing } from "../render/briefing.js";
+import { briefingMarkdown } from "../render/markdown.js";
 import { shouldColor } from "../render/style.js";
 import { LAST_QUEUE_KEY, type LastQueue } from "./open.js";
 
 interface ReviewOptions {
   json?: boolean;
+  markdown?: boolean;
   /** Commander sets this to false for --no-llm. */
   llm: boolean;
   /** Commander sets this to false for --no-graph. */
@@ -61,8 +63,10 @@ export function registerReviewCommand(program: Command): void {
     .option("--model <name>", "use this model for this review (e.g. opus), instead of your configured one")
     .option("--effort <level>", "how hard the model thinks: low, medium, high, xhigh or max (default: the model's own)")
     .option("--json", "print the briefing as JSON (see packages/schema/json)")
+    .option("--markdown", "print the briefing as a Markdown document to share or save (`> briefing.md`)")
     .action(async (prArg: string | undefined, options: ReviewOptions) => {
       const startedAt = Date.now();
+      if (options.json && options.markdown) program.error("Choose one of --json and --markdown.");
       const config = await loadConfig();
       const effort = options.effort as Effort | undefined;
       if (effort !== undefined && !EFFORTS.includes(effort)) {
@@ -136,6 +140,10 @@ export function registerReviewCommand(program: Command): void {
 
       if (options.json) {
         console.log(JSON.stringify(briefing, null, 2));
+        return;
+      }
+      if (options.markdown) {
+        process.stdout.write(briefingMarkdown(briefing));
         return;
       }
       const render = { width: Math.min(process.stdout.columns ?? 100, 120), color: shouldColor(process.stdout) };
