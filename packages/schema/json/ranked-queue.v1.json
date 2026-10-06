@@ -122,6 +122,13 @@
                   "type": "string"
                 }
               },
+              "assignees": {
+                "description": "logins the PR is assigned to; absent in queues fetched before Alden read them",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "ci": {
                 "type": "string",
                 "enum": [
@@ -449,6 +456,13 @@
                 "description": "true when the PR has more files than Alden fetched"
               },
               "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "assignees": {
+                "description": "logins the PR is assigned to; absent in queues fetched before Alden read them",
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -782,6 +796,13 @@
                 "description": "true when the PR has more files than Alden fetched"
               },
               "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "assignees": {
+                "description": "logins the PR is assigned to; absent in queues fetched before Alden read them",
                 "type": "array",
                 "items": {
                   "type": "string"

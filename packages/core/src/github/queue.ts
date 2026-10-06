@@ -376,9 +376,9 @@ export function queueSearchQuery(
   return parts.join(" ");
 }
 
-/** Keyed by the account, not its login, so a cached queue is read without a request. */
+/** Keyed by the account, not its login, so a cached queue is read without a request. v5: facts carry assignees. */
 async function queueCacheKey(client: GitHubClient, options: QueueOptions): Promise<string> {
-  return `queue:v4:${await accountKey(client)}:${options.limit ?? 100}:${queueSearchQuery(options)}`;
+  return `queue:v5:${await accountKey(client)}:${options.limit ?? 100}:${queueSearchQuery(options)}`;
 }
 
 /**

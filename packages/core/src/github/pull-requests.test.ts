@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseCodeowners } from "./codeowners.js";
-import { type RawPullRequest, toFacts, type Viewer } from "./pull-requests.js";
+import { PULL_REQUEST_FIELDS, type RawPullRequest, toFacts, type Viewer } from "./pull-requests.js";
 
 interface Fixture {
   name: string;
@@ -40,6 +40,15 @@ describe("toFacts on every recorded PR", () => {
 });
 
 describe("toFacts", () => {
+  it("reads assignees, and none from a fixture recorded before Alden asked for them", () => {
+    const raw = pr("hugo", 15387);
+    expect(toFacts(raw, outsider).assignees).toEqual([]);
+    raw.assignees = { nodes: [{ login: "bep" }, { login: "jmooring" }] };
+    expect(toFacts(raw, outsider).assignees).toEqual(["bep", "jmooring"]);
+    // One small connection on the details already fetched: no extra request.
+    expect(PULL_REQUEST_FIELDS).toContain("assignees(first: 10) { nodes { login } }");
+  });
+
   it("maps CI rollups", () => {
     // Real CI results change between recordings, so set each rollup explicitly.
     const withRollup = (state: string | null) => {

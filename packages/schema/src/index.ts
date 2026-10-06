@@ -1,4 +1,13 @@
 export {
+  AI_AGENT_BRANCHES,
+  AI_AGENT_LOGINS,
+  type AuthorKind,
+  authorName,
+  loginSlug,
+  type PrAuthor,
+  prAuthor,
+} from "./authors.js";
+export {
   type Anchor,
   AnchorSchema,
   BRIEFING_SCHEMA_VERSION,
@@ -85,6 +94,28 @@ export {
   RankedQueueSchema,
   type Score,
 } from "./queue.js";
+export {
+  AGE_FILTERS,
+  AUTHOR_KINDS,
+  activeFilterCount,
+  CI_FILTERS,
+  DEFAULT_QUEUE_NAV,
+  DRAFT_FILTERS,
+  isQueueSort,
+  matchesSearch,
+  type NavigatedQueue,
+  navigateQueue,
+  parseQueueNav,
+  QUEUE_SORTS,
+  type QueueFacets,
+  type QueueFilters,
+  type QueueNav,
+  type QueueSort,
+  queueFacets,
+  queueFilter,
+  sortLane,
+  withFilter,
+} from "./queue-nav.js";
 export {
   REVIEW_SCHEMA_VERSION,
   type ReviewDraft,

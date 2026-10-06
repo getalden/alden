@@ -2,7 +2,7 @@
  * Who wrote a PR, as learning sees it: you, a person, a bot, or an AI agent, and which bot or agent. More and more PRs
  * come from agents and bots, and how a reviewer treats them (opens Copilot's PRs first, skips Dependabot's) is worth
  * learning. Everything here works from what the queue already fetches: the author's login and GitHub type, and the
- * PR's branch name. Nothing costs an extra API call.
+ * PR's branch name. Nothing costs an extra API call. Pure, so the web UI uses it too.
  */
 
 export type AuthorKind = "you" | "person" | "bot" | "agent";

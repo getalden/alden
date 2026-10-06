@@ -116,6 +116,18 @@ describe("fetchReviewQueue", () => {
     expect(withDrafts.calls.searches[0]?.q).not.toContain("draft:false");
   });
 
+  it("brings each PR's assignees with its details, without another request", async () => {
+    const withAssignees = prs.map((p, i) => ({
+      ...p,
+      assignees: { nodes: i === 0 ? [{ login: "nwrichmond" }, { login: "ash" }] : [] },
+    }));
+    const { client, calls } = fakeClient(withAssignees);
+    const queue = await fetchReviewQueue(client);
+    expect(queue.pullRequests[0]?.assignees).toEqual(["nwrichmond", "ash"]);
+    expect(queue.pullRequests.slice(1).every((p) => p.assignees?.length === 0)).toBe(true);
+    expect(calls.details).toHaveLength(Math.ceil(prs.length / 25));
+  });
+
   it("pages through results up to the limit", async () => {
     const many = Array.from({ length: 30 }, (_, i) => ({
       ...structuredClone(prs[0] as RawPullRequest),
