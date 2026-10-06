@@ -1,5 +1,0 @@
----
-"alden": minor
----
-
-Choose how your queue ranks, and have the desktop app brief by it. Every signal the queue ranks by is now a weight you can turn up, down or off under `[queue.rank]` (`urgentLabel`, `stacked`, `sameAuthor`, `ownsFiles`, `waiting`, `size`, `risk`, `noTests`, `learned`; 0 ignores one, 1 is the default, 2 doubles it), and rules put PRs first or last in their lane, or boost or lower them, by path, label, author (a login, or people, bots or AI agents), repo, base branch or title. Each rule that applies leads the row's reasons ("↑ your rule: payments/ first"), and what Alden learns never overrides a rule. With nothing set, the order is unchanged. Settings → Ranking in the web UI and the desktop app has a slider per weight, the rules list, and your current queue's top 5 with what's on screen before you save. The desktop app briefs your top PRs in that order, and how many it keeps briefed is now yours to set (`background.prepare`, 0 to 10, default 3). `alden queue --explain` shows each PR's score by weight and rule, and `--json` carries the same breakdown.
