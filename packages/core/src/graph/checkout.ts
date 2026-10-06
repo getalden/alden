@@ -19,19 +19,56 @@ export function repoFromRemote(url: string): string | undefined {
   return match ? `${match[1]}/${match[2]}`.toLowerCase() : undefined;
 }
 
-export type Checkout = { ok: true; root: string } | { ok: false; reason: string };
+/** Where a PR's code graph came from: GitHub's merge of the PR onto its latest base, or the PR's own branch. */
+export type GraphFrom = "merge" | "head";
+
+export type Checkout =
+  | {
+      ok: true;
+      root: string;
+      graphFrom: GraphFrom;
+      /** The PR head commit checked out (or, for a merge, whose versions of the PR's files were kept). */
+      headSha: string;
+      /** The base commit the graph saw: the merge's first parent. Absent for a checkout of the PR's branch. */
+      baseSha?: string;
+      /** Why the graph comes from the PR's branch rather than the merge, in a sentence for the briefing. */
+      note?: string;
+    }
+  | { ok: false; reason: string };
+
+export interface CheckoutOptions {
+  /** Defaults to ~/.alden/worktrees. */
+  worktrees?: string;
+  /** The base branch's name, for the note when the merge can't be used. */
+  baseRef?: string;
+  /** What GitHub says now: the PR's head, its merge commit (`refs/pull/N/merge`) and whether it merges cleanly. */
+  headSha?: string;
+  mergeSha?: string;
+  mergeable?: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+  /**
+   * The PR's changed paths (new paths). In a merge checkout they're put back to the PR head's version, so line numbers
+   * match the PR's own diff even where the base changed the same file since.
+   */
+  pin?: string[];
+}
 
 /**
- * A checkout of a PR's head, for the code graph. Needs `cwd` to be inside a clone of the PR's repo (any remote may
- * point at it, e.g. a fork's upstream). Fetches the PR into `refs/alden/pr-<n>` and checks it out, detached, in one
- * reusable worktree per repo under ~/.alden/worktrees. The user's own working tree is never touched.
+ * A checkout of a PR for the code graph: GitHub's `refs/pull/N/merge`, the PR merged onto its latest base (what CI
+ * tests), so callers added or moved on the base since the PR branched are found. When there's no merge (the PR
+ * conflicts, or GitHub hasn't made one for its latest push), the PR's head, with a note saying so.
+ *
+ * Needs `cwd` to be inside a clone of the PR's repo (any remote may point at it, e.g. a fork's upstream). Fetches into
+ * `refs/alden/pr-<n>` and `refs/alden/pr-<n>-merge`, skipping the fetch when those already hold what GitHub reports,
+ * and checks out, detached, in one reusable worktree per repo under ~/.alden/worktrees. The user's own working tree is
+ * never touched.
  */
 export async function checkoutPullRequest(
   cwd: string,
   repo: string,
   number: number,
-  worktrees: string = join(aldenHome(), "worktrees"),
+  options: CheckoutOptions = {},
 ): Promise<Checkout> {
+  const worktrees = options.worktrees ?? join(aldenHome(), "worktrees");
   let root: string;
   try {
     root = resolve(await git(cwd, ["rev-parse", "--show-toplevel"]));
@@ -39,10 +76,11 @@ export async function checkoutPullRequest(
     return { ok: false, reason: `Run \`alden review\` from a clone of ${repo} to check callers outside the diff.` };
   }
 
-  const remotes = (await git(root, ["remote", "-v"])).split("\n");
+  // The URLs as configured, not as `insteadOf` rewrites them: the clone names GitHub even when it fetches elsewhere.
+  const remotes = (await git(root, ["config", "--get-regexp", "^remote\\..*\\.url$"]).catch(() => "")).split("\n");
   const remote = remotes
-    .map((line) => line.split(/\s+/))
-    .find(([, url]) => url !== undefined && repoFromRemote(url) === repo.toLowerCase())?.[0];
+    .map((line) => /^remote\.(.+)\.url\s+(.*)$/.exec(line))
+    .find((match) => match?.[2] !== undefined && repoFromRemote(match[2]) === repo.toLowerCase())?.[1];
   if (!remote) {
     return {
       ok: false,
@@ -50,23 +88,106 @@ export async function checkoutPullRequest(
     };
   }
 
-  const ref = `refs/alden/pr-${number}`;
+  const headRef = `refs/alden/pr-${number}`;
+  const mergeRef = `refs/alden/pr-${number}-merge`;
+  const base = options.baseRef ?? "the base branch";
   const worktree = join(worktrees, createHash("sha256").update(root).digest("hex").slice(0, 16));
+  // Told what GitHub has, a PR with no merge commit isn't asked for one.
+  const wantMerge = options.mergeable !== "CONFLICTING" && (options.headSha === undefined || !!options.mergeSha);
+  const note =
+    options.mergeable === "CONFLICTING"
+      ? `Callers from the PR's branch: it conflicts with ${base}, so changes merged since aren't included.`
+      : `Callers from the PR's branch: GitHub hasn't merged it with ${base} yet, so changes merged since aren't included.`;
+  let from: GraphFrom = "head";
+  let baseSha: string | undefined;
+  let headSha: string;
   try {
-    await git(root, ["fetch", "--quiet", "--no-tags", remote, `+pull/${number}/head:${ref}`]);
+    const [haveHead, haveMerge] = await Promise.all([commitOf(root, headRef), commitOf(root, mergeRef)]);
+    const current =
+      options.headSha !== undefined &&
+      haveHead === options.headSha &&
+      (!wantMerge || (options.mergeSha !== undefined && haveMerge === options.mergeSha));
+    let mergeFetched = wantMerge && haveMerge !== undefined;
+    if (!current) {
+      const fetch = (...specs: string[]) => git(root, ["fetch", "--quiet", "--no-tags", remote, ...specs]);
+      if (!wantMerge) await fetch(`+pull/${number}/head:${headRef}`);
+      else {
+        try {
+          await fetch(`+pull/${number}/head:${headRef}`, `+pull/${number}/merge:${mergeRef}`);
+          mergeFetched = true;
+        } catch (error) {
+          if (!/couldn't find remote ref/i.test((error as { stderr?: string }).stderr ?? "")) throw error;
+          // No merge on GitHub: conflicts, or not computed yet. Don't let an old one stand in for it.
+          await git(root, ["update-ref", "-d", mergeRef]).catch(() => {});
+          await fetch(`+pull/${number}/head:${headRef}`);
+          mergeFetched = false;
+        }
+      }
+    }
+    headSha = await git(root, ["rev-parse", "--verify", `${headRef}^{commit}`]);
+    if (wantMerge && mergeFetched) {
+      // "<merge> <base> <head>": a merge of an older push doesn't hold the PR's latest code.
+      const [, first, second] = (await git(root, ["rev-list", "--parents", "-n", "1", mergeRef])).split(" ");
+      if (second === headSha && first) {
+        from = "merge";
+        baseSha = first;
+      }
+    }
+
+    const target = from === "merge" ? mergeRef : headRef;
     if (!existsSync(join(worktree, ".git"))) {
       await mkdir(worktrees, { recursive: true });
       // A worktree left over from a deleted directory would block `add`.
       await git(root, ["worktree", "prune"]);
-      await git(root, ["worktree", "add", "--detach", "--quiet", worktree, ref]);
+      await git(root, ["worktree", "add", "--detach", "--quiet", worktree, target]);
     } else {
-      await git(worktree, ["checkout", "--detach", "--quiet", "--force", ref]);
+      await git(worktree, ["checkout", "--detach", "--quiet", "--force", target]);
     }
+    if (from === "merge" && options.pin && options.pin.length > 0)
+      await pinToHead(worktree, mergeRef, headRef, options.pin);
   } catch (error) {
     const message = (error as { stderr?: string }).stderr?.trim().split("\n").at(-1) ?? (error as Error).message;
     return { ok: false, reason: `Couldn't fetch ${repo}#${number} for the code graph (${message}).` };
   }
-  return { ok: true, root: worktree };
+  return {
+    ok: true,
+    root: worktree,
+    graphFrom: from,
+    headSha,
+    ...(baseSha ? { baseSha } : {}),
+    ...(from === "head" ? { note } : {}),
+  };
+}
+
+/** The commit a ref points at, or undefined when there's no such ref. */
+async function commitOf(root: string, ref: string): Promise<string | undefined> {
+  return git(root, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).catch(() => undefined);
+}
+
+/**
+ * Puts the PR's own files back to the PR head's version in a merge checkout. The PR's diff (head against where it
+ * branched) says which lines changed; where the base changed the same file since, the merged file's lines no longer
+ * match it. Only files that differ are touched, and the next checkout's `--force` discards them.
+ */
+async function pinToHead(worktree: string, mergeRef: string, headRef: string, paths: string[]): Promise<void> {
+  const literal = ["--literal-pathspecs"];
+  const differ = (
+    await git(worktree, [
+      ...literal,
+      "diff",
+      "--name-only",
+      "-z",
+      "--no-renames",
+      "--diff-filter=AMT",
+      mergeRef,
+      headRef,
+      "--",
+      ...paths,
+    ])
+  )
+    .split("\0")
+    .filter(Boolean);
+  if (differ.length > 0) await git(worktree, [...literal, "checkout", headRef, "--", ...differ]);
 }
 
 let checkoutQueue: Promise<unknown> = Promise.resolve();

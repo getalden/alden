@@ -48,7 +48,10 @@ When your Mac has been idle for three minutes, Alden briefs the top PR waiting o
 and tells you when it's ready ("Briefing ready: acme/shop#412 · 2 places need your eyes"). Open it and the briefing is
 already there, marked "prepared while you were away"; **Brief again** makes a fresh one. It works through your top
 three, one a minute while you're still away, skips drafts and PRs waiting on their author, and briefs a PR again only
-after it changes. Ready PRs are marked in the menu and the queue.
+after it changes: a new push, or new commits on its base branch (main moving can add callers of the code it changes).
+A prepared briefing is shown only if its PR's head and base still match GitHub's when you open it; otherwise Alden
+drops it and prepares a fresh one. While you're away it checks the ones it has every five minutes, one GitHub request
+each. Ready PRs are marked in the menu and the queue.
 
 These briefings use the checks and the code graph only, which costs nothing. To have them ask the model too, turn on
 **Ask the model too** in Settings → While you're away; each then counts against your caps like any briefing. Turn the

@@ -259,6 +259,20 @@ describe("renderBriefing", () => {
     expect(plain(briefing())).toMatch(/Not checked\n {2}· Callers and code outside the diff/);
   });
 
+  it("ends with what the callers were found in: the base at a commit plus the PR, or the PR's branch", () => {
+    const pr = briefing().target;
+    if (pr.kind !== "pr") throw new Error("a PR briefing");
+    const fromMerge = briefing({
+      target: { ...pr, headSha: "1234567890ab", baseSha: "abc1234def", graphFrom: "merge" },
+    });
+    expect(plain(fromMerge).trimEnd().split("\n").slice(-2)).toEqual(["", "Callers from main at abc1234 + this PR"]);
+    const fromHead = briefing({ target: { ...pr, headSha: "1234567890ab", graphFrom: "head" } });
+    expect(plain(fromHead).trimEnd().split("\n").at(-1)).toBe(
+      "Callers from the PR's branch at 1234567, not main as it is now",
+    );
+    expect(plain(briefing())).not.toMatch(/Callers from/);
+  });
+
   describe("with the model's view", () => {
     const withModel = briefing({
       needsYourEyes: [

@@ -1,4 +1,4 @@
-import type { RankedPullRequest, RankedQueue } from "@alden/schema";
+import type { BriefingFreshness, BriefingTarget, RankedPullRequest, RankedQueue } from "@alden/schema";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Api, ApiError, type CloneInfo, type Session } from "./api";
 import { MemoryView } from "./components/MemoryView";
@@ -240,6 +240,7 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
                 draftsApi={api}
                 onDraftCount={onDraftCount}
                 cloneOf={api.clone}
+                freshness={api.freshness}
                 onSetUpModel={() => setSettingUpModel(true)}
               />
             ) : (
@@ -386,6 +387,8 @@ function PrPane(props: {
   draftsApi?: Api | undefined;
   onDraftCount?: (key: string, count: number) => void;
   onSetUpModel?: () => void;
+  /** Whether a briefing still matches its PR on GitHub. */
+  freshness?: ((target: BriefingTarget) => Promise<BriefingFreshness>) | undefined;
 }) {
   const { prRef, row, reviews, session, api, cloneOf, onDraftCount } = props;
   const key = `${prRef.repo}#${prRef.number}`;
@@ -488,6 +491,7 @@ function PrPane(props: {
       feedbackFor={props.feedbackFor}
       perReviewUsd={session?.budget.perReviewUsd}
       comments={comments}
+      freshness={props.freshness}
     />
   );
 }

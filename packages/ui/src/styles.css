@@ -850,6 +850,17 @@ textarea.input {
 .why .chip {
   padding: 2px 8px;
 }
+.brief-age {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  font: 500 12px var(--font-ui);
+  color: var(--ink3);
+}
+.brief-age .stale {
+  color: var(--warn);
+}
 .toolbar {
   padding: 12px 32px;
   border-bottom: 1px solid var(--line);

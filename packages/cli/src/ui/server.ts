@@ -4,13 +4,15 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
 import type { ReviewStage } from "@alden/core";
-import type {
-  Briefing,
-  LocalSetupEvent,
-  ReviewDraft,
-  ReviewDrafts,
-  ReviewEvent as ReviewVerdict,
-  SendReviewResult,
+import {
+  type Briefing,
+  type BriefingTarget,
+  BriefingTargetSchema,
+  type LocalSetupEvent,
+  type ReviewDraft,
+  type ReviewDrafts,
+  type ReviewEvent as ReviewVerdict,
+  type SendReviewResult,
 } from "@alden/schema";
 import { stripControlDeep } from "../render/style.js";
 import type { ModelSetupApi, SetupPage } from "./model-setup.js";
@@ -43,6 +45,11 @@ export interface UiApi {
   prepareNext(): Promise<unknown>;
   /** Without a PR, which briefings are ready; with one ("owner/repo#12"), that briefing, or null if none or stale. */
   prepared(pr?: string): Promise<unknown>;
+  /**
+   * Whether a briefing (by its target) still matches the PR on GitHub: fresh, the PR has new commits, or its base has
+   * moved. One GitHub request; the UI asks when it shows a briefing and when the window regains focus.
+   */
+  freshness(target: BriefingTarget): Promise<unknown>;
   /** GitHub sign-in from the UI: start the device flow, its status, open GitHub's page, or use the GitHub CLI's. */
   startSignIn(): Promise<unknown>;
   signInStatus(): Promise<unknown>;
@@ -314,6 +321,13 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       case "GET /api/prepared": {
         const pr = url.searchParams.get("pr") ?? undefined;
         send(res, 200, await api.prepared(pr));
+        return;
+      }
+      case "POST /api/freshness": {
+        const body = await readJsonBody(req);
+        const target = BriefingTargetSchema.safeParse(body.target);
+        if (!target.success) throw new ApiError(400, "Send { target }: a briefing's target.");
+        send(res, 200, await api.freshness(target.data));
         return;
       }
       case "GET /api/spend":

@@ -144,6 +144,13 @@ describe("briefingMarkdown", () => {
     );
   });
 
+  it("says what the callers were found in", () => {
+    const base = briefing();
+    if (base.target.kind !== "pr") throw new Error("a PR briefing");
+    const target = { ...base.target, headSha: "1234567890", baseSha: "abc1234def", graphFrom: "merge" as const };
+    expect(briefingMarkdown({ ...base, target }, [], false)).toContain("Callers from main at abc1234 + this PR.\n");
+  });
+
   it("keeps a title's backticks from breaking the Markdown", () => {
     expect(briefingMarkdown(briefing(), [], false)).toContain("Add the 'review' command");
   });

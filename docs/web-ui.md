@@ -36,6 +36,10 @@ Stop it with Ctrl+C.
   **Not useful** on each place, finding and flagged check teach Alden; **Dismiss** hides one place on this PR. "Shaped
   by your feedback" says what your feedback changed. Briefing a PR from
   the queue counts as opening it, for learning.
+  Under the title, when it was briefed ("Briefed 30 min ago"), and once the PR or its base has moved on, what changed
+  and **Re-brief**: "main has 4 new commits since" (callers merged there since aren't in it) or "the PR has 2 new
+  commits". Alden asks GitHub (one request) when the briefing is shown and when the window comes back to the front, at
+  most once a minute; it doesn't poll. See [Keeping up with the base](code-graph.md#keeping-up-with-the-base).
 - **Comment from Alden.** Write your review in the briefing and send it to GitHub as one review. **Comment** on a place
   in "Needs your eyes" or on a flagged check's evidence line opens an editor there; **Comment on a line…** takes any
   line of a changed file (pick the file, give the line; a removed file's line is on the old side), and **Add a general
