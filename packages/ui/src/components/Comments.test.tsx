@@ -443,8 +443,6 @@ describe("drafts on the queue", () => {
         }}
         error={undefined}
         loading={false}
-        repoFilter=""
-        onRepoFilter={() => {}}
         onRefresh={() => {}}
         selected={undefined}
         drafts={{ "acme/api#1": 2 }}

@@ -24,6 +24,7 @@ export const PULL_REQUEST_FIELDS = `
   repository { nameWithOwner }
   author { __typename login }
   labels(first: 20) { nodes { name } }
+  assignees(first: 10) { nodes { login } }
   files(first: ${MAX_FILES}) { nodes { path additions deletions } pageInfo { hasNextPage } }
   reviewRequests(first: 20) {
     nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug organization { login } } } }
@@ -63,6 +64,8 @@ export interface RawPullRequest {
   repository: { nameWithOwner: string };
   author: { __typename?: string; login: string } | null;
   labels: { nodes: { name: string }[] };
+  /** Absent in fixtures recorded before Alden read assignees. */
+  assignees?: { nodes: { login: string }[] };
   files: { nodes: { path: string; additions: number; deletions: number }[]; pageInfo: { hasNextPage: boolean } } | null;
   reviewRequests: { nodes: { requestedReviewer: Reviewer | null }[] };
   reviews: { nodes: { author: { login: string } | null; state: string; submittedAt: string | null }[] };
@@ -137,6 +140,7 @@ export function toFacts(raw: RawPullRequest, viewer: Viewer, codeowners: Codeown
     files,
     filesTruncated: raw.files?.pageInfo.hasNextPage ?? raw.changedFiles > 0,
     labels: raw.labels.nodes.map((l) => l.name),
+    assignees: raw.assignees?.nodes.map((a) => a.login) ?? [],
     ci: ciState(raw),
     mergeable: raw.mergeable.toLowerCase() as PullRequestFacts["mergeable"],
     reviews: raw.reviews.nodes.map((r) => ({

@@ -596,8 +596,124 @@ textarea.input {
   align-items: center;
   padding: 12px 16px 0;
 }
-.list-tools select {
+.list-tools .search {
   flex: 1;
+}
+/* The refresh glyph turns while the queue loads (the keyframes are the state card's). */
+.list-tools .spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .list-tools .spin {
+    animation: none;
+  }
+}
+.list-tools .search {
+  height: 30px;
+  font-size: 13px;
+}
+
+/* One row of filter menus, each a chip: its name when off, its value (highlighted) when on. */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 8px 16px 0;
+}
+.chip-select {
+  appearance: none;
+  height: 24px;
+  /* As wide as the chosen value, not the longest option; capped where that isn't supported. */
+  field-sizing: content;
+  max-width: 160px;
+  padding: 0 15px 0 5px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-sm);
+  color: var(--ink2);
+  font: 500 12px var(--font-ui);
+  text-overflow: ellipsis;
+  background:
+    linear-gradient(45deg, transparent 50%, currentColor 50%) right 8px top 55% / 4px 4px no-repeat,
+    linear-gradient(-45deg, transparent 50%, currentColor 50%) right 4px top 55% / 4px 4px no-repeat,
+    var(--panel);
+}
+.chip-select:hover {
+  border-color: var(--ink3);
+}
+.chip-select.on {
+  border-color: var(--acc);
+  color: var(--ink);
+  font-weight: 600;
+  background-color: var(--acc-soft);
+}
+.list-tools .chip-select {
+  height: 30px;
+}
+.chip-select option {
+  background: var(--panel);
+  color: var(--ink);
+}
+.count-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 0;
+  font: 500 12px var(--font-mono);
+  color: var(--ink2);
+}
+.count-row .sort {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 12px var(--font-ui);
+}
+.sort-note {
+  padding: 4px 16px 0;
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
+}
+
+/* Collapsed (wide windows only): a thin rail, and the briefing takes the width. Narrow windows keep one pane. */
+.queue-rail {
+  display: none;
+}
+@media (min-width: 960px) {
+  .side.collapsed {
+    width: 40px;
+    overflow: hidden;
+  }
+  .side.collapsed > :not(.queue-rail) {
+    display: none;
+  }
+  .queue-rail {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink2);
+    font: 600 13px var(--font-ui);
+  }
+  .queue-rail:hover {
+    background: color-mix(in srgb, var(--sunk) 60%, transparent);
+    color: var(--ink);
+  }
+  .queue-rail .rail-label {
+    writing-mode: vertical-rl;
+    font: 600 12px var(--font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+}
+@media (max-width: 959px) {
+  .collapse-queue {
+    display: none;
+  }
 }
 .visually-plain {
   list-style: none;

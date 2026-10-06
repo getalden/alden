@@ -9,6 +9,18 @@ Open, non-archived PRs where your review is requested, directly or through a tea
 left out unless you pass `--include-drafts` or set `queue.includeDrafts`; then each is tagged Draft before its title.
 Narrow the queue with `--repo` and `--org`.
 
+## Narrowing and sorting
+
+`alden queue --author bots`, `--label <name>` and `--search <text>` show only the PRs that match, and
+`--sort age|waiting|updated|size` re-sorts them (oldest first, longest wait first, last updated first, smallest
+first). These work on the ranked queue: ranking doesn't change, sorting happens inside Needs you and Fast-track
+separately, and a line above the table says what's narrowed ("12 of 144 PRs: author bots"). `alden open 3` and
+`alden review 3` take the numbers as shown. The web UI has the same search, filters and sort, and more (assignee, how
+you were asked, CI, age, drafts); see [The web UI](web-ui.md#views).
+
+Every PR's facts include its **assignees** (up to 10), read in the same request as the rest of its details: one more
+small field per PR, no extra request. Queues cached before Alden read assignees are fetched again once.
+
 ## Needs you
 
 Ranked by three factors, in this order of weight. **Blocking beats waiting beats risk.**
@@ -52,7 +64,7 @@ Alden tells four kinds of author apart, and learns how you treat each, and each 
   `devin/…`) counts as that agent's too. An agent's name only counts on a bot account, so a person whose login is
   `claude` stays a person.
 
-The list lives in `packages/core/src/learn/authors.ts`. Alden reads only what the queue already fetches (the author's
+The list lives in `packages/schema/src/authors.ts`, so the web UI's author filter uses it too. Alden reads only what the queue already fetches (the author's
 login and type, and the branch name), so this costs no extra API calls; it doesn't read PR descriptions or commit
 trailers ("Generated with Claude Code", `Co-authored-by`).
 

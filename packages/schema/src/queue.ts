@@ -32,6 +32,10 @@ export const PullRequestFactsSchema = z.object({
   files: z.array(z.object({ path: z.string(), additions: z.number().int(), deletions: z.number().int() })),
   filesTruncated: z.boolean().describe("true when the PR has more files than Alden fetched"),
   labels: z.array(z.string()),
+  assignees: z
+    .array(z.string())
+    .optional()
+    .describe("logins the PR is assigned to; absent in queues fetched before Alden read them"),
   ci: CiStateSchema,
   mergeable: z.enum(["mergeable", "conflicting", "unknown"]),
   reviews: z.array(

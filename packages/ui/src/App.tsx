@@ -1,9 +1,9 @@
 import type { BriefingFreshness, BriefingTarget, RankedPullRequest, RankedQueue } from "@alden/schema";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { type Api, ApiError, type CloneInfo, type Session } from "./api";
 import { MemoryView } from "./components/MemoryView";
 import { ModelSetupDialog } from "./components/ModelSetup";
-import { isLearnedReason, prKey, QueueView, type Reaction } from "./components/QueueView";
+import { isLearnedReason, prKey, QueueView, type Reaction, useNavigatedQueue } from "./components/QueueView";
 import { type Choices, initialChoices, ReviewOptions, toRequest } from "./components/ReviewOptions";
 import { ReviewPane } from "./components/ReviewPane";
 import { SettingsView } from "./components/SettingsView";
@@ -15,6 +15,7 @@ import { TopBar } from "./components/TopBar";
 import { useDrafts } from "./drafts";
 import { useFeedback } from "./feedback";
 import { fetchedAgo, waitingSince } from "./format";
+import { useQueueCollapsed, useQueueNav } from "./queue-prefs";
 import { useReviews } from "./reviews";
 import { navigate, useRoute } from "./router";
 
@@ -32,7 +33,12 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
   const [queue, setQueue] = useState<RankedQueue>();
   const [queueError, setQueueError] = useState<string>();
   const [queueLoading, setQueueLoading] = useState(false);
-  const [repoFilter, setRepoFilter] = useState("");
+  // Filters and sort are remembered across reloads; the search box isn't.
+  const [nav, setNav] = useQueueNav();
+  const [search, setSearch] = useState("");
+  const [collapsed, setCollapsed] = useQueueCollapsed();
+  // Bumped by "/": the queue's search box takes focus.
+  const [searchFocus, setSearchFocus] = useState(0);
   const [choices, setChoices] = useState<Choices>();
   const [reactions, setReactions] = useState<Record<string, Reaction | undefined>>({});
   const [reactError, setReactError] = useState<string>();
@@ -68,9 +74,9 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
     if (!choseFolder || !session || folderShown.current) return;
     folderShown.current = true;
     const repo = session.repo?.repos[0];
-    if (repo) setRepoFilter(repo);
+    if (repo) setNav((n) => ({ ...n, filters: { ...n.filters, repo } }));
     setFolderNote({ root: session.repo?.root ?? session.cwd, repo });
-  }, [choseFolder, session]);
+  }, [choseFolder, session, setNav]);
   const reviews = useReviews(api, loadSession);
   const feedbackFor = useFeedback(api, session?.repo?.repos[0] ?? null);
 
@@ -150,11 +156,18 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
   );
 
   const all = [...(queue?.needsYou ?? []), ...(queue?.fastTrack ?? [])];
-  const visible = all.filter((r) => !repoFilter || r.pr.repo === repoFilter);
+  // j/k walk the queue as it's shown: filtered, searched and sorted.
+  const view = useNavigatedQueue(queue, nav, useDeferredValue(search));
+  const visible = view ? [...view.needsYou, ...view.fastTrack] : [];
   const current = route.view === "queue" ? route.pr : undefined;
   useQueueKeys({
     active: route.view === "queue",
     order: visible.map((r) => ({ repo: r.pr.repo, number: r.pr.number, url: r.pr.url })),
+    onToggleQueue: () => setCollapsed((was) => !was),
+    onSearch: () => {
+      setCollapsed(false);
+      setSearchFocus((n) => n + 1);
+    },
     current,
     onBrief: (key) => reviews.start(key, { pr: key, ...toRequest(choices ?? initialChoices(session), session) }),
     onReact: react,
@@ -185,14 +198,35 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
       <TopBar session={session} route={route} queueCount={queueCount} />
       {route.view === "queue" && (
         <div className={`workspace${current ? " has-detail" : ""}`}>
-          <aside className="side" aria-label="Your review queue">
+          <aside className={`side${collapsed ? " collapsed" : ""}`} aria-label="Your review queue">
+            {collapsed && (
+              <button
+                type="button"
+                className="queue-rail"
+                onClick={() => setCollapsed(false)}
+                aria-label={`Show the queue${queueCount !== undefined ? `, ${queueCount} PRs` : ""}`}
+                aria-keyshortcuts="["
+                title="Show the queue  ["
+              >
+                <span aria-hidden="true">»</span>
+                <span className="rail-label" aria-hidden="true">
+                  Queue
+                  {queueCount !== undefined
+                    ? ` · ${view && view.shown !== view.total ? `${view.shown} of ${queueCount}` : queueCount}`
+                    : ""}
+                </span>
+              </button>
+            )}
             <TelemetryCard api={api} />
             {folderNote && (
               <FolderNotice
                 note={folderNote}
-                filtered={repoFilter !== "" && repoFilter === folderNote.repo}
+                filtered={nav.filters.repo !== undefined && nav.filters.repo === folderNote.repo}
                 onShowAll={() => {
-                  setRepoFilter("");
+                  setNav((n) => {
+                    const { repo: _, ...filters } = n.filters;
+                    return { ...n, filters };
+                  });
                   setFolderNote(undefined);
                 }}
               />
@@ -201,8 +235,13 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
               queue={queue}
               error={queueError ?? reactError}
               loading={queueLoading}
-              repoFilter={repoFilter}
-              onRepoFilter={setRepoFilter}
+              nav={nav}
+              onNav={setNav}
+              search={search}
+              onSearch={setSearch}
+              view={view}
+              focusSearch={searchFocus}
+              onCollapse={() => setCollapsed(true)}
               onRefresh={() => loadQueue(true)}
               selected={selected}
               signedOut={session !== undefined && (session.user === null || "error" in session.user)}
@@ -501,7 +540,8 @@ const typing = (target: EventTarget | null) =>
 
 /**
  * The queue from the keyboard: j/k (or the arrows) move between PRs and open each briefing, o opens the PR on GitHub,
- * b briefs you on it, + − x react to it, r refreshes, Esc goes back to the list (narrow windows).
+ * b briefs you on it, + − x react to it, r refreshes, / searches, [ collapses or expands the queue (wide windows), Esc
+ * goes back to the list (narrow windows).
  */
 function useQueueKeys(options: {
   active: boolean;
@@ -510,12 +550,14 @@ function useQueueKeys(options: {
   onBrief: (key: string) => void;
   onReact: (key: string, reaction: Reaction) => void;
   onRefresh: () => void;
+  onToggleQueue: () => void;
+  onSearch: () => void;
 }) {
   const latest = useRef(options);
   latest.current = options;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const { active, order, current, onBrief, onReact, onRefresh } = latest.current;
+      const { active, order, current, onBrief, onReact, onRefresh, onToggleQueue, onSearch } = latest.current;
       if (!active || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
       const index = current ? order.findIndex((p) => p.repo === current.repo && p.number === current.number) : -1;
       const go = (i: number) => {
@@ -553,6 +595,16 @@ function useQueueKeys(options: {
           break;
         case "r":
           onRefresh();
+          break;
+        case "/":
+          // Narrow windows show one pane: search from the list, not over a briefing.
+          if (current && window.innerWidth < 960) return;
+          onSearch();
+          break;
+        case "[":
+          // Narrow windows already show one pane at a time; the rail is for wide ones.
+          if (window.innerWidth < 960) return;
+          onToggleQueue();
           break;
         case "Escape":
           // Narrow windows show one pane at a time: Esc goes back to the list. (Wide, Esc stops a running review.)

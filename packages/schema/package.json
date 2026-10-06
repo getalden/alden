@@ -5,7 +5,8 @@
   "description": "Shared data formats for Alden: config, queue items and briefings.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./queue-nav": "./src/queue-nav.ts"
   },
   "scripts": {
     "typecheck": "tsc"
