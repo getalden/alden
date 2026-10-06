@@ -6,6 +6,7 @@ import { extname, join, normalize, sep } from "node:path";
 import type { ReviewStage } from "@alden/core";
 import {
   type Briefing,
+  BriefingSchema,
   type BriefingTarget,
   BriefingTargetSchema,
   type LocalSetupEvent,
@@ -14,6 +15,7 @@ import {
   type ReviewEvent as ReviewVerdict,
   type SendReviewResult,
 } from "@alden/schema";
+import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
 import { stripControlDeep } from "../render/style.js";
 import type { ModelSetupApi, SetupPage } from "./model-setup.js";
 
@@ -67,6 +69,11 @@ export interface UiApi {
   /** The desktop app's `alden` command: whether it's installed, and installing it. */
   cliStatus(): Promise<unknown>;
   installCli(): Promise<unknown>;
+  /**
+   * The desktop app's "Save as Markdown": writes the briefing to the Downloads folder (the Tauri window can't download
+   * files) and says where, `~` for the home folder.
+   */
+  saveBriefing(briefing: Briefing): Promise<{ path: string; shown: string }>;
   spend(): Promise<unknown>;
   config(): Promise<unknown>;
   /** `null` removes the setting, so its default applies again. */
@@ -179,6 +186,8 @@ const SECURITY_HEADERS = {
 };
 
 const MAX_BODY_BYTES = 64 * 1024;
+/** A briefing sent back to be exported: up to ten places, every check's evidence, the model's findings. */
+const MAX_BRIEFING_BYTES = 4 * 1024 * 1024;
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { ...SECURITY_HEADERS, "Content-Type": "application/json; charset=utf-8" });
@@ -186,12 +195,12 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(stripControlDeep(body)));
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readJsonBody(req: IncomingMessage, limit = MAX_BODY_BYTES): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) throw new ApiError(413, "Request too large.");
+    if (size > limit) throw new ApiError(413, "Request too large.");
     chunks.push(chunk as Buffer);
   }
   if (chunks.length === 0) return {};
@@ -202,6 +211,14 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
     // fall through
   }
   throw new ApiError(400, "Expected a JSON object.");
+}
+
+/** The briefing in a request to export one: `{ briefing }`, as the review sent it. */
+async function briefingFrom(req: IncomingMessage): Promise<Briefing> {
+  const body = await readJsonBody(req, MAX_BRIEFING_BYTES);
+  const parsed = BriefingSchema.safeParse(body.briefing);
+  if (!parsed.success) throw new ApiError(400, "Send { briefing }, a briefing as a review returned it.");
+  return parsed.data;
 }
 
 /** A draft's line from a request: `path` and `line` together (and optionally `side`), or nothing. */
@@ -506,6 +523,14 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         );
         return;
       }
+      case "POST /api/briefing/markdown": {
+        const briefing = await briefingFrom(req);
+        send(res, 200, { markdown: briefingMarkdown(briefing), fileName: briefingFileName(briefing) });
+        return;
+      }
+      case "POST /api/briefing/save":
+        send(res, 200, await api.saveBriefing(await briefingFrom(req)));
+        return;
       case "GET /api/feedback/export":
         send(res, 200, await api.exportFeedback());
         return;

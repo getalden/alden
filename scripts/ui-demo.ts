@@ -10,6 +10,8 @@
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { briefingFileName, briefingMarkdown } from "../packages/cli/src/render/markdown.js";
+import { saveToDownloads } from "../packages/cli/src/ui/api.js";
 import { startUiServer, type UiApi } from "../packages/cli/src/ui/server.js";
 import {
   addNote,
@@ -199,6 +201,8 @@ let demoConsent: "on" | "off" | "unset" = "unset";
 // ALDEN_DEMO_DESKTOP=1 shows the desktop app's extras: Django's briefing was "prepared in the background".
 const DEMO_DESKTOP = process.env.ALDEN_DEMO_DESKTOP === "1";
 let demoBackground = { enabled: true, model: false };
+let demoSound = true;
+const DEMO_DOWNLOADS = mkdtempSync(join(tmpdir(), "alden-demo-downloads-"));
 const preparedAt = new Date(Date.now() - 25 * 60_000).toISOString();
 // ALDEN_DEMO_NO_MODEL=1 starts with no model, to show "Set up a model". Its key test and Ollama download are pretend:
 // a key ending in "bad" is refused, one ending in "offline" can't be checked, and Ollama "downloads" in a few seconds.
@@ -234,6 +238,7 @@ const api: UiApi = {
     budget: { perReviewUsd: 0.5, dailyUsd: 10, spentToday: 0.37 },
     desktop: DEMO_DESKTOP,
     background: demoBackground,
+    notifications: { sound: demoSound },
   }),
   prepareNext: async () => ({ prepared: null, reason: "demo" }),
   setModelKey: async (key) => {
@@ -412,8 +417,12 @@ const api: UiApi = {
   setConfig: async (key, value) => {
     if (key === "background.enabled") demoBackground = { ...demoBackground, enabled: value === "true" };
     if (key === "background.model") demoBackground = { ...demoBackground, model: value === "true" };
+    if (key === "notifications.sound") demoSound = value === "true";
     return { path: "(demo)", config };
   },
+  // The desktop app's Save as Markdown, into a throwaway folder rather than your Downloads.
+  saveBriefing: async (briefing) =>
+    saveToDownloads(briefingFileName(briefing), briefingMarkdown(briefing), DEMO_DOWNLOADS),
 };
 
 const ui = await startUiServer({ api, staticDir: join(ROOT, "packages/ui/dist"), port, token: "demo" });

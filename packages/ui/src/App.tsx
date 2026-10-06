@@ -339,6 +339,7 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
               }
               emptyHint="Review your uncommitted changes (staged, unstaged and untracked) before you open a PR."
               perReviewUsd={session?.budget.perReviewUsd}
+              exportWith={{ api, desktop: !!session?.desktop }}
             />
           </main>
         </div>
@@ -531,6 +532,7 @@ function PrPane(props: {
       perReviewUsd={session?.budget.perReviewUsd}
       comments={comments}
       freshness={props.freshness}
+      exportWith={props.draftsApi ? { api: props.draftsApi, desktop: !!session?.desktop } : undefined}
     />
   );
 }

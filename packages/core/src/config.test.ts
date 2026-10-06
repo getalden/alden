@@ -44,6 +44,16 @@ describe("loadConfig", () => {
   });
 });
 
+describe("notification sound", () => {
+  it("is on by default, and only your user config turns it off", async () => {
+    expect((await loadConfig(repo)).notifications.sound).toBe(true);
+    await writeFile(join(repo, ".alden.toml"), "[notifications]\nsound = false\n");
+    expect((await loadConfig(repo)).notifications.sound).toBe(true);
+    await setConfigValue("notifications.sound", "false");
+    expect((await loadConfig(repo)).notifications.sound).toBe(false);
+  });
+});
+
 describe("queue scope", () => {
   it("comes from this machine's user config, and a repo's config can't change it", async () => {
     await writeFile(userConfigPath(), '[queue]\norgs = ["acme"]\nignore = ["acme/legacy"]\n');

@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import type { Api, Session, SpendReport } from "../api";
 import { formatUsd, plural } from "../format";
 import { applyTheme, readTheme, type Theme } from "../theme";
+import { NotificationSettings } from "./NotificationSettings";
 import { Switch } from "./ReviewOptions";
 import { Segmented } from "./Segmented";
 import { TelemetrySettings } from "./TelemetryCard";
@@ -233,6 +234,10 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
 
           {session.desktop && session.background && (
             <BackgroundSettings api={api} initial={session.background} onSaved={onSaved} />
+          )}
+
+          {session.desktop && (
+            <NotificationSettings api={api} sound={session.notifications?.sound ?? true} onSaved={onSaved} />
           )}
 
           <TelemetrySettings api={api} />

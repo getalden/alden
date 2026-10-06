@@ -68,6 +68,12 @@ export const AldenConfigSchema = z.object({
       model: z.boolean().default(false),
     })
     .prefault({}),
+  notifications: z
+    .object({
+      /** Whether the desktop app's "Briefing ready" notification plays the system's notification sound. User config only. */
+      sound: z.boolean().default(true),
+    })
+    .prefault({}),
   updates: z
     .object({
       /** Whether `alden --version` and `alden doctor` say when a newer Alden exists (checked at most once a day). */

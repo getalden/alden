@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "print",
+  "description": "Print / Save as PDF in the briefing's Export menu. On macOS the webview's window.print() asks the app to print, so Alden's local server (http://127.0.0.1, any port) may call that one command and nothing else.",
+  "windows": ["main"],
+  "remote": { "urls": ["http://127.0.0.1:*"] },
+  "permissions": ["core:webview:allow-print"]
+}

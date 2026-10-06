@@ -1,12 +1,13 @@
 import type { Briefing, BriefingFreshness, BriefingTarget } from "@alden/schema";
 import { type ReactNode, useEffect, useState } from "react";
-import type { ReviewRequest } from "../api";
+import type { Api, ReviewRequest } from "../api";
 import type { BriefingComments } from "../drafts";
 import type { BriefingFeedback } from "../feedback";
 import type { ReviewRun } from "../reviews";
 import { onLinkClick } from "../router";
 import { BriefingAge } from "./BriefingAge";
 import { BriefingView } from "./BriefingView";
+import { ExportMenu } from "./ExportMenu";
 import { StateCard } from "./StateCard";
 
 const STEPS: { stage: string; done: string; doing: string }[] = [
@@ -89,6 +90,8 @@ interface ReviewPaneProps {
   comments?: BriefingComments | undefined;
   /** Whether a PR briefing still matches its PR on GitHub, for "Briefed 30 min ago · main has 4 new commits since". */
   freshness?: ((target: BriefingTarget) => Promise<BriefingFreshness>) | undefined;
+  /** Export (copy, save, print) the briefing; `desktop` saves to Downloads through the server. */
+  exportWith?: { api: Pick<Api, "briefingMarkdown" | "saveBriefing">; desktop: boolean } | undefined;
 }
 
 /** A PR (or your local changes) and its briefing: run it, watch it, read it. */
@@ -142,6 +145,9 @@ export function ReviewPane(props: ReviewPaneProps) {
           </button>
         )}
         {props.controls}
+        {run?.briefing && !run.running && props.exportWith && (
+          <ExportMenu briefing={run.briefing} {...props.exportWith} />
+        )}
       </div>
       {props.notice && (
         <div className="notice note-box">

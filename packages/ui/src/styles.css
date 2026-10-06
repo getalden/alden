@@ -2218,3 +2218,150 @@ details > summary {
 .setup-progress progress::-moz-progress-bar {
   background: var(--acc);
 }
+
+/* ---- Export ------------------------------------------------------------------------------------------------ */
+
+.export {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.export-note {
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+.export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 220px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+.export-menu [role="menuitem"] {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  text-align: left;
+  font: 500 13px var(--font-ui);
+  white-space: nowrap;
+}
+.export-menu [role="menuitem"]:hover,
+.export-menu [role="menuitem"]:focus-visible {
+  background: var(--sunk);
+  outline: none;
+}
+
+/*
+ * Print / Save as PDF: the briefing alone, on white, in the order it reads. The queue, the top bar, the toolbar and
+ * every button go; links say where they point; places, checks and findings don't split across pages.
+ */
+@media print {
+  :root,
+  :root[data-theme="dark"],
+  :root:not([data-theme="light"]) {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --sunk: #f3f6f6;
+    --line: #d5e0de;
+    --line2: #b5c4c1;
+    --ink: #000000;
+    --ink2: #2b3a3c;
+    --ink3: #4f6062;
+    --acc: #0f5f58;
+    --acc-ink: #ffffff;
+    --acc-soft: #e3f4f1;
+    --ok: #0f5f58;
+    --ok-soft: #e3f4f1;
+    --warn: #7a4c0f;
+    --warn-soft: #f8efdc;
+    --bad: #9e2f22;
+    --bad-soft: #f8e6e2;
+    color-scheme: light;
+  }
+  @page {
+    margin: 16mm 14mm;
+  }
+  html,
+  body,
+  #root,
+  .app,
+  .workspace,
+  .main-pane,
+  .page {
+    height: auto;
+    overflow: visible;
+    display: block;
+    background: #ffffff;
+  }
+  body {
+    font-size: 12px;
+  }
+  /* Specific enough to beat any one rule that shows these. */
+  :root
+    body
+    :is(
+      .topbar,
+      .side,
+      .toolbar,
+      .notice,
+      .back-link,
+      .btn,
+      .link-button,
+      .verdicts,
+      .comment-slot,
+      .review-panel,
+      .missed,
+      .export,
+      .banner.error,
+      .react-note
+    ) {
+    display: none;
+  }
+  .brief-head,
+  .brief-body {
+    padding: 0 0 16px;
+    max-width: none;
+  }
+  .brief-body {
+    padding-top: 16px;
+    gap: 20px;
+  }
+  .brief-head .crumbs a[href^="http"]::after {
+    content: " " attr(href);
+  }
+  .card,
+  .export-menu {
+    box-shadow: none;
+  }
+  .eye,
+  .check,
+  .finding,
+  .file,
+  .evidence li,
+  .not-checked li,
+  .shaped {
+    break-inside: avoid;
+  }
+  h1,
+  h2,
+  h3,
+  .section-head {
+    break-after: avoid;
+  }
+  .check-row {
+    cursor: default;
+  }
+  a {
+    color: var(--ink);
+  }
+}

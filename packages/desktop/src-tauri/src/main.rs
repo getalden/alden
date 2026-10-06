@@ -4,7 +4,8 @@
 //! repo clone: your uncommitted changes come from there, and right after you choose, the window shows that repo's PRs;
 //! PR callers come from any clone Alden knows), shows its UI in the window, and polls the local API for the
 //! menu bar: how many PRs wait on you, the top three, and a notification when someone has waited three days. While
-//! you're away from the Mac, it asks the server to brief the top PRs ahead of time and says when one is ready. Closing
+//! you're away from the Mac, it asks the server to brief the top PRs ahead of time and says when one is ready (with the
+//! system's notification sound unless `notifications.sound` is off). Closing
 //! the window keeps Alden in the menu bar; Quit stops it and the server with it (the server also exits on its own when
 //! this app's end of its stdin closes, so a crash can't leave it running).
 
@@ -53,7 +54,22 @@ struct AppState {
 #[derive(Deserialize)]
 struct PrepareResult {
     prepared: Option<PreparedPr>,
+    /// `notifications.sound`: whether "Briefing ready" plays the system's sound. An older server doesn't say: it does.
+    #[serde(default = "yes")]
+    sound: bool,
 }
+
+fn yes() -> bool {
+    true
+}
+
+/// The system's default notification sound, by the name each platform's notifications know it by.
+#[cfg(target_os = "macos")]
+const DEFAULT_SOUND: &str = "NSUserNotificationDefaultSoundName";
+#[cfg(windows)]
+const DEFAULT_SOUND: &str = "Default";
+#[cfg(not(any(target_os = "macos", windows)))]
+const DEFAULT_SOUND: &str = "message-new-instant";
 
 #[derive(Deserialize)]
 struct PreparedPr {
@@ -410,24 +426,27 @@ async fn prepare_next(app: &AppHandle) {
             .filter(|res| res.status().is_success()),
         _ => None,
     };
-    let prepared = match result {
-        Some(res) => res.json::<PrepareResult>().await.ok().and_then(|r| r.prepared),
+    let result = match result {
+        Some(res) => res.json::<PrepareResult>().await.ok(),
         None => None,
     };
     *state.preparing.lock().unwrap() = false;
-    let Some(pr) = prepared else { return };
+    let Some(PrepareResult { prepared: Some(pr), sound }) = result else { return };
 
     let places = match pr.places {
         0 => "Nothing needs a closer look.".to_string(),
         1 => "1 place needs your eyes.".to_string(),
         n => format!("{n} places need your eyes."),
     };
-    let _ = app
+    let mut ready = app
         .notification()
         .builder()
         .title(format!("Briefing ready: {}", pr.pr))
-        .body(format!("{} · {places}", clip(&pr.title, 80)))
-        .show();
+        .body(format!("{} · {places}", clip(&pr.title, 80)));
+    if sound {
+        ready = ready.sound(DEFAULT_SOUND);
+    }
+    let _ = ready.show();
     poll(app).await;
 }
 
@@ -685,5 +704,14 @@ mod tests {
         assert_eq!((pr.pr.as_str(), pr.places), ("a/b#1", 2));
         let none: PrepareResult = serde_json::from_str(r#"{"prepared":null,"reason":"off"}"#).unwrap();
         assert!(none.prepared.is_none());
+    }
+
+    #[test]
+    fn plays_the_sound_unless_it_was_turned_off() {
+        let quiet: PrepareResult =
+            serde_json::from_str(r#"{"prepared":{"pr":"a/b#1","title":"T","places":0},"sound":false}"#).unwrap();
+        assert!(!quiet.sound);
+        let older: PrepareResult = serde_json::from_str(r#"{"prepared":null}"#).unwrap();
+        assert!(older.sound);
     }
 }

@@ -1,6 +1,9 @@
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { RankedQueue } from "@alden/schema";
 import { describe, expect, it } from "vitest";
-import { nextToPrepare } from "./api.js";
+import { createUiApi, nextToPrepare, saveToDownloads } from "./api.js";
 
 const row = (number: number, extra: { draft?: boolean; onAuthor?: boolean; updatedAt?: string } = {}) =>
   ({
@@ -57,6 +60,35 @@ describe("feedback through the UI's API", () => {
       if (saved.home === undefined) delete process.env.ALDEN_HOME;
       if (saved.track === undefined) delete process.env.DO_NOT_TRACK;
       rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("saveToDownloads", () => {
+  it("never replaces a file: a second save of the same PR gets -2", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "alden-downloads-"));
+    try {
+      const first = await saveToDownloads("a-b-1-briefing.md", "one", folder);
+      const second = await saveToDownloads("a-b-1-briefing.md", "two", folder);
+      expect(first.path).toBe(join(folder, "a-b-1-briefing.md"));
+      expect(second.path).toBe(join(folder, "a-b-1-briefing-2.md"));
+      expect(await readFile(first.path, "utf8")).toBe("one");
+      expect(await readFile(second.path, "utf8")).toBe("two");
+      expect((await readdir(folder)).sort()).toEqual(["a-b-1-briefing-2.md", "a-b-1-briefing.md"]);
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
+  });
+
+  it("is the desktop app's alone: a browser downloads the file itself", async () => {
+    const home = await mkdtemp(join(tmpdir(), "alden-home-"));
+    process.env.ALDEN_HOME = home;
+    try {
+      const api = createUiApi({ version: "0", cwd: home });
+      await expect(api.saveBriefing({} as never)).rejects.toThrow("a browser downloads them");
+    } finally {
+      delete process.env.ALDEN_HOME;
+      await rm(home, { recursive: true, force: true });
     }
   });
 });

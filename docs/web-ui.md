@@ -56,6 +56,14 @@ Stop it with Ctrl+C.
   and **Re-brief**: "main has 4 new commits since" (callers merged there since aren't in it) or "the PR has 2 new
   commits". Alden asks GitHub (one request) when the briefing is shown and when the window comes back to the front, at
   most once a minute; it doesn't poll. See [Keeping up with the base](code-graph.md#keeping-up-with-the-base).
+- **Export.** Once a briefing is there, **Export** (or `e`) in its toolbar copies it, saves it or prints it:
+  **Copy as Markdown** puts the same document as [`alden review --markdown`](commands.md#alden-review) on the
+  clipboard; **Save as Markdown** downloads it as `owner-repo-123-briefing.md` (in the desktop app, which can't
+  download files, Alden saves it to your Downloads folder and says where, adding `-2` rather than replace a file);
+  **Print / Save as PDF** opens the print dialog, where your system offers PDF. The printout is the briefing alone, in
+  light colours: no queue, toolbar or buttons, and places and checks don't split across pages. The Markdown leaves out
+  your memory notes and what your feedback changed, keeps secrets masked as the briefing shows them, and ends with the
+  model, its cost and when it was briefed. A line beside the button says what happened ("Copied as Markdown.").
 - **Comment from Alden.** Write your review in the briefing and send it to GitHub as one review. **Comment** on a place
   in "Needs your eyes" or on a flagged check's evidence line opens an editor there; **Comment on a line…** takes any
   line of a changed file (pick the file, give the line; a removed file's line is on the old side), and **Add a general
@@ -80,8 +88,9 @@ Stop it with Ctrl+C.
   your queue covers on this machine
   (organisations, repos, and what to leave out; the queue says when it's narrowed), your feedback with a redacted export,
   usage stats on or off, today's spend by PR, and light, dark or system appearance. In the desktop app, "While you're
-  away" turns [background briefings](desktop.md#while-youre-away) and their use of the model on or off, and "Command
-  line tool" installs the `alden` command if it isn't there.
+  away" turns [background briefings](desktop.md#while-youre-away) and their use of the model on or off,
+  "Notifications" turns the sound for "Briefing ready" on or off, and "Command line tool" installs the `alden` command
+  if it isn't there.
 - **Sign-in.** When Alden isn't signed in to GitHub, or GitHub no longer accepts its sign-in, the queue offers **Sign in
   with GitHub** (a one-time code, with GitHub's page opened for you) and, when the GitHub CLI is signed in, **Use my
   GitHub CLI sign-in**. No terminal needed. If you signed in in a terminal instead, **I've signed in** looks again and,
@@ -110,6 +119,7 @@ tab; Settings changes the defaults.
 | `+` `−` `x` | Useful, Not useful, Dismiss on this PR |
 | `c` | Comment on the place you're on in the briefing (a place in "Needs your eyes" or an evidence line), or else open "Comment on a line…" |
 | `s` | Go to the Review panel |
+| `e` | Open the Export menu (`↑` `↓` move, `↵` picks, `Esc` closes) |
 | `⌘↵` / `Ctrl+↵` | Save the comment you're writing |
 | `r` | Refresh the queue |
 | `/` | Search the queue (opens it first if it's collapsed); `Esc` clears the search, `Enter` opens the first match |
