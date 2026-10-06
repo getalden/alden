@@ -31,7 +31,13 @@ export {
   loadChangeSymbols,
   type SymbolChange,
 } from "./graph/changes.js";
-export { type Checkout, checkoutPullRequest, repoFromRemote } from "./graph/checkout.js";
+export {
+  type Checkout,
+  type CheckoutOptions,
+  checkoutPullRequest,
+  type GraphFrom,
+  repoFromRemote,
+} from "./graph/checkout.js";
 export {
   type Clone,
   type CloneFound,
@@ -209,6 +215,12 @@ export {
   sendReview,
   unaddressedPlaces,
 } from "./review/drafts.js";
+export {
+  checkFreshness,
+  fetchPullRequestNow,
+  freshnessOf,
+  type PullRequestNow,
+} from "./review/freshness.js";
 export { buildGraphReview, filesOutsideGraph, type GraphReview } from "./review/graph-context.js";
 export { mergeLookHere } from "./review/llm/merge.js";
 export {

@@ -4,7 +4,7 @@ import { fetchPullRequestDiff, readLocalDiff } from "../diff/sources.js";
 import type { GitHubClient } from "../github/client.js";
 import { PULL_REQUEST_FIELDS, type RawPullRequest, toFacts } from "../github/pull-requests.js";
 import { fetchViewer } from "../github/queue.js";
-import { checkoutPullRequest, withCheckoutLock } from "../graph/checkout.js";
+import { type Checkout, checkoutPullRequest, type GraphFrom, withCheckoutLock } from "../graph/checkout.js";
 import { findClone } from "../graph/clones.js";
 import type { Learning } from "../learn/learn.js";
 import type { SpendLedger } from "../llm/ledger.js";
@@ -23,19 +23,29 @@ export interface WithModel {
   effort?: Effort;
 }
 
-/** One PR's facts by number: the queue's fields plus its description, which only a review needs. */
+/** What a review needs beyond the queue's fields: the description, and the commits the code graph is built from. */
+export interface PullRequestDetail {
+  body: string;
+  headRefOid: string;
+  /** GitHub's merge of the PR onto its latest base (`refs/pull/N/merge`); null when it conflicts or isn't made yet. */
+  potentialMergeCommit: { oid: string } | null;
+}
+
+/** One PR's facts by number: the queue's fields plus what only a review needs. */
 export async function fetchPullRequest(
   client: GitHubClient,
   repo: string,
   number: number,
-): Promise<RawPullRequest & { body: string }> {
+): Promise<RawPullRequest & PullRequestDetail> {
   const [owner, name] = repo.split("/");
   const notFound = new Error(`Couldn't find ${repo}#${number}. Check the number, and that you can see the repo.`);
-  let data: { repository: { pullRequest: (RawPullRequest & { body: string }) | null } | null };
+  let data: { repository: { pullRequest: (RawPullRequest & PullRequestDetail) | null } | null };
   try {
     data = await client.graphql(
       `query($owner: String!, $name: String!, $number: Int!) {
-        repository(owner: $owner, name: $name) { pullRequest(number: $number) { ${PULL_REQUEST_FIELDS} body } }
+        repository(owner: $owner, name: $name) { pullRequest(number: $number) {
+          ${PULL_REQUEST_FIELDS} body headRefOid potentialMergeCommit { oid }
+        } }
       }`,
       { owner, name, number },
     );
@@ -73,17 +83,25 @@ export interface GraphOptions {
   learning?: Learning;
 }
 
-type GraphResult = { graph?: GraphReview; unavailable?: string };
+type GraphResult = {
+  graph?: GraphReview;
+  unavailable?: string;
+  /** For a PR: what the graph was built from. */
+  from?: { graphFrom: GraphFrom; baseSha?: string; note?: string };
+};
 
 /** Builds the graph at `root`, or explains why not, without ever failing the review. */
 async function tryGraph(
-  root: Promise<{ ok: true; root: string } | { ok: false; reason: string }>,
+  root: Promise<Checkout | { ok: true; root: string; graphFrom?: undefined }>,
   files: DiffFile[],
 ): Promise<GraphResult> {
   try {
     const checkout = await root;
     if (!checkout.ok) return { unavailable: checkout.reason };
-    return { graph: await buildGraphReview(checkout.root, files) };
+    const graph = await buildGraphReview(checkout.root, files);
+    if (!checkout.graphFrom) return { graph };
+    const { graphFrom, baseSha, note } = checkout;
+    return { graph, from: { graphFrom, ...(baseSha ? { baseSha } : {}), ...(note ? { note } : {}) } };
   } catch (error) {
     return { unavailable: `The code graph failed to build (${(error as Error).message.slice(0, 160)}).` };
   }
@@ -97,6 +115,7 @@ export function noCloneReason(repo: string): string {
 const graphFields = (g: GraphResult) => ({
   ...(g.graph ? { graph: g.graph.context } : {}),
   ...(g.unavailable ? { graphUnavailable: g.unavailable } : {}),
+  ...(g.from?.note ? { graphNote: g.from.note } : {}),
 });
 
 /** A briefing for one PR on GitHub. */
@@ -125,7 +144,16 @@ export async function reviewPullRequest(
             folders: config.clones.folders,
           }).catch(() => undefined);
           if (!clone) return { unavailable: noCloneReason(repo) };
-          return tryGraph(checkoutPullRequest(clone.path, repo, number), files);
+          return tryGraph(
+            checkoutPullRequest(clone.path, repo, number, {
+              baseRef: raw.baseRefName,
+              headSha: raw.headRefOid,
+              ...(raw.potentialMergeCommit ? { mergeSha: raw.potentialMergeCommit.oid } : {}),
+              mergeable: raw.mergeable,
+              pin: files.filter((f) => f.status !== "removed").map((f) => f.path),
+            }),
+            files,
+          );
         }),
   ]);
   stage("checks", "Running checks");
@@ -139,6 +167,11 @@ export async function reviewPullRequest(
       author: pr.author,
       baseRef: pr.baseRef,
       headRef: pr.headRef,
+      // What it was briefed against, so it can tell when it's out of date. The diff is GitHub's (the PR against where
+      // it branched); only the graph sees the base as it is now.
+      headSha: raw.headRefOid,
+      ...(graph.from?.baseSha ? { baseSha: graph.from.baseSha } : {}),
+      ...(graph.from ? { graphFrom: graph.from.graphFrom } : {}),
     },
     files,
     pr,

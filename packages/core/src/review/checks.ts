@@ -7,7 +7,7 @@ import { type DependencyChange, diffDependencies, isManifest } from "./dependenc
 import { AI_INSTRUCTION_FILE, findInjection } from "./injection.js";
 import { findSecrets } from "./secrets.js";
 import { type SignatureChange, signatureChanges } from "./signatures.js";
-import { type Check, type CheckOutcome, MAX_EVIDENCE, symbolKey } from "./types.js";
+import { type Check, type CheckOutcome, MAX_EVIDENCE, type ReviewContext, symbolKey } from "./types.js";
 
 const passed = (summary: string, evidence: Evidence[] = []): CheckOutcome => ({
   status: "passed",
@@ -447,92 +447,96 @@ export const callersCheck: Check = {
   id: "callers.outside",
   title: "Callers outside the diff",
   heuristic: true,
-  run({ files, graph, graphUnavailable }) {
-    if (!graph) {
-      return skipped(
-        graphUnavailable ??
-          "The code graph wasn't available for this review, so callers outside the diff weren't checked.",
-      );
-    }
-    const publicChanges = graph.changes.filter((c) => c.exported && c.change !== "added");
-    const goneModules = (graph.modules ?? []).filter((m) => m.importers.length > 0);
-    if (publicChanges.length === 0 && goneModules.length === 0)
-      return passed("No public functions, classes or methods changed.");
-
-    // A removed definition, or one whose signature changed, can break its callers outright. Graph-based changes
-    // name their type; diff-based ones only a name, which then matches any symbol of that name in the file.
-    const signatureChanged = new Set(
-      signatureChanges(files, graph).flatMap((c) =>
-        c.kind === "changed" && !c.compatible
-          ? [symbolKey(c.after)]
-          : c.kind === "removed"
-            ? [symbolKey(c.before)]
-            : [],
-      ),
-    );
-    const breaking: Evidence[] = [];
-    const reaching: Evidence[] = [];
-    let uncertain = 0;
-    let breakingSymbols = 0;
-    let reachingSymbols = 0;
-
-    for (const change of publicChanges) {
-      const sites = graph.callers.get(symbolKey(change)) ?? [];
-      if (sites.length === 0) continue;
-      const label = `${change.container ? `${change.container}.` : ""}${change.name}`;
-      const isBreaking =
-        change.change === "removed" ||
-        signatureChanged.has(symbolKey(change)) ||
-        signatureChanged.has(`${change.path}#${change.name}`);
-      const why = change.change === "removed" ? "removed" : isBreaking ? "signature changed" : "changed";
-      if (isBreaking) breakingSymbols++;
-      else reachingSymbols++;
-      for (const site of sites) {
-        if (site.confidence === "name") uncertain++;
-        const evidence: Evidence = {
-          text: `calls ${label} (${why})${site.confidence === "name" ? ", name match only" : ""}`,
-          anchor: { path: site.path, line: site.line },
-        };
-        (isBreaking ? breaking : reaching).push(evidence);
-      }
-    }
-
-    // A moved or deleted file breaks whatever still imports it by its old path, like a removed symbol.
-    for (const module of goneModules) {
-      breakingSymbols++;
-      const why = module.movedTo ? `moved to ${module.movedTo}` : "deleted";
-      for (const site of module.importers) {
-        breaking.push({ text: `imports ${module.path} (${why})`, anchor: { path: site.path, line: site.line } });
-      }
-    }
-
-    // Callers in code before callers in tests, across symbols, so the capped evidence keeps the ones that matter.
-    const codeFirst = (list: Evidence[]) => list.sort((a, b) => Number(isTestEvidence(a)) - Number(isTestEvidence(b)));
-    codeFirst(breaking);
-    codeFirst(reaching);
-
-    const incomplete = graph.complete ? "" : " The index was cut short, so there may be more.";
-    const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-    if (breaking.length > 0) {
-      const sure = breaking.some((e) => !e.text.endsWith("name match only"));
-      return {
-        status: "flagged",
-        severity: sure ? "high" : "medium",
-        summary: `${goneModules.length > 0 ? `${breakingSymbols} moved, removed or re-signed ${breakingSymbols === 1 ? "file or symbol" : "files or symbols"} still used from` : `${count(breakingSymbols, "removed or re-signed public symbol")} still called from`} ${count(breaking.length, "place")} this PR didn't change. Check each caller still works.${incomplete}`,
-        evidence: capped([...breaking, ...reaching]),
-      };
-    }
-    if (reaching.length > 0) {
-      return {
-        status: "flagged",
-        severity: "low",
-        summary: `${count(reachingSymbols, "changed public symbol")} called from ${count(reaching.length, "place")} outside the diff${uncertain > 0 ? ` (${uncertain} by name only)` : ""}. Behaviour changes reach them.${incomplete}`,
-        evidence: capped(reaching),
-      };
-    }
-    return passed(`Changed public code has no callers outside the diff.${incomplete}`);
+  run(context) {
+    const outcome = callersOutcome(context);
+    // Callers from the PR's branch miss what's been merged since; say so wherever the check lands.
+    return context.graph && context.graphNote
+      ? { ...outcome, summary: `${outcome.summary} ${context.graphNote}` }
+      : outcome;
   },
 };
+
+function callersOutcome({ files, graph, graphUnavailable }: ReviewContext): CheckOutcome {
+  if (!graph) {
+    return skipped(
+      graphUnavailable ??
+        "The code graph wasn't available for this review, so callers outside the diff weren't checked.",
+    );
+  }
+  const publicChanges = graph.changes.filter((c) => c.exported && c.change !== "added");
+  const goneModules = (graph.modules ?? []).filter((m) => m.importers.length > 0);
+  if (publicChanges.length === 0 && goneModules.length === 0)
+    return passed("No public functions, classes or methods changed.");
+
+  // A removed definition, or one whose signature changed, can break its callers outright. Graph-based changes
+  // name their type; diff-based ones only a name, which then matches any symbol of that name in the file.
+  const signatureChanged = new Set(
+    signatureChanges(files, graph).flatMap((c) =>
+      c.kind === "changed" && !c.compatible ? [symbolKey(c.after)] : c.kind === "removed" ? [symbolKey(c.before)] : [],
+    ),
+  );
+  const breaking: Evidence[] = [];
+  const reaching: Evidence[] = [];
+  let uncertain = 0;
+  let breakingSymbols = 0;
+  let reachingSymbols = 0;
+
+  for (const change of publicChanges) {
+    const sites = graph.callers.get(symbolKey(change)) ?? [];
+    if (sites.length === 0) continue;
+    const label = `${change.container ? `${change.container}.` : ""}${change.name}`;
+    const isBreaking =
+      change.change === "removed" ||
+      signatureChanged.has(symbolKey(change)) ||
+      signatureChanged.has(`${change.path}#${change.name}`);
+    const why = change.change === "removed" ? "removed" : isBreaking ? "signature changed" : "changed";
+    if (isBreaking) breakingSymbols++;
+    else reachingSymbols++;
+    for (const site of sites) {
+      if (site.confidence === "name") uncertain++;
+      const evidence: Evidence = {
+        text: `calls ${label} (${why})${site.confidence === "name" ? ", name match only" : ""}`,
+        anchor: { path: site.path, line: site.line },
+      };
+      (isBreaking ? breaking : reaching).push(evidence);
+    }
+  }
+
+  // A moved or deleted file breaks whatever still imports it by its old path, like a removed symbol.
+  for (const module of goneModules) {
+    breakingSymbols++;
+    const why = module.movedTo ? `moved to ${module.movedTo}` : "deleted";
+    for (const site of module.importers) {
+      breaking.push({ text: `imports ${module.path} (${why})`, anchor: { path: site.path, line: site.line } });
+    }
+  }
+
+  // Callers in code before callers in tests, across symbols, so the capped evidence keeps the ones that matter.
+  const codeFirst = (list: Evidence[]) => list.sort((a, b) => Number(isTestEvidence(a)) - Number(isTestEvidence(b)));
+  codeFirst(breaking);
+  codeFirst(reaching);
+
+  const incomplete = graph.complete ? "" : " The index was cut short, so there may be more.";
+  const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  if (breaking.length > 0) {
+    const sure = breaking.some((e) => !e.text.endsWith("name match only"));
+    return {
+      status: "flagged",
+      severity: sure ? "high" : "medium",
+      summary: `${goneModules.length > 0 ? `${breakingSymbols} moved, removed or re-signed ${breakingSymbols === 1 ? "file or symbol" : "files or symbols"} still used from` : `${count(breakingSymbols, "removed or re-signed public symbol")} still called from`} ${count(breaking.length, "place")} this PR didn't change. Check each caller still works.${incomplete}`,
+      evidence: capped([...breaking, ...reaching]),
+    };
+  }
+  if (reaching.length > 0) {
+    return {
+      status: "flagged",
+      severity: "low",
+      summary: `${count(reachingSymbols, "changed public symbol")} called from ${count(reaching.length, "place")} outside the diff${uncertain > 0 ? ` (${uncertain} by name only)` : ""}. Behaviour changes reach them.${incomplete}`,
+      evidence: capped(reaching),
+    };
+  }
+  return passed(`Changed public code has no callers outside the diff.${incomplete}`);
+}
 
 /** Every check, in the order a briefing lists them. */
 export const CHECKS: Check[] = [

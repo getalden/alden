@@ -5,6 +5,8 @@ export {
   type Briefing,
   type BriefingFile,
   BriefingFileSchema,
+  type BriefingFreshness,
+  BriefingFreshnessSchema,
   type BriefingLearning,
   BriefingLearningSchema,
   BriefingSchema,

@@ -119,6 +119,19 @@ export const BriefingTargetSchema = z.discriminatedUnion("kind", [
     author: z.string().nullable(),
     baseRef: z.string(),
     headRef: z.string(),
+    headSha: z.string().optional().describe("the PR head commit briefed; absent in briefings from before Alden 0.5"),
+    baseSha: z
+      .string()
+      .optional()
+      .describe(
+        "the base commit the code graph saw (the merge's first parent); absent when it came from the PR's branch",
+      ),
+    graphFrom: z
+      .enum(["merge", "head"])
+      .optional()
+      .describe(
+        "where callers came from: GitHub's merge of the PR onto its latest base, or the PR's own branch (it conflicts, or GitHub hasn't merged it yet); absent when the graph didn't run",
+      ),
   }),
   z.object({
     kind: z.literal("local"),
@@ -146,6 +159,23 @@ export const BriefingSchema = z.object({
   learning: BriefingLearningSchema.optional().describe("what your feedback and memory changed; absent when nothing"),
 });
 
+/**
+ * Whether a PR briefing still matches the PR: `fresh`; the PR has new commits since (`pr_changed`); its base branch has
+ * moved since the code graph saw it (`base_moved`, only for graphs from the merge); or `unknown` (an older briefing
+ * without commits recorded, or GitHub couldn't be asked). `commits` is absent when GitHub can't count them, e.g. after
+ * a force-push.
+ */
+export const BriefingFreshnessSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("fresh") }),
+  z.object({ state: z.literal("pr_changed"), commits: z.number().int().positive().optional() }),
+  z.object({
+    state: z.literal("base_moved"),
+    baseRef: z.string(),
+    commits: z.number().int().positive().optional(),
+  }),
+  z.object({ state: z.literal("unknown"), reason: z.string() }),
+]);
+
 export type Anchor = z.infer<typeof AnchorSchema>;
 export type Evidence = z.infer<typeof EvidenceSchema>;
 export type CheckStatus = z.infer<typeof CheckStatusSchema>;
@@ -158,3 +188,4 @@ export type BriefingTarget = z.infer<typeof BriefingTargetSchema>;
 export type LlmFinding = z.infer<typeof LlmFindingSchema>;
 export type LlmSection = z.infer<typeof LlmSectionSchema>;
 export type Briefing = z.infer<typeof BriefingSchema>;
+export type BriefingFreshness = z.infer<typeof BriefingFreshnessSchema>;

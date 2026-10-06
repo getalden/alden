@@ -43,6 +43,22 @@
             },
             "headRef": {
               "type": "string"
+            },
+            "headSha": {
+              "description": "the PR head commit briefed; absent in briefings from before Alden 0.5",
+              "type": "string"
+            },
+            "baseSha": {
+              "description": "the base commit the code graph saw (the merge's first parent); absent when it came from the PR's branch",
+              "type": "string"
+            },
+            "graphFrom": {
+              "description": "where callers came from: GitHub's merge of the PR onto its latest base, or the PR's own branch (it conflicts, or GitHub hasn't merged it yet); absent when the graph didn't run",
+              "type": "string",
+              "enum": [
+                "merge",
+                "head"
+              ]
             }
           },
           "required": [

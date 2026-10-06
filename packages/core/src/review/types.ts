@@ -24,6 +24,8 @@ export interface ReviewContext {
   graph?: GraphContext;
   /** Why there's no graph (e.g. not run from a clone of the PR's repo), shown by the callers check. */
   graphUnavailable?: string;
+  /** Why a PR's callers come from its branch rather than its merge with the base, shown by the callers check. */
+  graphNote?: string;
   /** What Alden has learned about this reviewer in this repo. Not seen by checks, only by the picker. */
   learning?: Learning;
 }

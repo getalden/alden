@@ -9,6 +9,7 @@ import type {
   RankedPullRequest,
   RankedQueue,
 } from "@alden/schema";
+import { briefedAgainst } from "../render/briefing.js";
 import { stripControlDeep } from "../render/style.js";
 
 /**
@@ -188,6 +189,8 @@ export function briefingMarkdown(untrusted: Briefing, memory: MemoryItem[], used
   const quietened = (id: string) => briefing.learning?.quietened?.find((q) => q.checkId === id)?.reason;
   out.push("## Checked", ...briefing.checks.flatMap((c) => checkLines(c, quietened(c.id))), "");
   out.push("## Not checked", ...briefing.notChecked.map((n) => `- ${quote(n)}`), "");
+  const against = briefedAgainst(briefing);
+  if (against) out.push(`${quote(against)}.`, "");
   out.push("## Files");
   for (const file of briefing.files) {
     const renamed = file.previousPath ? ` (moved from \`${file.previousPath}\`)` : "";

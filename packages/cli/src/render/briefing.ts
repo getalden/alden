@@ -130,6 +130,19 @@ function modelFooter(llm: LlmSection | undefined, options: RenderOptions): strin
   return ["", ...wrap(parts.join(" · "), width).map((l) => paint(l, "dim", color))];
 }
 
+/**
+ * What a PR briefing's callers were found in: "Callers from main at abc1234 + this PR" for a graph built on GitHub's
+ * merge, or the PR's branch at its head when there was no merge to use.
+ */
+export function briefedAgainst(briefing: Briefing): string | undefined {
+  const target = briefing.target;
+  if (target.kind !== "pr" || !target.graphFrom) return undefined;
+  const short = (sha: string | undefined) => sha?.slice(0, 7);
+  if (target.graphFrom === "merge" && target.baseSha)
+    return `Callers from ${target.baseRef} at ${short(target.baseSha)} + this PR`;
+  return `Callers from the PR's branch${target.headSha ? ` at ${short(target.headSha)}` : ""}, not ${target.baseRef} as it is now`;
+}
+
 /** The terminal briefing: where to look first, what was checked with evidence, and what wasn't checked. */
 /** What your feedback left out, and how many of your notes the model saw: learning is never silent. */
 function learnedNote(briefing: Briefing, { width, color }: RenderOptions): string[] {
@@ -300,5 +313,7 @@ export function renderBriefing(untrusted: Briefing, options: RenderOptions): str
   for (const item of briefing.notChecked)
     out.push(...wrap(item, width, "  · ").map((l, i) => (i === 0 ? l : `    ${l.slice(4)}`)));
   out.push(...modelFooter(briefing.llm, options));
+  const against = briefedAgainst(briefing);
+  if (against) out.push(...(briefing.llm ? [] : [""]), ...wrap(against, width).map((l) => paint(l, "dim", color)));
   return `${out.join("\n")}\n`;
 }
