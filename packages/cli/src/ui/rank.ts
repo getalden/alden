@@ -26,6 +26,8 @@ export interface RankingApiOptions {
   desktop: boolean;
   /** The queue to preview: the last one fetched if there is one, else a fresh one. Throws when there's none to be had. */
   queue(config: AldenConfig): Promise<ReviewQueue>;
+  /** What was learned, per repo; from the local database unless given (the UI demo has its own). */
+  learning?: typeof learningForQueue;
 }
 
 export function createRankingApi(options: RankingApiOptions): RankingApi {
@@ -69,7 +71,7 @@ export function createRankingApi(options: RankingApiOptions): RankingApi {
         return { fetchedAt: null, needsYou: 0, top: [], problem: (error as Error).message };
       }
       const now = Date.now();
-      const learning = await learningForQueue(queue);
+      const learning = await (options.learning ?? learningForQueue)(queue);
       const saved = rankQueue(queue, config.queue, now, learning);
       const trying = rankQueue(queue, { ...config.queue, rank: parsed.data }, now, learning);
       const place = new Map(saved.needsYou.map((r, i) => [r.pr.url, i + 1]));

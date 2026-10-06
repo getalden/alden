@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import type { Api, Session, SpendReport } from "../api";
 import { formatUsd, plural } from "../format";
 import { applyTheme, readTheme, type Theme } from "../theme";
+import { RankingSettings } from "./RankingSettings";
 import { Switch } from "./ReviewOptions";
 import { Segmented } from "./Segmented";
 import { TelemetrySettings } from "./TelemetryCard";
@@ -226,6 +227,8 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
           </div>
 
           <QueueScopeSettings api={api} initial={session.queueScope} onSaved={onSaved} />
+
+          <RankingSettings api={api} desktop={session.desktop === true} onSaved={onSaved} />
 
           {session.desktop && session.cli && session.cli.state !== "unavailable" && (
             <CliSettings api={api} initial={session.cli} />

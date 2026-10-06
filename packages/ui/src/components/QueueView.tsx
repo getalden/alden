@@ -25,6 +25,8 @@ export const prKey = (pr: { repo: string; number: number }) => `${pr.repo}#${pr.
 
 /** Reasons that came from your own feedback ("ranked higher: …") get their own line, not a chip. */
 export const isLearnedReason = (reason: string) => /^ranked (higher|lower):/.test(reason);
+/** "↑ your rule: payments/ first": a rule from Settings → Ranking, marked so it reads as yours. */
+export const isRuleReason = (reason: string) => /^[↑↓] your rule:/.test(reason);
 
 interface QueueViewProps {
   queue: RankedQueue | undefined;
@@ -348,7 +350,7 @@ function PrRow(props: {
             {drafts > 0 && <span className="chip drafts">{plural(drafts, "draft")}</span>}
             {row.waitingOnAuthor && pr.author && <span className="chip">CI failing: ping @{pr.author}</span>}
             {reasons.map((reason) => (
-              <span key={reason} className="chip">
+              <span key={reason} className={isRuleReason(reason) ? "chip rule" : "chip"}>
                 {reason}
               </span>
             ))}

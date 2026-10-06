@@ -33,6 +33,8 @@ function fakeApi() {
     spend: vi.fn(async () => ({ spentToday: 0, dailyUsd: 10, perReviewUsd: 0.5, byModel: [], lastDays: [] })),
     feedbackSummary: vi.fn(async () => ({ briefings: 0 })),
     telemetry: vi.fn(async () => ({ consent: "off", blocked: null })),
+    rank: vi.fn(async () => ({ path: "/c.toml", settings: { rules: [] }, prepare: 3, background: false })),
+    previewRank: vi.fn(async () => ({ fetchedAt: null, needsYou: 0, top: [] })),
     setModelKey: vi.fn(async (key: string | null) => ({
       key: key ? { source: "alden", where: "the key you stored with `alden auth model`" } : null,
     })),
