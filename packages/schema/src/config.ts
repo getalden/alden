@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RankSettingsSchema } from "./rank.js";
 
 /** Paths that raise a PR's risk score unless the user overrides them. */
 export const DEFAULT_SENSITIVE_PATHS = [
@@ -66,6 +67,8 @@ export const AldenConfigSchema = z.object({
        * never from a repo's .alden.toml, so a repo can't make you spend.
        */
       model: z.boolean().default(false),
+      /** How many of the top PRs waiting on you to keep briefed, in your queue's order. 0 briefs none. */
+      prepare: z.number().int().min(0).max(10).default(3),
     })
     .prefault({}),
   updates: z
@@ -87,6 +90,11 @@ export const AldenConfigSchema = z.object({
       repos: z.array(z.string().regex(REPO, "owner/name, e.g. getalden/alden")).default([]),
       /** Organisations or repos (`owner/name`) to leave out of your queue. Read from your user config only. */
       ignore: z.array(z.string().regex(OWNER_OR_REPO, "an organisation, or owner/name for a repo")).default([]),
+      /**
+       * How you rank the queue: a multiplier per signal (0 ignores it, 1 is the default, 2 doubles it) and rules that
+       * pin or move PRs. Read from your user config only: it's your order, not the repo's.
+       */
+      rank: RankSettingsSchema.prefault({}),
     })
     .prefault({}),
   clones: z

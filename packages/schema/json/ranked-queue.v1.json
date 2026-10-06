@@ -309,6 +309,10 @@
                 "description": "points added because you usually open PRs like this first",
                 "type": "number"
               },
+              "rules": {
+                "description": "points your boost and lower rules added or took away",
+                "type": "number"
+              },
               "total": {
                 "type": "number"
               }
@@ -320,6 +324,62 @@
               "total"
             ],
             "additionalProperties": false
+          },
+          "pinned": {
+            "description": "a rule of yours puts it above (first) or below (last) every PR no rule pins in its lane",
+            "type": "string",
+            "enum": [
+              "first",
+              "last"
+            ]
+          },
+          "breakdown": {
+            "description": "the score by weight and rule, adding up to score.total, as `alden queue --explain` shows it",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "signal": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "urgentLabel",
+                        "stacked",
+                        "sameAuthor",
+                        "ownsFiles",
+                        "waiting",
+                        "size",
+                        "risk",
+                        "noTests",
+                        "learned"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "const": "rule"
+                    }
+                  ]
+                },
+                "points": {
+                  "type": "number",
+                  "description": "after its weight; 0 for a first or last rule, which orders rather than scores"
+                },
+                "weight": {
+                  "description": "the multiplier, when it isn't 1",
+                  "type": "number"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "signal",
+                "points",
+                "text"
+              ],
+              "additionalProperties": false
+            }
           },
           "reasons": {
             "type": "array",
@@ -641,6 +701,10 @@
                 "description": "points added because you usually open PRs like this first",
                 "type": "number"
               },
+              "rules": {
+                "description": "points your boost and lower rules added or took away",
+                "type": "number"
+              },
               "total": {
                 "type": "number"
               }
@@ -652,6 +716,62 @@
               "total"
             ],
             "additionalProperties": false
+          },
+          "pinned": {
+            "description": "a rule of yours puts it above (first) or below (last) every PR no rule pins in its lane",
+            "type": "string",
+            "enum": [
+              "first",
+              "last"
+            ]
+          },
+          "breakdown": {
+            "description": "the score by weight and rule, adding up to score.total, as `alden queue --explain` shows it",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "signal": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "urgentLabel",
+                        "stacked",
+                        "sameAuthor",
+                        "ownsFiles",
+                        "waiting",
+                        "size",
+                        "risk",
+                        "noTests",
+                        "learned"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "const": "rule"
+                    }
+                  ]
+                },
+                "points": {
+                  "type": "number",
+                  "description": "after its weight; 0 for a first or last rule, which orders rather than scores"
+                },
+                "weight": {
+                  "description": "the multiplier, when it isn't 1",
+                  "type": "number"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "signal",
+                "points",
+                "text"
+              ],
+              "additionalProperties": false
+            }
           },
           "reasons": {
             "type": "array",
@@ -974,6 +1094,10 @@
                 "description": "points added because you usually open PRs like this first",
                 "type": "number"
               },
+              "rules": {
+                "description": "points your boost and lower rules added or took away",
+                "type": "number"
+              },
               "total": {
                 "type": "number"
               }
@@ -985,6 +1109,62 @@
               "total"
             ],
             "additionalProperties": false
+          },
+          "pinned": {
+            "description": "a rule of yours puts it above (first) or below (last) every PR no rule pins in its lane",
+            "type": "string",
+            "enum": [
+              "first",
+              "last"
+            ]
+          },
+          "breakdown": {
+            "description": "the score by weight and rule, adding up to score.total, as `alden queue --explain` shows it",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "signal": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "urgentLabel",
+                        "stacked",
+                        "sameAuthor",
+                        "ownsFiles",
+                        "waiting",
+                        "size",
+                        "risk",
+                        "noTests",
+                        "learned"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "const": "rule"
+                    }
+                  ]
+                },
+                "points": {
+                  "type": "number",
+                  "description": "after its weight; 0 for a first or last rule, which orders rather than scores"
+                },
+                "weight": {
+                  "description": "the multiplier, when it isn't 1",
+                  "type": "number"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "signal",
+                "points",
+                "text"
+              ],
+              "additionalProperties": false
+            }
           },
           "reasons": {
             "type": "array",

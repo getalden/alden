@@ -6,8 +6,10 @@ export {
   isKnownKey,
   loadConfig,
   queueScope,
+  type RankChange,
   repoConfigPath,
   setConfigValue,
+  setRankSettings,
   unsetConfigValue,
   userConfigPath,
 } from "./config.js";
@@ -161,6 +163,7 @@ export {
   reviewableSize,
   type Score,
 } from "./queue/rank.js";
+export { applyRules, describeWhen, pathGlobs, ruleMatches, ruleReason } from "./queue/rules.js";
 export { buildBriefing, NOT_CHECKED, runChecks } from "./review/briefing.js";
 export {
   CHECKS,
