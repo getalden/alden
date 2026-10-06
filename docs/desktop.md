@@ -34,6 +34,8 @@ the same sign-in, settings, memory and spend.
   the clones under `clones.folders` (see [Configuration](configuration.md#clones)). The briefing says which clone.
 - The menu bar shows how many PRs wait on you and the top three; click one to open its briefing. If an organisation hides
   its PRs from your sign-in, the menu says some are hidden, and the window says which and why.
+- The queue in the window searches, filters and sorts like the [web UI's](web-ui.md#views), and `[` folds it into a
+  rail when you want the briefing at full width. The window remembers its filters, sort and fold across restarts.
 - **Open Alden** (⌘⇧A) brings the window forward from anywhere. **Refresh** reloads the queue, which also happens
   every 5 minutes.
 - When someone has waited three days on a PR that isn't waiting on its author, you get one notification for it.

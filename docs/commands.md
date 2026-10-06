@@ -67,7 +67,14 @@ terminal, and never on standard output, so scripts reading the queue get only th
 | `--limit <n>` | The most PRs to fetch. Default 100. |
 | `--include-drafts` | Include draft PRs. Each is tagged `[Draft]` before its title and dimmed. |
 | `--refresh` | Ignore the 60-second cache. |
-| `--json` | Print the ranked queue as JSON. Schema: `packages/schema/json/ranked-queue.v1.json`. |
+| `--author <who>` | Only PRs by this login, or by `people`, `bots`, `agents` (AI agents) or `you`. |
+| `--label <name>` | Only PRs with this label (any case). |
+| `--search <text>` | Only PRs whose title, repo, `#number`, author or branch names contain every word. |
+| `--sort <order>` | `rank` (the default), `age` (open longest first), `waiting` (waited on you longest first), `updated` (most recent first) or `size` (smallest first). Sorts inside Needs you and Fast-track separately. |
+| `--json` | Print the ranked queue as JSON. Schema: `packages/schema/json/ranked-queue.v1.json`. With the flags above, only what they leave. |
+
+With `--author`, `--label`, `--search` or `--sort`, a line above the table says what's shown ("12 of 144 PRs: label
+db"), and `alden open` and `alden review` take the numbers as shown.
 
 ## alden open
 

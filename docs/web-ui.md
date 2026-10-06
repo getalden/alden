@@ -23,12 +23,28 @@ Stop it with Ctrl+C.
 
 - **Queue.** "Needs you" and "Fast-track", with each PR's wait, size, CI and the reasons it ranks where it does (a
   line marked ↑ or ↓ when your own feedback moved it). The selected row takes **Useful**, **Not useful** and
-  **Dismiss** (hidden until it changes). Filter by repo, refresh, and pick a PR to see its briefing beside the list.
-  The UI fetches your whole queue (up to the 1,000 PRs a GitHub search returns), so the repo filter lists every repo
-  in it. On opening, it shows the last queue at once (kept for a day), marked "As of 3 min ago, refreshing…" until
+  **Dismiss** (hidden until it changes). Search, filter and sort it (below), refresh, and pick a PR to see its briefing
+  beside the list. On opening, it shows the last queue at once (kept for a day), marked "As of 3 min ago, refreshing…" until
   the current one arrives.
   Until you've answered, a card at the top asks whether to send [anonymous usage stats](telemetry.md). In the desktop
   app, PRs briefed while you were away are marked "Briefing ready".
+- **Finding a PR in the queue.** The UI fetches your whole queue (up to the 1,000 PRs a GitHub search returns), so
+  search and every filter cover all of it.
+  - **Search** (`/`) matches the title, repo, `#number`, author and branch names; every word has to match, and
+    `@sam` means the author sam. `Esc` clears it and goes back to the list; `Enter` opens the first match.
+  - **Filters**, one row of menus under the search: repo, author (you, people, bots or AI agents, the same
+    [kinds](queue.md#bots-and-ai-agents) learning uses), how you were asked (you by name, your teams, or one team),
+    assignee (you, unassigned, or someone), label, drafts (hide, or only drafts, when the queue has any), CI (passing,
+    failing, running, none) and age (opened today, this week, or before). They combine, a filter that's on is
+    highlighted with its value, and the line below says "12 of 144" with **Clear filters**.
+  - **Sort**: Alden's rank (the default), open longest, waiting longest on you, recently updated, or smallest first for
+    quick wins. It sorts inside Needs you and Fast-track separately, and dismissed PRs stay at the bottom. Each row
+    keeps its number from Alden's rank.
+  - `j` and `k` move through the queue as it's shown. Filters and sort are remembered in this browser (the desktop app's
+    window keeps its own) until you reset them; the search isn't.
+  - **Collapse** (`«` or `[`) folds the queue into a thin rail so the briefing takes the full width; `[` again, or a
+    click on the rail, brings it back. `/` and `j`/`k` still work while it's folded. Remembered like the filters. Below
+    960px wide, where the list and the briefing already take turns, there's nothing to collapse.
 - **A PR.** Above the briefing, which clone its callers come from (when it isn't the folder `alden ui` runs in), or that
   there's none, with how to point Alden at your clones (`clones.folders`). "Brief me" runs the review and shows each stage as it goes (fetching, finding callers, checks, the
   model). The briefing follows the CLI's order. Every place links into the PR's "Files changed" view at that line.
@@ -92,6 +108,8 @@ tab; Settings changes the defaults.
 | `s` | Go to the Review panel |
 | `⌘↵` / `Ctrl+↵` | Save the comment you're writing |
 | `r` | Refresh the queue |
+| `/` | Search the queue (opens it first if it's collapsed); `Esc` clears the search, `Enter` opens the first match |
+| `[` | Collapse the queue to a rail, or bring it back (windows 960px and wider) |
 | `Esc` | Cancel the comment you're writing, or leave the send summary; stop a running briefing; in a narrow window, back to the list |
 
 Keys never fire while you're typing in a text box.
