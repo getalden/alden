@@ -50,8 +50,7 @@ export function formatBytes(bytes: number): string {
 export function describeCurrent(state: ModelSetupState): string {
   const { current, key } = state;
   if (!current.available) return "no model set up, so reviews run the checks only.";
-  if (current.provider === "anthropic")
-    return `${current.model} via Anthropic, using ${key?.where ?? "your setup"}.`;
+  if (current.provider === "anthropic") return `${current.model} via Anthropic, using ${key?.where ?? "your setup"}.`;
   if (current.provider === "openai-compatible") return `${current.model}, a local model (openai-compatible).`;
   return `${current.model} via ${current.provider}.`;
 }
