@@ -223,6 +223,8 @@ export class Api {
     this.request<unknown>("/api/reaction", { method: "POST", body: JSON.stringify({ pr, reaction }) });
 
   exportFeedback = () => this.request<unknown[]>("/api/feedback/export");
+  openLink = (url: string) =>
+    this.request<{ opened: string }>("/api/open", { method: "POST", body: JSON.stringify({ url }) });
   saveFeedback = () =>
     this.request<{ path: string; shown: string; events: number }>("/api/feedback/save", { method: "POST" });
 

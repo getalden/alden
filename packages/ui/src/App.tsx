@@ -102,6 +102,27 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
 
   useEffect(() => loadQueue(false, true), [loadQueue]);
 
+  // The desktop app's window can't open tabs, so a click on a link to anywhere else (a PR, a file on GitHub, docs)
+  // goes through Alden, which opens it in your default browser.
+  const desktopLinks = session?.desktop === true;
+  useEffect(() => {
+    if (!api || !desktopLinks) return;
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || (event.type === "click" && event.button !== 0) || event.button > 1) return;
+      const link = (event.target as Element | null)?.closest?.("a[href]");
+      if (!(link instanceof HTMLAnchorElement)) return;
+      if (!/^https?:$/.test(link.protocol) || link.origin === window.location.origin) return;
+      event.preventDefault();
+      api.openLink(link.href).catch(() => {});
+    };
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("auxclick", onClick, true);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("auxclick", onClick, true);
+    };
+  }, [api, desktopLinks]);
+
   // A PR dismissed in this window comes back when it changes: once the server lists it again, it isn't dismissed here.
   useEffect(() => {
     if (!queue) return;

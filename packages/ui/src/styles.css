@@ -1145,6 +1145,9 @@ textarea.input {
 .verdict-note {
   font: 500 12px var(--font-mono);
   color: var(--ink3);
+  /* Its own line under the buttons: a long note ("Saved. This finding isn't tied to…") must never squeeze the
+     finding beside it. */
+  flex-basis: 100%;
 }
 .finding {
   display: grid;
@@ -1165,6 +1168,15 @@ textarea.input {
   gap: 4px;
   align-items: center;
   align-self: flex-start;
+  /* The finding's text is beside these: they stay narrow, and a long note wraps under the buttons. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 16rem;
+}
+.finding .acts .react-note {
+  flex-basis: 100%;
+  margin-left: 0;
+  text-align: right;
 }
 .finding .acts .sev {
   margin-right: 4px;

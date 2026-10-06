@@ -113,6 +113,10 @@ const api: UiApi = {
     return input;
   },
   exportFeedback: async () => [],
+  openLink: async (url) => {
+    calls.push({ method: "openLink", args: url });
+    return { opened: url };
+  },
   saveFeedback: async () => ({ path: "/tmp/alden-feedback.json", shown: "/tmp/alden-feedback.json", events: 0 }),
   telemetry: async () => ({ consent: "unset", blocked: null }),
   setTelemetry: async (on) => {
@@ -330,6 +334,18 @@ describe("alden ui server", () => {
     } finally {
       api.queue = queue;
     }
+  });
+
+  it("opens web links for the desktop app, and nothing else", async () => {
+    const open = (url: unknown) =>
+      call("/api/open", { method: "POST", headers: authed, body: { url } }).then((r) => r.status);
+    expect(await open("https://github.com/a/b/pull/1")).toBe(200);
+    expect(calls).toEqual([{ method: "openLink", args: "https://github.com/a/b/pull/1" }]);
+    expect(await open("file:///etc/passwd")).toBe(400);
+    expect(await open("javascript:alert(1)")).toBe(400);
+    expect(await open(`http://127.0.0.1:${ui.port}/#t=${TOKEN}`)).toBe(400);
+    expect(await open("not a url")).toBe(400);
+    expect(calls).toHaveLength(1);
   });
 
   it("passes queue filters through", async () => {

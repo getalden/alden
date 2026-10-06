@@ -65,7 +65,7 @@ import {
   whyNoToken,
 } from "@alden/core";
 import type { Briefing, BriefingFreshness, BriefingTarget, RankedQueue, ReviewDraft } from "@alden/schema";
-import { LAST_QUEUE_KEY, type LastQueue } from "../commands/open.js";
+import { LAST_QUEUE_KEY, type LastQueue, openInBrowser } from "../commands/open.js";
 import { spendReport } from "../commands/spend.js";
 import { loadRepoStats } from "../commands/stats.js";
 import { describeGitHubError, reviewWriteFix } from "../github-errors.js";
@@ -579,6 +579,13 @@ export function createUiApi(options: {
 
     async exportFeedback() {
       return feedback.redacted();
+    },
+
+    async openLink(url) {
+      if (!options.desktop)
+        throw new ApiError(400, "Only the desktop app opens links this way; a browser opens them itself.");
+      openInBrowser(url, "Couldn't open a browser.");
+      return { opened: url };
     },
 
     async saveFeedback() {

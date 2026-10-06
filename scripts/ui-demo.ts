@@ -386,6 +386,7 @@ const api: UiApi = {
     return { pr, reaction };
   },
   exportFeedback: async () => redactFeedback(await feedback.events()),
+  openLink: async (url) => ({ opened: url }),
   saveFeedback: async () => {
     const events = redactFeedback(await feedback.events());
     const saved = await saveToDownloads("alden-feedback.json", JSON.stringify(events, null, 2), DEMO_DOWNLOADS);

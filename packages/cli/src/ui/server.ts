@@ -100,6 +100,8 @@ export interface UiApi {
   exportFeedback(): Promise<unknown>;
   /** The desktop app can't download files: the redacted feedback export, written to Downloads. */
   saveFeedback(): Promise<{ path: string; shown: string; events: number }>;
+  /** The desktop app's window can't open tabs: a link you clicked, opened in your default browser. */
+  openLink(url: string): Promise<{ opened: string }>;
   /** Whether anonymous usage stats are on, off or not yet asked, and anything forcing them off. */
   telemetry(): Promise<unknown>;
   setTelemetry(on: boolean): Promise<unknown>;
@@ -194,6 +196,19 @@ const SECURITY_HEADERS = {
 const MAX_BODY_BYTES = 64 * 1024;
 /** A briefing sent back to be exported: up to ten places, every check's evidence, the model's findings. */
 const MAX_BRIEFING_BYTES = 4 * 1024 * 1024;
+
+/** A web link to open in the browser: http or https only, and never Alden's own page (its key is in the link). */
+export function webLink(value: unknown): string {
+  let url: URL;
+  try {
+    url = new URL(typeof value === "string" ? value : "");
+  } catch {
+    throw new ApiError(400, "Send { url }, a web link.");
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new ApiError(400, "Only web links open.");
+  if (["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) throw new ApiError(400, "That's Alden's own page.");
+  return url.href;
+}
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { ...SECURITY_HEADERS, "Content-Type": "application/json; charset=utf-8" });
@@ -592,6 +607,11 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       case "GET /api/feedback/export":
         send(res, 200, await api.exportFeedback());
         return;
+      case "POST /api/open": {
+        const body = await readJsonBody(req);
+        send(res, 200, await api.openLink(webLink(body.url)));
+        return;
+      }
       case "POST /api/feedback/save":
         send(res, 200, await api.saveFeedback());
         return;
