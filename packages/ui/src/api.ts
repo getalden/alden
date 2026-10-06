@@ -1,5 +1,7 @@
 import type {
   Briefing,
+  BriefingFreshness,
+  BriefingTarget,
   FeedbackInput,
   FeedbackSummary,
   KeyTestResult,
@@ -273,6 +275,10 @@ export class Api {
 
   /** That PR's background briefing, or null when there's none or the PR has changed since. */
   prepared = (pr: string) => this.request<Prepared | null>(`/api/prepared?pr=${encodeURIComponent(pr)}`);
+
+  /** Whether a briefing still matches its PR on GitHub: fresh, the PR has new commits, or its base has moved. */
+  freshness = (target: BriefingTarget) =>
+    this.request<BriefingFreshness>("/api/freshness", { method: "POST", body: JSON.stringify({ target }) });
 
   telemetry = () => this.request<Telemetry>("/api/telemetry");
 

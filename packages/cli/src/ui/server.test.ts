@@ -31,6 +31,10 @@ const api: UiApi = {
     calls.push({ method: "prepared", args: pr });
     return pr ? null : [];
   },
+  freshness: async (target) => {
+    calls.push({ method: "freshness", args: target });
+    return { state: "base_moved", baseRef: "main", commits: 4 };
+  },
   startSignIn: async () => {
     calls.push({ method: "startSignIn", args: undefined });
     return { state: "waiting", userCode: "ABCD-1234" };
@@ -219,6 +223,26 @@ describe("alden ui server", () => {
       { method: "prepared", args: undefined },
       { method: "prepared", args: "a/b#1" },
     ]);
+  });
+
+  it("says whether a briefing still matches its PR, given the briefing's target", async () => {
+    const target = {
+      kind: "pr",
+      repo: "a/b",
+      number: 1,
+      url: "https://github.com/a/b/pull/1",
+      title: "T",
+      author: "sam",
+      baseRef: "main",
+      headRef: "feature",
+      headSha: "abc",
+      baseSha: "def",
+      graphFrom: "merge",
+    };
+    const post = (body: unknown) => call("/api/freshness", { method: "POST", headers: authed, body });
+    expect(JSON.parse((await post({ target })).text)).toEqual({ state: "base_moved", baseRef: "main", commits: 4 });
+    expect(calls).toEqual([{ method: "freshness", args: target }]);
+    expect((await post({ target: { kind: "pr" } })).status).toBe(400);
   });
 
   it("signs in and installs the command through the API", async () => {

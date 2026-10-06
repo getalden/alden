@@ -1,10 +1,11 @@
-import type { Briefing } from "@alden/schema";
+import type { Briefing, BriefingFreshness, BriefingTarget } from "@alden/schema";
 import { type ReactNode, useEffect, useState } from "react";
 import type { ReviewRequest } from "../api";
 import type { BriefingComments } from "../drafts";
 import type { BriefingFeedback } from "../feedback";
 import type { ReviewRun } from "../reviews";
 import { onLinkClick } from "../router";
+import { BriefingAge } from "./BriefingAge";
 import { BriefingView } from "./BriefingView";
 import { StateCard } from "./StateCard";
 
@@ -86,6 +87,8 @@ interface ReviewPaneProps {
   perReviewUsd?: number | undefined;
   /** This PR's drafts, for Comment from Alden. */
   comments?: BriefingComments | undefined;
+  /** Whether a PR briefing still matches its PR on GitHub, for "Briefed 30 min ago · main has 4 new commits since". */
+  freshness?: ((target: BriefingTarget) => Promise<BriefingFreshness>) | undefined;
 }
 
 /** A PR (or your local changes) and its briefing: run it, watch it, read it. */
@@ -123,6 +126,9 @@ export function ReviewPane(props: ReviewPaneProps) {
               </span>
             ))}
           </div>
+        )}
+        {run?.briefing && !run.running && run.briefing.target.kind === "pr" && (
+          <BriefingAge briefing={run.briefing} check={props.freshness} onRebrief={() => props.onStart(props.request)} />
         )}
       </header>
       <div className="toolbar" role="toolbar" aria-label="Review options">

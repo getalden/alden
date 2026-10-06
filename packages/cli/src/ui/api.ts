@@ -2,6 +2,7 @@ import {
   addNote,
   backgroundModelAllowed,
   cachedReviewQueue,
+  checkFreshness,
   checkModelKey,
   checkProgress,
   cloneAt,
@@ -60,7 +61,7 @@ import {
   type WithModel,
   whyNoToken,
 } from "@alden/core";
-import type { Briefing, RankedQueue, ReviewDraft } from "@alden/schema";
+import type { Briefing, BriefingFreshness, BriefingTarget, RankedQueue, ReviewDraft } from "@alden/schema";
 import { LAST_QUEUE_KEY, type LastQueue } from "../commands/open.js";
 import { spendReport } from "../commands/spend.js";
 import { loadRepoStats } from "../commands/stats.js";
@@ -87,12 +88,20 @@ async function signedIn() {
 
 const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
 
-/** A briefing made in the background, and the PR's last update it was made from (newer pushes make it stale). */
+/**
+ * A briefing made in the background, and the PR's last update it was made from. It's stale once the PR has a new push
+ * or (for callers from the merge) its base branch has moved: see `checkFreshness`.
+ */
 interface Prepared {
   briefing: Briefing;
   updatedAt: string;
   at: string;
+  /** When its head and base were last compared with GitHub's (ms). */
+  checkedAt: number;
 }
+
+/** While you're away, how often a prepared briefing's head and base are compared with GitHub's again: one request. */
+const RECHECK_PREPARED_MS = 5 * 60_000;
 
 /**
  * PRs the UI fetches: all of them, up to the 1,000 a GitHub search can return, so the repo filter covers the whole
@@ -105,7 +114,8 @@ const PREPARE_TOP = 3;
 
 /**
  * The PR to brief in the background next: the first of the top "needs you" PRs that's ready for review (not a draft,
- * not waiting on its author) and has no briefing for its latest update.
+ * not waiting on its author) and has no briefing for its latest update. Briefings found stale (a moved base doesn't
+ * change `updatedAt`) are dropped before this runs, so their PRs come up again.
  */
 export function nextToPrepare(
   queue: RankedQueue,
@@ -172,6 +182,28 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
     const store = openStore();
     const learning = await loadLearning(store, target);
     return { repo: target, items: memoryItems(learning), paused: learning.paused, path: store.path };
+  };
+
+  /** Whether a PR briefing still matches the PR on GitHub. */
+  const freshNow = async (target: BriefingTarget): Promise<BriefingFreshness> => {
+    const resolved = await signedIn();
+    return checkFreshness(createGitHubClient(resolved.token), target);
+  };
+  /**
+   * Drops background briefings of PRs in the queue that no longer match the PR (a new push, or a moved base), checking
+   * each at most every few minutes. A failed check keeps the briefing; the queue's update time still applies.
+   */
+  const dropStalePrepared = async (queue: RankedQueue) => {
+    const now = Date.now();
+    for (const row of queue.needsYou) {
+      const key = keyOf(row.pr.repo, row.pr.number);
+      const entry = prepared.get(key);
+      if (!entry || entry.updatedAt !== row.pr.updatedAt || now - entry.checkedAt < RECHECK_PREPARED_MS) continue;
+      const fresh = await freshNow(entry.briefing.target).catch(() => undefined);
+      if (!fresh) continue;
+      if (fresh.state === "fresh") entry.checkedAt = now;
+      else prepared.delete(key);
+    }
   };
 
   const api: UiApi = {
@@ -308,12 +340,13 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
       const config = await loadConfig(options.cwd);
       if (!options.desktop || !config.background.enabled) return { prepared: null, reason: "off" };
       const queue = (await api.queue({ refresh: false, repos: [], orgs: [] })) as RankedQueue;
+      await dropStalePrepared(queue);
       const next = nextToPrepare(queue, (repo, number) => prepared.get(keyOf(repo, number))?.updatedAt);
       if (!next) return { prepared: null, reason: "up to date" };
       const { pr } = next;
       const llm = await backgroundModelAllowed();
       const briefing = await runReview({ pr: `${pr.repo}#${pr.number}`, llm, graph: true }, () => {}, true);
-      const entry = { briefing, updatedAt: pr.updatedAt, at: new Date().toISOString() };
+      const entry = { briefing, updatedAt: pr.updatedAt, at: new Date().toISOString(), checkedAt: Date.now() };
       prepared.set(keyOf(pr.repo, pr.number), entry);
       return {
         prepared: {
@@ -336,13 +369,17 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
       }
       const entry = prepared.get(pr.toLowerCase());
       if (!entry) return null;
-      // Stale once the PR has changed since: the last queue knows its latest update.
+      // Served only while it still matches the PR's head and base on GitHub (one request). Offline, the last queue's
+      // update time is the best there is.
       const last = await cache.get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
+      const fresh = await freshNow(entry.briefing.target).catch(() => undefined);
       const row = last?.rows?.find((r) => keyOf(r.repo, r.number) === pr.toLowerCase());
-      if (row?.updatedAt && row.updatedAt !== entry.updatedAt) {
+      const stale = fresh ? fresh.state !== "fresh" : row?.updatedAt !== undefined && row.updatedAt !== entry.updatedAt;
+      if (stale) {
         prepared.delete(pr.toLowerCase());
         return null;
       }
+      if (fresh) entry.checkedAt = Date.now();
       // Reading it is using Alden on that repo, for `alden stats`, and opening that PR, for learning.
       const target = entry.briefing.target;
       if (target.kind === "pr") {
@@ -350,6 +387,15 @@ export function createUiApi(options: { version: string; cwd: string; desktop?: b
         noteOpened(last?.rows, target.url, "ui");
       }
       return { briefing: entry.briefing, at: entry.at };
+    },
+
+    async freshness(target) {
+      const resolved = await signedIn();
+      try {
+        return await checkFreshness(createGitHubClient(resolved.token), target);
+      } catch (error) {
+        throw new ApiError(502, describeGitHubError(error, resolved.source));
+      }
     },
 
     async spend() {
