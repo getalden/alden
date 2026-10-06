@@ -3,3 +3,6 @@ contact_links:
   - name: Security problem
     url: mailto:security@getalden.dev
     about: Please report security problems privately.
+  - name: Questions and ideas
+    url: https://discord.gg/ZtXFX7sxTu
+    about: Ask in the Alden Community on Discord.

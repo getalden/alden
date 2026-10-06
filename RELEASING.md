@@ -1,9 +1,9 @@
 # Releasing Alden
 
-During the private beta, releases go to npm under `next` and to the public
-[getalden/homebrew-tap](https://github.com/getalden/homebrew-tap) repo (the binaries, the desktop app's .dmg, the
-Homebrew formula and the cask). The Claude Code plugin and its marketplace go to the public
-[getalden/claude-plugin](https://github.com/getalden/claude-plugin) repo. This repo stays private.
+Releases go to npm (under `next` during the beta; move `latest` with `npm dist-tag add alden@<version> latest`) and
+to the public [getalden/homebrew-tap](https://github.com/getalden/homebrew-tap) repo (the binaries, the desktop app's
+.dmg, the Homebrew formula and the cask). The Claude Code plugin and its marketplace go to the public
+[getalden/claude-plugin](https://github.com/getalden/claude-plugin) repo.
 
 ## Once: set up
 
@@ -35,8 +35,8 @@ Homebrew formula and the cask). The Claude Code plugin and its marketplace go to
    smoke-tests your platform's binary, packages it as the workflow does, writes checksums and the formula, and installs
    the npm tarball into a throwaway prefix and smoke-tests that too. Add `--desktop` to build the universal Alden.app
    and the cask as well (a couple of minutes). The output is in `build/release/`.
-3. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`. This starts the Release workflow, which costs Actions
-   minutes (macOS runners bill at 10× on a private repo), so do it once the dry run passes.
+3. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`. This starts the Release workflow, which takes about
+   25 minutes (and costs Actions minutes while a repo is private), so do it once the dry run passes.
 4. The Release workflow builds the five binaries on their own runners, smoke-tests each (`pnpm smoke:binary`),
    signs and notarizes the macOS ones, builds the universal desktop app around them (Tauri signs, notarizes and staples
    it with the same Apple secrets), publishes `alden@<version>` to npm under `next`, and creates the release and

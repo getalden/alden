@@ -32,33 +32,33 @@ describe("org access", () => {
 
   it("checks every org, and warns only about the ones that hide their PRs", async () => {
     const access = await checkOrgAccess(
-      fakeClient({ acme: fail(403, SSO), acme: fail(403, RESTRICTED), getalden: null }),
+      fakeClient({ globex: fail(403, SSO), acme: fail(403, RESTRICTED), getalden: null }),
       { otherOrgs: async () => [] },
     );
     expect(access).toEqual([
-      { org: "acme", access: "sso" },
+      { org: "globex", access: "sso" },
       { org: "acme", access: "restricted" },
       { org: "getalden", access: "ok" },
     ]);
     const warnings = orgAccessWarnings(access);
     expect(warnings).toHaveLength(2);
-    expect(warnings[0]).toContain("acme uses single sign-on");
+    expect(warnings[0]).toContain("globex uses single sign-on");
     expect(warnings[1]).toContain("acme restricts third-party apps");
   });
 
   it("finds orgs that leave themselves out of this sign-in's own list, through the GitHub CLI's", async () => {
-    const client = fakeClient({ acme: fail(403, RESTRICTED), getalden: null }, ["getalden"]);
-    const access = await checkOrgAccess(client, { otherOrgs: async () => ["acme", "getalden"] });
+    const client = fakeClient({ globex: fail(403, RESTRICTED), getalden: null }, ["getalden"]);
+    const access = await checkOrgAccess(client, { otherOrgs: async () => ["globex", "getalden"] });
     expect(access).toEqual([
       { org: "getalden", access: "ok" },
-      { org: "acme", access: "restricted" },
+      { org: "globex", access: "restricted" },
     ]);
   });
 
   it("counts an org in scope when nothing is set, when named, or when it owns a named repo, never when ignored", () => {
-    expect(orgInScope("acme", {})).toBe(true);
-    expect(orgInScope("acme", { orgs: ["getalden"] })).toBe(false);
-    expect(orgInScope("Acme", { repos: ["acme/web"] })).toBe(true);
-    expect(orgInScope("acme", { ignore: ["acme"] })).toBe(false);
+    expect(orgInScope("globex", {})).toBe(true);
+    expect(orgInScope("globex", { orgs: ["getalden"] })).toBe(false);
+    expect(orgInScope("Globex", { repos: ["globex/web"] })).toBe(true);
+    expect(orgInScope("globex", { ignore: ["globex"] })).toBe(false);
   });
 });

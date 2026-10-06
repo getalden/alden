@@ -3,7 +3,7 @@ name: Release
 # Runs when a version tag is pushed (see RELEASING.md). Builds the standalone binaries on their own platforms,
 # smoke-tests each, signs and notarizes the macOS ones, builds the universal desktop app around them, publishes the npm
 # package, publishes the binaries, the app, the Homebrew formula and the cask to the public getalden/homebrew-tap
-# repo, and the Claude Code plugin to the public getalden/claude-plugin repo (this repo stays private during the beta).
+# repo, and the Claude Code plugin to the public getalden/claude-plugin repo.
 #
 # Secrets (steps that need one are skipped without it, so a dry run works with none):
 #   NPM_TOKEN               npm automation token, to publish `alden`

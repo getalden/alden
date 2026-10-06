@@ -1,0 +1,20 @@
+name: Idea or feature
+description: Something Alden should do that it doesn't.
+labels: ["idea"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The review situation, not the solution yet. "I review 30 PRs a day and…"
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+  - type: input
+    id: surface
+    attributes:
+      label: Where
+      description: Terminal, web UI, desktop app, Claude Code, or somewhere else.

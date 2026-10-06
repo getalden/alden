@@ -287,8 +287,8 @@ describe("queueSearchQuery", () => {
   });
 
   it("leaves out ignored orgs and repos", () => {
-    expect(queueSearchQuery({ orgs: ["acme"], ignore: ["acme/legacy", "acme-labs"] })).toBe(
-      "is:pr is:open archived:false review-requested:@me draft:false org:acme -repo:acme/legacy -org:acme-labs",
+    expect(queueSearchQuery({ orgs: ["acme"], ignore: ["acme/legacy", "initech"] })).toBe(
+      "is:pr is:open archived:false review-requested:@me draft:false org:acme -repo:acme/legacy -org:initech",
     );
     expect(() => queueSearchQuery({ ignore: ["a b"] })).toThrow(/queue.ignore/);
   });
