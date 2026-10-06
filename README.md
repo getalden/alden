@@ -137,6 +137,14 @@ Settings live in `~/.alden/config.toml`. A repo can override them in `.alden.tom
 [Models, providers and budgets](https://getalden.dev/docs/models/) and
 [Configuration](https://getalden.dev/docs/configuration/).
 
+## Roadmap
+
+The roadmap is the issue tracker: [now](https://github.com/getalden/alden/labels/roadmap%3A%20now),
+[next](https://github.com/getalden/alden/labels/roadmap%3A%20next) and
+[later](https://github.com/getalden/alden/labels/roadmap%3A%20later). Add a 👍 to what you want most, or open an
+[idea](https://github.com/getalden/alden/issues/new/choose). Looking for a way in? Try a
+[good first issue](https://github.com/getalden/alden/labels/good%20first%20issue).
+
 ## Development
 
 Requires Node 22.13+ and pnpm 10.
