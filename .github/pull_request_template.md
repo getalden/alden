@@ -8,6 +8,7 @@
 
 ## Checklist
 
+- [ ] Every commit is signed off (`git commit -s`, see CONTRIBUTING.md)
 - [ ] `pnpm test && pnpm typecheck && pnpm lint` pass
 - [ ] A changeset (`pnpm changeset`) for any change users will notice
 - [ ] Docs in `docs/` updated where behaviour changed

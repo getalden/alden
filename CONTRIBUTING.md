@@ -18,6 +18,19 @@ Thanks for helping. Alden is early, so open an issue before starting anything la
   fails while they're stale.
 - Alden never collects or stores Claude.ai logins. Model access is always the user's own API key, cloud provider account, local model, or their own Claude Code session via the plugin.
 
+## Sign off your commits
+
+Alden uses the [Developer Certificate of Origin](https://developercertificate.org) instead of a contributor
+agreement: by signing off a commit you certify you wrote it, or have the right to submit it, under the project's
+Apache-2.0 license. Add the sign-off with `-s`:
+
+```sh
+git commit -s -m "Explain what changed"
+```
+
+That adds a `Signed-off-by: Your Name <you@example.com>` line matching your commit's author. A check on every pull
+request looks for it. To sign off commits you already made: `git rebase --signoff main`, then push again.
+
 ## Releases
 
 Add a changeset for any user-facing change:
