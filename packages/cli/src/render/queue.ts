@@ -1,4 +1,5 @@
 import { formatAge, type RankedPullRequest, type RankedQueue } from "@alden/core";
+import type { ScoreLine } from "@alden/schema";
 import { fit, paint, type RenderOptions, type Style, stripControlDeep } from "./style.js";
 
 export { type RenderOptions, shouldColor } from "./style.js";
@@ -19,13 +20,38 @@ const CI_STYLE: Record<keyof typeof CI_LABEL, Style | undefined> = {
   none: undefined,
 };
 
+/** `alden queue --explain`: the score line under each row. */
+export interface QueueRenderOptions extends RenderOptions {
+  explain?: boolean;
+}
+
+/** A number as the explain line shows it: no trailing zeros, at most two decimals. */
+const num = (n: number) => String(Math.round(n * 100) / 100);
+
+/**
+ * "score 11.5: urgentLabel +6 · waiting +4.5 (×1.5) · ↑ your rule: payments/ first", named as `[queue.rank]` names
+ * the weights, so you can see which one to change.
+ */
+export function explainLine(item: RankedPullRequest): string {
+  const part = (line: ScoreLine) => {
+    if (line.signal === "rule") return line.text;
+    const points = line.points === 0 ? "0" : `${line.points > 0 ? "+" : "−"}${num(Math.abs(line.points))}`;
+    const weight = line.weight !== undefined ? ` (×${num(line.weight)})` : "";
+    const aside = line.points === 0 && line.signal === "learned" ? " (set aside: your rule decides)" : "";
+    return `${line.signal} ${points}${weight}${aside}`;
+  };
+  const lines = item.breakdown ?? [];
+  const failing = item.waitingOnAuthor ? " · after the others: CI failing" : "";
+  return `score ${num(item.score.total)}${lines.length > 0 ? `: ${lines.map(part).join(" · ")}` : ""}${failing}`;
+}
+
 interface Row {
   rank: number;
   item: RankedPullRequest;
 }
 
 /** The two-group queue table: a row per PR, and a dimmed line under it saying why it ranks where it does. */
-export function renderQueue(untrusted: RankedQueue, options: RenderOptions): string {
+export function renderQueue(untrusted: RankedQueue, options: QueueRenderOptions): string {
   // Titles, authors, labels and repos come from GitHub users: no control characters reach the terminal.
   const ranked = stripControlDeep(untrusted);
   const { color } = options;
@@ -81,7 +107,9 @@ export function renderQueue(untrusted: RankedQueue, options: RenderOptions): str
     if (pr.isDraft && reasons.includes("draft")) reasons.splice(reasons.indexOf("draft"), 1);
     const why = item.fastTrack ? item.fastTrack : reasons.join(" · ") || "nothing stands out";
     const indent = " ".repeat(cols.rank + 2);
-    return `${pr.isDraft ? paint(main, "dim", color) : main}\n${indent}${paint(fit(why, Math.max(20, options.width - indent.length)).trimEnd(), "dim", color)}`;
+    // The explain line isn't cut to the width: it's there to be read in full.
+    const explain = options.explain ? `\n${indent}${paint(explainLine(item), "cyan", color)}` : "";
+    return `${pr.isDraft ? paint(main, "dim", color) : main}\n${indent}${paint(fit(why, Math.max(20, options.width - indent.length)).trimEnd(), "dim", color)}${explain}`;
   };
 
   const out: string[] = [];

@@ -131,3 +131,33 @@ describe("shouldColor", () => {
     expect(shouldColor(tty, { TERM: "dumb" })).toBe(false);
   });
 });
+
+describe("alden queue --explain", () => {
+  const explained = item(7, {
+    score: { risk: 0, wait: 2, blocking: 3, rules: 5, total: 20 },
+    pinned: "first",
+    reasons: ["↑ your rule: payments/ first", "labelled urgent"],
+    breakdown: [
+      { signal: "waiting", points: 6, weight: 2, text: "waiting 30h" },
+      { signal: "urgentLabel", points: 6, text: "labelled urgent" },
+      { signal: "learned", points: 0, text: "ranked lower: you usually skip bot PRs (set aside: your rule decides)" },
+      { signal: "rule", points: 0, text: "↑ your rule: payments/ first" },
+      { signal: "rule", points: 5, text: "↑ your rule: labelled security +5" },
+    ],
+  });
+
+  it("adds each row's score by weight and rule, named as [queue.rank] names them", () => {
+    const lines = renderQueue(queue([explained]), { width: 100, color: false, explain: true }).split("\n");
+    expect(lines[4]).toBe(
+      "    score 20: waiting +6 (×2) · urgentLabel +6 · learned 0 (set aside: your rule decides) · ↑ your rule: payments/ first · ↑ your rule: labelled security +5",
+    );
+    expect(renderQueue(queue([explained]), { width: 100, color: false })).not.toContain("score 20");
+  });
+
+  it("says a row with nothing scored is 0, and that failing CI sinks it", () => {
+    const quiet = item(8, { waitingOnAuthor: true, breakdown: [] });
+    expect(renderQueue(queue([quiet]), { width: 100, color: false, explain: true })).toContain(
+      "score 0 · after the others: CI failing",
+    );
+  });
+});

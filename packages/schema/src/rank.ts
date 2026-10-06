@@ -109,6 +109,34 @@ export const ScoreLineSchema = z.object({
   text: z.string(),
 });
 
+/** The Ranking settings as the web UI and desktop app load them: `GET /api/rank`. */
+export const RankingStateSchema = z.object({
+  path: z.string().describe("the user config they're saved to"),
+  settings: RankSettingsSchema,
+  prepare: z.number().int().describe("background.prepare: how many top PRs the desktop app keeps briefed"),
+  background: z.boolean().describe("background briefings are on (and this is the desktop app, which makes them)"),
+});
+
+/** "Top 5 with these settings": the current queue ranked with unsaved settings, `POST /api/rank/preview`. */
+export const RankPreviewSchema = z.object({
+  fetchedAt: z.iso.datetime().nullable().describe("when the queue it ranks was fetched; null with no queue"),
+  needsYou: z.number().int().describe("PRs in Needs you"),
+  top: z.array(
+    z.object({
+      pr: z.string().describe("owner/name#number"),
+      title: z.string(),
+      url: z.url(),
+      author: z.string().nullable(),
+      total: z.number(),
+      pinned: z.enum(["first", "last"]).optional(),
+      was: z.number().int().nullable().describe("its place (1-based) with your saved settings; null if not in the top"),
+      reasons: z.array(z.string()),
+      breakdown: z.array(ScoreLineSchema),
+    }),
+  ),
+  problem: z.string().optional().describe("why there's no preview, e.g. not signed in"),
+});
+
 export type RankWeight = z.infer<typeof RankWeightSchema>;
 export type RankWeights = z.infer<typeof RankWeightsSchema>;
 export type RankRuleWhen = z.infer<typeof RankRuleWhenSchema>;
@@ -116,3 +144,5 @@ export type RankRuleThen = z.infer<typeof RankRuleThenSchema>;
 export type RankRule = z.infer<typeof RankRuleSchema>;
 export type RankSettings = z.infer<typeof RankSettingsSchema>;
 export type ScoreLine = z.infer<typeof ScoreLineSchema>;
+export type RankingState = z.infer<typeof RankingStateSchema>;
+export type RankPreview = z.infer<typeof RankPreviewSchema>;

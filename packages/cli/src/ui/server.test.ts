@@ -61,6 +61,12 @@ const api: UiApi = {
       return { opened: page };
     },
   },
+  // Settings → Ranking has its own tests, in rank.test.ts.
+  ranking: {
+    state: async () => ({}) as never,
+    save: async () => ({}) as never,
+    preview: async () => ({}) as never,
+  },
   clone: async (repo) => {
     calls.push({ method: "clone", args: repo });
     return { repo, path: null };

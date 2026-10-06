@@ -27,6 +27,7 @@ interface QueueCommandOptions {
   refresh?: boolean;
   repo: string[];
   org: string[];
+  explain?: boolean;
 }
 
 export function registerQueueCommand(program: Command): void {
@@ -39,6 +40,7 @@ export function registerQueueCommand(program: Command): void {
     .option("--include-drafts", "include draft PRs")
     .option("--refresh", "ignore the 60-second cache")
     .option("--json", "print the ranked queue as JSON (see packages/schema/json)")
+    .option("--explain", "show each PR's score by weight and rule, as [queue.rank] names them")
     .action(async (options: QueueCommandOptions) => {
       const resolved = await resolveToken();
       if (!resolved) program.error("Not signed in. Run `alden auth login`.");
@@ -84,7 +86,7 @@ export function registerQueueCommand(program: Command): void {
         return;
       }
       const render = { width: process.stdout.columns ?? 120, color: shouldColor(process.stdout) };
-      process.stdout.write(renderQueue(ranked, render));
+      process.stdout.write(renderQueue(ranked, { ...render, explain: options.explain ?? false }));
       if (wantsNext(options.json)) {
         process.stdout.write(
           nextLine(queueNext(lastQueue.urls.length), { ...render, width: Math.min(render.width, 100) }),
