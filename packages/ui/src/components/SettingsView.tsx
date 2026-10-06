@@ -67,6 +67,12 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
   async function exportFeedback() {
     setExportStatus(undefined);
     try {
+      // The desktop app's window can't download files, so the server writes the export to Downloads.
+      if (session.desktop) {
+        const saved = await api.saveFeedback();
+        setExportStatus(`Saved ${plural(saved.events, "event")} to ${saved.shown}.`);
+        return;
+      }
       const events = await api.exportFeedback();
       download(`alden-feedback-${new Date().toISOString().slice(0, 10)}.json`, events);
       setExportStatus(`Saved ${plural(events.length, "event")}.`);

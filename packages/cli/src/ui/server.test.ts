@@ -113,6 +113,7 @@ const api: UiApi = {
     return input;
   },
   exportFeedback: async () => [],
+  saveFeedback: async () => ({ path: "/tmp/alden-feedback.json", shown: "/tmp/alden-feedback.json", events: 0 }),
   telemetry: async () => ({ consent: "unset", blocked: null }),
   setTelemetry: async (on) => {
     calls.push({ method: "setTelemetry", args: on });

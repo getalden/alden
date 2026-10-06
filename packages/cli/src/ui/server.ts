@@ -98,6 +98,8 @@ export interface UiApi {
   react(input: { pr: string; reaction: "up" | "down" | "dismiss" | "clear" }): Promise<unknown>;
   /** Feedback events with repo names, titles, paths and notes removed, as `alden feedback --export` writes them. */
   exportFeedback(): Promise<unknown>;
+  /** The desktop app can't download files: the redacted feedback export, written to Downloads. */
+  saveFeedback(): Promise<{ path: string; shown: string; events: number }>;
   /** Whether anonymous usage stats are on, off or not yet asked, and anything forcing them off. */
   telemetry(): Promise<unknown>;
   setTelemetry(on: boolean): Promise<unknown>;
@@ -589,6 +591,9 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         return;
       case "GET /api/feedback/export":
         send(res, 200, await api.exportFeedback());
+        return;
+      case "POST /api/feedback/save":
+        send(res, 200, await api.saveFeedback());
         return;
       case "POST /api/memory/forget": {
         const body = await readJsonBody(req);

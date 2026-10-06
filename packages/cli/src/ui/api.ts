@@ -581,6 +581,14 @@ export function createUiApi(options: {
       return feedback.redacted();
     },
 
+    async saveFeedback() {
+      if (!options.desktop) throw new ApiError(400, "Only the desktop app saves the export; a browser downloads it.");
+      const events = await feedback.redacted();
+      const name = `alden-feedback-${new Date().toISOString().slice(0, 10)}.json`;
+      const saved = await saveToDownloads(name, `${JSON.stringify(events, null, 2)}\n`, options.downloads);
+      return { ...saved, events: events.length };
+    },
+
     async addMemory({ repo, text }) {
       const target = await memoryRepo(repo);
       try {

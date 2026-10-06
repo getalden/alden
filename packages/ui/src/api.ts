@@ -223,6 +223,8 @@ export class Api {
     this.request<unknown>("/api/reaction", { method: "POST", body: JSON.stringify({ pr, reaction }) });
 
   exportFeedback = () => this.request<unknown[]>("/api/feedback/export");
+  saveFeedback = () =>
+    this.request<{ path: string; shown: string; events: number }>("/api/feedback/save", { method: "POST" });
 
   /** A briefing as a Markdown document to share (the same as `alden review --markdown`), and the file to save it as. */
   briefingMarkdown = (briefing: Briefing) =>

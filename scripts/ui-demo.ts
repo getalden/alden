@@ -386,6 +386,11 @@ const api: UiApi = {
     return { pr, reaction };
   },
   exportFeedback: async () => redactFeedback(await feedback.events()),
+  saveFeedback: async () => {
+    const events = redactFeedback(await feedback.events());
+    const saved = await saveToDownloads("alden-feedback.json", JSON.stringify(events, null, 2), DEMO_DOWNLOADS);
+    return { ...saved, events: events.length };
+  },
   // The demo never sends anything: it remembers the answer for this run only.
   telemetry: async () => ({ consent: demoConsent, blocked: null }),
   setTelemetry: async (on) => {

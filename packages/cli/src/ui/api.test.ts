@@ -90,12 +90,30 @@ describe("saveToDownloads", () => {
     }
   });
 
+  it("saves the redacted feedback export to Downloads in the desktop app", async () => {
+    const home = await mkdtemp(join(tmpdir(), "alden-home-"));
+    const downloads = await mkdtemp(join(tmpdir(), "alden-downloads-"));
+    process.env.ALDEN_HOME = home;
+    try {
+      const api = createUiApi({ version: "0", cwd: home, desktop: true, downloads });
+      const saved = await api.saveFeedback();
+      expect(saved.events).toBe(0);
+      expect(JSON.parse(await readFile(saved.path, "utf8"))).toEqual([]);
+      expect(saved.path.startsWith(downloads)).toBe(true);
+    } finally {
+      delete process.env.ALDEN_HOME;
+      await rm(home, { recursive: true, force: true });
+      await rm(downloads, { recursive: true, force: true });
+    }
+  });
+
   it("is the desktop app's alone: a browser downloads the file itself", async () => {
     const home = await mkdtemp(join(tmpdir(), "alden-home-"));
     process.env.ALDEN_HOME = home;
     try {
       const api = createUiApi({ version: "0", cwd: home });
       await expect(api.saveBriefing({} as never)).rejects.toThrow("a browser downloads them");
+      await expect(api.saveFeedback()).rejects.toThrow("a browser downloads it");
     } finally {
       delete process.env.ALDEN_HOME;
       await rm(home, { recursive: true, force: true });
