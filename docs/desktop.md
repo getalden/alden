@@ -40,6 +40,9 @@ the same sign-in, settings, memory and spend.
 - [Comment from Alden](web-ui.md#views) works the same in the window: write comments in a briefing, check the summary,
   and send them to GitHub as one review. Drafts Claude Code added show there too, marked "from Claude". Nothing is
   sent until you press Send.
+- **Export** in a briefing works in the window too. **Save as Markdown** saves to your Downloads folder (the window
+  can't download files itself) and says where, e.g. "Saved to ~/Downloads/acme-shop-412-briefing.md."; **Print / Save
+  as PDF** opens the macOS print dialog, whose **PDF** menu saves it. See [Export](web-ui.md#views).
 - Closing the window keeps Alden in the menu bar; clicking Alden in the Dock brings the window back. **Quit** stops it.
 
 ## While you're away
@@ -53,6 +56,10 @@ after it changes. Ready PRs are marked in the menu and the queue.
 These briefings use the checks and the code graph only, which costs nothing. To have them ask the model too, turn on
 **Ask the model too** in Settings → While you're away; each then counts against your caps like any briefing. Turn the
 whole thing off there, or with `alden config set background.enabled false`.
+
+"Briefing ready" plays your system's notification sound. Turn it off in Settings → Notifications ("Play a sound when a
+briefing is ready"), or with `alden config set notifications.sound false`. Focus modes and macOS's own notification
+settings for Alden still apply. The three-day nudge stays silent.
 
 ## Sign-in
 

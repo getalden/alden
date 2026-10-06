@@ -86,6 +86,14 @@ For the [desktop app](desktop.md#while-youre-away), which briefs your top PRs wh
 | `background.enabled` | `true` | Prepare briefings in the background. A repo's `.alden.toml` can turn it off there. |
 | `background.model` | `false` | Ask the model for them too, within your caps. Read from your user config only, so a repo can't make you spend. |
 
+## notifications
+
+For the [desktop app](desktop.md#while-youre-away).
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `notifications.sound` | `true` | Play the system's notification sound with "Briefing ready". Read from your user config only. Settings → Notifications sets it too. |
+
 ## telemetry
 
 | Key | Default | What it does |

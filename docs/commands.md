@@ -93,8 +93,38 @@ Briefs you on a PR, or on your uncommitted local changes when you don't name one
 | `--model <name>` | Use this model for this review, e.g. `opus`, instead of your configured one. |
 | `--effort <level>` | How hard the model thinks: `low`, `medium`, `high`, `xhigh` or `max`. Default: the model's own. |
 | `--json` | Print the briefing as JSON. Schema: `packages/schema/json/briefing.v1.json`. |
+| `--markdown` | Print the briefing as a Markdown document to share or keep: `alden review 12 --markdown > briefing.md`. |
 
 Local reviews cover staged, unstaged and untracked files, compared with `HEAD`.
+
+`--markdown` writes the briefing as a document for people: the PR's title, `owner/repo#123` with its link, what it
+does (when the model ran), "Needs your eyes" with each file and line and why, the model's other findings, callers
+outside the diff, every check with its evidence, what wasn't checked, the files, and a closing line with the model, its
+cost and when it was briefed. It's the same document as **Export → Copy as Markdown** in the [web UI](web-ui.md). Your
+memory notes and what your feedback changed stay out of it; secrets stay masked as the checks recorded them; terminal
+control sequences are removed. For example:
+
+```markdown
+# Drop the legacy email column
+
+[acme/shop#412](https://github.com/acme/shop/pull/412) by @sam · main ← sam/drop-email  
+3 files · +48/-12
+
+## Needs your eyes
+1. **Migration may lose data** (critical) `db/migrate/0042_drop_email.ts:4`
+   Dropping a column can't be undone.
+
+## Checked
+- ! **Migration may lose data** (critical): A column is dropped.
+  - `db/migrate/0042_drop_email.ts:4` drops users.email
+- ✓ **Code changed without tests** (inferred from the diff, can be wrong): Tests changed alongside the code.
+
+…
+
+---
+
+Checks only, no model · briefed 2026-10-06 09:30 UTC by Alden
+```
 
 ## alden comment
 
