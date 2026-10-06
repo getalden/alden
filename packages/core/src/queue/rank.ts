@@ -5,12 +5,15 @@ import {
   QUEUE_SCHEMA_VERSION,
   type RankedPullRequest,
   type RankedQueue,
+  type RankWeight,
   type Score,
+  type ScoreLine,
 } from "@alden/schema";
 import type { PullRequestFacts } from "../github/pull-requests.js";
 import type { ReviewQueue } from "../github/queue.js";
 import { type Learning, prFeatures, type QueueRow, queueBoost, sensitiveDir } from "../learn/learn.js";
 import { fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./files.js";
+import { applyRules } from "./rules.js";
 
 export type { FastTrackKind, Lane, RankedPullRequest, RankedQueue, Score };
 
@@ -19,7 +22,8 @@ const URGENT_LABEL = /\b(hotfix|urgent|critical|blocker|p0|sev[ -]?[01])\b/i;
 
 /**
  * v0 weights. Plain numbers so anyone can see why a PR ranks where it does; tuned by testing on real queues.
- * Waiting counts most: the product exists to stop PRs going stale.
+ * Waiting counts most: the product exists to stop PRs going stale. Your `[queue.rank]` weights multiply each signal's
+ * points on top of these (see RankWeightsSchema for what each signal is worth).
  */
 const WEIGHTS = { risk: 1, wait: 1.5, blocking: 2 };
 
@@ -56,26 +60,50 @@ export function rankPullRequest(
   const reasons: { weight: number; text: string }[] = [];
   const add = (weight: number, text: string) => reasons.push({ weight, text });
   const isSensitive = sensitiveMatcher(config.sensitivePaths);
+  const { rules, ...weights } = config.rank;
+  const breakdown: ScoreLine[] = [];
+  /**
+   * A signal's points at your weight for it, on the row as a reason (unless `shown` is false) and in the breakdown.
+   * A weight of 0 ignores the signal: no points, no reason.
+   */
+  const signal = (name: RankWeight, base: number, text: string, shown = true): number => {
+    const weight = weights[name];
+    if (base === 0 || weight === 0) return 0;
+    const points = base * weight;
+    breakdown.push({ signal: name, points, ...(weight !== 1 ? { weight } : {}), text });
+    if (shown) add(points, text);
+    return points;
+  };
 
   // Wait
   const since = Date.parse(pr.request.requestedAt ?? pr.createdAt);
   const waitingHours = Math.max(0, (context.now - since) / 3_600_000);
   const wait = waitingHours < 4 ? 0 : waitingHours < 24 ? 1 : waitingHours < 72 ? 2 : 3;
-  if (wait > 0) add(wait * WEIGHTS.wait, `waiting ${formatAge(waitingHours)}`);
+  const waitPoints = signal("waiting", wait * WEIGHTS.wait, `waiting ${formatAge(waitingHours)}`);
 
   // Risk
   let risk = 0;
+  let riskPoints = 0;
   const { additions, deletions } = reviewableSize(pr);
   const lines = additions + deletions;
   const sizeScore = pr.filesTruncated || lines > 1000 ? 3 : lines > 250 ? 2 : lines > config.fastTrackMaxLines ? 1 : 0;
   risk += sizeScore;
-  if (sizeScore >= 2) add(sizeScore * WEIGHTS.risk, `large (+${additions}/-${deletions})`);
+  riskPoints += signal(
+    "size",
+    sizeScore * WEIGHTS.risk,
+    sizeScore >= 2 ? `large (+${additions}/-${deletions})` : `${lines} lines`,
+    sizeScore >= 2,
+  );
 
   const sensitive = pr.files.map((f) => f.path).filter(isSensitive);
   if (sensitive.length > 0) {
     risk += 2;
     const dirs = [...new Set(sensitive.map((p) => sensitiveDir(p, isSensitive)))];
-    add(2 * WEIGHTS.risk, `touches ${dirs.slice(0, 2).join(", ")}${dirs.length > 2 ? ` +${dirs.length - 2}` : ""}`);
+    riskPoints += signal(
+      "risk",
+      2 * WEIGHTS.risk,
+      `touches ${dirs.slice(0, 2).join(", ")}${dirs.length > 2 ? ` +${dirs.length - 2}` : ""}`,
+    );
   }
 
   // A major dependency bump can break callers anywhere, however small its diff.
@@ -84,13 +112,13 @@ export function rankPullRequest(
   if (bump) {
     risk += 2;
     const more = bumps.length > 1 ? ` +${bumps.length - 1}` : "";
-    add(2 * WEIGHTS.risk, `major bump: ${bump.name} ${bump.from} → ${bump.to}${more}`);
+    riskPoints += signal("risk", 2 * WEIGHTS.risk, `major bump: ${bump.name} ${bump.from} → ${bump.to}${more}`);
   }
 
   const kinds = pr.files.map((f) => fileKind(f.path));
   if (kinds.includes("code") && !kinds.includes("test")) {
     risk += 1;
-    add(WEIGHTS.risk, "no test changes");
+    riskPoints += signal("noTests", WEIGHTS.risk, "no test changes");
   }
 
   // Failing CI isn't risk for the reviewer: the author has to fix it first. It leads the reasons and sinks the PR.
@@ -99,24 +127,37 @@ export function rankPullRequest(
 
   if (pr.codeownedFiles.length > 0) {
     risk += 1;
-    add(WEIGHTS.risk, `you own ${pr.codeownedFiles.length} file${pr.codeownedFiles.length === 1 ? "" : "s"}`);
+    riskPoints += signal(
+      "ownsFiles",
+      WEIGHTS.risk,
+      `you own ${pr.codeownedFiles.length} file${pr.codeownedFiles.length === 1 ? "" : "s"}`,
+    );
   }
 
   // Blocking
   let blocking = 0;
+  let blockingPoints = 0;
   const urgent = pr.labels.find((l) => URGENT_LABEL.test(l));
   if (urgent) {
     blocking += 3;
-    add(3 * WEIGHTS.blocking, `labelled ${urgent}`);
+    blockingPoints += signal("urgentLabel", 3 * WEIGHTS.blocking, `labelled ${urgent}`);
   }
   if (pr.stackedPrs > 0) {
     blocking += 2;
-    add(2 * WEIGHTS.blocking, `${pr.stackedPrs} PR${pr.stackedPrs === 1 ? "" : "s"} stacked on it`);
+    blockingPoints += signal(
+      "stacked",
+      2 * WEIGHTS.blocking,
+      `${pr.stackedPrs} PR${pr.stackedPrs === 1 ? "" : "s"} stacked on it`,
+    );
   }
   // A bot with a pile of PRs isn't a teammate waiting on you.
   if (context.authorQueueSize >= 2 && pr.author && !pr.authorIsBot) {
     blocking += 1;
-    add(WEIGHTS.blocking, `@${pr.author} has ${context.authorQueueSize} PRs waiting on you`);
+    blockingPoints += signal(
+      "sameAuthor",
+      WEIGHTS.blocking,
+      `@${pr.author} has ${context.authorQueueSize} PRs waiting on you`,
+    );
   }
 
   // Facts worth showing that don't change the score.
@@ -138,25 +179,69 @@ export function rankPullRequest(
     pr.mergeable !== "conflicting" &&
     !pr.isDraft;
 
+  // Your rules come after learning, and learning never overrides them.
+  const applied = applyRules(rules, pr, context.viewer);
+
   // How you treat PRs like this one, from your own history in this repo. Shown, never silent.
   const learned = queueBoost(context.learning, prFeatures(pr, config.sensitivePaths, context.viewer));
-  if (learned.reason) add(Math.abs(learned.points), learned.reason);
+  let learnedPoints = 0;
+  if (learned.reason) {
+    // Learning that pulls against a boost or lower rule is set aside: your rule says how PRs like this rank.
+    const opposed = applied.points !== 0 && Math.sign(learned.points) !== Math.sign(applied.points);
+    if (opposed) {
+      breakdown.push({ signal: "learned", points: 0, text: `${learned.reason} (set aside: your rule decides)` });
+    } else {
+      learnedPoints = signal("learned", Math.abs(learned.points), learned.reason) * Math.sign(learned.points);
+      const line = breakdown.at(-1);
+      if (line?.signal === "learned") line.points = learnedPoints;
+    }
+  }
 
-  const total = risk * WEIGHTS.risk + wait * WEIGHTS.wait + blocking * WEIGHTS.blocking + learned.points;
+  // Rule reasons come right after failing CI: they're yours, so they lead.
+  for (const text of applied.reasons) add(Number.MAX_VALUE, text);
+  breakdown.push(...applied.lines);
+
+  const total = riskPoints + waitPoints + blockingPoints + learnedPoints + applied.points;
   return {
     pr,
     lane: fastTrack ? "fast-track" : "needs-you",
     ...(fastTrack ? { fastTrack: kind } : {}),
-    score: { risk, wait, blocking, ...(learned.points !== 0 ? { learned: learned.points } : {}), total },
+    score: {
+      risk,
+      wait,
+      blocking,
+      ...(learnedPoints !== 0 ? { learned: learnedPoints } : {}),
+      ...(applied.points !== 0 ? { rules: applied.points } : {}),
+      total,
+    },
+    ...(applied.pinned ? { pinned: applied.pinned } : {}),
+    breakdown,
     reasons: reasons.sort((a, b) => b.weight - a.weight).map((r) => r.text),
     waitingHours,
     waitingOnAuthor,
   };
 }
 
+/** A first rule's PRs lead their lane and a last rule's trail it, whatever their scores. */
+const pinTier = (r: RankedPullRequest) => (r.pinned === "first" ? 0 : r.pinned === "last" ? 2 : 1);
+
+/**
+ * "Needs you" order: your first and last rules, then PRs waiting on their author last, then score, then the longest
+ * waiting. `learned: false` leaves out what was learned, for learning's own view of where a PR sat.
+ */
+function byScore(learned: boolean) {
+  const score = (r: RankedPullRequest) => r.score.total - (learned ? 0 : (r.score.learned ?? 0));
+  return (a: RankedPullRequest, b: RankedPullRequest) =>
+    pinTier(a) - pinTier(b) ||
+    Number(a.waitingOnAuthor) - Number(b.waitingOnAuthor) ||
+    score(b) - score(a) ||
+    b.waitingHours - a.waitingHours;
+}
+
 /**
  * Splits the queue into "needs you" (highest score first, PRs waiting on their author last) and "fast-track"
- * (longest waiting first). Ranking only orders the queue; nothing is ever approved.
+ * (longest waiting first), each led by your first rules' PRs and ended by your last rules'. Ranking only orders the
+ * queue; nothing is ever approved.
  */
 export function rankQueue(
   queue: ReviewQueue,
@@ -178,11 +263,8 @@ export function rankQueue(
     }),
   );
 
-  const byScore = (a: RankedPullRequest, b: RankedPullRequest) =>
-    Number(a.waitingOnAuthor) - Number(b.waitingOnAuthor) ||
-    b.score.total - a.score.total ||
-    b.waitingHours - a.waitingHours;
   const byWait = (a: RankedPullRequest, b: RankedPullRequest) => b.waitingHours - a.waitingHours;
+  const pinnedByWait = (a: RankedPullRequest, b: RankedPullRequest) => pinTier(a) - pinTier(b) || byWait(a, b);
 
   // PRs you dismissed stay out of both lanes until they change.
   const isDismissed = (r: RankedPullRequest) => {
@@ -195,8 +277,8 @@ export function rankQueue(
     schemaVersion: QUEUE_SCHEMA_VERSION,
     viewer: queue.viewer,
     fetchedAt: queue.fetchedAt,
-    needsYou: shown.filter((r) => r.lane === "needs-you").sort(byScore),
-    fastTrack: shown.filter((r) => r.lane === "fast-track").sort(byWait),
+    needsYou: shown.filter((r) => r.lane === "needs-you").sort(byScore(true)),
+    fastTrack: shown.filter((r) => r.lane === "fast-track").sort(pinnedByWait),
     ...(dismissed.length > 0 ? { dismissed } : {}),
     warnings: queue.warnings,
   };
@@ -204,15 +286,10 @@ export function rankQueue(
 
 /**
  * The queue's rows as learning sees them: each PR's features and its place in "needs you" ranked without anything
- * learned, so opening a PR that learning lifted doesn't count as jumping ahead (which would feed on itself).
+ * learned (your weights and rules still count), so opening a PR that learning lifted doesn't count as jumping ahead (which would feed on itself).
  */
 export function queueRows(ranked: RankedQueue, config: AldenConfig["queue"]): QueueRow[] {
-  const base = [...ranked.needsYou].sort(
-    (a, b) =>
-      Number(a.waitingOnAuthor) - Number(b.waitingOnAuthor) ||
-      b.score.total - (b.score.learned ?? 0) - (a.score.total - (a.score.learned ?? 0)) ||
-      b.waitingHours - a.waitingHours,
-  );
+  const base = [...ranked.needsYou].sort(byScore(false));
   return [...ranked.needsYou, ...ranked.fastTrack, ...(ranked.dismissed ?? [])].map((r) => ({
     url: r.pr.url,
     repo: r.pr.repo,

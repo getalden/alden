@@ -9,6 +9,10 @@ import type {
   MemoryItem,
   ModelSetupState,
   RankedQueue,
+  RankingState,
+  RankPreview,
+  RankRule,
+  RankWeight,
   RepoStats,
 } from "@alden/schema";
 import type { DraftsResponse, NewDraft, ReviewDraft, ReviewEvent as ReviewVerdict, SendReviewResult } from "./drafts";
@@ -314,6 +318,16 @@ export class Api {
     return this.request<RepoStats>(`/api/stats?${params}`);
   };
 
+  /** Settings → Ranking: your weights, rules and how many top PRs to keep briefed (`[queue.rank]`). */
+  rank = () => this.request<RankingState>("/api/rank");
+
+  saveRank = (change: RankChange) =>
+    this.request<RankingState>("/api/rank", { method: "PUT", body: JSON.stringify(change) });
+
+  /** The current queue's top five ranked with these settings, unsaved, beside where each PR sits now. */
+  previewRank = (settings: { weights: Partial<Record<RankWeight, number>>; rules: RankRule[] }) =>
+    this.request<RankPreview>("/api/rank/preview", { method: "POST", body: JSON.stringify(settings) });
+
   /** `null` removes the setting, so its default applies again. */
   setConfig = (key: string, value: string | null) =>
     this.request<unknown>("/api/config", { method: "PUT", body: JSON.stringify({ key, value }) });
@@ -366,6 +380,14 @@ export class Api {
       if (done) throw new ApiError(500, "The review ended without a briefing.");
     }
   }
+}
+
+/** A change to how you rank: a weight of null (or 1) and an empty rule list go back to the defaults. */
+export interface RankChange {
+  weights?: Partial<Record<RankWeight, number | null>>;
+  rules?: RankRule[];
+  /** How many top PRs the desktop app keeps briefed; null for the default (3). */
+  prepare?: number | null;
 }
 
 /** The pages the setup step links to: where to create an Anthropic key, Alden Cloud's waitlist, Ollama's download. */

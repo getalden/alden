@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { briefingFileName, briefingMarkdown } from "../packages/cli/src/render/markdown.js";
 import { saveToDownloads } from "../packages/cli/src/ui/api.js";
+import { createRankingApi } from "../packages/cli/src/ui/rank.js";
 import { startUiServer, type UiApi } from "../packages/cli/src/ui/server.js";
 import {
   addNote,
@@ -245,6 +246,17 @@ const api: UiApi = {
     demoModel = key !== null;
     return { key: demoModel ? { source: "alden", where: "the key you stored with `alden auth model`" } : null };
   },
+  // Saves to ALDEN_HOME's config.toml: run the demo with ALDEN_HOME set to a temporary folder to keep yours as it is.
+  ranking: createRankingApi({
+    cwd: process.cwd(),
+    desktop: DEMO_DESKTOP,
+    queue: async () => ({ viewer: "you", fetchedAt: new Date().toISOString(), pullRequests: facts, warnings: [] }),
+    learning: async (queue) => {
+      const learned = new Map<string, Learning>();
+      for (const pr of queue.pullRequests) learned.set(pr.repo.toLowerCase(), await learningFor(pr.repo));
+      return (repo) => learned.get(repo.toLowerCase());
+    },
+  }),
   modelSetup: {
     state: async () => ({
       current: { provider: "anthropic", model: "claude-sonnet-5", available: demoModel, reason: null },
@@ -305,13 +317,15 @@ const api: UiApi = {
   queue: async () => {
     const learned = new Map<string, Learning>();
     for (const repo of new Set(facts.map((f) => f.repo.toLowerCase()))) learned.set(repo, await learningFor(repo));
+    // Read afresh, so what Settings → Ranking saves (to ALDEN_HOME's config) shows on the next refresh.
+    const { queue: queueConfig } = await loadConfig();
     const ranked = rankQueue(
       { viewer: "you", fetchedAt: new Date().toISOString(), pullRequests: facts, warnings: [] },
-      config.queue,
+      queueConfig,
       Date.now(),
       (repo) => learned.get(repo.toLowerCase()),
     );
-    lastRows = queueRows(ranked, config.queue);
+    lastRows = queueRows(ranked, queueConfig);
     return ranked;
   },
   review: async (request, onStage) => {

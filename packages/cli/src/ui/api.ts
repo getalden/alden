@@ -73,6 +73,7 @@ import { learningFor, learningForQueue, noteOpened } from "../learning.js";
 import { parsePrRef } from "../pr-ref.js";
 import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
 import { createModelSetupApi } from "./model-setup.js";
+import { createRankingApi } from "./rank.js";
 import { ApiError, type DraftInput, type ReviewRequest, type UiApi } from "./server.js";
 import { cliStatus, createSignIn, gitHubCliSignedIn, installCli } from "./setup.js";
 
@@ -140,20 +141,22 @@ const RECHECK_PREPARED_MS = 5 * 60_000;
  */
 export const UI_QUEUE_LIMIT = 1000;
 
-/** How many of the top "needs you" PRs the desktop app prepares briefings for. */
+/** How many of the top "needs you" PRs the desktop app prepares briefings for, unless `background.prepare` says. */
 const PREPARE_TOP = 3;
 
 /**
- * The PR to brief in the background next: the first of the top "needs you" PRs that's ready for review (not a draft,
- * not waiting on its author) and has no briefing for its latest update. Briefings found stale (a moved base doesn't
- * change `updatedAt`) are dropped before this runs, so their PRs come up again.
+ * The PR to brief in the background next: the first of the top `top` "needs you" PRs, in your ranked order (your
+ * weights and rules included), that's ready for review (not a draft, not waiting on its author) and has no briefing
+ * for its latest update. Briefings found stale (a moved base doesn't change `updatedAt`) are dropped before this
+ * runs, so their PRs come up again.
  */
 export function nextToPrepare(
   queue: RankedQueue,
   preparedFor: (repo: string, number: number) => string | undefined,
+  top: number = PREPARE_TOP,
 ): RankedQueue["needsYou"][number] | undefined {
   return queue.needsYou
-    .slice(0, PREPARE_TOP)
+    .slice(0, top)
     .find(
       (row) => !row.waitingOnAuthor && !row.pr.isDraft && preparedFor(row.pr.repo, row.pr.number) !== row.pr.updatedAt,
     );
@@ -362,6 +365,32 @@ export function createUiApi(options: {
 
     modelSetup: createModelSetupApi({ cwd: options.cwd }),
 
+    ranking: createRankingApi({
+      cwd: options.cwd,
+      desktop: options.desktop === true,
+      // The queue you last saw, as the Queue view fetched it; a fresh one only if there's none yet.
+      async queue(config) {
+        const resolved = await signedIn();
+        const client = createGitHubClient(resolved.token);
+        const scope = {
+          includeDrafts: config.queue.includeDrafts,
+          limit: UI_QUEUE_LIMIT,
+          cache,
+          ...queueScope(config),
+        };
+        try {
+          return (
+            (await cachedReviewQueue(client, scope)) ??
+            (await shared(JSON.stringify([scope.repos, scope.orgs, scope.ignore, false]), () =>
+              fetchReviewQueue(client, { ...scope, refresh: false }),
+            ))
+          );
+        } catch (error) {
+          throw new ApiError(502, describeGitHubError(error, resolved.source));
+        }
+      },
+    }),
+
     async clone(repo) {
       const config = await loadConfig(options.cwd);
       const found = await findClone(repo, { cwd: options.cwd, folders: config.clones.folders }).catch(() => undefined);
@@ -380,10 +409,16 @@ export function createUiApi(options: {
 
     async prepareNext() {
       const config = await loadConfig(options.cwd);
-      if (!options.desktop || !config.background.enabled) return { prepared: null, reason: "off" };
+      if (!options.desktop || !config.background.enabled || config.background.prepare === 0) {
+        return { prepared: null, reason: "off" };
+      }
       const queue = (await api.queue({ refresh: false, repos: [], orgs: [] })) as RankedQueue;
       await dropStalePrepared(queue);
-      const next = nextToPrepare(queue, (repo, number) => prepared.get(keyOf(repo, number))?.updatedAt);
+      const next = nextToPrepare(
+        queue,
+        (repo, number) => prepared.get(keyOf(repo, number))?.updatedAt,
+        config.background.prepare,
+      );
       if (!next) return { prepared: null, reason: "up to date" };
       const { pr } = next;
       const llm = await backgroundModelAllowed();

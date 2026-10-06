@@ -3,13 +3,14 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
-import type { ReviewStage } from "@alden/core";
+import type { RankChange, ReviewStage } from "@alden/core";
 import {
   type Briefing,
   BriefingSchema,
   type BriefingTarget,
   BriefingTargetSchema,
   type LocalSetupEvent,
+  type RankRule,
   type ReviewDraft,
   type ReviewDrafts,
   type ReviewEvent as ReviewVerdict,
@@ -18,6 +19,7 @@ import {
 import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
 import { stripControlDeep } from "../render/style.js";
 import type { ModelSetupApi, SetupPage } from "./model-setup.js";
+import type { RankingApi } from "./rank.js";
 
 /** A review request from the UI. `pr` is a URL, owner/repo#123 or a queue number; without it, local changes. */
 export interface ReviewRequest {
@@ -64,6 +66,8 @@ export interface UiApi {
   setModelKey(key: string | null): Promise<unknown>;
   /** "Set up a model": what's available, testing and storing a key, a local model through Ollama (see model-setup.ts). */
   modelSetup: ModelSetupApi;
+  /** Settings → Ranking: your weights and rules (`[queue.rank]`), `background.prepare`, and a preview (see rank.ts). */
+  ranking: RankingApi;
   /** The local clone PR briefings on `repo` ("owner/name") find callers in, or null when there's none. */
   clone(repo: string): Promise<unknown>;
   /** The desktop app's `alden` command: whether it's installed, and installing it. */
@@ -240,6 +244,34 @@ function placeFrom(body: Record<string, unknown>): Pick<DraftInput, "path" | "li
     );
   }
   return { path: body.path, line: body.line, ...(side ? { side } : {}) };
+}
+
+/**
+ * A ranking change from a request: `weights` (numbers, or null for the default), `rules` (a list, checked against the
+ * schema when saved) and `prepare` (a whole number, or null for the default). Anything else is refused.
+ */
+function rankChangeFrom(body: Record<string, unknown>): RankChange {
+  const usage =
+    "Send { weights?: { name: number | null }, rules?: [{ when, then, by?, name? }], prepare?: number | null }.";
+  const known = new Set(["weights", "rules", "prepare"]);
+  if (Object.keys(body).some((k) => !known.has(k))) throw new ApiError(400, usage);
+  const { weights, rules, prepare } = body;
+  if (
+    weights !== undefined &&
+    (typeof weights !== "object" ||
+      weights === null ||
+      Array.isArray(weights) ||
+      Object.values(weights).some((w) => w !== null && typeof w !== "number"))
+  ) {
+    throw new ApiError(400, usage);
+  }
+  if (rules !== undefined && !Array.isArray(rules)) throw new ApiError(400, usage);
+  if (prepare !== undefined && prepare !== null && typeof prepare !== "number") throw new ApiError(400, usage);
+  const change: RankChange = {};
+  if (weights !== undefined) change.weights = weights as NonNullable<RankChange["weights"]>;
+  if (rules !== undefined) change.rules = rules as RankRule[];
+  if (prepare !== undefined) change.prepare = prepare as number | null;
+  return change;
 }
 
 const sameToken = (given: string | undefined, token: string) =>
@@ -471,6 +503,30 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         const page = pages.find((p) => p === body.page);
         if (!page) throw new ApiError(400, "Send { page: keys | cloud | ollama }.");
         send(res, 200, await api.modelSetup.open(page));
+        return;
+      }
+      case "GET /api/rank":
+        send(res, 200, await api.ranking.state());
+        return;
+      case "PUT /api/rank": {
+        const body = await readJsonBody(req);
+        send(res, 200, await api.ranking.save(rankChangeFrom(body)));
+        return;
+      }
+      case "POST /api/rank/preview": {
+        const body = await readJsonBody(req);
+        const { weights, rules } = rankChangeFrom(body);
+        if (weights && Object.values(weights).some((w) => w === null)) {
+          throw new ApiError(400, "A preview takes numbers for weights, not null.");
+        }
+        send(
+          res,
+          200,
+          await api.ranking.preview({
+            ...(weights ? { weights: weights as Record<string, number> } : {}),
+            ...(rules ? { rules } : {}),
+          }),
+        );
         return;
       }
       case "GET /api/clone": {

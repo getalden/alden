@@ -40,6 +40,7 @@ interface QueueCommandOptions {
   label?: string;
   sort?: string;
   search?: string;
+  explain?: boolean;
 }
 
 const SORT_NAMES: Record<QueueSort, string> = {
@@ -95,6 +96,7 @@ export function registerQueueCommand(program: Command): void {
     .option("--search <text>", "only PRs whose title, repo, #number, author or branch has every word")
     .option("--sort <order>", "rank (default), age, waiting, updated or size; within each group")
     .option("--json", "print the ranked queue as JSON (see packages/schema/json)")
+    .option("--explain", "show each PR's score by weight and rule, as [queue.rank] names them")
     .action(async (options: QueueCommandOptions) => {
       const resolved = await resolveToken();
       if (!resolved) program.error("Not signed in. Run `alden auth login`.");
@@ -154,7 +156,7 @@ export function registerQueueCommand(program: Command): void {
         process.stdout.write("No PRs match. Leave out --author, --label or --search to see them all.\n");
         return;
       }
-      process.stdout.write(renderQueue(shown, render));
+      process.stdout.write(renderQueue(shown, { ...render, explain: options.explain ?? false }));
       if (wantsNext(options.json)) {
         process.stdout.write(
           nextLine(queueNext(lastQueue.urls.length), { ...render, width: Math.min(render.width, 100) }),

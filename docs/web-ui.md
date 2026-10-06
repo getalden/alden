@@ -87,8 +87,14 @@ Stop it with Ctrl+C.
   keychain like `alden auth model`; the field is write-only and the page only learns where the key comes from), what
   your queue covers on this machine
   (organisations, repos, and what to leave out; the queue says when it's narrowed), your feedback with a redacted export,
-  usage stats on or off, today's spend by PR, and light, dark or system appearance. In the desktop app, "While you're
-  away" turns [background briefings](desktop.md#while-youre-away) and their use of the model on or off,
+  usage stats on or off, today's spend by PR, and light, dark or system appearance. **Ranking** sets
+  [how the queue ranks](queue.md#your-ranking): a slider per weight (0 to 3 here, off at 0, ×1 the default; Reset puts
+  them all back), your rules (add, edit, delete and reorder; each takes any of a path, label, author, repo, base branch
+  and title, and puts PRs first or last or boosts or lowers them), and "Top 5 with these settings", your current queue
+  re-ranked as you change them, each PR's move against your saved settings beside it. Nothing applies until **Save
+  ranking**; **Discard changes** goes back. Without a queue to rank (signed out, offline) the preview says why. The
+  rules' reasons show on the queue's rows, marked as yours ("↑ your rule: payments/ first"). In the desktop app,
+  "While you're away" turns [background briefings](desktop.md#while-youre-away) and their use of the model on or off,
   "Notifications" turns the sound for "Briefing ready" on or off, and "Command line tool" installs the `alden` command
   if it isn't there.
 - **Sign-in.** When Alden isn't signed in to GitHub, or GitHub no longer accepts its sign-in, the queue offers **Sign in

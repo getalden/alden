@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ScoreLineSchema } from "./rank.js";
 
 /**
  * The review queue as Alden hands it to every front end: the CLI's `--json`, the local UI, the desktop app and the
@@ -66,8 +67,17 @@ export const RankedPullRequestSchema = z.object({
     wait: z.number(),
     blocking: z.number(),
     learned: z.number().optional().describe("points added because you usually open PRs like this first"),
+    rules: z.number().optional().describe("points your boost and lower rules added or took away"),
     total: z.number(),
   }),
+  pinned: z
+    .enum(["first", "last"])
+    .optional()
+    .describe("a rule of yours puts it above (first) or below (last) every PR no rule pins in its lane"),
+  breakdown: z
+    .array(ScoreLineSchema)
+    .optional()
+    .describe("the score by weight and rule, adding up to score.total, as `alden queue --explain` shows it"),
   reasons: z.array(z.string()).describe("short human reasons, heaviest first"),
   waitingHours: z.number().describe("hours since the viewer was asked, or since the PR opened"),
   waitingOnAuthor: z.boolean().describe("CI is failing, so the author has to act before a review is worth it"),

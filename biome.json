@@ -33,5 +33,23 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "packages/schema/src/rank.ts",
+        "packages/core/src/queue/**",
+        "packages/cli/src/ui/rank*.ts",
+        "packages/cli/src/render/queue*.ts",
+        "packages/ui/src/components/RankingSettings*.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noThenProperty": "off"
+          }
+        }
+      }
+    }
+  ]
 }

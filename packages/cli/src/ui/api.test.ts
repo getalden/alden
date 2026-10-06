@@ -26,6 +26,16 @@ describe("nextToPrepare", () => {
   });
 });
 
+describe("nextToPrepare and background.prepare", () => {
+  it("keeps as many of the top PRs briefed as you ask, in the ranked order", () => {
+    const q = queue(row(1), row(2), row(3), row(4), row(5));
+    const done = (_: string, n: number) => (n <= 3 ? "2026-10-01T00:00:00Z" : undefined);
+    expect(nextToPrepare(q, done)).toBeUndefined();
+    expect(nextToPrepare(q, done, 5)?.pr.number).toBe(4);
+    expect(nextToPrepare(q, () => undefined, 0)).toBeUndefined();
+  });
+});
+
 describe("feedback through the UI's API", () => {
   it("says how close each useful or not useful brought a lesson", async () => {
     const { mkdtempSync, rmSync } = await import("node:fs");

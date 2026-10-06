@@ -72,6 +72,7 @@ terminal, and never on standard output, so scripts reading the queue get only th
 | `--search <text>` | Only PRs whose title, repo, `#number`, author or branch names contain every word. |
 | `--sort <order>` | `rank` (the default), `age` (open longest first), `waiting` (waited on you longest first), `updated` (most recent first) or `size` (smallest first). Sorts inside Needs you and Fast-track separately. |
 | `--json` | Print the ranked queue as JSON. Schema: `packages/schema/json/ranked-queue.v1.json`. With the flags above, only what they leave. |
+| `--explain` | Under each row, its score by weight and rule, named as `[queue.rank]` names them: `score 6: waiting +3 · risk +2 · ↑ your rule: payments/ first`. See [Your ranking](queue.md#your-ranking). |
 
 With `--author`, `--label`, `--search` or `--sort`, a line above the table says what's shown ("12 of 144 PRs: label
 db"), and `alden open` and `alden review` take the numbers as shown.

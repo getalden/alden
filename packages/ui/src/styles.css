@@ -2365,3 +2365,134 @@ details > summary {
     color: var(--ink);
   }
 }
+
+/* Settings → Ranking: weights, rules, how many to keep briefed, and the live top 5. */
+.section-head.sep {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.rank-weights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rank-weights li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 200px) 44px;
+  gap: 12px;
+  align-items: center;
+}
+.rank-weight-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font: 600 13px var(--font-ui);
+  color: var(--ink);
+}
+.rank-weight-name .help {
+  font: 500 12px var(--font-ui);
+  color: var(--ink3);
+}
+.rank-weights input[type="range"] {
+  width: 100%;
+  accent-color: var(--acc);
+}
+.rank-weight-value {
+  font-size: 12px;
+  text-align: right;
+}
+.rank-rules {
+  margin: 0;
+  padding: 0 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rank-rule {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rank-rule-text {
+  font: 500 13px var(--font-mono);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.rank-rule-actions {
+  display: flex;
+  gap: 4px;
+}
+.rank-rule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--sunk);
+}
+.rank-stepper {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.rank-stepper .input {
+  width: 64px;
+  text-align: center;
+}
+.rank-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rank-preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rank-preview-list li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+}
+.rank-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.rank-preview-title {
+  font: 600 13px var(--font-ui);
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.rank-preview-title:hover {
+  text-decoration: underline;
+}
+.rank-moved {
+  color: var(--acc);
+  white-space: nowrap;
+}
+.chip.rule {
+  color: var(--acc);
+  background: var(--acc-soft);
+}
+@media (max-width: 560px) {
+  .rank-weights li {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+  .rank-weights input[type="range"] {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

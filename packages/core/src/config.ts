@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { type AldenConfig, AldenConfigSchema } from "@alden/schema";
+import { type AldenConfig, AldenConfigSchema, RANK_WEIGHTS, type RankRule, type RankWeight } from "@alden/schema";
 import { parse, stringify } from "smol-toml";
 import { z } from "zod";
 
@@ -44,6 +44,7 @@ const USER_ONLY = [
   ["queue", "orgs"],
   ["queue", "repos"],
   ["queue", "ignore"],
+  ["queue", "rank"],
   ["clones", "folders"],
   ["notifications", "sound"],
 ] as const;
@@ -166,4 +167,54 @@ export async function backgroundModelAllowed(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** A change to how you rank the queue. A weight of null (or 1, the default) and an empty rule list are removed. */
+export interface RankChange {
+  weights?: Partial<Record<RankWeight, number | null>>;
+  rules?: RankRule[];
+  /** `background.prepare`: how many top PRs to keep briefed. null removes it, so the default (3) applies. */
+  prepare?: number | null;
+}
+
+/**
+ * Writes `[queue.rank]` (and `background.prepare`) to your user config, rejecting anything the schema would refuse,
+ * so the file only ever holds what differs from the defaults.
+ */
+export async function setRankSettings(change: RankChange): Promise<void> {
+  const path = userConfigPath();
+  const table = await readToml(path);
+  const queue = isTable(table.queue) ? table.queue : {};
+  const rank = isTable(queue.rank) ? queue.rank : {};
+  for (const [name, value] of Object.entries(change.weights ?? {})) {
+    if (!(RANK_WEIGHTS as readonly string[]).includes(name)) throw new Error(`Unknown ranking weight: ${name}`);
+    if (value === null || value === 1) delete rank[name];
+    else rank[name] = value;
+  }
+  if (change.rules !== undefined) {
+    if (change.rules.length === 0) delete rank.rules;
+    // Only the fields a rule has: no undefined values for TOML to trip on.
+    else rank.rules = JSON.parse(JSON.stringify(change.rules)) as unknown;
+  }
+  if (Object.keys(rank).length > 0) queue.rank = rank;
+  else delete queue.rank;
+  if (Object.keys(queue).length > 0) table.queue = queue;
+  else delete table.queue;
+
+  if (change.prepare !== undefined) {
+    const background = isTable(table.background) ? table.background : {};
+    if (change.prepare === null) delete background.prepare;
+    else background.prepare = change.prepare;
+    if (Object.keys(background).length > 0) table.background = background;
+    else delete table.background;
+  }
+
+  const result = AldenConfigSchema.safeParse(table);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const where = issue?.path.join(".") ?? "";
+    throw new Error(`Invalid ranking setting${where ? ` (${where})` : ""}: ${issue?.message ?? "rejected by schema"}`);
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, stringify(table), "utf8");
 }
