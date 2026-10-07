@@ -235,6 +235,8 @@ or `--repo owner/name`. `--json` prints the items. Every subcommand also takes `
 | --- | --- |
 | `alden memory add <text>` | Adds a note; the model gets it with every review of the repo. |
 | `alden memory edit <id> <text>` | Changes a note's text. |
+| `alden memory exclude <id> <path>` | Stops applying a note to a folder (`app/api`) or file. `alden memory` lists where each note is stopped. |
+| `alden memory include <id> <path>` | Applies a note there again. |
 | `alden memory forget <id>` | Forgets a note or a learned item, by the id `alden memory` shows. |
 | `alden memory forget --all` | Forgets everything in this repo. |
 | `alden memory restore <id>` | Takes back a forget. |

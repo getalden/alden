@@ -1293,6 +1293,34 @@ textarea.input {
   font: 500 12px / 1.4 var(--font-mono);
   color: var(--acc);
 }
+/* A model finding that came from one of your notes. */
+.from-note {
+  font: 500 12px / 1.4 var(--font-mono);
+  color: var(--acc);
+}
+/* After "Not useful" on one: stop applying the note to the finding's area, or edit it. */
+.note-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font: 500 12px / 1.4 var(--font-ui);
+  color: var(--ink2);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.note-offer-edit {
+  display: flex;
+  flex: 1 1 100%;
+  gap: 6px;
+  align-items: center;
+}
+.note-offer-edit .input {
+  flex: 1;
+  min-width: 0;
+}
 .verdicts {
   display: flex;
   gap: 6px;
@@ -2651,6 +2679,7 @@ details > summary {
       .link-button,
       .guided-start,
       .verdicts,
+      .note-offer,
       .comment-slot,
       .comments-drawer,
       .missed,

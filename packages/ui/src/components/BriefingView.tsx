@@ -3,6 +3,7 @@ import type {
   Briefing,
   CheckResult,
   FeedbackItem,
+  FromNote,
   LlmFinding,
   LlmSection,
   LookHere,
@@ -10,7 +11,7 @@ import type {
 } from "@alden/schema";
 import { type FormEvent, useContext, useEffect, useState } from "react";
 import type { BriefingComments, CommentPlace } from "../drafts";
-import type { BriefingFeedback, Verdict } from "../feedback";
+import { type BriefingFeedback, noteArea, type Verdict } from "../feedback";
 import { formatUsd, plural, prFileUrl } from "../format";
 import { onLinkClick, routePath } from "../router";
 import { CommentSlot, placeAttrs, useReviewActions } from "./Comments";
@@ -108,6 +109,7 @@ export function eyesItem(item: LookHere, checks: CheckResult[]): FeedbackItem {
     ...(severity ? { severity } : {}),
     ...(item.anchor ? { anchor: item.anchor } : {}),
     placement: "eyes",
+    ...(item.fromNote ? { note: item.fromNote.id } : {}),
   };
 }
 
@@ -119,7 +121,111 @@ export function findingItem(finding: LlmFinding): FeedbackItem {
     severity: finding.severity,
     ...(finding.anchors[0] ? { anchor: finding.anchors[0] } : {}),
     placement: "finding",
+    ...(finding.fromNote ? { note: finding.fromNote.id } : {}),
   };
+}
+
+/** A model finding that came from one of your notes says so. */
+export function FromNoteLine({ note }: { note: FromNote }) {
+  return <span className="from-note">Because of your note: {note.text}</span>;
+}
+
+/**
+ * After "Not useful" on a finding from one of your notes: stop applying the note to the finding's area, or edit the
+ * note. Without either, the reaction is recorded and changes nothing.
+ */
+export function NoteOffer({
+  item,
+  note,
+  feedback,
+}: {
+  item: FeedbackItem;
+  note: FromNote;
+  feedback: BriefingFeedback;
+}) {
+  const [state, setState] = useState<"ask" | "editing" | "stopped" | "edited">("ask");
+  const [text, setText] = useState(note.text);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const change = feedback.changeNote;
+  if (!change || feedback.verdictOf(item) !== "not_needed") return null;
+  const area = item.anchor ? noteArea(item.anchor.path) : undefined;
+  const run = async (next: typeof state, request: Parameters<typeof change>[0]) => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await change(request);
+      setState(next);
+    } catch (e) {
+      setError(`Couldn't change the note: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <fieldset className="note-offer" aria-label="What to do with your note">
+      {state === "ask" && (
+        <>
+          {area && <span>Stop applying this note to {area}?</span>}
+          {area && (
+            <button
+              type="button"
+              className="btn xs"
+              disabled={busy}
+              onClick={() => run("stopped", { action: "exclude", id: note.id, path: area })}
+            >
+              Stop applying
+            </button>
+          )}
+          <button type="button" className="btn xs quiet" disabled={busy} onClick={() => setState("editing")}>
+            Edit the note
+          </button>
+        </>
+      )}
+      {state === "editing" && (
+        <form
+          className="note-offer-edit"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (text.trim()) void run("edited", { action: "edit", id: note.id, text: text.trim() });
+          }}
+        >
+          <input
+            className="input"
+            aria-label="Edit your note"
+            maxLength={500}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <button type="submit" className="btn xs" disabled={busy || !text.trim()}>
+            Save
+          </button>
+          <button type="button" className="btn xs quiet" onClick={() => setState("ask")}>
+            Cancel
+          </button>
+        </form>
+      )}
+      {state === "stopped" && area && (
+        <>
+          <span role="status">This note no longer applies under {area}.</span>
+          <button
+            type="button"
+            className="btn xs quiet"
+            disabled={busy}
+            onClick={() => run("ask", { action: "include", id: note.id, path: area })}
+          >
+            Undo
+          </button>
+        </>
+      )}
+      {state === "edited" && <span role="status">Note updated. Reviews from now on use the new text.</span>}
+      {error && (
+        <span className="error-text" role="alert">
+          {error}
+        </span>
+      )}
+    </fieldset>
+  );
 }
 
 function checkItem(check: CheckResult): FeedbackItem {
@@ -463,7 +569,11 @@ export function BriefingView({
                         </span>
                       )}
                       {item.learned && <span className="learned-why">↑ {item.learned}</span>}
+                      {item.fromNote && <FromNoteLine note={item.fromNote} />}
                       {feedback && <Verdicts item={fbItem} feedback={feedback} />}
+                      {feedback && item.fromNote && (
+                        <NoteOffer item={fbItem} note={item.fromNote} feedback={feedback} />
+                      )}
                       {slot(item.anchor)}
                     </div>
                   </li>
@@ -491,6 +601,10 @@ export function BriefingView({
                     <span>
                       <strong>{f.title}.</strong> <span className="muted">{f.detail}</span>
                     </span>
+                    {f.fromNote && <FromNoteLine note={f.fromNote} />}
+                    {feedback && f.fromNote && (
+                      <NoteOffer item={findingItem(f)} note={f.fromNote} feedback={feedback} />
+                    )}
                     {f.anchors.map((a) => (
                       <Place key={anchorKey(a)} anchor={a} links={links} />
                     ))}

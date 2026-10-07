@@ -115,7 +115,10 @@ The briefing follows the CLI's order. See [Briefings and checks](checks.md) for 
 - **What the model says**, when it was asked: what the change does, whether it matches its title, and its findings.
 
 Each place, finding and flagged check has **Useful** and **Not useful**, which teach Alden what you look for, and
-**Dismiss**, which hides one place on this PR. **You missed something** tells Alden what it should have flagged.
+**Dismiss**, which hides one place on this PR. A model finding raised because of one of your notes says "Because of
+your note: …". Useful on it confirms the note; after Not useful, it offers **Stop applying this note to app/api?**
+(**Stop applying**, then **Undo**) and **Edit the note**, and without either nothing changes. See
+[Findings from your notes](memory.md#findings-from-your-notes). **You missed something** tells Alden what it should have flagged.
 "Shaped by your feedback" says what your feedback changed in this briefing.
 
 ### Model, effort and callers
@@ -203,7 +206,8 @@ Alden's order. Each step shows:
 - **Useful**, **Not useful** and **Dismiss**, as in the briefing, and **Comment**, which opens the Comments drawer's
   editor at that place.
 
-After Alden's places, the model's other findings that point at code follow as extra steps, with **Comment** too.
+After Alden's places, the model's other findings that point at code follow as extra steps, with **Comment** too. A
+step from one of your notes says "Because of your note: …" and has the same offer after Not useful.
 
 `n` and `p` move between steps. `Esc` leaves, and **Resume guided review at step 3** takes you back there while the
 window is open. The last step offers **Finish: review your comments**, which opens the drawer at the review body.
@@ -286,7 +290,8 @@ before you open a PR. It has the same toolbar, Diff tab and guided review as a P
 ## Memory
 
 **Memory** lists each repo Alden knows about, then what you look for and what you skip there. Each item says where it
-came from and what it changes, with **Edit** (for notes), **Forget** and **Undo**. A switch pauses learning, and
+came from and what it changes, with **Edit** (for notes), **Forget** and **Undo**. A note says how many reviews
+confirmed it ("confirmed 3×") and has **Apply under app/api again** for each place you stopped it. A switch pauses learning, and
 **Tell Alden something** adds a note ("Money is in cents, never floats"). See [Learning and memory](memory.md).
 
 ## Stats
