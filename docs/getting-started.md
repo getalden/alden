@@ -84,7 +84,7 @@ See [Briefings and checks](checks.md).
 alden ui
 ```
 
-The queue, briefings, your feedback and what Alden learned, in a local web page. See [The web UI](web-ui.md).
+The queue, briefings, your feedback and what Alden learned, in a local web page. See [Alden in your browser](web-ui.md).
 
 ## Add a model (optional)
 

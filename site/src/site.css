@@ -977,6 +977,17 @@ h2.huge {
 .prose li {
   margin: 4px 0;
 }
+.prose .shot {
+  display: block;
+  margin: 8px 0 20px;
+}
+.prose .shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+}
 
 @media (max-width: 600px) {
   .top nav .mono {

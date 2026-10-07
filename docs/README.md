@@ -12,8 +12,8 @@ sign-in and your own model account.
 
 - [Getting started](getting-started.md): install, sign in, and your first queue and review.
 - [Commands](commands.md): every command and flag.
-- [The web UI](web-ui.md): `alden ui`, its views, keyboard and security.
-- [The desktop app](desktop.md): Alden in a window and the macOS menu bar.
+- [Alden in your browser](web-ui.md): `alden ui`, a guide to the queue, briefings, the diff and sending a review.
+- [The desktop app](desktop.md): Alden in a window and the macOS menu bar, with briefings ready while you're away.
 - [Claude Code plugin](claude-code.md): `/alden:review` and your queue in Claude Code.
 - [Alden in your AI coding tool](mcp.md): `alden mcp` for Claude Code, Cursor and other MCP clients.
 - [The review queue](queue.md): how PRs are ranked, and what "fast-track" means.

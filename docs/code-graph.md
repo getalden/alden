@@ -152,7 +152,7 @@ the PR on top of the latest base.
   graph saw (`baseSha`, the merge's first parent), where callers came from (`graphFrom`: `merge` or `head`) and when
   it was made. `alden review` ends with "Callers from main at abc1234 + this PR".
 - **Stale briefings.** Comparing those with the PR now takes one GitHub request: a new push makes a briefing stale,
-  and so do new commits on the base for a graph from the merge. The [web UI](web-ui.md#views) says "main has 4 new
+  and so do new commits on the base for a graph from the merge. The [web UI](web-ui.md#when-it-was-briefed-and-re-brief) says "main has 4 new
   commits since · Re-brief", and the [desktop app](desktop.md#while-youre-away) prepares a fresh briefing instead of
   showing a stale one.
 

@@ -175,7 +175,7 @@ else in Alden posts to GitHub. See [Comments and sending a review](comments.md#s
 ## alden ui
 
 Opens the queue and briefings in your browser, served on 127.0.0.1 only until you stop it. See
-[The web UI](web-ui.md).
+[Alden in your browser](web-ui.md).
 
 | Flag | What it does |
 | --- | --- |

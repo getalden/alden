@@ -16,7 +16,7 @@ Narrow the queue with `--repo` and `--org`.
 first). These work on the ranked queue: ranking doesn't change, sorting happens inside Needs you and Fast-track
 separately, and a line above the table says what's narrowed ("12 of 144 PRs: author bots"). `alden open 3` and
 `alden review 3` take the numbers as shown. The web UI has the same search, filters and sort, and more (assignee, how
-you were asked, CI, age, drafts); see [The web UI](web-ui.md#views).
+you were asked, CI, age, drafts); see [Search, filters and sort](web-ui.md#search-filters-and-sort).
 
 Every PR's facts include its **assignees** (up to 10), read in the same request as the rest of its details: one more
 small field per PR, no extra request. Queues cached before Alden read assignees are fetched again once.
