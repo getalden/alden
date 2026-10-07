@@ -92,6 +92,7 @@ export {
   restore,
   setLearning,
 } from "./learn/learn.js";
+export { recordSeen, SEEN_KEEP_DAYS, SEEN_KEEP_PRS, type SeenPlace, seenPlaces } from "./learn/seen.js";
 export { AnthropicProvider, type MessagesClient, supportsEffort, toLlmError } from "./llm/anthropic.js";
 export {
   affordableInputTokens,
@@ -271,7 +272,7 @@ export {
   weekOf,
 } from "./stats/stats.js";
 export { UsageLog } from "./stats/usage.js";
-export { AldenStore, closeStores, openStore } from "./store/db.js";
+export { AldenStore, closeStores, MIGRATION_COUNT, openStore } from "./store/db.js";
 export { queueEvent, reviewEvent, statsEvent } from "./telemetry/events.js";
 export {
   type Consent,

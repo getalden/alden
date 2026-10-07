@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FeedbackLog } from "../feedback/log.js";
 import { buildPrompt } from "../review/llm/prompt.js";
 import { pickWithLearning } from "../review/pick.js";
-import { AldenStore, openStore } from "../store/db.js";
+import { AldenStore, MIGRATION_COUNT, openStore } from "../store/db.js";
 import {
   addNote,
   checkProgress,
@@ -219,7 +219,7 @@ describe("the store, memory and opens", () => {
   it("migrates once and survives reopening", () => {
     store.close();
     const again = AldenStore.open(join(dir, "alden.db"));
-    expect(again.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(5);
+    expect(again.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(MIGRATION_COUNT);
     expect(again.get<{ journal_mode: string }>("PRAGMA journal_mode")?.journal_mode).toBe("wal");
     again.close();
     store = openStore(join(dir, "alden.db"));

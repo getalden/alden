@@ -108,7 +108,30 @@ const MIGRATIONS: ((store: AldenStore) => void)[] = [
       ALTER TABLE drafts ADD COLUMN link_to TEXT;
     `);
   },
+  (store) => {
+    store.exec(`
+      -- The places Alden flagged that you actually saw (a guided step shown for 1.5 s, an E1 marker on screen for
+      -- 1.5 s), so a review that approves without a word on one can count as a quiet "not worth my time". One row per
+      -- PR, head and place; place_key is "checkId|path|line". Kept 90 days and for the last 200 PRs. Never synced or
+      -- exported.
+      CREATE TABLE IF NOT EXISTS seen_places (
+        pr_key TEXT NOT NULL,
+        head_sha TEXT NOT NULL,
+        place_key TEXT NOT NULL,
+        check_id TEXT,
+        path TEXT NOT NULL,
+        line INTEGER,
+        how TEXT NOT NULL,
+        seen_at TEXT NOT NULL,
+        PRIMARY KEY (pr_key, head_sha, place_key)
+      );
+      CREATE INDEX IF NOT EXISTS seen_places_by_time ON seen_places (seen_at);
+    `);
+  },
 ];
+
+/** How many schema changes there are: the database's `user_version` once it's up to date. */
+export const MIGRATION_COUNT = MIGRATIONS.length;
 
 /** The JSON files Alden kept before the database, read once into it. */
 const LEGACY = ["feedback", "spend", "usage.json"];
