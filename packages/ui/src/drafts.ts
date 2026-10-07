@@ -1,8 +1,8 @@
 import type {
   ReviewDraft as BaseDraft,
   ReviewDrafts as BaseDrafts,
+  SendReviewResult as BaseSendResult,
   ReviewEvent,
-  SendReviewResult,
   UnaddressedPlace,
 } from "@alden/schema";
 import { linkLines, noteText } from "@alden/schema/note-text";
@@ -16,7 +16,12 @@ import type { Api } from "./api";
 
 /** A draft, with its line range, suggested change and the lines it was placed on (from the schema). */
 export type ReviewDraft = BaseDraft;
-export type { ReviewEvent, SendReviewResult };
+export type { ReviewEvent };
+/**
+ * What sending a review answers, and (from engines that learn from reviews) what Alden learned from it, e.g. "you care
+ * about callers flags (2 of 3)". Mirrors the engine's optional `learned`.
+ */
+export type SendReviewResult = BaseSendResult & { learned?: string[] | undefined };
 export type Unaddressed = UnaddressedPlace;
 export type DraftsResponse = BaseDrafts;
 

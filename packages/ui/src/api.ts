@@ -24,10 +24,24 @@ import type {
   ReviewEvent as ReviewVerdict,
   SendReviewResult,
 } from "./drafts";
+import type { SeenBatch } from "./seen";
+
+/**
+ * Where a learned item came from: a review you sent, a reaction in the queue, how a PR turned out, a PR you opened.
+ * Mirrors the engine's optional `sources` on memory items; older engines leave it out.
+ */
+export interface MemorySource {
+  kind: "reaction" | "review" | "outcome" | "open";
+  /** "owner/repo#12" */
+  pr?: string;
+  at: string;
+}
+
+export type MemoryEntry = MemoryItem & { sources?: MemorySource[] | undefined };
 
 export interface Memory {
   repo: string;
-  items: MemoryItem[];
+  items: MemoryEntry[];
   paused: boolean;
   /** Where it's kept, e.g. ~/.alden/alden.db. */
   path: string;
@@ -118,6 +132,8 @@ export interface Session {
   background?: { enabled: boolean; model: boolean };
   /** Whether the desktop app's "Briefing ready" notification plays a sound (`notifications.sound`). */
   notifications?: { sound: boolean };
+  /** Whether Alden learns from the reviews you send (`learning.fromReviews`, on unless you turn it off). */
+  learning?: { fromReviews: boolean };
 }
 
 /** Why there's no GitHub sign-in: the keychain refused (an unsigned build of the app), or there's none anywhere. */
@@ -368,6 +384,10 @@ export class Api {
    * a PR's diff per head commit, so asking again costs it one GitHub request.
    */
   diff = (pr?: string) => this.request<PrDiff>(`/api/diff${pr ? `?pr=${encodeURIComponent(pr)}` : ""}`);
+
+  /** The flagged places you saw in a PR, at the head its briefing is of. Kept on this machine by the local API. */
+  recordSeen = (batch: SeenBatch) =>
+    this.request<{ recorded: number }>("/api/seen", { method: "POST", body: JSON.stringify(batch) });
 
   /** Posts every draft on the PR to GitHub as one review. Only ever called from the Send you confirmed. */
   sendReview = (review: { pr: string; event: ReviewVerdict; body?: string }) =>

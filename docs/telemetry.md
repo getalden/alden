@@ -46,8 +46,8 @@ through `alden mcp`), Node or the standalone binary, the OS and CPU type, and ho
 ran.
 
 **Never sent:** code, diffs, PR titles or descriptions, file paths, repo names, user names, your notes, your comments,
-model output, tokens or keys. A repo appears only as a hash salted with a random value that never leaves your machine, so we can
-count repos but can't work out which ones they are.
+which places you saw, model output, tokens or keys. A repo appears only as a hash salted with a random value that never
+leaves your machine, so we can count repos but can't work out which ones they are.
 
 ## Where it goes
 

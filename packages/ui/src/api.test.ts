@@ -112,3 +112,20 @@ describe("Api.diff", () => {
     expect(new URLSearchParams(seen[0]?.url.split("?")[1]).get("pr")).toBe("acme/api#12");
   });
 });
+
+describe("Api.recordSeen", () => {
+  it("posts the places you saw to the local API, with the session token", async () => {
+    const requests: { url: string; init: RequestInit }[] = [];
+    const api = new Api("tok", async (url, init) => {
+      requests.push({ url: String(url), init: init ?? {} });
+      return new Response(JSON.stringify({ recorded: 1 }), { status: 200 });
+    });
+    const batch = { pr: "acme/api#1", headSha: "abc1234", places: [{ path: "a.ts", line: 3, how: "diff" as const }] };
+    expect(await api.recordSeen(batch)).toEqual({ recorded: 1 });
+    const [sent] = requests;
+    expect(sent?.url).toBe("/api/seen");
+    expect(sent?.init.method).toBe("POST");
+    expect(JSON.parse(String(sent?.init.body))).toEqual(batch);
+    expect(new Headers(sent?.init.headers).get("X-Alden-Token")).toBe("tok");
+  });
+});

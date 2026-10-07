@@ -1,6 +1,5 @@
-import type { MemoryItem } from "@alden/schema";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import type { Api, Memory, MemoryRepo, Session } from "../api";
+import type { Api, Memory, MemoryEntry, MemoryRepo, MemorySource, Session } from "../api";
 import { plural } from "../format";
 import { Switch } from "./ReviewOptions";
 import { StateCard } from "./StateCard";
@@ -20,6 +19,37 @@ const since = (iso: string) => {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 };
 
+/** How many of a learned item's sources to list before "and N more". */
+const SOURCES_SHOWN = 3;
+
+const FROM: Record<MemorySource["kind"], [withPr: string, without: string]> = {
+  review: ["from your review of", "from a review you sent"],
+  reaction: ["from your reaction to", "from a reaction in your queue"],
+  outcome: ["from how it went with", "from how a PR turned out"],
+  open: ["from opening", "from a PR you opened"],
+};
+
+/** Where a learned item came from, newest first: "from your review of acme/shop#412, Oct 8", then "and 4 more". */
+export function MemorySources({ sources }: { sources: MemorySource[] | undefined }) {
+  if (!sources || sources.length === 0) return null;
+  const newest = [...sources].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  const more = newest.length - SOURCES_SHOWN;
+  return (
+    <ul className="mem-sources visually-plain" aria-label="Where it came from">
+      {newest.slice(0, SOURCES_SHOWN).map((source, i) => {
+        const [withPr, without] = FROM[source.kind] ?? FROM.review;
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: two sources can share a PR, kind and time.
+          <li key={i}>
+            {source.pr ? `${withPr} ${source.pr}` : without}, {since(source.at)}
+          </li>
+        );
+      })}
+      {more > 0 && <li>and {more} more</li>}
+    </ul>
+  );
+}
+
 /**
  * What Alden knows about you, per repo: what you look for and what you skip, each with where it came from and what it
  * changes. Notes can be edited; anything can be forgotten (and the forget undone); learning can be paused.
@@ -30,7 +60,7 @@ export function MemoryView({ api, session }: { api: Api; session: Session }) {
   const [memory, setMemory] = useState<Memory>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const [forgotten, setForgotten] = useState<Record<string, MemoryItem>>({});
+  const [forgotten, setForgotten] = useState<Record<string, MemoryEntry>>({});
   const [editing, setEditing] = useState<{ id: string; text: string }>();
   const [note, setNote] = useState("");
   const [confirmAll, setConfirmAll] = useState(false);
@@ -73,10 +103,10 @@ export function MemoryView({ api, session }: { api: Api; session: Session }) {
     }
   }
 
-  const forget = async (item: MemoryItem) => {
+  const forget = async (item: MemoryEntry) => {
     if (await act(() => api.forgetMemory(item.id, repo))) setForgotten((f) => ({ ...f, [item.id]: item }));
   };
-  const undo = async (item: MemoryItem) => {
+  const undo = async (item: MemoryEntry) => {
     if (await act(() => api.changeMemory({ action: "restore", id: item.id }, repo))) {
       setForgotten(({ [item.id]: _, ...rest }) => rest);
     }
@@ -248,6 +278,7 @@ export function MemoryView({ api, session }: { api: Api; session: Session }) {
                                 {item.examples !== undefined && <span>· {plural(item.examples, "example")}</span>}
                                 {item.confirmed !== undefined && <span>· confirmed {item.confirmed}×</span>}
                               </span>
+                              {item.source === "learned" && <MemorySources sources={item.sources} />}
                               {!gone && item.excluded && item.excluded.length > 0 && (
                                 <span className="meta">
                                   {item.excluded.map((path) => (

@@ -165,6 +165,10 @@ const api: UiApi = {
       ],
     };
   },
+  recordSeen: async (input) => {
+    calls.push({ method: "recordSeen", args: input });
+    return { recorded: input.places.length };
+  },
   sendReview: async (input) => {
     calls.push({ method: "sendReview", args: input });
     if (input.pr === "a/b#403") throw new ApiError(403, "Your GitHub sign-in can't write reviews on a/b.");
@@ -618,6 +622,35 @@ describe("alden ui server", () => {
     expect((await call("/api/telemetry", { method: "PUT", headers: authed, body: { on: "yes" } })).status).toBe(400);
     await call("/api/telemetry", { method: "PUT", headers: authed, body: { on: true } });
     expect(calls.at(-1)).toEqual({ method: "setTelemetry", args: true });
+  });
+
+  it("records the places you saw, checking the body and keeping it small", async () => {
+    const post = (body: unknown, headers: Record<string, string> = authed) =>
+      call("/api/seen", { method: "POST", headers, body });
+    const place = { checkId: "callers.outside", path: "src/pay.ts", line: 12, how: "guided" };
+    expect((await post({ pr: "acme/shop#412", headSha: "abc1234", places: [place] }, {})).status).toBe(401);
+    const ok = await post({ pr: "acme/shop#412", headSha: "abc1234", places: [place, { path: "a.ts", how: "diff" }] });
+    expect([ok.status, JSON.parse(ok.text)]).toEqual([200, { recorded: 2 }]);
+    expect(calls).toEqual([
+      {
+        method: "recordSeen",
+        args: { pr: "acme/shop#412", headSha: "abc1234", places: [place, { path: "a.ts", how: "diff" }] },
+      },
+    ]);
+    const bad = [
+      { pr: "acme/shop", headSha: "abc1234", places: [place] },
+      { pr: "acme/shop#1", headSha: "not a sha", places: [place] },
+      { pr: "acme/shop#1", headSha: "abc1234", places: [] },
+      { pr: "acme/shop#1", headSha: "abc1234", places: [{ ...place, how: "glanced" }] },
+      { pr: "acme/shop#1", headSha: "abc1234", places: [{ ...place, line: 0 }] },
+      { pr: "acme/shop#1", headSha: "abc1234", places: [{ ...place, path: "" }] },
+      { pr: "acme/shop#1", headSha: "abc1234", places: [{ ...place, checkId: "<script>" }] },
+      { pr: "acme/shop#1", headSha: "abc1234", places: Array.from({ length: 51 }, () => place) },
+    ];
+    for (const body of bad) expect((await post(body)).status).toBe(400);
+    const big = { pr: "acme/shop#1", headSha: "abc1234", places: [{ path: "x".repeat(20_000), how: "diff" }] };
+    expect((await post(big)).status).toBe(413);
+    expect(calls).toHaveLength(1);
   });
 
   it("serves the UI without a token, the app for unknown paths, and nothing outside its folder", async () => {

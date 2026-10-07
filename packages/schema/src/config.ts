@@ -77,6 +77,15 @@ export const AldenConfigSchema = z.object({
       sound: z.boolean().default(true),
     })
     .prefault({}),
+  learning: z
+    .object({
+      /**
+       * Whether Alden learns from the reviews you send: a place you saw and approved without a word on counts as a
+       * quiet "not worth my time". Off, Alden also stops noting which places you saw. Read from your user config only.
+       */
+      fromReviews: z.boolean().default(true),
+    })
+    .prefault({}),
   updates: z
     .object({
       /** Whether `alden --version` and `alden doctor` say when a newer Alden exists (checked at most once a day). */

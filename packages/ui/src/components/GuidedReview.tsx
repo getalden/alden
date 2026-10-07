@@ -14,6 +14,7 @@ import {
   savedProgress,
   saveProgress,
 } from "../guided";
+import { onScreen, useRecordSeen, useSeenAfter } from "../seen";
 import { eyesItem, FromNoteLine, findingItem, NoteOffer, Verdicts } from "./BriefingView";
 import { CodeExcerpt } from "./CodeExcerpt";
 import { typing } from "./Comments";
@@ -109,6 +110,26 @@ export function GuidedReview({ briefing, feedback, loadDiff, onComment, onFinish
   }, [steps.length]);
 
   const diff = useDiff(briefing, active ? loadDiff : undefined);
+
+  // A step you've had in front of you for 1.5 s counts as seen: its place, at the head commit the briefing is of. Only
+  // for a PR's places (never your local changes), and only steps with a place in the code.
+  const record = useRecordSeen();
+  const briefed = briefing.target.kind === "pr" ? briefing.target : undefined;
+  const shown = active ? steps[step] : undefined;
+  const seenPr = briefed?.headSha ? { pr: `${briefed.repo}#${briefed.number}`, headSha: briefed.headSha } : undefined;
+  useSeenAfter(
+    record && seenPr && shown?.anchor ? `${seenPr.headSha}|${shown.key}` : undefined,
+    () => onScreen(heading.current),
+    () => {
+      if (!record || !seenPr || !shown?.anchor) return;
+      record(seenPr.pr, seenPr.headSha, {
+        ...(shown.checkId ? { checkId: shown.checkId } : {}),
+        path: shown.anchor.path,
+        ...(shown.anchor.line !== undefined ? { line: shown.anchor.line } : {}),
+        how: "guided",
+      });
+    },
+  );
 
   if (steps.length === 0) return <>{children}</>;
   if (!active) {

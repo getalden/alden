@@ -184,6 +184,9 @@ Once a PR is briefed, **Diff** (or `d`) shows the code itself, so you don't have
 - On a PR, **+** beside a line starts a comment on it in the Comments drawer. Shift-click a second line, or drag, for
   a range on the same side of one hunk.
 
+A marker that's been on screen for 1.5 seconds counts as a place you saw, which Alden learns from when you send your
+review: see [Places you saw](memory.md#places-you-saw).
+
 For a PR, the diff is the PR's latest push. If that's newer than the briefing, a line above the diff says so, since
 places may have moved. For **My changes**, it's your uncommitted changes, as the briefing read them.
 
@@ -212,6 +215,9 @@ step from one of your notes says "Because of your note: …" and has the same of
 `n` and `p` move between steps. `Esc` leaves, and **Resume guided review at step 3** takes you back there while the
 window is open. The last step offers **Finish: review your comments**, which opens the drawer at the review body.
 For **My changes**, guided review shows the places and their files to look at, without the code.
+
+On a PR, a step that's been in front of you for 1.5 seconds counts as a place you saw, which Alden learns from when you
+send your review: see [Places you saw](memory.md#places-you-saw). Nothing about it leaves your machine.
 
 ## Comments and sending a review
 
@@ -280,7 +286,8 @@ comment with its file, line and suggestion. Before **Approve**, it also lists th
 comment on.
 
 Only the button in the summary sends it; **Back** returns to your drafts. Afterwards the drawer says "Sent to GitHub",
-with a link to the review. If GitHub refuses, it shows why and keeps your drafts.
+with a link to the review, and, when Alden learned something from it, one line under that: "Alden learned: you care
+about callers flags (2 of 3)". If GitHub refuses, it shows why and keeps your drafts.
 
 ## My changes
 
@@ -291,7 +298,8 @@ before you open a PR. It has the same toolbar, Diff tab and guided review as a P
 
 **Memory** lists each repo Alden knows about, then what you look for and what you skip there. Each item says where it
 came from and what it changes, with **Edit** (for notes), **Forget** and **Undo**. A note says how many reviews
-confirmed it ("confirmed 3×") and has **Apply under app/api again** for each place you stopped it. A switch pauses learning, and
+confirmed it ("confirmed 3×") and has **Apply under app/api again** for each place you stopped it. A learned item lists what it was
+learned from, newest first: "from your review of acme/shop#412, Oct 8", then "and 3 more". A switch pauses learning, and
 **Tell Alden something** adds a note ("Money is in cents, never floats"). See [Learning and memory](memory.md).
 
 ## Stats
@@ -311,6 +319,8 @@ Settings change your user config, like `alden config set`; a repo's `.alden.toml
 - **Anthropic API key**: stored in the keychain, like `alden auth model`. The field is write-only: the page only learns
   where the key comes from.
 - **Your feedback**: how often you found Alden's places useful, and **Export redacted feedback**.
+- **Learning**: **Learn from my reviews** (on by default). Off, Alden stops noting which places you saw and learns only
+  from Useful and Not useful. See [Places you saw](memory.md#places-you-saw).
 - **Your queue on this machine**: which organisations and repos the queue covers, and what to leave out. The queue
   says when it's narrowed.
 - **Ranking**: see below.

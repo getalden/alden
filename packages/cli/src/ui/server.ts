@@ -125,6 +125,54 @@ export interface UiApi {
    * changes a briefing of them covers. A PR's diff is kept per head commit, so opening it again costs one request.
    */
   diff(pr?: string): Promise<PrDiff>;
+  /**
+   * The flagged places you saw in a PR at a head commit (a guided step, a marker in the Diff tab), so a review that
+   * passes them without a word can teach Alden. Kept on this machine only; nothing is recorded while
+   * `learning.fromReviews` is off.
+   */
+  recordSeen(input: SeenInput): Promise<{ recorded: number }>;
+}
+
+/** What `POST /api/seen` takes: a PR ("owner/repo#12"), the head commit its places are from, and the places. */
+export interface SeenInput {
+  pr: string;
+  headSha: string;
+  places: { checkId?: string; path: string; line?: number; how: "guided" | "diff" }[];
+}
+
+/** The most places one `POST /api/seen` takes: the UI sends a few at a time. */
+export const MAX_SEEN_PLACES = 50;
+const MAX_SEEN_BYTES = 16 * 1024;
+
+/** A `POST /api/seen` body, checked: anything else is a 400. */
+export function seenFrom(body: Record<string, unknown>): SeenInput {
+  const fail = () =>
+    new ApiError(
+      400,
+      `Send { pr: owner/repo#12, headSha, places: [{ checkId?, path, line?, how: guided | diff }] }, up to ${MAX_SEEN_PLACES} places.`,
+    );
+  const { pr, headSha, places } = body;
+  if (typeof pr !== "string" || !/^[\w.-]+\/[\w.-]+#\d{1,9}$/.test(pr)) throw fail();
+  if (typeof headSha !== "string" || !/^[0-9a-f]{7,64}$/i.test(headSha)) throw fail();
+  if (!Array.isArray(places) || places.length === 0 || places.length > MAX_SEEN_PLACES) throw fail();
+  return {
+    pr,
+    headSha,
+    places: places.map((place: unknown) => {
+      if (!place || typeof place !== "object") throw fail();
+      const { checkId, path, line, how } = place as Record<string, unknown>;
+      if (typeof path !== "string" || path.length === 0 || path.length > 1024) throw fail();
+      if (checkId !== undefined && (typeof checkId !== "string" || !/^[\w.:-]{1,100}$/.test(checkId))) throw fail();
+      if (line !== undefined && !(Number.isInteger(line) && (line as number) > 0)) throw fail();
+      if (how !== "guided" && how !== "diff") throw fail();
+      return {
+        ...(checkId !== undefined ? { checkId: checkId as string } : {}),
+        path,
+        ...(line !== undefined ? { line: line as number } : {}),
+        how,
+      };
+    }),
+  };
 }
 
 /**
@@ -688,6 +736,9 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         );
         return;
       }
+      case "POST /api/seen":
+        send(res, 200, await api.recordSeen(seenFrom(await readJsonBody(req, MAX_SEEN_BYTES))));
+        return;
       case "POST /api/briefing/markdown": {
         const briefing = await briefingFrom(req);
         send(res, 200, { markdown: briefingMarkdown(briefing), fileName: briefingFileName(briefing) });

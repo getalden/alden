@@ -8,7 +8,7 @@ import { fromRestFile } from "../diff/sources.js";
 import { FeedbackLog } from "../feedback/log.js";
 import type { GitHubClient } from "../github/client.js";
 import { loadLearning } from "../learn/learn.js";
-import { AldenStore } from "../store/db.js";
+import { AldenStore, MIGRATION_COUNT } from "../store/db.js";
 import {
   checkLinkTarget,
   checkSendable,
@@ -275,7 +275,7 @@ describe("drafts written before 0.6", () => {
       .run(PR, PR.toLowerCase(), JSON.stringify(anchor), "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z");
     old.close();
     store = AldenStore.open(path);
-    expect(store.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(5);
+    expect(store.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(MIGRATION_COUNT);
     const drafts = new ReviewDrafts(store);
     const [draft] = drafts.list(PR);
     expect(draft).toMatchObject({ id: "old1", line: 12, body: "Cents?" });
