@@ -40,10 +40,11 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | Method and path | What it does |
 | --- | --- |
 | `GET /api/session` | Alden's version, the folder and repo it runs in, the GitHub user (or, signed out, why: the keychain refused or there's no sign-in), the model and where its key comes from, the budget, and whether it's the desktop app and background briefings are on. |
-| `GET /api/queue` | The ranked queue. `refresh=1` skips the cache; `repo` and `org` (repeatable) narrow it. |
+| `GET /api/queue` | The ranked queue. `refresh=1` skips the cache; `cached=1` answers with the last queue (up to a day old) at once, if there is one; `repo` and `org` (repeatable) narrow it. |
 | `POST /api/review` | Runs a review of `{ pr?, llm?, graph?, model?, effort? }` and streams it as above. No `pr` reviews local changes. |
-| `POST /api/prepare` | Briefs the next of the top three PRs in the background. Acts only when started with `--json` (the desktop app) and `background.enabled` is on; asks the model only if `background.model` is true in the user config. |
+| `POST /api/prepare` | Briefs the next of the top `background.prepare` (3) PRs in Needs you, in your ranked order, in the background. Acts only when started with `--json` (the desktop app) and `background.enabled` is on; asks the model only if `background.model` is true in the user config. |
 | `GET /api/prepared` | Briefings prepared in the background; with `pr=owner/repo#12`, that PR's briefing, unless the PR changed since. |
+| `POST /api/freshness` | Whether a briefing still matches its PR: `{ target }` (a briefing's target) → `fresh`, `pr_changed`, `base_moved` (with the base and how many commits) or `unknown`. One GitHub request. |
 | `GET /api/spend` | Today's and recent spend against your caps. |
 | `GET /api/config` | The merged settings. |
 | `PUT /api/config` | Sets `{ key, value }` in the user config; a `null` value removes it. |
@@ -58,11 +59,18 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | `POST /api/memory/change` | `{ action, repo? }`: `edit` (with `id`, `text`), `restore` (with `id`), `learning` (with `on`) or `forget-all`. |
 | `POST /api/memory/forget` | Forgets one item: `{ id, repo? }`. |
 | `GET /api/drafts` | `pr=owner/repo#12`'s pending review: `{ drafts, unaddressed }`, the drafts brought to the PR's current head (moved with their lines, or `outdated`), and the places its latest briefing flagged that no draft is near. |
-| `POST /api/drafts` | Adds a draft at the PR's head: `{ pr, path?, line?, side?, body }`; without `path` and `line`, a general note. Always yours (`source: "you"`). 422 when the line isn't in the diff. |
-| `PATCH /api/drafts/:id` | Changes a draft's `{ body }`, or places it on a line again with `{ path, line, side? }`, which brings an outdated draft back. |
+| `POST /api/drafts` | Adds a draft at the PR's head: `{ pr, body, path?, line?, startLine?, side?, suggestion? }`; without `path`, a general note. `body` may be left out with a `suggestion`. A line or file GitHub won't take an inline comment on becomes a linked note. Always yours (`source: "you"`). 422 for a range the wrong way round, an old-side line outside the diff, or a link to code that isn't at the head. |
+| `PATCH /api/drafts/:id` | Changes a draft's `{ body?, suggestion? }` (`suggestion: null` removes it), or places it again with `{ path, line?, side?, startLine? }`, which brings an outdated draft back. |
 | `DELETE /api/drafts/:id` | Deletes a draft: `{ ok: true }`. |
 | `GET /api/diff` | The Diff tab: `pr=owner/repo#12`'s diff at its current head, or without `pr` the local changes a briefing of them covers, as `{ headSha, files: [{ path, previousPath?, status, additions, deletions, binary?, patchMissing?, hunks: [{ header, lines: [{ kind: add \| del \| ctx, oldLine?, newLine?, text }] }] }] }` (`PrDiffSchema`). Built from the PR files API's patches or `git diff HEAD` plus untracked files; a file whose patch was too large has `hunks: []` and `patchMissing: true`. Control sequences are stripped from every string, as on every route. A PR's diff is kept per head commit while the server runs, so asking again costs one GitHub request; local changes aren't kept. |
 | `POST /api/review/send` | Sends the PR's drafts to GitHub as one review: `{ pr, event: COMMENT \| APPROVE \| REQUEST_CHANGES, body? }` → `{ url, posted, review }`. The only route that writes to GitHub. Refuses (409) when a draft is outdated or the PR moved since the drafts were listed, 422 when a line isn't in the diff, 403 with the fix when the sign-in can't write reviews. Sent drafts are deleted. |
+| `POST /api/briefing/markdown` | `{ briefing }` as Markdown, as `alden review --markdown` prints it: `{ markdown, fileName }`. |
+| `POST /api/briefing/save` | Desktop app: saves `{ briefing }` as Markdown to the Downloads folder and says where. |
+| `POST /api/feedback/save` | Desktop app: saves the redacted feedback export to the Downloads folder. |
+| `POST /api/open` | Desktop app: opens `{ url }` (http or https, never Alden's own page) in the default browser. |
+| `GET /api/rank` | Settings → Ranking: your weights, rules and `background.prepare`. |
+| `PUT /api/rank` | Saves `{ weights?, rules?, prepare? }` to the user config (`[queue.rank]`, `background.prepare`); a `null` weight or `prepare` goes back to the default. |
+| `POST /api/rank/preview` | The current queue ranked with `{ weights?, rules? }`, unsaved, beside where each PR sits now. |
 | `POST /api/auth/device` | Starts GitHub sign-in with a one-time code (the device flow); the server waits for approval. |
 | `GET /api/auth/device` | How that sign-in is going: waiting (with the code), done, or failed. |
 | `POST /api/auth/device/open` | Opens GitHub's page for the code in the default browser. |
@@ -85,7 +93,7 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 3. **Code graph** (unless `--no-graph`). The repo is indexed from the working tree or a PR worktree. Changed lines are
    mapped to symbols, and the callers of changed public symbols are found. Failures become a "Not checked" note.
 4. **Checks.** Each check gets the diff, PR details and graph, and returns passed, flagged or skipped, with evidence.
-5. **Pick.** Up to 3 "needs your eyes" places are chosen from the flagged checks.
+5. **Pick.** Up to `review.eyes` (3 by default) "needs your eyes" places are chosen from the flagged checks.
 6. **Model** (unless `--no-llm` or unconfigured). The prompt is built from the diff, the check results and caller
    snippets, and sized to the budget. `budgetedGenerate` is the only way to call a model: it checks the worst-case
    cost against both caps, then records the actual cost in the ledger. Findings are checked against the diff, then

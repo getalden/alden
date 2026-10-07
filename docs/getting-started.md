@@ -123,7 +123,9 @@ cd ~/code/their-repo
 alden review 123
 ```
 
-See [The code graph](code-graph.md).
+Alden remembers each clone you run it in, so later briefings of that repo's PRs find callers from anywhere. If your
+clones live in one folder, `alden config set clones.folders ~/src` lets Alden find them all. See
+[The code graph](code-graph.md).
 
 ## In Claude Code
 

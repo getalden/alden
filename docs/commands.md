@@ -27,8 +27,8 @@ Sets up a model in about a minute. In a terminal it asks which of three you want
    Ollama isn't at its default address, `model.baseUrl`.
 3. **Checks only.** Changes nothing.
 
-Outside a terminal (a pipe, a script), it prints what it would offer and the commands to do each by hand. It exits
-with 1 when no model was set up (except for checks only). `alden doctor` suggests it when there's no model.
+Outside a terminal (a pipe, a script), it prints what it would offer and the commands to do each by hand, and exits
+with 0. In a terminal, it exits with 1 when no model was set up (except for checks only). `alden doctor` suggests it when there's no model.
 
 ## alden auth
 

@@ -123,13 +123,14 @@ as "none found", not "none exist".
 
 Local reviews use your working tree. For a PR, Alden needs the PR's code on disk:
 
-1. Run `alden review <pr>` from inside a clone of the PR's repo. Any remote may point at it, so a fork with an
-   `upstream` remote works.
+1. Alden finds a clone of the PR's repo: the one you run `alden review <pr>` in, or else one it saw you run Alden in
+   before, or one under the folders in `clones.folders` (see [Configuration](configuration.md#clones)). Any remote may
+   point at the PR's repo, so a fork with an `upstream` remote works.
 2. Alden fetches GitHub's merge of the PR onto its base (`refs/pull/<number>/merge`, what CI tests) into
    `refs/alden/pr-<number>-merge`, and the PR's head into `refs/alden/pr-<number>`, and checks the merge out in its own
    worktree under `~/.alden/worktrees` (one per repo, reused). Your branch, working tree and stash are never touched.
 
-Outside a clone, the review still runs, and "Callers outside the diff" says why it was skipped. The first checkout of a
+With no clone, the review still runs, and "Callers outside the diff" says why it was skipped. The first checkout of a
 large repo can take a while; later ones reuse the worktree.
 
 Skip the graph with `--no-graph`.

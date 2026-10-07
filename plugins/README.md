@@ -14,7 +14,7 @@ Claude also uses Alden without the commands when you ask: "what's waiting on me?
 
 ## Install
 
-Install Alden 0.2.0 or later and sign in first ([getting started](https://getalden.dev/docs/getting-started/)):
+Install Alden 0.6.0 or later and sign in first ([getting started](https://getalden.dev/docs/getting-started/)):
 
 ```sh
 brew install getalden/tap/alden      # or: npm install -g alden@next
