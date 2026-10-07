@@ -1,27 +1,100 @@
 import type { Anchor, Briefing } from "@alden/schema";
-import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   type BriefingComments,
+  type CommentPlace,
   cannotSend,
   groupDrafts,
+  type NewDraft,
   placeText,
   type ReviewDraft,
   type ReviewEvent,
   reviewBody,
   type SendReviewResult,
+  whereText,
 } from "../drafts";
 import { plural } from "../format";
 import { Segmented } from "./Segmented";
 
-/** What's being written: a comment on a place in the briefing, on any line, or a general note. */
+/**
+ * What's being written in the Comments drawer: a comment on a place (from the briefing, the diff or the guided review),
+ * on a line you pick, or a general note. `replaces` is the outdated draft a rewrite takes the place of; `n` makes a
+ * second request for the same place open (and focus) the editor again.
+ */
 export type Editing =
-  | { kind: "place"; key: string }
+  | {
+      kind: "place";
+      place: CommentPlace;
+      n: number;
+      initial?: { body: string; suggestion?: string | undefined };
+      replaces?: string;
+    }
   | {
       kind: "line";
-      initial?: { path?: string | undefined; line?: number | undefined; body: string };
+      initial?: {
+        path?: string | undefined;
+        line?: number | undefined;
+        startLine?: number | undefined;
+        body: string;
+        suggestion?: string | undefined;
+      };
       replaces?: string;
     }
   | { kind: "note"; initial?: string | undefined; replaces?: string };
+
+/**
+ * What a PR's review offers whatever is showing it (the briefing, the diff, the guided review): `onComment` opens the
+ * Comments drawer with the editor on that place, focused; `onFinish` opens it at the review body, verdict and Send.
+ * Provided by ReviewPane on a PR; absent for your local changes, which have no review to send.
+ */
+export interface ReviewActions {
+  onComment(place: CommentPlace): void;
+  onFinish(): void;
+}
+
+export const ReviewActionsContext = createContext<ReviewActions | undefined>(undefined);
+
+/** The PR's review actions, inside ReviewPane; undefined where there's nothing to comment on. */
+export const useReviewActions = () => useContext(ReviewActionsContext);
+
+/**
+ * Marks an element as a place to comment on, so `c` comments there while focus is on it or inside it. The diff's lines
+ * can use it too.
+ */
+export const placeAttrs = (place: CommentPlace | undefined): Record<string, string | undefined> =>
+  place
+    ? {
+        "data-comment-path": place.path,
+        "data-comment-line": String(place.line),
+        "data-comment-side": place.side,
+        "data-comment-start-line": place.startLine ? String(place.startLine) : undefined,
+      }
+    : {};
+
+/** The place an element (or one around it) is marked with by `placeAttrs`, if any. */
+export function placeFromElement(element: Element | null): CommentPlace | undefined {
+  const marked = element?.closest("[data-comment-path][data-comment-line]");
+  if (!marked) return undefined;
+  const path = marked.getAttribute("data-comment-path") ?? "";
+  const line = Number(marked.getAttribute("data-comment-line"));
+  const startLine = Number(marked.getAttribute("data-comment-start-line"));
+  if (!path || !Number.isInteger(line) || line < 1) return undefined;
+  return {
+    path,
+    line,
+    side: marked.getAttribute("data-comment-side") === "LEFT" ? "LEFT" : "RIGHT",
+    ...(Number.isInteger(startLine) && startLine > 0 && startLine < line ? { startLine } : {}),
+  };
+}
 
 /** Keys never fire while you type. */
 export const typing = (target: EventTarget | null) =>
@@ -39,9 +112,37 @@ const verdictOf = (event: ReviewEvent) =>
 
 const onPlace = (d: ReviewDraft, a: Anchor) => d.path === a.path && d.line === a.line;
 
+/** "line 4" or "lines 4–9": what a suggestion replaces. */
+const linesText = (p: { line: number; startLine?: number | undefined }) =>
+  p.startLine && p.startLine < p.line ? `lines ${p.startLine}–${p.line}` : `line ${p.line}`;
+
+/** Leaves out what isn't set, so the request carries only what you wrote. */
+const lineDraft = (
+  p: { path: string; line: number; startLine?: number | undefined; side: "RIGHT" | "LEFT" },
+  body: string,
+  suggestion: string | undefined,
+): NewDraft => ({
+  path: p.path,
+  line: p.line,
+  ...(p.startLine && p.startLine < p.line ? { startLine: p.startLine } : {}),
+  side: p.side,
+  body,
+  ...(suggestion !== undefined ? { suggestion } : {}),
+});
+
+/** Replacement code for the line(s), offered on the new side only (GitHub applies suggestions there). */
+interface Suggest {
+  /** "line 4" or "lines 4–9". */
+  lines: string;
+  /** The line(s) as they are, to start from. */
+  lineText?: string | undefined;
+  /** A suggestion the draft already has. */
+  initial?: string | undefined;
+}
+
 /**
- * A textarea with Save and Cancel. Focus moves into it when it opens; ⌘↵ or Ctrl+↵ saves, Esc cancels. A failed save
- * keeps the text and says why.
+ * A textarea with Save and Cancel, and "Suggest a change" where the comment can carry one. Focus moves into it when it
+ * opens; ⌘↵ or Ctrl+↵ saves, Esc cancels. A failed save keeps the text and says why.
  */
 export function CommentEditor(props: {
   label: string;
@@ -52,20 +153,30 @@ export function CommentEditor(props: {
   firstField?: RefObject<HTMLElement | null>;
   /** Why it can't be saved yet, checked on Save. */
   validate?: () => string | undefined;
-  onSave: (body: string) => Promise<void>;
+  suggest?: Suggest | undefined;
+  onSave: (body: string, suggestion: string | undefined) => Promise<void>;
   onCancel: () => void;
 }) {
   const [text, setText] = useState(props.initial ?? "");
+  const [suggesting, setSuggesting] = useState(props.suggest?.initial !== undefined);
+  const [code, setCode] = useState(props.suggest?.initial ?? props.suggest?.lineText ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const area = useRef<HTMLTextAreaElement>(null);
+  const codeArea = useRef<HTMLTextAreaElement>(null);
+  const toggled = useRef(false);
   const { firstField } = props;
   useEffect(() => {
     (firstField?.current ?? area.current)?.focus();
   }, [firstField]);
+  useEffect(() => {
+    if (suggesting && toggled.current) codeArea.current?.focus();
+  }, [suggesting]);
+  const withSuggestion = !!props.suggest && suggesting;
+  const ready = !!text.trim() || withSuggestion;
 
   async function save() {
-    if (!text.trim() || saving) return;
+    if (!ready || saving) return;
     const invalid = props.validate?.();
     if (invalid) {
       setError(invalid);
@@ -74,12 +185,18 @@ export function CommentEditor(props: {
     setSaving(true);
     setError(undefined);
     try {
-      await props.onSave(text.trim());
+      await props.onSave(text.trim(), withSuggestion ? code : undefined);
     } catch (e) {
       setError(messageOf(e));
       setSaving(false);
     }
   }
+  const saveKeys = (e: ReactKeyboardEvent) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      void save();
+    }
+  };
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Esc anywhere in the editor cancels it
@@ -98,25 +215,56 @@ export function CommentEditor(props: {
         ref={area}
         className="input"
         aria-label={props.label}
-        placeholder="Write a comment"
+        placeholder={withSuggestion ? "Why this change (optional)" : "Write a comment"}
         rows={3}
         maxLength={65_000}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            void save();
-          }
-        }}
+        onKeyDown={saveKeys}
       />
+      {props.suggest && (
+        <div className="suggest">
+          <button
+            type="button"
+            className={`btn xs${suggesting ? " on neutral" : ""}`}
+            aria-pressed={suggesting}
+            onClick={() => {
+              toggled.current = true;
+              if (!suggesting && !code && props.suggest?.lineText) setCode(props.suggest.lineText);
+              setSuggesting((on) => !on);
+            }}
+          >
+            ± Suggest a change
+          </button>
+          {suggesting && (
+            <>
+              <textarea
+                ref={codeArea}
+                className="input mono suggest-code"
+                aria-label={`Suggested change for ${props.suggest.lines}`}
+                placeholder={props.suggest.lineText === undefined ? "The code as it should be" : undefined}
+                rows={Math.min(8, Math.max(2, code.split("\n").length))}
+                spellCheck={false}
+                maxLength={65_000}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                onKeyDown={saveKeys}
+              />
+              <span className="faint small">
+                Replaces {props.suggest.lines} when the author accepts it on GitHub. Left empty, it suggests deleting{" "}
+                {props.suggest.lines.startsWith("lines") ? "them" : "it"}.
+              </span>
+            </>
+          )}
+        </div>
+      )}
       {error && (
         <p className="error-text small" role="alert">
           {error}
         </p>
       )}
       <div className="form-actions">
-        <button type="button" className="btn sm primary" disabled={saving || !text.trim()} onClick={save}>
+        <button type="button" className="btn sm primary" disabled={saving || !ready} onClick={save}>
           {saving ? "Saving…" : (props.saveLabel ?? "Save")}
         </button>
         <button type="button" className="btn sm quiet" onClick={props.onCancel}>
@@ -133,33 +281,29 @@ function Source({ draft }: { draft: ReviewDraft }) {
   return draft.source === "claude" ? <span className="chip from-claude">from Claude</span> : null;
 }
 
+/** A suggested change, as it will post: the code that replaces the line(s). */
+function SuggestionBlock({ code }: { code: string }) {
+  return (
+    <div className="draft-suggestion">
+      <span className="label">Suggested change</span>
+      {code ? <pre className="mono">{code}</pre> : <span className="faint small">Deletes the line(s).</span>}
+    </div>
+  );
+}
+
 /**
- * A place in the briefing you can comment on: its drafts, a Comment button, and the editor when open. Closing the
- * editor puts focus back on the button.
+ * A place in the briefing you can comment on: your drafts there, and Comment, which opens the editor for it in the
+ * Comments drawer.
  */
 export function CommentSlot(props: {
   anchor: Anchor & { line: number };
   comments: BriefingComments;
-  open: boolean;
-  onOpen: () => void;
-  onClose: () => void;
+  onComment: (place: CommentPlace) => void;
   compact?: boolean;
 }) {
-  const { anchor, comments, open } = props;
-  const button = useRef<HTMLButtonElement>(null);
-  const restore = useRef(false);
-  useEffect(() => {
-    if (!open && restore.current) {
-      restore.current = false;
-      button.current?.focus();
-    }
-  }, [open]);
-  const close = () => {
-    restore.current = true;
-    props.onClose();
-  };
+  const { anchor, comments } = props;
   const here = comments.drafts.filter((d) => onPlace(d, anchor));
-  const where = placeText(anchor);
+  const where = whereText(anchor);
   return (
     <div className={`comment-slot${props.compact ? " compact" : ""}`}>
       {here.length > 0 && (
@@ -168,54 +312,66 @@ export function CommentSlot(props: {
             <li key={d.id}>
               <span className="faint mono">{d.state === "outdated" ? "outdated draft" : "draft"}</span>
               <Source draft={d} />
-              <span className="body">{d.body}</span>
+              <span className="body">{d.body || (d.suggestion !== undefined ? "Suggested change" : "")}</span>
             </li>
           ))}
         </ul>
       )}
-      {open ? (
-        <CommentEditor
-          label={`Comment on ${where}`}
-          onCancel={close}
-          onSave={async (body) => {
-            await comments.add({ path: anchor.path, line: anchor.line, side: "RIGHT", body });
-            close();
-          }}
-        />
-      ) : (
-        <button
-          ref={button}
-          type="button"
-          className={props.compact ? "link-button small" : "btn xs"}
-          aria-label={`Comment on ${where}`}
-          onClick={props.onOpen}
-        >
-          Comment
-        </button>
-      )}
+      <button
+        type="button"
+        className={props.compact ? "link-button small" : "btn xs"}
+        aria-label={`Comment on ${where}`}
+        aria-controls="comments-drawer"
+        onClick={(e) => {
+          // Safari doesn't focus a button you click; focus comes back here when the editor closes.
+          e.currentTarget.focus();
+          props.onComment({ path: anchor.path, line: anchor.line, side: "RIGHT" });
+        }}
+      >
+        Comment
+      </button>
     </div>
   );
 }
 
-/** Any line of a changed file: pick the file and the line, then write. */
+/** "12" or "4–9" (a hyphen works too): the line, or the first and last of a range. */
+export function parseLines(text: string): { line: number; startLine?: number } | undefined {
+  const match = /^\s*(\d+)\s*(?:[-–]\s*(\d+))?\s*$/.exec(text);
+  if (!match) return undefined;
+  const first = Number(match[1]);
+  const last = match[2] ? Number(match[2]) : first;
+  if (first < 1 || last < first) return undefined;
+  return last === first ? { line: first } : { startLine: first, line: last };
+}
+
+/** Any line (or lines) of a changed file: pick the file and the line, then write. */
 function LineForm(props: {
-  files: Briefing["files"];
-  initial?: { path?: string | undefined; line?: number | undefined; body: string } | undefined;
-  onSave: (draft: { path: string; line: number; side: "RIGHT" | "LEFT"; body: string }) => Promise<void>;
+  files: { path: string; status: string }[];
+  initial?: Extract<Editing, { kind: "line" }>["initial"];
+  onSave: (draft: NewDraft) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [path, setPath] = useState(props.initial?.path ?? props.files[0]?.path ?? "");
-  const [line, setLine] = useState(props.initial?.line ? String(props.initial.line) : "");
+  const { initial } = props;
+  const [path, setPath] = useState(initial?.path ?? props.files[0]?.path ?? "");
+  const [lineInput, setLineInput] = useState(
+    initial?.line
+      ? initial.startLine && initial.startLine < initial.line
+        ? `${initial.startLine}–${initial.line}`
+        : String(initial.line)
+      : "",
+  );
   const select = useRef<HTMLSelectElement>(null);
-  const lineNumber = Number(line);
+  const lines = parseLines(lineInput);
   const file = props.files.find((f) => f.path === path);
+  const side = file?.status === "removed" ? "LEFT" : "RIGHT";
   return (
     <CommentEditor
       label="Comment"
-      initial={props.initial?.body}
+      initial={initial?.body}
       firstField={select}
-      validate={() =>
-        !path ? "Pick a file." : !Number.isInteger(lineNumber) || lineNumber < 1 ? "Give a line number." : undefined
+      validate={() => (!path ? "Pick a file." : !lines ? "Give a line number, or a range like 4–9." : undefined)}
+      suggest={
+        side === "RIGHT" ? { lines: lines ? linesText(lines) : "the line", initial: initial?.suggestion } : undefined
       }
       fields={
         <div className="line-fields">
@@ -234,22 +390,25 @@ function LineForm(props: {
             Line
             <input
               className="input mono"
-              inputMode="numeric"
-              value={line}
-              onChange={(e) => setLine(e.target.value.replace(/\D/g, ""))}
+              placeholder="12 or 4–9"
+              value={lineInput}
+              onChange={(e) => setLineInput(e.target.value.replace(/[^\d\s\-–]/g, ""))}
             />
           </label>
         </div>
       }
       onCancel={props.onCancel}
-      onSave={(body) =>
-        props.onSave({ path, line: lineNumber, side: file?.status === "removed" ? "LEFT" : "RIGHT", body })
+      onSave={(body, suggestion) =>
+        props.onSave(lineDraft({ path, side, ...(lines as { line: number; startLine?: number }) }, body, suggestion))
       }
     />
   );
 }
 
-/** One draft in the Review panel: where, who wrote it, the text; Edit, Delete, and Rewrite when it's outdated. */
+/**
+ * One draft in the drawer: where it posts, who wrote it, the start of its text (and its suggested change); Edit and
+ * Delete, or Rewrite and Delete when it's outdated.
+ */
 function DraftRow(props: {
   draft: ReviewDraft;
   comments: BriefingComments;
@@ -276,32 +435,53 @@ function DraftRow(props: {
     restore.current = true;
     setEditing(false);
   };
-  const where = placeText(draft) || "general note";
+  const what = draft.path ? `comment on ${whereText(draft)}` : "general note";
   const outdated = draft.state === "outdated";
+  const canSuggest = !!draft.path && !!draft.line && draft.side !== "LEFT";
   return (
     <li className={`draft${outdated ? " outdated" : ""}`}>
       <div className="draft-head">
-        {/* Under its file's heading, so the line is enough. */}
-        {draft.path ? (
-          <span className="place">{draft.line ? `line ${draft.line}` : "whole file"}</span>
-        ) : (
-          <span className="faint small">General note</span>
-        )}
+        <span className="draft-where">
+          {draft.path ? (
+            <>
+              On <span className="mono">{draft.path}</span>
+              {draft.line ? `, ${linesText({ line: draft.line, startLine: draft.startLine })}` : ""}
+              {draft.side === "LEFT" ? " (old side)" : ""}
+            </>
+          ) : (
+            "In the review body"
+          )}
+        </span>
         <Source draft={draft} />
         {outdated && <span className="pill warn">Outdated</span>}
       </div>
       {editing ? (
         <CommentEditor
-          label={`Edit comment on ${where}`}
+          label={`Edit ${what}`}
           initial={draft.body}
+          suggest={
+            canSuggest
+              ? { lines: linesText({ line: draft.line ?? 1, startLine: draft.startLine }), initial: draft.suggestion }
+              : undefined
+          }
           onCancel={stopEditing}
-          onSave={async (body) => {
-            await comments.edit(draft.id, body);
+          onSave={async (body, suggestion) => {
+            await comments.edit(draft.id, {
+              body,
+              ...(suggestion !== undefined
+                ? { suggestion }
+                : draft.suggestion !== undefined
+                  ? { suggestion: null }
+                  : {}),
+            });
             stopEditing();
           }}
         />
       ) : (
-        <p className="draft-body">{draft.body}</p>
+        <>
+          {draft.body && <p className="draft-body excerpt">{draft.body}</p>}
+          {draft.suggestion !== undefined && <SuggestionBlock code={draft.suggestion} />}
+        </>
       )}
       {outdated && !editing && (
         <p className="small muted">
@@ -313,7 +493,7 @@ function DraftRow(props: {
         <div className="draft-acts">
           {confirming ? (
             <>
-              <span className="small">Delete this comment?</span>
+              <span className="small">Delete this {draft.path ? "comment" : "note"}?</span>
               <button
                 type="button"
                 className="btn xs"
@@ -338,7 +518,7 @@ function DraftRow(props: {
           ) : (
             <>
               {outdated ? (
-                <button type="button" className="btn xs" onClick={props.onRewrite}>
+                <button type="button" className="btn xs" aria-label={`Rewrite ${what}`} onClick={props.onRewrite}>
                   Rewrite
                 </button>
               ) : (
@@ -346,7 +526,7 @@ function DraftRow(props: {
                   ref={editButton}
                   type="button"
                   className="btn xs"
-                  aria-label={`Edit comment on ${where}`}
+                  aria-label={`Edit ${what}`}
                   onClick={() => setEditing(true)}
                 >
                   Edit
@@ -355,7 +535,7 @@ function DraftRow(props: {
               <button
                 type="button"
                 className="btn xs quiet"
-                aria-label={`Delete comment on ${where}`}
+                aria-label={`Delete ${what}`}
                 onClick={() => setConfirming(true)}
               >
                 Delete
@@ -433,7 +613,7 @@ function Confirm(props: {
       </div>
       {inline.length > 0 && (
         <div className="section" style={{ gap: 6 }}>
-          <h4 className="label">Comments · {inline.length}</h4>
+          <h4 className="label">Comments on lines · {inline.length}</h4>
           <ul className="visually-plain confirm-list">
             {groupDrafts(inline, props.files).flatMap((g) =>
               g.drafts.map((d) => (
@@ -442,7 +622,8 @@ function Confirm(props: {
                     <span className="place">{placeText(d)}</span>
                     <Source draft={d} />
                   </span>
-                  <p className="draft-body">{d.body}</p>
+                  {d.body && <p className="draft-body">{d.body}</p>}
+                  {d.suggestion !== undefined && <SuggestionBlock code={d.suggestion} />}
                 </li>
               )),
             )}
@@ -466,42 +647,64 @@ function Confirm(props: {
   );
 }
 
+/** Where focus goes when the drawer is asked to show something: its heading, or the review body (`onFinish`). */
+export type DrawerFocus = { to: "head" | "finish"; n: number };
+
 /**
- * The review you're writing: your drafts by file, the review's body, the verdict, and one Send. Nothing posts until
- * you've seen the summary and pressed Send there.
+ * The Comments drawer, beside the briefing (a full-width sheet in narrow windows): the drafts by where they'll post
+ * (on lines, in the review body), the editor, "Add a general note", the review body, the verdict and Send at the
+ * bottom. Nothing posts until you've seen the summary and pressed Send there. Esc closes it (after an open editor or
+ * summary has taken its own Esc).
  */
-export function ReviewPanel(props: {
-  briefing: Briefing;
+export function CommentsDrawer(props: {
   comments: BriefingComments;
+  /** The briefing's files, for "Comment on a line…"; absent before a briefing. */
+  files: Briefing["files"] | undefined;
+  open: boolean;
+  onClose: () => void;
   editing: Editing | undefined;
   onEditing: (editing: Editing | undefined) => void;
-  headingRef: RefObject<HTMLHeadingElement | null>;
+  focus: DrawerFocus | undefined;
+  /** Where focus goes back to when a place's editor closes: the Comment button or the line it came from. */
+  returnFocus: RefObject<HTMLElement | null>;
 }) {
-  const { briefing, comments, editing, onEditing } = props;
+  const { comments, editing, onEditing, open, files } = props;
   const [confirming, setConfirming] = useState(false);
   const [sent, setSent] = useState<SendReviewResult>();
   const [checking, setChecking] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
   const lineButton = useRef<HTMLButtonElement>(null);
   const noteButton = useRef<HTMLButtonElement>(null);
   const sendButton = useRef<HTMLButtonElement>(null);
+  const bodyField = useRef<HTMLTextAreaElement>(null);
   const sentLine = useRef<HTMLParagraphElement>(null);
   const restore = useRef<RefObject<HTMLElement | null> | undefined>(undefined);
-  const formOpen = editing?.kind === "line" || editing?.kind === "note";
+  const formOpen = editing !== undefined;
   useEffect(() => {
-    if (!formOpen && restore.current) {
-      restore.current.current?.focus();
-      restore.current = undefined;
-    }
+    if (formOpen || !restore.current) return;
+    const target = restore.current.current;
+    restore.current = undefined;
+    if (target?.isConnected) target.focus();
+    else heading.current?.focus();
   });
   useEffect(() => {
     if (sent) sentLine.current?.focus();
   }, [sent]);
+  const { focus } = props;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when asked again
+  useEffect(() => {
+    if (!focus || !open) return;
+    if (focus.to === "finish" && bodyField.current) {
+      bodyField.current.scrollIntoView?.({ block: "nearest" });
+      bodyField.current.focus();
+    } else heading.current?.focus();
+  }, [focus]);
   // The next review has begun.
   const hasDrafts = comments.drafts.length > 0;
   useEffect(() => {
     if (hasDrafts) setSent(undefined);
   }, [hasDrafts]);
-  // Starting a comment (c) leaves the summary: it would no longer be what posts.
+  // Starting a comment leaves the summary: it would no longer be what posts.
   useEffect(() => {
     if (formOpen) setConfirming(false);
   }, [formOpen]);
@@ -512,185 +715,272 @@ export function ReviewPanel(props: {
     setSent(undefined);
   }, [comments.pr]);
 
-  const files = briefing.files.map((f) => f.path);
-  const groups = groupDrafts(comments.drafts, files);
+  const fileOrder = (files ?? []).map((f) => f.path);
+  // Rewriting before there's a briefing: the draft's own file is the one to pick.
+  const rewriting = editing?.kind === "line" ? editing.initial?.path : undefined;
+  const lineFiles = files ?? (rewriting ? [{ path: rewriting, status: "modified" }] : undefined);
+  const onLines = groupDrafts(
+    comments.drafts.filter((d) => d.path),
+    fileOrder,
+  ).flatMap((g) => g.drafts);
+  const notes = comments.drafts.filter((d) => !d.path);
   const count = comments.drafts.length;
   const blocked = cannotSend(comments.event, comments.body, comments.drafts);
   const closeForm = (back: RefObject<HTMLElement | null>) => {
     restore.current = back;
     onEditing(undefined);
   };
+  const rewrite = (d: ReviewDraft) =>
+    onEditing(
+      d.path
+        ? {
+            kind: "line",
+            initial: { path: d.path, line: d.line, startLine: d.startLine, body: d.body, suggestion: d.suggestion },
+            replaces: d.id,
+          }
+        : { kind: "note", initial: d.body, replaces: d.id },
+    );
+  const row = (d: ReviewDraft) => (
+    <DraftRow
+      key={d.id}
+      draft={d}
+      comments={comments}
+      onDeleted={() => heading.current?.focus()}
+      onRewrite={() => rewrite(d)}
+    />
+  );
 
   return (
-    <section className="section review-panel" aria-labelledby="review-panel-title">
-      <div className="section-head">
-        <h2 className="h2" id="review-panel-title" ref={props.headingRef} tabIndex={-1}>
-          Review
+    <aside
+      id="comments-drawer"
+      className="comments-drawer"
+      aria-labelledby="comments-drawer-title"
+      hidden={!open}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !e.defaultPrevented) {
+          e.stopPropagation();
+          props.onClose();
+        }
+      }}
+    >
+      <div className="drawer-head">
+        <h2 className="h3" id="comments-drawer-title" ref={heading} tabIndex={-1}>
+          Comments
         </h2>
-        <span className="faint small mono">c comment · s review</span>
+        <span className="faint small mono">{count > 0 ? plural(count, "draft") : ""}</span>
+        <button
+          type="button"
+          className="btn xs quiet icon"
+          aria-label="Close comments"
+          title="Close  s"
+          onClick={props.onClose}
+        >
+          ×
+        </button>
       </div>
-      <p className="muted small">
-        Comments stay on this machine until you send them. Nothing reaches GitHub until you press Send and confirm.
+      <p className="drawer-intro muted small">
+        Kept on this machine until you send them to <strong>{comments.pr}</strong> on GitHub, as one review.
       </p>
-      {sent && (
-        <p className="banner ok" role="status" tabIndex={-1} ref={sentLine}>
-          <strong>Sent to GitHub.</strong> You {verdictOf(sent.review).past}
-          {sent.posted > 0 ? ` with ${plural(sent.posted, "comment")}` : ""}.{" "}
-          <a href={sent.url} target="_blank" rel="noreferrer">
-            See the review ↗
-          </a>
-        </p>
-      )}
-      {comments.error && <p className="banner error">{comments.error}</p>}
 
-      {confirming ? (
-        <Confirm
-          comments={comments}
-          files={files}
-          onBack={() => {
-            restore.current = sendButton;
-            setConfirming(false);
-          }}
-          onSent={(result) => {
-            setConfirming(false);
-            setSent(result);
-          }}
-        />
-      ) : (
-        <>
-          {count === 0 ? (
-            <p className="faint small">
-              {comments.loading
-                ? "Reading your drafts…"
-                : "No comments yet. Comment on a place above, on any line, or add a general note."}
-            </p>
-          ) : (
-            <div className="card drafts">
-              {groups.map((g) => (
-                <section key={g.path} className="draft-group" aria-label={g.path || "General notes"}>
-                  <h3 className="draft-file mono">{g.path || "General notes"}</h3>
-                  <ul className="visually-plain">
-                    {g.drafts.map((d) => (
-                      <DraftRow
-                        key={d.id}
-                        draft={d}
-                        comments={comments}
-                        onDeleted={() => props.headingRef.current?.focus()}
-                        onRewrite={() =>
-                          onEditing(
-                            d.path
-                              ? { kind: "line", initial: { path: d.path, line: d.line, body: d.body }, replaces: d.id }
-                              : { kind: "note", initial: d.body, replaces: d.id },
-                          )
+      <div className="drawer-scroll">
+        {sent && (
+          <p className="banner ok" role="status" tabIndex={-1} ref={sentLine}>
+            <strong>Sent to GitHub.</strong> You {verdictOf(sent.review).past}
+            {sent.posted > 0 ? ` with ${plural(sent.posted, "comment")}` : ""}.{" "}
+            <a href={sent.url} target="_blank" rel="noreferrer">
+              See the review ↗
+            </a>
+          </p>
+        )}
+        {comments.error && <p className="banner error">{comments.error}</p>}
+
+        {confirming ? (
+          <Confirm
+            comments={comments}
+            files={fileOrder}
+            onBack={() => {
+              restore.current = sendButton;
+              setConfirming(false);
+            }}
+            onSent={(result) => {
+              setConfirming(false);
+              setSent(result);
+            }}
+          />
+        ) : (
+          <>
+            {editing?.kind === "place" && (
+              <div className="card comment-form">
+                <h3 className="comment-target">
+                  {editing.replaces ? "Rewrite on " : "Comment on "}
+                  <span className="mono">{editing.place.path}</span>, {linesText(editing.place)}
+                  {editing.place.side === "LEFT" ? " (old side)" : ""}
+                </h3>
+                <CommentEditor
+                  key={editing.n}
+                  label={`Comment on ${whereText(editing.place)}`}
+                  initial={editing.initial?.body}
+                  suggest={
+                    editing.place.side === "RIGHT"
+                      ? {
+                          lines: linesText(editing.place),
+                          lineText: editing.place.lineText,
+                          initial: editing.initial?.suggestion,
                         }
-                      />
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
-          )}
+                      : undefined
+                  }
+                  onCancel={() => closeForm(props.returnFocus)}
+                  onSave={async (body, suggestion) => {
+                    await comments.add(lineDraft(editing.place, body, suggestion));
+                    if (editing.replaces) await comments.remove(editing.replaces);
+                    closeForm(props.returnFocus);
+                  }}
+                />
+              </div>
+            )}
+            {editing?.kind === "line" && lineFiles && (
+              <div className="card comment-form">
+                <h3 className="comment-target">
+                  {editing.replaces ? "Rewrite on the current code" : "Comment on a line"}
+                </h3>
+                <LineForm
+                  files={lineFiles}
+                  initial={editing.initial}
+                  onCancel={() => closeForm(lineButton)}
+                  onSave={async (draft) => {
+                    await comments.add(draft);
+                    if (editing.replaces) await comments.remove(editing.replaces);
+                    closeForm(lineButton);
+                  }}
+                />
+              </div>
+            )}
+            {editing?.kind === "note" && (
+              <div className="card comment-form">
+                <h3 className="comment-target">General note, in the review body</h3>
+                <CommentEditor
+                  label="General note"
+                  initial={editing.initial}
+                  onCancel={() => closeForm(noteButton)}
+                  onSave={async (body) => {
+                    await comments.add({ body });
+                    if (editing.replaces) await comments.remove(editing.replaces);
+                    closeForm(noteButton);
+                  }}
+                />
+              </div>
+            )}
 
-          {editing?.kind === "line" && (
-            <div className="card comment-form">
-              <h3 className="label">{editing.replaces ? "Rewrite on the current code" : "Comment on a line"}</h3>
-              <LineForm
-                files={briefing.files}
-                initial={editing.initial}
-                onCancel={() => closeForm(lineButton)}
-                onSave={async (draft) => {
-                  await comments.add(draft);
-                  if (editing.replaces) await comments.remove(editing.replaces);
-                  closeForm(lineButton);
-                }}
-              />
-            </div>
-          )}
-          {editing?.kind === "note" && (
-            <div className="card comment-form">
-              <h3 className="label">General note</h3>
-              <CommentEditor
-                label="General note"
-                initial={editing.initial}
-                onCancel={() => closeForm(noteButton)}
-                onSave={async (body) => {
-                  await comments.add({ body });
-                  if (editing.replaces) await comments.remove(editing.replaces);
-                  closeForm(noteButton);
-                }}
-              />
-            </div>
-          )}
-          {!formOpen && (
-            <div className="form-actions">
-              <button
-                ref={lineButton}
-                type="button"
-                className="btn sm"
-                onClick={() => {
-                  setSent(undefined);
-                  onEditing({ kind: "line" });
-                }}
-              >
-                Comment on a line…
-              </button>
-              <button
-                ref={noteButton}
-                type="button"
-                className="btn sm"
-                onClick={() => {
-                  setSent(undefined);
-                  onEditing({ kind: "note" });
-                }}
-              >
-                Add a general note
-              </button>
-            </div>
-          )}
+            {count === 0 ? (
+              <p className="faint small">
+                {comments.loading
+                  ? "Reading your drafts…"
+                  : "No comments yet. Comment on a place in the briefing or a line of the diff, or add a general note."}
+              </p>
+            ) : (
+              <>
+                {onLines.length > 0 && (
+                  <section className="drawer-group" aria-labelledby="drafts-on-lines">
+                    <h3 className="label" id="drafts-on-lines">
+                      On lines · {onLines.length}
+                    </h3>
+                    <p className="faint small">Each posts as a comment on its line in the PR's diff.</p>
+                    <ul className="visually-plain card drafts">{onLines.map(row)}</ul>
+                  </section>
+                )}
+                {notes.length > 0 && (
+                  <section className="drawer-group" aria-labelledby="drafts-in-body">
+                    <h3 className="label" id="drafts-in-body">
+                      In the review body · {notes.length}
+                    </h3>
+                    <p className="faint small">Added after what you write below, oldest first.</p>
+                    <ul className="visually-plain card drafts">{notes.map(row)}</ul>
+                  </section>
+                )}
+              </>
+            )}
 
-          <label className="field">
-            Review body
-            <textarea
-              className="input"
-              rows={3}
-              placeholder="Optional. Your general notes are added after it."
-              value={comments.body}
-              onChange={(e) => comments.setBody(e.target.value)}
-            />
-          </label>
-          <div className="send-row">
-            <Segmented label="Verdict">
-              {VERDICTS.map((v) => (
+            {!formOpen && (
+              <div className="form-actions">
                 <button
-                  key={v.event}
+                  ref={noteButton}
                   type="button"
-                  aria-pressed={comments.event === v.event}
-                  onClick={() => comments.setEvent(v.event)}
+                  className="btn sm"
+                  onClick={() => {
+                    setSent(undefined);
+                    onEditing({ kind: "note" });
+                  }}
                 >
-                  {v.label}
+                  Add a general note
                 </button>
-              ))}
-            </Segmented>
-            <button
-              ref={sendButton}
-              type="button"
-              className="btn primary"
-              disabled={!!blocked || comments.loading || checking || formOpen}
-              onClick={async () => {
-                // Read the drafts once more, so the summary has anything Claude Code added since.
-                setChecking(true);
-                await comments.reload();
-                setChecking(false);
-                setSent(undefined);
-                setConfirming(true);
-              }}
-            >
-              {count > 0 ? `Send review · ${plural(count, "comment")}` : "Send review"}
-            </button>
-          </div>
-          {blocked && count + comments.body.trim().length > 0 && <p className="faint small">{blocked}</p>}
-        </>
+                {files && files.length > 0 && (
+                  <button
+                    ref={lineButton}
+                    type="button"
+                    className="btn sm quiet"
+                    onClick={() => {
+                      setSent(undefined);
+                      onEditing({ kind: "line" });
+                    }}
+                  >
+                    Comment on a line…
+                  </button>
+                )}
+              </div>
+            )}
+
+            <label className="field">
+              Review body
+              <textarea
+                ref={bodyField}
+                className="input"
+                rows={3}
+                placeholder="Optional. Your general notes are added after it."
+                value={comments.body}
+                onChange={(e) => comments.setBody(e.target.value)}
+              />
+            </label>
+          </>
+        )}
+      </div>
+
+      {!confirming && (
+        <div className="drawer-foot">
+          <Segmented label="Verdict">
+            {VERDICTS.map((v) => (
+              <button
+                key={v.event}
+                type="button"
+                aria-pressed={comments.event === v.event}
+                onClick={() => comments.setEvent(v.event)}
+              >
+                {v.label}
+              </button>
+            ))}
+          </Segmented>
+          <button
+            ref={sendButton}
+            type="button"
+            className="btn primary send"
+            disabled={!!blocked || comments.loading || checking || formOpen}
+            onClick={async () => {
+              // Read the drafts once more, so the summary has anything Claude Code added since.
+              setChecking(true);
+              await comments.reload();
+              setChecking(false);
+              setSent(undefined);
+              setConfirming(true);
+            }}
+          >
+            {count > 0 ? `Send review · ${plural(count, "comment")}` : "Send review"}
+          </button>
+          {formOpen ? (
+            <p className="faint small">Save or cancel the comment you're writing first.</p>
+          ) : (
+            blocked && count + comments.body.trim().length > 0 && <p className="faint small">{blocked}</p>
+          )}
+        </div>
       )}
-    </section>
+    </aside>
   );
 }

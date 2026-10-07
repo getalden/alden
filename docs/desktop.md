@@ -39,9 +39,11 @@ the same sign-in, settings, memory and spend.
 - **Open Alden** (⌘⇧A) brings the window forward from anywhere. **Refresh** reloads the queue, which also happens
   every 5 minutes.
 - When someone has waited three days on a PR that isn't waiting on its author, you get one notification for it.
-- [Comment from Alden](web-ui.md#views) works the same in the window: write comments in a briefing, check the summary,
-  and send them to GitHub as one review. Drafts Claude Code added show there too, marked "from Claude". Nothing is
-  sent until you press Send.
+- [Comment from Alden](web-ui.md#views) works the same in the window: **Comments** (or `s`) opens the drawer beside the
+  briefing that collects your comments, with the verdict and **Send review** at its bottom; check the summary and send
+  them to GitHub as one review. Drafts Claude Code added show there too, marked "from Claude". The window remembers
+  whether the drawer is open until you quit; in a narrow window it's a full-width sheet. Nothing is sent until you
+  press Send.
 - **Export** in a briefing works in the window too. **Save as Markdown** saves to your Downloads folder (the window
   can't download files itself) and says where, e.g. "Saved to ~/Downloads/acme-shop-412-briefing.md."; **Print / Save
   as PDF** opens the macOS print dialog, whose **PDF** menu saves it. See [Export](web-ui.md#views).
