@@ -74,6 +74,42 @@ describe("feedback through the UI's API", () => {
   });
 });
 
+describe("seen places through the UI's API", () => {
+  it("records them on this machine, once each, and not while learning from reviews is off", async () => {
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { closeStores, openStore, seenPlaces, setConfigValue } = await import("@alden/core");
+    const home = mkdtempSync(join(tmpdir(), "alden-api-"));
+    const saved = { home: process.env.ALDEN_HOME, track: process.env.DO_NOT_TRACK };
+    process.env.ALDEN_HOME = home;
+    process.env.DO_NOT_TRACK = "1";
+    try {
+      const api = createUiApi({ version: "test", cwd: home });
+      const places = [
+        { checkId: "callers.outside", path: "src/pay.ts", line: 12, how: "guided" as const },
+        { path: "src/web.ts", how: "diff" as const },
+      ];
+      expect(await api.recordSeen({ pr: "Acme/Shop#412", headSha: "abc1234", places })).toEqual({ recorded: 2 });
+      expect(await api.recordSeen({ pr: "acme/shop#412", headSha: "abc1234", places })).toEqual({ recorded: 0 });
+      expect(seenPlaces(openStore(), "acme/shop#412", "abc1234")).toEqual(places);
+
+      await setConfigValue("learning.fromReviews", "false");
+      const later = [{ path: "src/other.ts", how: "diff" as const }];
+      expect(await api.recordSeen({ pr: "acme/shop#413", headSha: "abc1234", places: later })).toEqual({
+        recorded: 0,
+      });
+      expect(seenPlaces(openStore(), "acme/shop#413")).toEqual([]);
+      // Never in the feedback export: it reads feedback events, and seen places aren't events.
+      expect(JSON.stringify(await api.exportFeedback())).not.toContain("src/pay.ts");
+    } finally {
+      closeStores();
+      process.env.ALDEN_HOME = saved.home;
+      if (saved.home === undefined) delete process.env.ALDEN_HOME;
+      if (saved.track === undefined) delete process.env.DO_NOT_TRACK;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("saveToDownloads", () => {
   it("never replaces a file: a second save of the same PR gets -2", async () => {
     const folder = await mkdtemp(join(tmpdir(), "alden-downloads-"));

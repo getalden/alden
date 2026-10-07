@@ -43,6 +43,7 @@ import {
   rankQueue,
   reactionProgress,
   recordReaction,
+  recordSeen,
   resolveModel,
   resolveModelKey,
   resolveToken,
@@ -307,6 +308,7 @@ export function createUiApi(options: {
         ...(options.desktop ? { cli: cliStatus() } : {}),
         background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
         notifications: { sound: config.notifications.sound },
+        learning: { fromReviews: config.learning.fromReviews },
         repo: (await repoOf(options.cwd)) ?? null,
         user,
         model: {
@@ -783,6 +785,16 @@ export function createUiApi(options: {
       } catch (error) {
         throw new ApiError(502, describeGitHubError(error, resolved.source));
       }
+    },
+
+    async recordSeen({ pr, headSha, places }) {
+      // Only ever on this machine, and not at all while you've turned learning from reviews off.
+      if (!(await loadConfig(options.cwd)).learning.fromReviews) return { recorded: 0 };
+      const store = openStore();
+      const recorded = store.transaction(
+        () => places.filter((place) => recordSeen(store, { pr, headSha, ...place })).length,
+      );
+      return { recorded };
     },
 
     async setConfig(key, value) {
