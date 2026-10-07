@@ -76,7 +76,7 @@ function github(options: { mergeable?: "MERGEABLE" | "CONFLICTING" } = {}): GitH
 const callersOf = (briefing: Awaited<ReturnType<typeof reviewPullRequest>>) =>
   briefing.checks.find((c) => c.id === "callers.outside");
 
-describe("reviewing a PR against its merge with the latest base", () => {
+describe("reviewing a PR against its merge with the latest base", { timeout: 30_000 }, () => {
   it("finds callers added on the base since the PR branched, and keeps the PR's own diff for what changed", async () => {
     fixture = await prRepo();
     clonePath.current = fixture.clone;

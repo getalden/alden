@@ -79,5 +79,7 @@ export async function prRepo(options: { merge?: boolean } = {}) {
 
   /** The PR's own diff, as GitHub's files API gives it: the head against where it branched. */
   const diff = git(github, "diff", forkPoint, head);
-  return { dir, github, clone, forkPoint, head, base, merge, diff, cleanup: () => rm(dir, { recursive: true, force: true }) };
+  return { dir, github, clone, forkPoint, head, base, merge, diff, // Windows can hold a git file a moment after the process exits: retry, and leave the rest to the OS.
+    cleanup: () => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }).catch(() => {}),
+  };
 }

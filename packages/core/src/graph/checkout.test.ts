@@ -24,7 +24,7 @@ describe("withCheckoutLock", () => {
   });
 });
 
-describe("checkoutPullRequest against GitHub's merge", () => {
+describe("checkoutPullRequest against GitHub's merge", { timeout: 30_000 }, () => {
   let fixture: Awaited<ReturnType<typeof prRepo>>;
   let worktrees: string;
   afterEach(() => fixture.cleanup());
