@@ -656,8 +656,11 @@ describe("sending from the drawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send review · 2 comments" }));
 
     const summary = await screen.findByRole("region", { name: "Send this review to acme/api#1?" });
-    expect(document.activeElement).toBe(
-      within(summary).getByRole("heading", { name: "Send this review to acme/api#1?" }),
+    // Focus moves to the summary's heading once it has rendered; on a busy machine that's a tick later.
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(summary).getByRole("heading", { name: "Send this review to acme/api#1?" }),
+      ),
     );
     // While it shows, the verdict and Send are its own.
     expect(screen.queryByRole("group", { name: "Verdict" })).toBeNull();
