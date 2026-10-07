@@ -155,7 +155,8 @@ The window can't open tabs or download files, so:
 
 ## Where its data lives
 
-- `~/.alden`: your settings, memory, drafts and spend, shared with the command line tool. Your GitHub token and
+- `~/.alden`: your settings, memory (including the [places you saw](memory.md#places-you-saw) in the window), drafts
+  and spend, shared with the command line tool. Your GitHub token and
   Anthropic key are in the macOS keychain. See [Privacy and data](privacy.md).
 - `~/Library/Application Support/dev.getalden.desktop`: the repo folder you chose, and whether the app has offered to
   install the `alden` command.

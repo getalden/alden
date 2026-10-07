@@ -77,6 +77,27 @@ the check's lesson like a click on Useful and shows in `alden feedback`.
   teach nothing either.
 - Comments by Claude Code count the same once you send them: you sent them.
 
+## Places you saw
+
+A review teaches Alden by what's in it, and also by what isn't: a place you looked at and then approved without a word
+on it counts as a weak "probably not worth your time". A place you never looked at teaches nothing, so `alden ui` and
+the desktop app note which places you actually saw:
+
+- **In guided review**, a step that's been in front of you for 1.5 seconds. Stepping past it sooner doesn't count.
+- **In the Diff tab**, an **E1**, **E2**… marker that's been on screen for 1.5 seconds. Scrolling past it doesn't count,
+  and nor does a marker in a hidden tab or a collapsed file.
+
+Each place is noted once per PR and head commit (its check, file and line, and whether you saw it in guided review or
+the diff), for 90 days and the last 200 PRs. Never for **My changes**, and never from the terminal: `alden review`
+can't tell what you read.
+
+Turn it off with **Learn from my reviews** in Settings, or `alden config set learning.fromReviews false`. Alden then
+notes nothing and learns from your reviews no more; Useful and Not useful still teach it.
+
+Learned items in the Memory view say where they came from, newest first: "from your review of acme/shop#412, Oct 8",
+"from your reaction to acme/shop#400, Oct 1", then "and 3 more". After you send a review, the Comments drawer says in
+one line what Alden learned from it, if anything ("Alden learned: you care about callers flags (2 of 3)").
+
 ## Seeing it build
 
 Every useful or not useful says what it did to learning, in `alden ui` (next to the button), in `alden_feedback`'s
@@ -127,8 +148,8 @@ To take back a reaction, press the same button again in `alden ui` (it toggles o
 
 In `~/.alden/alden.db`, a SQLite database (WAL mode, so the CLI and the UI can write at once). Feedback, opens and
 notes are stored as append-only events with unique ids, so a future sync can upload just what it hasn't sent. The same
-file holds spending, when you first used Alden on each repo, and the comments you're drafting (until you send or delete
-them).
+file holds spending, when you first used Alden on each repo, the comments you're drafting (until you send or delete
+them), and the [places you saw](#places-you-saw) in the last 90 days.
 
 Alden needs Node 22.13 or later for the database (the standalone binary has it built in). The first run on an older
 `~/.alden` imports the old JSON files (`feedback/`, `spend/`, `usage.json`) once and moves them to `~/.alden/legacy/`.
@@ -137,5 +158,5 @@ Alden needs Node 22.13 or later for the database (the standalone binary has it b
 
 Learning happens on your machine and its data stays there. Your notes, and the checks you care about or quietened (as
 one line each, e.g. "Cares about migration issues", "Usually finds untested-change concerns not useful: raise them
-only when they're serious"), are sent to your model provider with each review; nothing else from memory is. With `--no-llm`, nothing is. `alden feedback --export` shares feedback only: repo names become a salted
+only when they're serious"), are sent to your model provider with each review; nothing else from memory is. With `--no-llm`, nothing is. The places you saw never leave your machine: not to the model, not in usage stats, not in the feedback export. `alden feedback --export` shares feedback only: repo names become a salted
 hash, and titles, paths and notes are removed. See [Sharing your feedback](privacy.md#sharing-your-feedback).

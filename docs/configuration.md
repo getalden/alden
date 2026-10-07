@@ -119,6 +119,12 @@ For the [desktop app](desktop.md#while-youre-away).
 | --- | --- | --- |
 | `notifications.sound` | `true` | Play the system's notification sound with "Briefing ready". Read from your user config only. Settings → Notifications sets it too. |
 
+## learning
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `learning.fromReviews` | `true` | Learn from the reviews you send, including which of Alden's places you saw and passed without a word. Off, Alden notes nothing about what you saw. Read from your user config only. Settings → Learning sets it too. See [Places you saw](memory.md#places-you-saw). |
+
 ## telemetry
 
 | Key | Default | What it does |
@@ -168,7 +174,7 @@ Everything is under `~/.alden` (or `ALDEN_HOME`):
 | `cache/` | GitHub responses, cached briefly, and your last queue (for `alden open` and `alden review <#>`). |
 | `index/` | The code graph's per-file cache. Around 100 MB for a repo the size of Kubernetes. |
 | `worktrees/` | Checkouts of PRs for the code graph, one per repo. |
-| `alden.db` | The local database: feedback, the PRs you open, your notes, your draft comments, model spending, first use per repo, queued usage stats, the clone Alden last saw for each repo, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
+| `alden.db` | The local database: feedback, the PRs you open, your notes, your draft comments, the places you saw (90 days), model spending, first use per repo, queued usage stats, the clone Alden last saw for each repo, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
 | `legacy/` | Files from before the database, kept after their one-time import. Safe to delete. |
 
 Deleting any of these is safe, but deleting `alden.db` also deletes your feedback, notes and what Alden learned, and
