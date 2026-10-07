@@ -246,7 +246,26 @@ export function MemoryView({ api, session }: { api: Api; session: Session }) {
                                     : `${item.evidence} · since ${since(item.since)}`}
                                 </span>
                                 {item.examples !== undefined && <span>· {plural(item.examples, "example")}</span>}
+                                {item.confirmed !== undefined && <span>· confirmed {item.confirmed}×</span>}
                               </span>
+                              {!gone && item.excluded && item.excluded.length > 0 && (
+                                <span className="meta">
+                                  {item.excluded.map((path) => (
+                                    <button
+                                      key={path}
+                                      type="button"
+                                      className="btn xs quiet"
+                                      disabled={busy}
+                                      aria-label={`Apply this note under ${path} again`}
+                                      onClick={() =>
+                                        act(() => api.changeMemory({ action: "include", id: item.id, path }, repo))
+                                      }
+                                    >
+                                      Apply under {path} again
+                                    </button>
+                                  ))}
+                                </span>
+                              )}
                             </div>
                             <div className="acts">
                               {isEditing ? (

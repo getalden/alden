@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DiffFile } from "../../diff/parse.js";
 import { parseHunks } from "../../diff/parse.js";
 import { buildPrompt, renderFileDiff, SYSTEM_PROMPT } from "./prompt.js";
-import { restatesCi, validateFindings } from "./validate.js";
+import { noteOf, restatesCi, validateFindings } from "./validate.js";
 
 const target: BriefingTarget = {
   kind: "pr",
@@ -201,6 +201,93 @@ describe("validateFindings", () => {
       shown,
     );
     expect(findings).toHaveLength(1);
+  });
+});
+
+describe("findings from the reviewer's notes", () => {
+  it("gives each note a short id for this prompt, says where one doesn't apply, and asks for fromNote", () => {
+    const prompt = buildPrompt({
+      target,
+      files: [code],
+      checks: [],
+      maxInputTokens: 10_000,
+      reviewerNotes: [
+        { id: "note:aa", text: "Money is in cents, never floats" },
+        "Cares about migration issues.",
+        { id: "note:bb", text: "Every file needs a code owner header", except: ["vendor", "app/gen"] },
+      ],
+    });
+    expect(prompt.user).toContain(
+      [
+        "## What the reviewer cares about (from the reviewer, not the author)",
+        "- [N1] Money is in cents, never floats",
+        "- Cares about migration issues.",
+        "- [N2] Every file needs a code owner header (doesn't apply under vendor, app/gen)",
+      ].join("\n"),
+    );
+    expect(prompt.notes).toEqual(
+      new Map([
+        ["N1", { id: "note:aa", text: "Money is in cents, never floats" }],
+        ["N2", { id: "note:bb", text: "Every file needs a code owner header" }],
+      ]),
+    );
+    expect(SYSTEM_PROMPT).toContain(
+      "The reviewer's own notes have ids like [N1]: when one of them is the reason for a finding, set fromNote to that id; otherwise leave fromNote out.",
+    );
+  });
+
+  const notes = new Map([["N1", { id: "note:aa", text: "Every file needs a code owner header" }]]);
+
+  it("takes only an id Alden gave a note", () => {
+    expect(noteOf("N1", notes)).toEqual({ id: "note:aa", text: "Every file needs a code owner header" });
+    expect(noteOf("[n1]", notes)).toEqual({ id: "note:aa", text: "Every file needs a code owner header" });
+    expect(noteOf("N2", notes)).toBeUndefined();
+    expect(noteOf("note:aa", notes)).toBeUndefined();
+    expect(noteOf("N1 and N2", notes)).toBeUndefined();
+    expect(noteOf(undefined, notes)).toBeUndefined();
+  });
+
+  it("keeps the note on a finding, ties it to no check, and drops an id that wasn't in the prompt", () => {
+    const { findings } = validateFindings(
+      {
+        summary: "",
+        matchesTitle: { verdict: "yes", reason: "" },
+        findings: [
+          {
+            title: "Missing code owner header",
+            detail: "d",
+            severity: "low",
+            anchors: [{ path: "src/rank.ts" }],
+            topic: "tests",
+            fromNote: "N1",
+          },
+          {
+            title: "Made-up note",
+            detail: "d",
+            severity: "low",
+            anchors: [{ path: "src/rank.ts" }],
+            topic: "tests",
+            fromNote: "N7",
+          },
+        ],
+      },
+      [code],
+      notes,
+    );
+    expect(findings[0]).toEqual({
+      title: "Missing code owner header",
+      detail: "d",
+      severity: "low",
+      anchors: [{ path: "src/rank.ts" }],
+      fromNote: { id: "note:aa", text: "Every file needs a code owner header" },
+    });
+    expect(findings[1]).toEqual({
+      title: "Made-up note",
+      checkId: "tests.missing",
+      detail: "d",
+      severity: "low",
+      anchors: [{ path: "src/rank.ts" }],
+    });
   });
 });
 

@@ -50,6 +50,7 @@ export interface Telemetry {
 export type MemoryChange =
   | { action: "edit"; id: string; text: string }
   | { action: "restore"; id: string }
+  | { action: "exclude" | "include"; id: string; path: string }
   | { action: "learning"; on: boolean }
   | { action: "forget-all" };
 

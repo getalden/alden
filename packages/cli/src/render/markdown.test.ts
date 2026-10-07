@@ -253,6 +253,25 @@ describe("briefingMarkdown, for a model", () => {
   });
 });
 
+describe("briefingMarkdown, a finding from the reviewer's note", () => {
+  const owners = { id: "note:owners", text: "Every file needs a code owner header" };
+  const llm = briefing().llm as NonNullable<Briefing["llm"]>;
+  const noted = briefing({
+    llm: { ...llm, findings: llm.findings.map((f) => ({ ...f, fromNote: owners })) },
+  });
+
+  it("says so in one line for a model", () => {
+    const text = briefingMarkdown(noted, { forModel: { memory: [], usedModel: true } });
+    expect(text).toContain(
+      "- [F1] low: **Log says user** `src/rank.ts:2`\n  A nit.\n  Because of your note: Every file needs a code owner header",
+    );
+  });
+
+  it("keeps the note out of a document to share, like the rest of the reviewer's memory", () => {
+    expect(briefingMarkdown(noted)).not.toContain("code owner header");
+  });
+});
+
 describe("briefingFileName", () => {
   it("names a PR's briefing owner-repo-number-briefing.md", () => {
     expect(briefingFileName(briefing())).toBe("getalden-alden-12-briefing.md");

@@ -14,6 +14,7 @@ import {
 } from "@alden/schema";
 import { FeedbackLog } from "../feedback/log.js";
 import { fileKind, isLockfile, sensitiveMatcher } from "../queue/files.js";
+import type { PromptNote } from "../review/llm/prompt.js";
 import type { AldenStore } from "../store/db.js";
 import { authorName, prAuthor } from "./authors.js";
 
@@ -108,6 +109,10 @@ export interface Note {
   id: string;
   text: string;
   since: string;
+  /** Folders and files you stopped applying it to, e.g. "app/api": see `isUnder`. */
+  excluded: string[];
+  /** Reviews in which you marked a finding that came from it useful (once per review). */
+  confirmed: number;
 }
 
 export interface Learning {
@@ -154,6 +159,43 @@ export const MAX_AREAS = 3;
 export function codeArea(path: string): string {
   const dirs = path.split("/").slice(0, -1);
   return dirs.length === 0 ? "." : dirs.slice(0, 2).join("/");
+}
+
+/**
+ * A folder or file a note can be stopped under, as stored: no leading "./" or "/", no trailing "/". Throws on an
+ * empty path or one that climbs out of the repo.
+ */
+export function notePath(path: string): string {
+  const clean = path
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^(\.\/)+/, "")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+  if (!clean || clean === "." || clean.split("/").includes("..")) throw new Error("Give a folder or file in the repo.");
+  return clean;
+}
+
+/** Whether `path` is the file `prefix`, or under the folder `prefix`. */
+export function isUnder(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(`${prefix}/`);
+}
+
+/**
+ * Where "stop applying this note" offers to stop it, for a finding on `path`: the file's first two folders
+ * ("app/api/users/route.ts" → "app/api"), its folder when it has one, or the file itself at the repo root.
+ */
+export function noteArea(path: string): string {
+  const area = codeArea(path);
+  return area === "." ? path : area;
+}
+
+/** Whether you stopped applying a note everywhere a finding points: then the finding is left out. */
+export function noteStoppedAt(learning: Learning | undefined, noteId: string, paths: string[]): string | undefined {
+  const note = learning?.notes.find((n) => n.id === noteId);
+  if (!note || paths.length === 0) return undefined;
+  const at = paths.map((p) => note.excluded.find((prefix) => isUnder(p, prefix)));
+  return at.every(Boolean) ? (at[0] as string) : undefined;
 }
 
 /** Who wrote a PR, as features: their kind ("by:agents") and, for a bot or agent, which ("author:bot:dependabot"). */
@@ -264,7 +306,7 @@ export function learn(input: {
   for (const event of input.memory) {
     switch (event.action) {
       case "add":
-        notes.set(event.item, { id: event.item, text: event.text, since: event.at });
+        notes.set(event.item, { id: event.item, text: event.text, since: event.at, excluded: [], confirmed: 0 });
         break;
       case "edit": {
         const note = notes.get(event.item);
@@ -285,6 +327,15 @@ export function learn(input: {
         forgottenNotes.delete(event.item);
         break;
       }
+      case "exclude":
+      case "include": {
+        const note = notes.get(event.item);
+        if (!note) break;
+        const path = notePath(event.path);
+        const rest = note.excluded.filter((p) => p !== path);
+        notes.set(event.item, { ...note, excluded: event.action === "exclude" ? [...rest, path] : rest });
+        break;
+      }
       case "pause":
         paused = true;
         break;
@@ -300,16 +351,27 @@ export function learn(input: {
   // can't teach a lesson on its own.
   const latest = new Map<string, Extract<FeedbackEvent, { kind: "verdict" }>>();
   const latestOnPr = new Map<string, Extract<FeedbackEvent, { kind: "verdict" }>>();
+  // A finding from one of your notes teaches the note, not a check: useful confirms it, once per review.
+  const latestOnNote = new Map<string, Extract<FeedbackEvent, { kind: "verdict" }>>();
   for (const event of input.feedback) {
     if (event.kind !== "verdict") continue;
     const key = dismissKey(feedbackTargetKey(event), event.item);
     const { item } = event;
+    if (item.note) {
+      latestOnNote.set(`${event.briefingAt}|${feedbackTargetKey(event)}|${item.note}`, event);
+      latestOnPr.set(key, event);
+      continue;
+    }
     const flag = item.source === "llm" && item.checkId ? `llm|${checkTopic(item.checkId)}` : `${key}|${item.placement}`;
     latest.set(`${event.briefingAt}|${feedbackTargetKey(event)}|${flag}`, event);
     latestOnPr.set(key, event);
   }
   const dismissed = new Map<string, string>();
   for (const [key, event] of latestOnPr) if (event.verdict === "dismiss") dismissed.set(key, event.at);
+  for (const event of latestOnNote.values()) {
+    const note = event.item.note ? notes.get(event.item.note) : undefined;
+    if (note && event.verdict === "agree") note.confirmed++;
+  }
 
   // Each direction counts after its own forget, by topic or (from before topics) by the check's own id.
   const afterCheck = (checkId: string, direction: "up" | "down", at: string) =>
@@ -520,7 +582,12 @@ export function memoryItems(learning: Learning): MemoryItem[] {
     kind: "note",
     group: "look",
     text: n.text,
-    effect: "Given to the model with every review of this repo.",
+    effect:
+      n.excluded.length > 0
+        ? `Given to the model with every review of this repo, except under ${n.excluded.join(", ")}.`
+        : "Given to the model with every review of this repo.",
+    ...(n.confirmed > 0 ? { confirmed: n.confirmed } : {}),
+    ...(n.excluded.length > 0 ? { excluded: n.excluded } : {}),
     since: n.since,
   }));
   const checks: MemoryItem[] = [...learning.checks.values()].map((lesson) => {
@@ -588,15 +655,22 @@ export async function memoryRepos(
 }
 
 /**
- * Notes and learned check preferences, as lines for the model's prompt: what you care about, and what you usually
- * find not useful, so the model stops raising concerns your feedback quietened.
+ * Notes and learned check preferences, for the model's prompt: your notes (each by its id, so the model can say a
+ * finding came from one), what you care about, and what you usually find not useful, so the model stops raising
+ * concerns your feedback quietened. Given the change's files, a note you stopped applying under all of them is left
+ * out, and one you stopped applying under some of them says where it doesn't apply.
  */
-export function promptNotes(learning: Learning | undefined): string[] {
+export function promptNotes(learning: Learning | undefined, paths?: string[]): (string | PromptNote)[] {
   if (!learning) return [];
   const lessons = learning.paused ? [] : [...learning.checks.values()];
   const topic = (l: CheckLesson) => checkName(l.topic).replace(/ flags$/, "");
   return [
-    ...learning.notes.map((n) => n.text),
+    ...learning.notes.flatMap((n): PromptNote[] => {
+      if (n.excluded.length === 0 || !paths) return [{ id: n.id, text: n.text }];
+      const except = n.excluded.filter((prefix) => paths.some((p) => isUnder(p, prefix)));
+      if (paths.length > 0 && paths.every((p) => except.some((prefix) => isUnder(p, prefix)))) return [];
+      return [{ id: n.id, text: n.text, ...(except.length > 0 ? { except } : {}) }];
+    }),
     ...lessons.filter((l) => l.direction === "up").map((l) => `Cares about ${topic(l)} issues.`),
     ...lessons
       .filter((l) => l.direction === "down")
@@ -615,10 +689,17 @@ const more = (n: number) => (n === 1 ? "one more" : `${n} more`);
  */
 export function checkProgress(
   learning: Learning,
-  item: Pick<FeedbackItem, "source" | "checkId">,
+  item: Pick<FeedbackItem, "source" | "checkId" | "note">,
   verdict: Extract<FeedbackEvent, { kind: "verdict" }>["verdict"],
 ): string | undefined {
   if (verdict !== "agree" && verdict !== "not_needed") return undefined;
+  if (item.note) {
+    const note = learning.notes.find((n) => n.id === item.note);
+    if (!note) return "Saved. The note this came from is no longer in memory, so this teaches nothing.";
+    return verdict === "agree"
+      ? `Saved. Your note is confirmed ${note.confirmed}×.`
+      : "Saved. This came from your note, so it teaches no check. Nothing changes unless you stop the note here or edit it.";
+  }
   if (!item.checkId) {
     return "Saved. This finding isn't tied to one of Alden's topics, so it counts toward your useful rate but teaches no lesson.";
   }
@@ -750,6 +831,27 @@ export async function editNote(store: AldenStore, repo: string, item: string, te
   const learning = await loadLearning(store, repo, now);
   if (!learning.notes.some((n) => n.id === item)) return false;
   memoryEvent(store, { ...base(repo, now), action: "edit", item, text: trimmed });
+  return true;
+}
+
+/**
+ * Stops applying a note under a folder or file (`exclude`), or applies it there again (`include`). Returns false when
+ * `repo` has no note by that id, or (for include) the note wasn't stopped there.
+ */
+export async function scopeNote(
+  store: AldenStore,
+  repo: string,
+  item: string,
+  path: string,
+  action: "exclude" | "include",
+  now = new Date(),
+): Promise<boolean> {
+  const clean = notePath(path);
+  const note = (await loadLearning(store, repo, now)).notes.find((n) => n.id === item);
+  if (!note) return false;
+  if (action === "include" && !note.excluded.includes(clean)) return false;
+  if (action === "exclude" && note.excluded.includes(clean)) return true;
+  memoryEvent(store, { ...base(repo, now), action, item, path: clean });
   return true;
 }
 

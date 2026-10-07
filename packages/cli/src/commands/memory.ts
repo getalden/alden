@@ -7,9 +7,11 @@ import {
   forgetAll,
   loadLearning,
   memoryItems,
+  notePath,
   openStore,
   repoFromRemote,
   restore,
+  scopeNote,
   setLearning,
 } from "@alden/core";
 import type { MemoryItem } from "@alden/schema";
@@ -46,12 +48,22 @@ export function renderMemory(repo: string, untrusted: MemoryItem[], color: boole
     out.push(paint(title, "bold", color));
     for (const item of list) {
       out.push(`  ${item.text}`);
-      const detail = [item.source === "you" ? "you said" : item.evidence, item.effect?.replace(/\.$/, "")]
+      const detail = [
+        item.source === "you" ? "you said" : item.evidence,
+        item.confirmed && `confirmed ${item.confirmed}×`,
+        // A note's exclusions get their own line.
+        item.excluded?.length ? "Given to the model with every review of this repo" : item.effect?.replace(/\.$/, ""),
+      ]
         .filter(Boolean)
         .join("; ");
       out.push(
         paint(`    ${detail ? `${detail} · ` : ""}since ${item.since.slice(0, 10)} · id ${item.id}`, "dim", color),
       );
+      if (item.excluded?.length) {
+        out.push(
+          paint(`    not applied under ${item.excluded.join(", ")} · alden memory include <id> <path>`, "dim", color),
+        );
+      }
     }
     out.push("");
   };
@@ -126,6 +138,44 @@ export function registerMemoryCommand(program: Command): void {
       }
       console.log(`Updated ${id}.`);
     });
+
+  for (const [name, action] of [
+    ["exclude", "exclude"],
+    ["include", "include"],
+  ] as const) {
+    memory
+      .command(name)
+      .description(
+        action === "exclude"
+          ? "Stop applying one of your notes to a folder or file: the model isn't told it for changes there."
+          : "Apply one of your notes to a folder or file again.",
+      )
+      .argument("<id>", "the note's id, from `alden memory`")
+      .argument("<path>", "a folder (e.g. app/api) or a file in the repo")
+      .option("--repo <owner/name>", "the repo (default: this clone's origin)")
+      .action(async (id: string, path: string, options: { repo?: string }) => {
+        const repo = await repoFrom({ ...memory.opts(), ...options });
+        let done: boolean;
+        try {
+          path = notePath(path);
+          done = await scopeNote(openStore(), repo, id, path, action);
+        } catch (error) {
+          program.error((error as Error).message);
+        }
+        if (!done) {
+          program.error(
+            action === "exclude"
+              ? `No note called ${id} in ${repo}. \`alden memory\` lists the ids.`
+              : `Note ${id} in ${repo} isn't stopped under ${path}. \`alden memory\` lists where it is.`,
+          );
+        }
+        console.log(
+          action === "exclude"
+            ? `Note ${id} no longer applies under ${path}. \`alden memory include ${id} ${path}\` takes that back.`
+            : `Note ${id} applies under ${path} again.`,
+        );
+      });
+  }
 
   memory
     .command("forget")

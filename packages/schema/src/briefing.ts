@@ -42,6 +42,12 @@ export const RelatedFileSchema = z.object({
   why: z.enum(["caller", "test", "importer"]),
 });
 
+/** The reviewer's note a model finding came from: the note's own id and its text when the review ran. */
+export const FromNoteSchema = z.object({
+  id: z.string().describe("the note's id in memory, e.g. note:1a2b3c4d"),
+  text: z.string().describe("the note's text, as the model was given it"),
+});
+
 export const LookHereSchema = z.object({
   title: z.string(),
   reason: z.string().describe("why a human should look, in one sentence"),
@@ -52,6 +58,7 @@ export const LookHereSchema = z.object({
     .string()
     .optional()
     .describe("why your feedback put it here, e.g. 'you usually mark migration flags useful'"),
+  fromNote: FromNoteSchema.optional().describe("for a model finding: the reviewer's note that is the reason for it"),
   related: z
     .array(RelatedFileSchema)
     .optional()
@@ -87,6 +94,9 @@ export const LlmFindingSchema = z.object({
   severity: SeveritySchema,
   /** One finding can cover several places, e.g. the same change repeated across ten files. */
   anchors: z.array(AnchorSchema),
+  fromNote: FromNoteSchema.optional().describe(
+    "the reviewer's note that is the reason for this finding, when the model said so and the note was in its prompt",
+  ),
 });
 
 export const LlmSectionSchema = z.object({
@@ -203,6 +213,7 @@ export type BriefingLearning = z.infer<typeof BriefingLearningSchema>;
 export type BriefingFile = z.infer<typeof BriefingFileSchema>;
 export type BriefingTarget = z.infer<typeof BriefingTargetSchema>;
 export type LlmFinding = z.infer<typeof LlmFindingSchema>;
+export type FromNote = z.infer<typeof FromNoteSchema>;
 export type LlmSection = z.infer<typeof LlmSectionSchema>;
 export type Briefing = z.infer<typeof BriefingSchema>;
 export type BriefingFreshness = z.infer<typeof BriefingFreshnessSchema>;

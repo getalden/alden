@@ -499,6 +499,26 @@ describe("sending a review", () => {
     expect((await loadLearning(store, REPO)).checkTallies.get("paths.sensitive")).toEqual({ agree: 1, notNeeded: 0 });
   });
 
+  it("counts a comment near a place from one of your notes toward the note, not a check", async () => {
+    const drafts = new ReviewDrafts(store);
+    const note = { id: "note:owners", text: "Every file needs a code owner header" };
+    const noted = { title: "Missing code owner header", reason: "r", anchor: { path: "src/pay.ts", line: 12 } };
+    drafts.rememberBriefing({
+      target: { kind: "pr", repo: REPO, number: 7 },
+      generatedAt: "2026-10-01T00:00:00.000Z",
+      needsYourEyes: [{ ...noted, source: "llm", checkId: "tests.missing", fromNote: note }],
+    } as unknown as Briefing);
+    drafts.add({ pr: PR, headSha: "h1", body: "Header?", source: "you", place: placed() });
+    const gh = fakeGitHub({ head: "h1", patch: V1 });
+    expect((await sendReview(gh.client, store, { repo: REPO, number: 7, event: "COMMENT" })).counts.learned).toBe(1);
+    expect((await new FeedbackLog(store).events(REPO))[0]).toMatchObject({
+      verdict: "agree",
+      via: "comment",
+      item: { note: "note:owners" },
+    });
+    expect((await loadLearning(store, REPO)).checkTallies.size).toBe(0);
+  });
+
   it("sends a suggestion like a comment, and learns from it the same way", async () => {
     const drafts = new ReviewDrafts(store);
     drafts.rememberBriefing(briefing("2026-10-01T00:00:00.000Z"));

@@ -7,6 +7,7 @@ import {
   FEEDBACK_SCHEMA_VERSION,
   type FeedbackEvent,
   MEMORY_SCHEMA_VERSION,
+  type MemoryEvent,
   type OpenEvent,
   type PullRequestFacts,
 } from "@alden/schema";
@@ -25,6 +26,9 @@ import {
   learn,
   loadLearning,
   memoryItems,
+  noteArea,
+  notePath,
+  noteStoppedAt,
   OPEN_BOOST,
   prFeatures,
   promptNotes,
@@ -33,6 +37,7 @@ import {
   recordOpen,
   recordReaction,
   restore,
+  scopeNote,
   setLearning,
 } from "./learn.js";
 
@@ -288,7 +293,7 @@ describe("the store, memory and opens", () => {
     expect(paused.paused).toBe(true);
     // Paused: listed, notes still go to the model, learned preferences don't.
     expect(memoryItems(paused)).toHaveLength(2);
-    expect(promptNotes(paused)).toEqual(["Money is in cents, never floats"]);
+    expect(promptNotes(paused)).toEqual([{ id, text: "Money is in cents, never floats" }]);
     setLearning(store, REPO, true, new Date(later.getTime() + 1));
     expect((await loadLearning(store, REPO, new Date(later.getTime() + 2))).paused).toBe(false);
 
@@ -447,7 +452,7 @@ describe("using what was learned", () => {
       now: NOW,
     });
     const notes = promptNotes(learning);
-    expect(notes).toEqual(["Money is in cents, never floats", "Cares about migration issues."]);
+    expect(notes).toEqual([{ id: "note:1", text: "Money is in cents, never floats" }, "Cares about migration issues."]);
     const prompt = buildPrompt({
       target: { kind: "local", repoRoot: "/x", branch: null },
       files: [],
@@ -456,8 +461,10 @@ describe("using what was learned", () => {
       reviewerNotes: notes,
     });
     expect(prompt.user).toContain("## What the reviewer cares about (from the reviewer, not the author)");
-    expect(prompt.user).toContain("- Money is in cents, never floats");
+    expect(prompt.user).toContain("- [N1] Money is in cents, never floats");
+    expect(prompt.user).toContain("- Cares about migration issues.");
     expect(prompt.reviewerNotes).toBe(2);
+    expect(prompt.notes).toEqual(new Map([["N1", { id: "note:1", text: "Money is in cents, never floats" }]]));
     expect(
       buildPrompt({
         target: { kind: "local", repoRoot: "/x", branch: null },
@@ -756,5 +763,167 @@ describe("saying how close a lesson is", () => {
     expect(reactionProgress(three, ["author:bot:dependabot", "by:bots"], "down")).toBe(
       "Alden ranks Dependabot PRs lower in this repo.",
     );
+  });
+});
+
+describe("findings from your notes", () => {
+  const add = (item: string, text: string, day = 10): Extract<MemoryEvent, { action: "add" }> => ({
+    schemaVersion: MEMORY_SCHEMA_VERSION,
+    id: `m${n++}`,
+    at: at(day),
+    repo: REPO,
+    action: "add" as const,
+    item,
+    text,
+  });
+  const scope = (action: "exclude" | "include", item: string, path: string, day = 11): MemoryEvent => ({
+    schemaVersion: MEMORY_SCHEMA_VERSION,
+    id: `m${n++}`,
+    at: at(day),
+    repo: REPO,
+    action,
+    item,
+    path,
+  });
+  const fromNote = (
+    note: string,
+    v: "agree" | "not_needed" | "dismiss",
+    pr: number,
+    options: { title?: string; checkId?: string } = {},
+  ): FeedbackEvent => ({
+    schemaVersion: FEEDBACK_SCHEMA_VERSION,
+    id: `nv${n++}`,
+    at: at(20),
+    kind: "verdict",
+    target: { kind: "pr", repo: REPO, number: pr },
+    briefingAt: at(20),
+    item: {
+      source: "llm",
+      ...(options.checkId ? { checkId: options.checkId } : {}),
+      title: options.title ?? "Missing code owner header",
+      anchor: { path: "app/api/users/route.ts" },
+      placement: "finding",
+      note,
+    },
+    verdict: v,
+  });
+  const OWNERS = "note:owners";
+  const memory = [add(OWNERS, "Every file needs a code owner header")];
+
+  it("confirms the note on useful, once per review, and teaches no check either way", () => {
+    const feedback = [
+      fromNote(OWNERS, "agree", 1, { checkId: "tests.missing" }),
+      fromNote(OWNERS, "agree", 1, { title: "Another file without a header" }),
+      fromNote(OWNERS, "agree", 2),
+      fromNote(OWNERS, "agree", 3),
+      fromNote(OWNERS, "not_needed", 4, { checkId: "tests.missing" }),
+      fromNote(OWNERS, "not_needed", 5, { checkId: "tests.missing" }),
+      fromNote(OWNERS, "not_needed", 6, { checkId: "tests.missing" }),
+    ];
+    const learning = learn({ repo: REPO, feedback, opens: [], memory, now: NOW });
+    expect(learning.notes[0]?.confirmed).toBe(3);
+    expect(learning.checks.size).toBe(0);
+    expect(learning.checkTallies.size).toBe(0);
+    expect(learning.notes[0]?.excluded).toEqual([]);
+    expect(memoryItems(learning)[0]).toMatchObject({ id: OWNERS, confirmed: 3 });
+    expect(memoryItems(learning)[0]?.excluded).toBeUndefined();
+  });
+
+  it("still lets a dismiss hide the finding on that PR", () => {
+    const learning = learn({ repo: REPO, feedback: [fromNote(OWNERS, "dismiss", 7)], opens: [], memory, now: NOW });
+    expect([...learning.dismissed.keys()]).toEqual([
+      "acme/shop#7|llm||Missing code owner header|app/api/users/route.ts",
+    ]);
+  });
+
+  it("says what a reaction did to the note", () => {
+    const learning = learn({ repo: REPO, feedback: [fromNote(OWNERS, "agree", 1)], opens: [], memory, now: NOW });
+    const item = { source: "llm" as const, note: OWNERS };
+    expect(checkProgress(learning, item, "agree")).toBe("Saved. Your note is confirmed 1×.");
+    expect(checkProgress(learning, item, "not_needed")).toBe(
+      "Saved. This came from your note, so it teaches no check. Nothing changes unless you stop the note here or edit it.",
+    );
+    expect(checkProgress(learning, { source: "llm", note: "note:gone" }, "agree")).toBe(
+      "Saved. The note this came from is no longer in memory, so this teaches nothing.",
+    );
+  });
+
+  it("keeps where you stopped a note, through edits, and takes it back", () => {
+    const events = [
+      ...memory,
+      scope("exclude", OWNERS, "vendor"),
+      scope("exclude", OWNERS, "app/api"),
+      scope("exclude", OWNERS, "app/api"),
+      { ...add(OWNERS, "x", 12), action: "edit" as const, text: "Every source file needs a code owner header" },
+      scope("include", OWNERS, "vendor", 13),
+      scope("exclude", "note:unknown", "x"),
+    ];
+    const learning = learn({ repo: REPO, feedback: [], opens: [], memory: events, now: NOW });
+    expect(learning.notes).toMatchObject([
+      { id: OWNERS, text: "Every source file needs a code owner header", excluded: ["app/api"] },
+    ]);
+    expect(memoryItems(learning)[0]).toMatchObject({
+      excluded: ["app/api"],
+      effect: "Given to the model with every review of this repo, except under app/api.",
+    });
+  });
+
+  it("leaves a note out of the prompt when every changed file is where you stopped it, and says where otherwise", () => {
+    const events = [...memory, add("note:cents", "Money is in cents"), scope("exclude", OWNERS, "app/api")];
+    const learning = learn({ repo: REPO, feedback: [], opens: [], memory: events, now: NOW });
+    expect(promptNotes(learning, ["app/api/a.ts", "app/api/b/c.ts"])).toEqual([
+      { id: "note:cents", text: "Money is in cents" },
+    ]);
+    expect(promptNotes(learning, ["app/api/a.ts", "lib/x.ts"])).toEqual([
+      { id: OWNERS, text: "Every file needs a code owner header", except: ["app/api"] },
+      { id: "note:cents", text: "Money is in cents" },
+    ]);
+    // "app/apiary" isn't under "app/api".
+    expect(promptNotes(learning, ["app/apiary/x.ts"])[0]).toEqual({
+      id: OWNERS,
+      text: "Every file needs a code owner header",
+    });
+    expect(noteStoppedAt(learning, OWNERS, ["app/api/a.ts"])).toBe("app/api");
+    expect(noteStoppedAt(learning, OWNERS, ["app/api/a.ts", "lib/x.ts"])).toBeUndefined();
+    expect(noteStoppedAt(learning, OWNERS, [])).toBeUndefined();
+    expect(noteStoppedAt(learning, "note:cents", ["app/api/a.ts"])).toBeUndefined();
+  });
+
+  it("offers a finding's first two folders, or the file at the root, and cleans up a path", () => {
+    expect(noteArea("app/api/users/route.ts")).toBe("app/api");
+    expect(noteArea("py/x.py")).toBe("py");
+    expect(noteArea("README.md")).toBe("README.md");
+    expect(notePath(" ./app/api/ ")).toBe("app/api");
+    expect(notePath("/vendor")).toBe("vendor");
+    expect(() => notePath("../etc")).toThrow("Give a folder or file in the repo.");
+    expect(() => notePath(" ")).toThrow();
+  });
+
+  describe("in the store", () => {
+    let dir: string;
+    let store: AldenStore;
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), "alden-note-scope-"));
+      store = openStore(join(dir, "alden.db"));
+    });
+    afterEach(() => {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("stops and applies a note again by path", async () => {
+      const event = addNote(store, REPO, "Every file needs a code owner header", NOW);
+      const id = event.item;
+      expect(await scopeNote(store, REPO, id, "app/api/", "exclude", NOW)).toBe(true);
+      expect(await scopeNote(store, REPO, id, "app/api", "exclude", NOW)).toBe(true);
+      expect(await scopeNote(store, REPO, "note:nope", "app/api", "exclude", NOW)).toBe(false);
+      expect(await scopeNote(store, REPO, id, "lib", "include", NOW)).toBe(false);
+      expect((await loadLearning(store, REPO, NOW)).notes[0]?.excluded).toEqual(["app/api"]);
+      // Only one event for the repeated exclude.
+      expect(store.events("memory", { repo: REPO })).toHaveLength(2);
+      const later = new Date(NOW.getTime() + 1000);
+      expect(await scopeNote(store, REPO, id, "app/api", "include", later)).toBe(true);
+      expect((await loadLearning(store, REPO, later)).notes[0]?.excluded).toEqual([]);
+    });
   });
 });

@@ -5,6 +5,15 @@ import type { Api } from "./api";
 /** Useful, not useful (both teach Alden about this kind of flag), or dismiss (only hides it on this PR). */
 export type Verdict = "agree" | "not_needed" | "dismiss";
 
+/**
+ * Where "Stop applying this note" offers to stop a note, for a finding on `path`: its first two folders
+ * ("app/api/users/route.ts" → "app/api"), its folder, or the file itself at the repo root. (Alden's `noteArea`.)
+ */
+export function noteArea(path: string): string {
+  const dirs = path.split("/").slice(0, -1);
+  return dirs.length === 0 ? path : dirs.slice(0, 2).join("/");
+}
+
 /** One flag in one briefing, as the UI tracks it. (The log keys verdicts the same way.) */
 export function itemKey(item: FeedbackItem): string {
   const where = item.anchor ? `${item.anchor.path}:${item.anchor.line ?? ""}` : "";
@@ -27,6 +36,17 @@ export interface BriefingFeedback {
   /** Sets a verdict; the same one again takes it back. */
   toggle(item: FeedbackItem, verdict: Verdict): void;
   reportMissed(note: string, anchor?: Anchor): Promise<void>;
+  /**
+   * Changes the note a model finding came from, in the briefing's repo: stop applying it under a folder or file, apply
+   * it there again, or rewrite it. Undefined when the briefing's repo isn't known (local changes without a remote).
+   */
+  changeNote?:
+    | ((
+        change:
+          | { action: "exclude" | "include"; id: string; path: string }
+          | { action: "edit"; id: string; text: string },
+      ) => Promise<void>)
+    | undefined;
   missedCount: number;
   error: string | undefined;
 }
@@ -57,7 +77,14 @@ export function useFeedback(api: Api | undefined, localRepo: string | null) {
           throw error;
         }
       };
+      const repo = base.target.repo;
       return {
+        changeNote:
+          api && repo
+            ? async (change) => {
+                await api.changeMemory(change, repo);
+              }
+            : undefined,
         verdictOf: (item) => verdicts[`${id}|${itemKey(item)}`],
         progressOf: (item) => progress[`${id}|${itemKey(item)}`],
         toggle(item, verdict) {

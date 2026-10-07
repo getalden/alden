@@ -347,6 +347,26 @@ describe("renderBriefing", () => {
       expect(out.match(/fetchCatalog callers/g)).toHaveLength(1);
     });
 
+    it("says when a finding came from one of your notes", () => {
+      const owners = { id: "note:owners", text: "Every file needs a code owner header" };
+      const llm = withModel.llm as NonNullable<typeof withModel.llm>;
+      const noted = plain(
+        {
+          ...withModel,
+          needsYourEyes: withModel.needsYourEyes.map((e) => ({ ...e, fromNote: owners })),
+          llm: { ...llm, findings: llm.findings.map((f) => ({ ...f, fromNote: owners })) },
+        },
+        120,
+      );
+      expect(noted).toContain(
+        "     The return type changed.\n     Because of your note: Every file needs a code owner header",
+      );
+      expect(noted).toContain(
+        "           Minor.\n           Because of your note: Every file needs a code owner header",
+      );
+      expect(out).not.toContain("Because of your note");
+    });
+
     it("ends with the model, its cost and what was dropped", () => {
       expect(plain(withModel, 120).trimEnd().split("\n").at(-1)).toBe(
         "Model: claude-sonnet-5 via anthropic (effort medium) · $0.04 · 1 finding dropped for pointing at lines not in the diff",

@@ -179,6 +179,72 @@ describe("addModelReview on a real PR", () => {
     });
   });
 
+  it("says which of your notes a finding came from, and leaves out one from a note you stopped there", async () => {
+    const { briefing, files } = recorded("grafana", 133736);
+    const path = "public/app/features/explore/SignalExplorer/data/metricResourceClient.ts";
+    const { provider, sent } = model({
+      output: {
+        summary: "s",
+        matchesTitle: { verdict: "yes", reason: "r" },
+        findings: [
+          {
+            title: "Missing code owner header",
+            detail: "d",
+            severity: "medium",
+            anchors: [{ path }],
+            topic: "other",
+            fromNote: "N1",
+          },
+          { title: "Uses floats for money", detail: "d", severity: "low", anchors: [{ path }], fromNote: "N2" },
+          { title: "Claims a note", detail: "d", severity: "low", anchors: [{ path }], fromNote: "N9" },
+        ],
+      },
+    });
+    const memory = (action: "add" | "exclude", item: string, extra: { text: string } | { path: string }) => ({
+      schemaVersion: 1 as const,
+      id: `${action}-${item}`,
+      at: "2026-09-20T12:00:00.000Z",
+      repo: "acme/shop",
+      action,
+      item,
+      ...extra,
+    });
+    const learning = learn({
+      repo: "acme/shop",
+      feedback: [],
+      opens: [],
+      memory: [
+        memory("add", "note:owners", { text: "Every file needs a code owner header" }),
+        memory("add", "note:cents", { text: "Money is in cents, never floats" }),
+        memory("exclude", "note:cents", { path: "public/app/features/explore/SignalExplorer/data" }),
+      ] as Parameters<typeof learn>[0]["memory"],
+    });
+    const result = await addModelReview(briefing, {
+      provider,
+      config,
+      ledger: new SpendLedger(join(dir, "alden.db")),
+      files,
+      learning,
+    });
+    expect(sent[0]).toContain("- [N1] Every file needs a code owner header");
+    expect(sent[0]).toContain(
+      "- [N2] Money is in cents, never floats (doesn't apply under public/app/features/explore/SignalExplorer/data)",
+    );
+    expect(result.llm?.findings.map((f) => [f.title, f.fromNote?.id])).toEqual([
+      ["Missing code owner header", "note:owners"],
+      ["Claims a note", undefined],
+    ]);
+    expect(result.needsYourEyes.find((e) => e.title === "Missing code owner header")).toMatchObject({
+      fromNote: { id: "note:owners", text: "Every file needs a code owner header" },
+    });
+    expect(result.learning?.hidden).toContainEqual({
+      title: "Uses floats for money",
+      reason: "You stopped applying the note it came from to public/app/features/explore/SignalExplorer/data",
+      anchor: { path },
+    });
+    expect(BriefingSchema.safeParse(JSON.parse(JSON.stringify(result))).error).toBeUndefined();
+  });
+
   it("sends the effort from config, or a one-off override, and records it", async () => {
     const { briefing, files } = recorded("django", 22041);
     const seen: (string | undefined)[] = [];

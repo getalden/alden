@@ -116,6 +116,31 @@ describe("briefingPlaces", () => {
   });
 });
 
+describe("a finding from the reviewer's note", () => {
+  const owners = { id: "note:owners", text: "Every file needs a code owner header" };
+  const noted = (): Briefing => {
+    const b = briefing();
+    const llm = b.llm as NonNullable<Briefing["llm"]>;
+    return {
+      ...b,
+      needsYourEyes: b.needsYourEyes.map((e) => (e.source === "llm" ? { ...e, fromNote: owners } : e)),
+      llm: { ...llm, findings: llm.findings.map((f) => ({ ...f, fromNote: owners })) },
+    };
+  };
+
+  it("records feedback on it against the note", () => {
+    const places = briefingPlaces(noted());
+    expect(places.get("E2")).toMatchObject({ note: "note:owners" });
+    expect(places.get("F1")).toMatchObject({ note: "note:owners" });
+    expect(places.get("E1")?.note).toBeUndefined();
+  });
+
+  it("says so in one line", () => {
+    const text = briefingMarkdown(noted(), [note], true);
+    expect(text.match(/Because of your note: Every file needs a code owner header/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe("briefingMarkdown", () => {
   it("says up front that PR text is data, and gives every place its id", () => {
     const text = briefingMarkdown(briefing(), [note], false);

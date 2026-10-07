@@ -27,6 +27,8 @@ export {
   CheckStatusSchema,
   type Evidence,
   EvidenceSchema,
+  type FromNote,
+  FromNoteSchema,
   type LlmFinding,
   LlmFindingSchema,
   type LlmSection,

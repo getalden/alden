@@ -26,6 +26,8 @@ export const FeedbackItemSchema = z.object({
    * for a check's own row ("worth flagging?").
    */
   placement: z.enum(["eyes", "finding", "check"]),
+  /** A model finding that came from one of your notes: reactions to it teach the note, not a check. */
+  note: z.string().optional().describe("the id of the note the model finding came from"),
 });
 
 const common = {

@@ -37,7 +37,25 @@ export interface ValidatedFindings {
  * that file's visible hunks when it gives one. A finding whose anchors all fail is dropped as invented; a finding
  * with no anchors at all (e.g. "the title promises X") is kept as a general note.
  */
-export function validateFindings(output: LlmOutput, shownFiles: DiffFile[]): ValidatedFindings {
+/**
+ * The note a finding says it came from, when the model named one of the ids its prompt gave the reviewer's notes
+ * ("N1", or "[N1]"). Anything else is dropped: the id can only point at a note Alden put in the prompt, never at text
+ * from the PR.
+ */
+export function noteOf(
+  fromNote: string | undefined,
+  notes: ReadonlyMap<string, { id: string; text: string }>,
+): { id: string; text: string } | undefined {
+  const short = /^\[?\s*(N\d+)\s*\]?$/i.exec(fromNote?.trim() ?? "")?.[1]?.toUpperCase();
+  const note = short ? notes.get(short) : undefined;
+  return note ? { id: note.id, text: note.text } : undefined;
+}
+
+export function validateFindings(
+  output: LlmOutput,
+  shownFiles: DiffFile[],
+  notes: ReadonlyMap<string, { id: string; text: string }> = new Map(),
+): ValidatedFindings {
   const index = visibleLines(shownFiles);
   const findings: LlmFinding[] = [];
   let dropped = 0;
@@ -56,14 +74,17 @@ export function validateFindings(output: LlmOutput, shownFiles: DiffFile[]): Val
       dropped++;
       continue;
     }
-    // The topic the model tagged it with, as the check it counts toward when the reviewer reacts to it.
-    const checkId = finding.topic && finding.topic !== "other" ? MODEL_TOPICS[finding.topic] : undefined;
+    const fromNote = noteOf(finding.fromNote, notes);
+    // The topic the model tagged it with, as the check it counts toward when the reviewer reacts to it. A finding
+    // from one of your notes counts toward the note instead, so it's tied to no check.
+    const checkId = !fromNote && finding.topic && finding.topic !== "other" ? MODEL_TOPICS[finding.topic] : undefined;
     findings.push({
       title: finding.title,
       ...(checkId ? { checkId } : {}),
       detail: finding.detail,
       severity: finding.severity,
       anchors: valid,
+      ...(fromNote ? { fromNote } : {}),
     });
   }
   return { findings, dropped };

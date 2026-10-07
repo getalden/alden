@@ -1,11 +1,12 @@
 import type { AldenConfig, Briefing, LlmSection } from "@alden/schema";
 import type { DiffFile } from "../../diff/parse.js";
-import { checkLesson, checkReason, dismissKey, type Learning, promptNotes } from "../../learn/learn.js";
+import { checkLesson, checkReason, dismissKey, type Learning, noteStoppedAt, promptNotes } from "../../learn/learn.js";
 import { supportsEffort } from "../../llm/anthropic.js";
 import { affordableInputTokens } from "../../llm/budget.js";
 import { BudgetExceededError, type BudgetedResult, budgetedGenerate } from "../../llm/budgeted.js";
 import type { SpendLedger } from "../../llm/ledger.js";
 import { type Effort, LlmError, type LlmErrorKind, type LlmProvider } from "../../llm/provider.js";
+import { isLockfile } from "../../queue/files.js";
 import { learningTarget, NOT_CHECKED } from "../briefing.js";
 import { mergeLookHere } from "./merge.js";
 import { buildPrompt, type LlmOutput, LlmOutputSchema } from "./prompt.js";
@@ -86,7 +87,10 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
       checks: briefing.checks,
       maxInputTokens: inputTokens,
       ...(options.callerSnippets ? { callerSnippets: options.callerSnippets } : {}),
-      reviewerNotes: promptNotes(options.learning),
+      reviewerNotes: promptNotes(
+        options.learning,
+        options.files.map((f) => f.path).filter((p) => !isLockfile(p)),
+      ),
     });
   let prompt = promptFor(maxInputTokens);
   if (prompt.includedFiles.length === 0) {
@@ -197,7 +201,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   }
 
   const shown = options.files.filter((f) => prompt.includedFiles.includes(f.path));
-  const validated = validateFindings(result.output, shown);
+  const validated = validateFindings(result.output, shown, prompt.notes);
   const { dropped } = validated;
   // A finding you dismissed on this PR stays down when a re-review raises it again.
   const target = learningTarget(briefing.target);
@@ -210,18 +214,25 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
         ),
       )
       .find(Boolean);
-  const findings = validated.findings.filter((f) => !dismissedOn(f));
+  // A finding from a note you stopped applying everywhere it points stays out too (the prompt told the model).
+  const stoppedAt = (f: (typeof validated.findings)[number]) =>
+    f.fromNote
+      ? noteStoppedAt(
+          options.learning,
+          f.fromNote.id,
+          f.anchors.map((a) => a.path),
+        )
+      : undefined;
+  const findings = validated.findings.filter((f) => !dismissedOn(f) && !stoppedAt(f));
   const hiddenFindings = validated.findings.flatMap((f) => {
     const at = dismissedOn(f);
-    return at
-      ? [
-          {
-            title: f.title,
-            reason: `You dismissed it on ${at.slice(0, 10)}`,
-            ...(f.anchors[0] ? { anchor: f.anchors[0] } : {}),
-          },
-        ]
-      : [];
+    const stopped = at ? undefined : stoppedAt(f);
+    const reason = at
+      ? `You dismissed it on ${at.slice(0, 10)}`
+      : stopped
+        ? `You stopped applying the note it came from to ${stopped}`
+        : undefined;
+    return reason ? [{ title: f.title, reason, ...(f.anchors[0] ? { anchor: f.anchors[0] } : {}) }] : [];
   });
   // A finding on a topic your feedback quietened stays in the model's list but takes no place to look, unless it's
   // high severity: the same rule as the check's own flags.

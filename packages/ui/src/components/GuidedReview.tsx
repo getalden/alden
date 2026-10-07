@@ -14,7 +14,7 @@ import {
   savedProgress,
   saveProgress,
 } from "../guided";
-import { eyesItem, findingItem, Verdicts } from "./BriefingView";
+import { eyesItem, FromNoteLine, findingItem, NoteOffer, Verdicts } from "./BriefingView";
 import { CodeExcerpt } from "./CodeExcerpt";
 import { typing } from "./Comments";
 
@@ -141,6 +141,7 @@ export function GuidedReview({ briefing, feedback, loadDiff, onComment, onFinish
   const excerpt = anchor ? excerptAround(fileOf(anchor.path), anchor.line) : undefined;
   const fbItem =
     "eyes" in current.item ? eyesItem(current.item.eyes, briefing.checks) : findingItem(current.item.finding);
+  const fromNote = "eyes" in current.item ? current.item.eyes.fromNote : current.item.finding.fromNote;
 
   return (
     <section className="card guided" aria-labelledby="guided-title" aria-roledescription="guided review">
@@ -174,6 +175,7 @@ export function GuidedReview({ briefing, feedback, loadDiff, onComment, onFinish
       </div>
       <p className="eye-text">{current.reason}</p>
       {current.learned && <span className="learned-why">↑ {current.learned}</span>}
+      {fromNote && <FromNoteLine note={fromNote} />}
 
       {anchor && target.kind === "pr" && loadDiff && (
         <CodeAt path={anchor.path} excerpt={excerpt} diff={diff} url={fileUrl?.(anchor.path, anchor.line)} />
@@ -220,6 +222,7 @@ export function GuidedReview({ briefing, feedback, loadDiff, onComment, onFinish
           )}
         </div>
       )}
+      {feedback && fromNote && <NoteOffer key={current.key} item={fbItem} note={fromNote} feedback={feedback} />}
 
       <nav className="guided-nav" aria-label="Guided review steps">
         <button

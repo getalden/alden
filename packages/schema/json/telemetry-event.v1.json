@@ -485,7 +485,9 @@
                     "restore",
                     "pause",
                     "resume",
-                    "forget_all"
+                    "forget_all",
+                    "exclude",
+                    "include"
                   ]
                 }
               },

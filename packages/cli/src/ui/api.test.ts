@@ -74,6 +74,59 @@ describe("feedback through the UI's API", () => {
   });
 });
 
+describe("a finding from your note, through the UI's API", () => {
+  it("confirms the note on useful, teaches no check, and stops the note under a folder", async () => {
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { closeStores } = await import("@alden/core");
+    const home = mkdtempSync(join(tmpdir(), "alden-api-note-"));
+    const saved = { home: process.env.ALDEN_HOME, track: process.env.DO_NOT_TRACK };
+    process.env.ALDEN_HOME = home;
+    process.env.DO_NOT_TRACK = "1";
+    try {
+      const api = createUiApi({ version: "test", cwd: home });
+      const added = (await api.addMemory({ repo: "acme/shop", text: "Every file needs a code owner header" })) as {
+        items: { id: string }[];
+      };
+      const id = added.items[0]?.id as string;
+      const verdict = (number: number, v: "agree" | "not_needed") =>
+        api.addFeedback({
+          kind: "verdict",
+          target: { kind: "pr", repo: "acme/shop", number },
+          briefingAt: "2026-10-01T00:00:00.000Z",
+          item: {
+            source: "llm",
+            checkId: "tests.missing",
+            title: "Missing code owner header",
+            anchor: { path: "app/api/users/route.ts" },
+            placement: "finding",
+            note: id,
+          },
+          verdict: v,
+        }) as Promise<{ progress?: string }>;
+      expect((await verdict(1, "agree")).progress).toBe("Saved. Your note is confirmed 1×.");
+      expect((await verdict(2, "agree")).progress).toBe("Saved. Your note is confirmed 2×.");
+      expect((await verdict(3, "not_needed")).progress).toMatch(/^Saved\. This came from your note/);
+      const memory = (await api.changeMemory({ repo: "acme/shop", action: "exclude", id, path: "app/api" })) as {
+        items: { id: string; confirmed?: number; excluded?: string[] }[];
+      };
+      // Only the note: no check lesson came from these reactions.
+      expect(memory.items).toMatchObject([{ id, confirmed: 2, excluded: ["app/api"] }]);
+      await expect(api.changeMemory({ repo: "acme/shop", action: "include", id, path: "lib" })).rejects.toThrow(
+        "That note isn't stopped under lib.",
+      );
+      await expect(
+        api.changeMemory({ repo: "acme/shop", action: "exclude", id: "note:nope", path: "lib" }),
+      ).rejects.toThrow("No note called note:nope in acme/shop.");
+    } finally {
+      closeStores();
+      process.env.ALDEN_HOME = saved.home;
+      if (saved.home === undefined) delete process.env.ALDEN_HOME;
+      if (saved.track === undefined) delete process.env.DO_NOT_TRACK;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("saveToDownloads", () => {
   it("never replaces a file: a second save of the same PR gets -2", async () => {
     const folder = await mkdtemp(join(tmpdir(), "alden-downloads-"));

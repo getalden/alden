@@ -132,6 +132,10 @@
                 "finding",
                 "check"
               ]
+            },
+            "note": {
+              "description": "the id of the note the model finding came from",
+              "type": "string"
             }
           },
           "required": [

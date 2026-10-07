@@ -15,6 +15,8 @@ Nothing here leaves your machine, except your notes: the model gets those with e
 | Useful on a check's flags | 3 or more, at least 3 to 1 | That check goes first among places to look, marked "↑ You usually mark … useful". The model is told you care about it. |
 | Not useful on a check's flags | 3 or more, at least 3 to 1 | That check is quietened: its flags are left out of places to look, unless high or critical severity, and listed as hidden with the reason. Its row in the checks says "quietened by your feedback" (terminal, `alden ui`, `alden_review`), and the model is told to raise those concerns only when they're serious. |
 | A comment you send near a place to look | Once per place per PR | Counts as Useful on that place's check, toward the lesson above. See [Comments you send](#comments-you-send). |
+| Useful on a model finding from one of your notes | Once per review | The note is confirmed ("confirmed 3×" in Memory). No check lesson. See [Findings from your notes](#findings-from-your-notes). |
+| Not useful on a model finding from one of your notes | | Recorded, and changes nothing unless you stop applying the note there or edit it. No check lesson. |
 | Dismiss on one place in a PR | Once | A re-review of that PR leaves that place out, and says so. Other PRs are unaffected, and nothing is learned from it. |
 | PRs you open, or mark Useful in the queue | 3 or more, at least 60% of the time, in the last 90 days | PRs like that rank higher, with a reason such as "ranked higher: you usually open PRs touching db/migrations/ first". |
 | PRs you mark Not useful in the queue | 3 or more, at least 3 to 1 | PRs like that rank lower: "ranked lower: you usually skip Dependabot PRs (4 marked not useful)". |
@@ -60,7 +62,8 @@ forget made by a check's own id before topics existed (`check:signatures.changed
 Alden's model tags each finding with a topic (tests, api, migrations, config, dependencies, or other). Useful or not
 useful on a tagged finding counts toward that topic's lesson, once per briefing however many findings share it, and a
 finding on a quietened topic takes no place to look unless it's high severity. Untagged ("other") findings count
-toward your useful rate but teach no lesson.
+toward your useful rate but teach no lesson. A finding from one of your notes teaches the note instead (below), whatever
+its topic.
 
 ## Comments you send
 
@@ -100,6 +103,32 @@ Notes are per repo (by default the clone you're in) and go to the model with eve
 the reviewer cares about", marked as coming from you rather than the PR's author. At most 12 notes are sent, each cut
 to 300 characters. The briefing says how many the model was given.
 
+## Findings from your notes
+
+Each note goes to the model with a short id for that review ("[N1] Money is in cents, never floats"), and the model can
+say a finding is there because of one. Alden keeps that only when the id is one it gave a note in that prompt, so text
+in the PR can't claim to be your note. The finding then says "Because of your note: …" in the briefing, guided
+review, the terminal and `alden_review`. (A Markdown export to share leaves your notes out, as it leaves out the rest of
+your memory.)
+
+Reacting to it teaches the note, not a check:
+
+- **Useful** confirms the note, once per review. Memory shows "confirmed 3×".
+- **Not useful** is recorded and changes nothing by itself. `alden ui` then offers **Stop applying this note to
+  app/api?** (the finding's first two folders, or the file for one at the repo root) and **Edit the note**.
+
+A note you've stopped under a folder or file isn't given to the model for a change whose files are all there. For a
+change that's partly there, the model is told where the note doesn't apply ("[N2] Every file needs a code owner header
+(doesn't apply under vendor)"), and a finding from that note pointing only at those files is left out and listed as
+hidden. From a terminal:
+
+```sh
+alden memory exclude note:1a2b3c4d app/api    # stop applying it under app/api
+alden memory include note:1a2b3c4d app/api    # apply it there again
+```
+
+`alden memory` lists where each note is stopped, and the Memory view has **Apply under app/api again**.
+
 ## Seeing, changing and forgetting
 
 The Memory view in `alden ui` lists each repo, then "What you look for" and "What you skip" in it. Each item says where
@@ -110,6 +139,7 @@ can be paused. The same from a terminal:
 alden memory                       # this clone's repo
 alden memory --repo acme/shop --json
 alden memory edit note:1a2b3c4d "Money is in cents, never floats"
+alden memory exclude note:1a2b3c4d vendor  # the note doesn't apply under vendor/
 alden memory forget check:tests.missing:down
 alden memory restore check:tests.missing:down
 alden memory forget --all
@@ -126,7 +156,7 @@ To take back a reaction, press the same button again in `alden ui` (it toggles o
 ## Where it's kept
 
 In `~/.alden/alden.db`, a SQLite database (WAL mode, so the CLI and the UI can write at once). Feedback, opens and
-notes are stored as append-only events with unique ids, so a future sync can upload just what it hasn't sent. The same
+notes (with where you stopped each one) are stored as append-only events with unique ids, so a future sync can upload just what it hasn't sent. The same
 file holds spending, when you first used Alden on each repo, and the comments you're drafting (until you send or delete
 them).
 
@@ -135,7 +165,8 @@ Alden needs Node 22.13 or later for the database (the standalone binary has it b
 
 ## Privacy
 
-Learning happens on your machine and its data stays there. Your notes, and the checks you care about or quietened (as
+Learning happens on your machine and its data stays there. Your notes (with where a note doesn't apply, when the change
+touches it), and the checks you care about or quietened (as
 one line each, e.g. "Cares about migration issues", "Usually finds untested-change concerns not useful: raise them
 only when they're serious"), are sent to your model provider with each review; nothing else from memory is. With `--no-llm`, nothing is. `alden feedback --export` shares feedback only: repo names become a salted
 hash, and titles, paths and notes are removed. See [Sharing your feedback](privacy.md#sharing-your-feedback).
