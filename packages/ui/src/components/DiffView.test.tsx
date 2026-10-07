@@ -3,6 +3,7 @@ import type { Briefing, PrDiff } from "@alden/schema";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearDiffCache, commentPlace, placeMarkers, placeOrder, rangeRows } from "../diff";
+import { SeenContext } from "../seen";
 import { DiffPane, DiffView } from "./DiffView";
 import { ReviewPane } from "./ReviewPane";
 
@@ -390,5 +391,126 @@ describe("the Briefing and Diff tabs", () => {
     render(pane());
     expect(screen.queryByRole("tab")).toBeNull();
     expect(screen.getByText("Logs cents.")).toBeTruthy();
+  });
+});
+
+describe("what you saw in the diff", () => {
+  type Fake = {
+    callback: IntersectionObserverCallback;
+    options: IntersectionObserverInit | undefined;
+    targets: Element[];
+    off: boolean;
+  };
+  let observers: Fake[];
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        targets: Element[] = [];
+        off = false;
+        constructor(
+          readonly callback: IntersectionObserverCallback,
+          readonly options?: IntersectionObserverInit,
+        ) {
+          observers.push(this as unknown as Fake);
+        }
+        observe(el: Element) {
+          this.targets.push(el);
+        }
+        disconnect() {
+          this.off = true;
+        }
+      },
+    );
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const fire = (o: Fake, isIntersecting: boolean) =>
+    act(() =>
+      o.callback(
+        o.targets.map((target) => ({ isIntersecting, target }) as unknown as IntersectionObserverEntry),
+        o as unknown as IntersectionObserver,
+      ),
+    );
+  /** Renders every chunk of rows, as scrolling near them would. */
+  const renderRows = () => {
+    for (const o of observers.filter((o) => o.options?.rootMargin)) fire(o, true);
+  };
+  const markerObserver = (element: Element) =>
+    observers.filter((o) => o.options?.threshold === 1 && !o.off && o.targets.includes(element)).at(-1) as Fake;
+  const places = [
+    { path: "src/charge.ts", line: 3, title: "Logs cents", index: 1, checkId: "money.cents" },
+    { path: "src/charge.ts", line: 99, title: "Far away", index: 2 },
+  ];
+
+  it("counts a place once its marker has been in view for 1.5 s, once", () => {
+    vi.useFakeTimers();
+    const onSeen = vi.fn();
+    render(<DiffView diff={diff} places={places} onSeen={onSeen} />);
+    renderRows();
+    const e1 = screen.getByRole("button", { name: "Place E1: Logs cents" });
+    fire(markerObserver(e1), true);
+    act(() => vi.advanceTimersByTime(1_000));
+    // Scrolled past before it counted.
+    fire(markerObserver(e1), false);
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(onSeen).not.toHaveBeenCalled();
+    fire(markerObserver(e1), true);
+    act(() => vi.advanceTimersByTime(1_500));
+    expect(onSeen.mock.calls).toEqual([[places[0]]]);
+    expect(observers.some((o) => o.targets.includes(e1) && !o.off)).toBe(false);
+    // E2 isn't on a line the diff shows: its marker is in the file's header, and it was never in view.
+    expect(document.querySelector(".diff-file-meta .diff-place")?.textContent).toBe("E2");
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(onSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it("records a PR's places at the briefing's head, as seen in the diff, and never your local changes'", async () => {
+    const record = vi.fn();
+    const local = render(
+      <SeenContext.Provider value={record}>
+        <DiffPane load={async () => diff} places={places} />
+      </SeenContext.Provider>,
+    );
+    await screen.findByText(/^4 files/);
+    renderRows();
+    expect(observers.some((o) => o.options?.threshold === 1)).toBe(false);
+    local.unmount();
+    clearDiffCache();
+
+    render(
+      <SeenContext.Provider value={record}>
+        <DiffPane load={async () => diff} pr="acme/api#1" headSha="h0" places={places} />
+      </SeenContext.Provider>,
+    );
+    await screen.findByText(/^4 files/);
+    vi.useFakeTimers();
+    renderRows();
+    fire(markerObserver(screen.getByRole("button", { name: "Place E1: Logs cents" })), true);
+    act(() => vi.advanceTimersByTime(1_500));
+    expect(record.mock.calls).toEqual([
+      ["acme/api#1", "h0", { checkId: "money.cents", path: "src/charge.ts", line: 3, how: "diff" }],
+    ]);
+  });
+
+  it("counts nothing in a hidden tab, or without an IntersectionObserver", () => {
+    vi.useFakeTimers();
+    const onSeen = vi.fn();
+    const hidden = render(
+      <div hidden>
+        <DiffView diff={diff} places={places} onSeen={onSeen} />
+      </div>,
+    );
+    renderRows();
+    fire(markerObserver(screen.getByRole("button", { name: "Place E1: Logs cents", hidden: true })), true);
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(onSeen).not.toHaveBeenCalled();
+    hidden.unmount();
+
+    vi.unstubAllGlobals();
+    render(<DiffView diff={diff} places={places} onSeen={onSeen} />);
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(onSeen).not.toHaveBeenCalled();
   });
 });

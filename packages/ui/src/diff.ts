@@ -32,6 +32,8 @@ export interface DiffPlace {
   line?: number | undefined;
   title: string;
   index: number;
+  /** The check that flagged it, for what you saw; absent for the model's own places. */
+  checkId?: string | undefined;
 }
 
 /** A line of the diff by position: file, hunk and line within the hunk. */

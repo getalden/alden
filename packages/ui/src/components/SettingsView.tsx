@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import type { Api, Session, SpendReport } from "../api";
 import { formatUsd, plural } from "../format";
 import { applyTheme, readTheme, type Theme } from "../theme";
+import { LearningSettings } from "./LearningSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { RankingSettings } from "./RankingSettings";
 import { Switch } from "./ReviewOptions";
@@ -232,6 +233,8 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
               </span>
             </div>
           </div>
+
+          <LearningSettings api={api} on={session.learning?.fromReviews ?? true} onSaved={onSaved} />
 
           <QueueScopeSettings api={api} initial={session.queueScope} onSaved={onSaved} />
 

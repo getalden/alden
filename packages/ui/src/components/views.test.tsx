@@ -479,6 +479,53 @@ describe("MemoryView", () => {
   });
 });
 
+describe("where a learned item came from", () => {
+  it("lists the newest few sources, then how many more", async () => {
+    const sources = [
+      { kind: "reaction" as const, pr: "acme/api#400", at: "2026-10-01T12:00:00.000Z" },
+      { kind: "review" as const, pr: "acme/api#412", at: "2026-10-08T12:00:00.000Z" },
+      { kind: "outcome" as const, pr: "acme/api#390", at: "2026-10-05T12:00:00.000Z" },
+      { kind: "open" as const, at: "2026-09-02T12:00:00.000Z" },
+      { kind: "review" as const, at: "2026-09-01T12:00:00.000Z" },
+    ];
+    const item = (id: string, text: string, extra = {}) => ({
+      id,
+      repo: "acme/api",
+      source: "learned" as const,
+      kind: "check" as const,
+      group: "look" as const,
+      text,
+      evidence: "you marked 3 of 3 useful",
+      since: "2026-09-20T10:00:00.000Z",
+      ...extra,
+    });
+    const memory = {
+      repo: "acme/api",
+      items: [item("check:x:up", "You care about callers flags", { sources }), item("check:y:up", "Older lesson")],
+      paused: false,
+      path: "/home/.alden/alden.db",
+    };
+    const api = {
+      memoryRepos: async () => [{ repo: "acme/api", items: 2, lastChange: "", paused: false }],
+      memory: async () => memory,
+    } as unknown as import("../api").Api;
+    render(<MemoryView api={api} session={{ repo: { root: "/r", repos: ["acme/api"] } } as unknown as Session} />);
+    const list = await screen.findByRole("list", { name: "Where it came from" });
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual([
+      "from your review of acme/api#412, Oct 8",
+      "from how it went with acme/api#390, Oct 5",
+      "from your reaction to acme/api#400, Oct 1",
+      "and 2 more",
+    ]);
+    // An item without sources (from an engine that doesn't say) shows none.
+    expect(screen.getAllByRole("list", { name: "Where it came from" })).toHaveLength(1);
+  });
+});
+
 describe("feedback in a briefing", () => {
   it("records useful, not useful and dismiss, takes a verdict back when pressed again, and reports misses", async () => {
     const verdicts = new Map<string, Verdict>();

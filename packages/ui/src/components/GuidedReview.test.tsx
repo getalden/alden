@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BriefingFeedback, Verdict } from "../feedback";
 import { type CommentPlace, forgetProgress, type PrDiff } from "../guided";
+import { SeenContext } from "../seen";
 import { BriefingView } from "./BriefingView";
 
 afterEach(() => {
@@ -344,5 +345,66 @@ describe("guided review", () => {
     expect(screen.getByText("Step 1 of 2")).toBeTruthy();
     expect(screen.queryByText(/Loading the code/)).toBeNull();
     await waitFor(() => expect(screen.getByText("src/web.ts:1")).toBeTruthy());
+  });
+});
+
+describe("what you saw in guided review", () => {
+  afterEach(() => vi.useRealTimers());
+  const seenIn = (b: Briefing, hidden = false) => {
+    vi.useFakeTimers();
+    const record = vi.fn();
+    render(
+      <SeenContext.Provider value={record}>
+        <div hidden={hidden}>
+          <BriefingView briefing={b} />
+        </div>
+      </SeenContext.Provider>,
+    );
+    return record;
+  };
+
+  it("counts a step's place once it has been shown for 1.5 s, and not a step you passed quickly", () => {
+    const record = seenIn(briefing);
+    key("g");
+    act(() => vi.advanceTimersByTime(1_000));
+    key("n");
+    act(() => vi.advanceTimersByTime(1_499));
+    expect(record).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(record.mock.calls).toEqual([
+      ["acme/api#1", "old0000", { checkId: "callers.outside", path: "src/api.ts", line: 9, how: "guided" }],
+    ]);
+    // The model's extra step, left before it counts.
+    key("n");
+    act(() => vi.advanceTimersByTime(500));
+    key("Escape");
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(record).toHaveBeenCalledTimes(1);
+    // Back on it for long enough: the model's places have no check.
+    key("g");
+    act(() => vi.advanceTimersByTime(1_500));
+    expect(record).toHaveBeenLastCalledWith("acme/api#1", "old0000", { path: "src/web.ts", line: 1, how: "guided" });
+  });
+
+  it("counts nothing for your local changes, a briefing without its head commit, or a step you can't see", () => {
+    const local = seenIn({ ...briefing, target: { kind: "local", repoRoot: "/r", branch: "main" } });
+    key("g");
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(local).not.toHaveBeenCalled();
+    cleanup();
+    forgetProgress();
+
+    const { headSha: _, ...noHead } = briefing.target as Extract<Briefing["target"], { kind: "pr" }>;
+    const old = seenIn({ ...briefing, target: noHead });
+    key("g");
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(old).not.toHaveBeenCalled();
+    cleanup();
+    forgetProgress();
+
+    const hidden = seenIn(briefing, true);
+    key("g");
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(hidden).not.toHaveBeenCalled();
   });
 });

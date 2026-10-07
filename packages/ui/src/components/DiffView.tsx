@@ -5,6 +5,7 @@ import {
   memo,
   type ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useMemo,
@@ -29,6 +30,7 @@ import {
   sideOf,
 } from "../diff";
 import { plural, prFileUrl } from "../format";
+import { onScreen, SEEN_AFTER_MS, useRecordSeen } from "../seen";
 import { StateCard } from "./StateCard";
 
 export type { CommentPlace, DiffDraft, DiffPlace };
@@ -64,6 +66,72 @@ export interface DiffViewProps {
   prUrl?: string | undefined;
   /** Files with more diff lines than this start collapsed. */
   collapseOver?: number | undefined;
+  /** Called once for each place whose E1, E2… marker has been on screen for 1.5 s: you saw it. */
+  onSeen?: ((place: DiffPlace) => void) | undefined;
+}
+
+/** `onSeen`, for the markers deep in the rows without passing it through each. */
+const PlaceSeen = createContext<((place: DiffPlace) => void) | undefined>(undefined);
+
+/**
+ * A ref for a place's marker: once it has been in the viewport for `SEEN_AFTER_MS` (an IntersectionObserver, so a
+ * marker scrolled past, in a hidden tab or a collapsed file never counts), the place counts as seen. Without an
+ * IntersectionObserver nothing counts.
+ */
+function useSeenMarker(place: DiffPlace): (element: HTMLElement | null) => void {
+  const onSeen = useContext(PlaceSeen);
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!onSeen || !element || typeof IntersectionObserver === "undefined") return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        clearTimeout(timer);
+        if (!entries.some((e) => e.isIntersecting)) return;
+        timer = setTimeout(() => {
+          if (!onScreen(element)) return;
+          observer.disconnect();
+          onSeen(place);
+        }, SEEN_AFTER_MS);
+      },
+      { threshold: 1 },
+    );
+    observer.observe(element);
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [onSeen, element, place]);
+  return setElement;
+}
+
+function PlaceMarker(props: { place: DiffPlace; noteOpen: boolean; noteId: string; onClick: () => void }) {
+  const { place } = props;
+  const ref = useSeenMarker(place);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className="diff-place"
+      title={place.title}
+      aria-label={`Place E${place.index}: ${place.title}`}
+      aria-expanded={props.noteOpen}
+      aria-controls={props.noteOpen ? props.noteId : undefined}
+      onClick={props.onClick}
+    >
+      E{place.index}
+    </button>
+  );
+}
+
+/** A place on a file but not on a line the diff shows, marked in the file's header. */
+function FilePlaceMarker({ place }: { place: DiffPlace }) {
+  const ref = useSeenMarker(place);
+  return (
+    <span ref={ref} className="diff-place static" title={place.title}>
+      E{place.index}
+    </span>
+  );
 }
 
 const typing = (target: EventTarget | null) =>
@@ -127,18 +195,13 @@ const DiffRow = memo(function DiffRow({
         <td className="gut">
           <div className="gut-in">
             {places?.map((p) => (
-              <button
+              <PlaceMarker
                 key={`p${p.index}`}
-                type="button"
-                className="diff-place"
-                title={p.title}
-                aria-label={`Place E${p.index}: ${p.title}`}
-                aria-expanded={noteOpen}
-                aria-controls={noteOpen ? noteId : undefined}
+                place={p}
+                noteOpen={noteOpen}
+                noteId={noteId}
                 onClick={() => actions.toggleNote(key)}
-              >
-                E{p.index}
-              </button>
+              />
             ))}
             {drafts && drafts.length > 0 && (
               <button
@@ -398,9 +461,7 @@ function DiffFileSection(props: FileProps) {
         </button>
         <span className="diff-file-meta">
           {fileMarks?.places.map((p) => (
-            <span key={`p${p.index}`} className="diff-place static" title={p.title}>
-              E{p.index}
-            </span>
+            <FilePlaceMarker key={`p${p.index}`} place={p} />
           ))}
           {fileMarks && fileMarks.drafts.length > 0 && (
             <span
@@ -675,56 +736,58 @@ export function DiffView(props: DiffViewProps) {
 
   const allCollapsed = collapsed.size === diff.files.length;
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: moving the mouse only extends a drag the + buttons start.
-    <div className="diff-view" ref={root} onMouseMove={onMouseOver}>
-      <div className="diff-bar">
-        <span className="mono small">
-          {plural(diff.files.length, "file")} · <span className="add">+{totals.additions}</span>{" "}
-          <span className="del">−{totals.deletions}</span>
-        </span>
-        {order.length > 0 && (
-          <span className="faint small">
-            {plural(order.length, "place")} to look · <kbd>]</kbd> next <kbd>[</kbd> previous
+    <PlaceSeen.Provider value={props.onSeen}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: moving the mouse only extends a drag the + buttons start. */}
+      <div className="diff-view" ref={root} onMouseMove={onMouseOver}>
+        <div className="diff-bar">
+          <span className="mono small">
+            {plural(diff.files.length, "file")} · <span className="add">+{totals.additions}</span>{" "}
+            <span className="del">−{totals.deletions}</span>
           </span>
-        )}
-        {onComment && (
-          <span className="faint small">Click a line's + to comment; shift-click or drag for a range.</span>
-        )}
-        <button
-          type="button"
-          className="btn xs quiet diff-all"
-          onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(diff.files.map((_, i) => i)))}
-        >
-          {allCollapsed ? "Expand all" : "Collapse all"}
-        </button>
-      </div>
-      <p className="visually-hidden" role="status" aria-live="polite">
-        {said}
-      </p>
-      {notice && (
-        <p className="diff-said faint small" role="status">
-          {notice}
+          {order.length > 0 && (
+            <span className="faint small">
+              {plural(order.length, "place")} to look · <kbd>]</kbd> next <kbd>[</kbd> previous
+            </span>
+          )}
+          {onComment && (
+            <span className="faint small">Click a line's + to comment; shift-click or drag for a range.</span>
+          )}
+          <button
+            type="button"
+            className="btn xs quiet diff-all"
+            onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(diff.files.map((_, i) => i)))}
+          >
+            {allCollapsed ? "Expand all" : "Collapse all"}
+          </button>
+        </div>
+        <p className="visually-hidden" role="status" aria-live="polite">
+          {said}
         </p>
-      )}
-      {diff.files.map((file, index) => (
-        <DiffFileSection
-          // biome-ignore lint/suspicious/noArrayIndexKey: a diff lists each path once; the index keeps renames stable.
-          key={`${index}:${file.path}`}
-          file={file}
-          index={index}
-          collapsed={collapsed.has(index)}
-          onToggle={toggle}
-          markers={markers}
-          selection={selection}
-          highlight={highlight}
-          notes={notes}
-          commentable={onComment !== undefined}
-          actions={actions}
-          prUrl={props.prUrl}
-          collapseOver={collapseOver}
-        />
-      ))}
-    </div>
+        {notice && (
+          <p className="diff-said faint small" role="status">
+            {notice}
+          </p>
+        )}
+        {diff.files.map((file, index) => (
+          <DiffFileSection
+            // biome-ignore lint/suspicious/noArrayIndexKey: a diff lists each path once; the index keeps renames stable.
+            key={`${index}:${file.path}`}
+            file={file}
+            index={index}
+            collapsed={collapsed.has(index)}
+            onToggle={toggle}
+            markers={markers}
+            selection={selection}
+            highlight={highlight}
+            notes={notes}
+            commentable={onComment !== undefined}
+            actions={actions}
+            prUrl={props.prUrl}
+            collapseOver={collapseOver}
+          />
+        ))}
+      </div>
+    </PlaceSeen.Provider>
   );
 }
 
@@ -742,6 +805,21 @@ export interface DiffPaneProps extends Omit<DiffViewProps, "diff"> {
 /** The Diff tab: loads the diff (at once, if this PR's was loaded before) and shows it. */
 export function DiffPane({ load, pr, headSha, ...view }: DiffPaneProps) {
   const [state, setState] = useState<{ diff?: PrDiff; error?: string }>({});
+  // A PR's places you saw, at the head commit the briefing (and so its places) is of. Never for local changes.
+  const record = useRecordSeen();
+  const onSeen = useMemo(
+    () =>
+      record && pr && headSha
+        ? (place: DiffPlace) =>
+            record(pr, headSha, {
+              ...(place.checkId ? { checkId: place.checkId } : {}),
+              path: place.path,
+              ...(place.line !== undefined ? { line: place.line } : {}),
+              how: "diff",
+            })
+        : undefined,
+    [record, pr, headSha],
+  );
   const [attempt, setAttempt] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` asks again after an error.
   useEffect(() => {
@@ -783,7 +861,7 @@ export function DiffPane({ load, pr, headSha, ...view }: DiffPaneProps) {
           catch up.
         </p>
       )}
-      <DiffView key={state.diff.headSha} diff={state.diff} {...view} />
+      <DiffView key={state.diff.headSha} diff={state.diff} onSeen={onSeen} {...view} />
     </>
   );
 }

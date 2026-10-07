@@ -1790,6 +1790,13 @@ textarea.input {
   color: var(--acc);
   border-color: var(--acc-soft);
 }
+.mem-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font: 12px / 1.4 var(--font-ui);
+  color: var(--ink3);
+}
 .mem-item .acts {
   display: flex;
   gap: 6px;
@@ -2403,6 +2410,10 @@ details > summary {
 }
 .banner.ok {
   background: var(--ok-soft);
+}
+/* What Alden learned from the review just sent: one quiet line under "Sent to GitHub". */
+.sent-learned {
+  margin: -8px 0 0;
 }
 .banner:focus {
   outline: none;

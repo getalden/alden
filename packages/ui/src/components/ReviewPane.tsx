@@ -264,7 +264,9 @@ function BriefingTabs(props: {
   const places = useMemo<DiffPlace[]>(
     () =>
       briefing.needsYourEyes.flatMap((item, i) =>
-        item.anchor ? [{ path: item.anchor.path, line: item.anchor.line, title: item.title, index: i + 1 }] : [],
+        item.anchor
+          ? [{ path: item.anchor.path, line: item.anchor.line, title: item.title, index: i + 1, checkId: item.checkId }]
+          : [],
       ),
     [briefing],
   );

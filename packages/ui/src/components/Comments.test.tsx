@@ -109,6 +109,8 @@ function fakeApi(start: ReviewDraft[] = [], unaddressed: Unaddressed[] = []) {
     unaddressed,
     calls: [] as string[],
     sendError: undefined as string | undefined,
+    /** What the engine says it learned from the review, when it learns from reviews. */
+    learned: undefined as string[] | undefined,
     /** Paths the server would link to rather than comment on inline (a whole file always is). */
     outside: new Set<string>(),
   };
@@ -154,7 +156,12 @@ function fakeApi(start: ReviewDraft[] = [], unaddressed: Unaddressed[] = []) {
       if (state.sendError) throw new ApiError(422, state.sendError);
       const posted = state.drafts.filter((d) => d.path).length;
       state.drafts = [];
-      return { url: "https://github.com/acme/api/pull/1#pullrequestreview-9", posted, review: review.event };
+      return {
+        url: "https://github.com/acme/api/pull/1#pullrequestreview-9",
+        posted,
+        review: review.event,
+        ...(state.learned ? { learned: state.learned } : {}),
+      };
     },
   } as unknown as Api;
   return { api, state };
@@ -693,6 +700,18 @@ describe("sending from the drawer", () => {
     expect(screen.getByRole("button", { name: "Send review" })).toBeTruthy();
     expect(toggle().textContent).toBe("Comments S");
     expect((screen.getByRole("textbox", { name: "Review body" }) as HTMLTextAreaElement).value).toBe("");
+    expect(screen.queryByText(/^Alden learned/)).toBeNull();
+  });
+
+  it("says in one quiet line what Alden learned from the review it just sent", async () => {
+    const { state } = await setup([draft("a", { path: "src/charge.ts", line: 3, side: "RIGHT" })]);
+    state.learned = ["you care about callers flags (2 of 3)", "tests flags are worth less here"];
+    fireEvent.click(screen.getByRole("button", { name: "Send review · 1 comment" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to GitHub" }));
+    await within(drawer() as HTMLElement).findByRole("status");
+    expect(
+      screen.getByText("Alden learned: you care about callers flags (2 of 3); tests flags are worth less here"),
+    ).toBeTruthy();
   });
 
   it("shows the server's error and keeps the drafts when sending fails", async () => {
