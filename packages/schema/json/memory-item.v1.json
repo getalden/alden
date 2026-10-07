@@ -54,6 +54,19 @@
       "description": "what it changes, e.g. 'ranks these PRs higher'",
       "type": "string"
     },
+    "confirmed": {
+      "description": "for notes: how many reviews you marked a finding that came from it useful",
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "excluded": {
+      "description": "for notes: folders and files it no longer applies under, e.g. app/api",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "since": {
       "type": "string",
       "format": "date-time",

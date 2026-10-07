@@ -946,6 +946,7 @@ export async function learnFromComments(
       title: place.title,
       ...(place.anchor ? { anchor: place.anchor } : {}),
       placement: "eyes",
+      ...(place.fromNote ? { note: place.fromNote.id } : {}),
     };
     const key = dismissKey(target, item);
     const verdict = inForce.get(key);

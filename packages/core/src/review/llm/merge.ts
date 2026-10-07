@@ -18,6 +18,7 @@ function fromFinding(finding: LlmFinding, used: Set<string>): LookHere | undefin
     anchor,
     source: "llm",
     ...(finding.checkId ? { checkId: finding.checkId } : {}),
+    ...(finding.fromNote ? { fromNote: finding.fromNote } : {}),
   };
 }
 

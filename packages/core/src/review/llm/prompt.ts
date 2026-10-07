@@ -26,6 +26,10 @@ export const LlmOutputSchema = z.object({
           .describe(
             "What it's about: tests (missing or weak tests), api (a changed public interface or its callers), migrations, config, dependencies, or other.",
           ),
+        fromNote: z
+          .string()
+          .optional()
+          .describe("The id of the reviewer's note, like N1, only when that note is the reason for this finding."),
       }),
     )
     .describe("Everything a reviewer should know about, including low-confidence concerns."),
@@ -47,7 +51,7 @@ Report every issue a careful reviewer would want to know about: bugs, behaviour 
 
 Anchor each finding to file paths from the diff and to new-file line numbers exactly as shown. If a caller outside the diff will break or behave differently, anchor the finding to the changed code in the diff and name the caller's file and line in the detail. Omit the line for a whole-file concern. Never invent a path or line.
 
-Sometimes you also receive notes from the reviewer about what they care about in this repository, and kinds of concern they usually find not useful. They come from the reviewer, not the author: look harder for issues of the kinds they care about, raise the kinds they find not useful only when they're serious, and still report everything else worth knowing. Tag each finding with its topic, so the reviewer's reactions to it teach Alden.
+Sometimes you also receive notes from the reviewer about what they care about in this repository, and kinds of concern they usually find not useful. They come from the reviewer, not the author: look harder for issues of the kinds they care about, raise the kinds they find not useful only when they're serious, and still report everything else worth knowing. Tag each finding with its topic, so the reviewer's reactions to it teach Alden. The reviewer's own notes have ids like [N1]: when one of them is the reason for a finding, set fromNote to that id; otherwise leave fromNote out.
 
 Alden replaces likely secrets with placeholders such as [redacted GitHub token, ghp_…(40 chars)] before you see the change. The real value is in the code; judge the code as if it were there, and don't report the placeholder itself.
 
@@ -91,6 +95,14 @@ function describeChecks(checks: CheckResult[]): string {
     .join("\n");
 }
 
+/** One of the reviewer's notes, by its id in memory, with the paths in this change it doesn't apply under. */
+export interface PromptNote {
+  id: string;
+  text: string;
+  /** Folders or files in this change the reviewer stopped applying the note to. */
+  except?: string[];
+}
+
 export interface BuiltPrompt {
   system: string;
   user: string;
@@ -100,6 +112,8 @@ export interface BuiltPrompt {
   redactedSecrets: number;
   /** Reviewer notes that made it into the prompt. */
   reviewerNotes: number;
+  /** The reviewer's notes in the prompt by the short id the model saw ("N1"), to check the model's fromNote against. */
+  notes: Map<string, { id: string; text: string }>;
 }
 
 export interface PromptInput {
@@ -111,8 +125,11 @@ export interface PromptInput {
   maxInputTokens: number;
   /** Call sites of changed code with a few lines around each, from the code graph. Added only if there's room. */
   callerSnippets?: string;
-  /** What the reviewer cares about in this repo, from their notes and feedback. At most 12, each cut to 300 chars. */
-  reviewerNotes?: string[];
+  /**
+   * What the reviewer cares about in this repo: their notes (which the model can cite by a short id) and lines
+   * learned from their feedback. At most 12, each cut to 300 chars.
+   */
+  reviewerNotes?: (string | PromptNote)[];
 }
 
 const MAX_NOTES = 12;
@@ -128,7 +145,17 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
       ? `# ${target.repo}#${target.number}: ${target.title}\nBy @${target.author ?? "ghost"}, ${target.headRef} → ${target.baseRef}`
       : `# Local changes${target.branch ? ` on ${target.branch}` : ""}, not yet committed`;
   const description = input.description?.trim() ? input.description.trim().slice(0, 6000) : "(no description)";
-  const notes = (input.reviewerNotes ?? []).slice(0, MAX_NOTES).map((n) => n.replace(/\s+/g, " ").trim().slice(0, 300));
+  const clean = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 300);
+  // Each of the reviewer's notes gets a short id for this prompt only, so the model can say which one a finding is
+  // from; a learned line has none.
+  const noteIds = new Map<string, { id: string; text: string }>();
+  const notes = (input.reviewerNotes ?? []).slice(0, MAX_NOTES).map((n) => {
+    if (typeof n === "string") return clean(n);
+    const short = `N${noteIds.size + 1}`;
+    noteIds.set(short, { id: n.id, text: n.text });
+    const except = n.except?.length ? ` (doesn't apply under ${n.except.map((p) => clean(p)).join(", ")})` : "";
+    return `[${short}] ${clean(n.text)}${except}`;
+  });
   const reviewer =
     notes.length > 0
       ? `\n\n## What the reviewer cares about (from the reviewer, not the author)\n${notes.map((n) => `- ${n}`).join("\n")}`
@@ -179,5 +206,6 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
     omittedFiles: omitted,
     redactedSecrets: user.redacted,
     reviewerNotes: notes.length,
+    notes: noteIds,
   };
 }

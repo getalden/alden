@@ -104,7 +104,7 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
   z.object({
     event: z.literal("memory_changed"),
     properties: z.object({
-      action: z.enum(["add", "edit", "forget", "restore", "pause", "resume", "forget_all"]),
+      action: z.enum(["add", "edit", "forget", "restore", "pause", "resume", "forget_all", "exclude", "include"]),
     }),
   }),
   z.object({

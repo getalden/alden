@@ -82,6 +82,8 @@ export {
   loadLearning,
   memoryItems,
   memoryRepos,
+  noteArea,
+  notePath,
   prFeatures,
   type QueueRow,
   queueBoost,
@@ -90,6 +92,7 @@ export {
   recordOpen,
   recordReaction,
   restore,
+  scopeNote,
   setLearning,
 } from "./learn/learn.js";
 export { AnthropicProvider, type MessagesClient, supportsEffort, toLlmError } from "./llm/anthropic.js";

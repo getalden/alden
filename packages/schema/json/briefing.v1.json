@@ -338,6 +338,25 @@
             "description": "why your feedback put it here, e.g. 'you usually mark migration flags useful'",
             "type": "string"
           },
+          "fromNote": {
+            "description": "for a model finding: the reviewer's note that is the reason for it",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "the note's id in memory, e.g. note:1a2b3c4d"
+              },
+              "text": {
+                "type": "string",
+                "description": "the note's text, as the model was given it"
+              }
+            },
+            "required": [
+              "id",
+              "text"
+            ],
+            "additionalProperties": false
+          },
           "related": {
             "description": "files to look at too: callers of the changed code here, tests that use it, files importing it; absent without the code graph or when there are none",
             "type": "array",
@@ -488,6 +507,25 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "fromNote": {
+                "description": "the reviewer's note that is the reason for this finding, when the model said so and the note was in its prompt",
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "the note's id in memory, e.g. note:1a2b3c4d"
+                  },
+                  "text": {
+                    "type": "string",
+                    "description": "the note's text, as the model was given it"
+                  }
+                },
+                "required": [
+                  "id",
+                  "text"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [

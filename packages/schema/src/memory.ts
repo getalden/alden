@@ -57,6 +57,18 @@ export const MemoryEventSchema = z.discriminatedUnion("action", [
     item: z.string().describe("a note's id, or a learned item's stable id"),
   }),
   z.object({ ...memoryBase, action: z.literal("restore"), item: z.string().describe("takes back a forget") }),
+  z.object({
+    ...memoryBase,
+    action: z.literal("exclude").describe("stop applying a note to the files under a path"),
+    item: z.string().describe("the note's id"),
+    path: z.string().min(1).max(500).describe("a folder (e.g. app/api) or a file; the note doesn't apply under it"),
+  }),
+  z.object({
+    ...memoryBase,
+    action: z.literal("include").describe("takes back an exclude"),
+    item: z.string(),
+    path: z.string().min(1).max(500),
+  }),
   z.object({ ...memoryBase, action: z.literal("pause").describe("stop applying what was learned in this repo") }),
   z.object({ ...memoryBase, action: z.literal("resume") }),
 ]);
@@ -88,6 +100,15 @@ export const MemoryItemSchema = z.object({
   text: z.string().describe("what Alden knows, in one sentence"),
   evidence: z.string().optional().describe("for learned items: what it was learned from, e.g. 'agreed 5 of 5 times'"),
   effect: z.string().optional().describe("what it changes, e.g. 'ranks these PRs higher'"),
+  confirmed: z
+    .number()
+    .int()
+    .optional()
+    .describe("for notes: how many reviews you marked a finding that came from it useful"),
+  excluded: z
+    .array(z.string())
+    .optional()
+    .describe("for notes: folders and files it no longer applies under, e.g. app/api"),
   since: z.iso.datetime(),
 });
 
