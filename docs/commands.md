@@ -142,7 +142,10 @@ alden comment <pr> [file:line[-endLine]] "text" [--suggest "code" | --suggest-fi
 
 Writes a comment on a PR, kept in Alden until you send it with `alden send`. With `file:line`, it's on that line of
 the diff, and with `file:12-14` on lines 12 to 14 (one hunk, one side); without, it's a general note for the review's
-body. With a suggestion, it's a suggested change the author can apply on GitHub, and the text is optional. With no
+body. A line (or lines) outside the PR's diff, where GitHub won't take an inline comment, becomes a general note that
+links to it at the PR's head, and Alden says so ("py/orders/tasks.py:5 isn't in the PR's diff, so this goes in the
+review body with a link to it"); the file and line must exist at the head. See
+[Comments on code outside the diff](comments.md#comments-on-code-outside-the-diff). With a suggestion, it's a suggested change the author can apply on GitHub, and the text is optional. With no
 text, lists the PR's comments, ranges and suggestions (old lines and new) shown, outdated ones marked. `pr` takes the same forms as `alden review`. See [Comments and sending a review](comments.md).
 
 | Flag | What it does |

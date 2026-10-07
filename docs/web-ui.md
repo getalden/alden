@@ -85,18 +85,26 @@ Stop it with Ctrl+C.
   window is wide enough for it beside the queue. At 700px wide and narrower it's a full-width sheet over the briefing;
   ×, `s` or `Esc` puts it away.
 
-  **Comment** on a place in "Needs your eyes" or on a flagged check's evidence line opens the editor in the drawer,
-  saying exactly where the comment goes ("Comment on py/orders/pricing.py, line 4", or "lines 4–9" for a range). There's
-  one editor, always in the drawer; the place keeps a short list of your drafts on it. **Suggest a change** (lines on the
+  **Comment** on a place in "Needs your eyes", on a flagged check's evidence line, or on something "The model also
+  noticed" opens the editor in the drawer, saying exactly where the comment goes ("Comment on py/orders/pricing.py,
+  line 4", or "lines 4–9" for a range). There's one editor, always in the drawer; the place keeps a short list of your
+  drafts on it. When the line isn't in the PR's diff (a caller in an unchanged file, say), GitHub won't take an inline
+  comment there, and the editor says so before you save: "This line isn't in the PR's diff, so it goes in the review
+  body with a link to it." It's saved as a [linked note](comments.md#comments-on-code-outside-the-diff), which starts
+  with a link to that line at the PR's head. A place or finding about a whole file gets one too, linking to the file. **Suggest a change** (lines on the
   new side only) adds a code box, started from the line's text when Alden has it, that posts as a suggested change the
-  author can accept on GitHub; left empty, it suggests deleting the line. A suggestion needs no words of its own.
+  author can accept on GitHub; left empty, it suggests deleting the line. A suggestion needs no words of its own. In a
+  linked note GitHub can't apply it, so it posts as code headed "Suggested change" for the author to copy, and the
+  editor says that instead.
   **Comment on a line…** takes any line or range of a changed file (pick the file, give `12` or `4–9`; a removed file's
   line is on the old side), and **Add a general note** writes one that goes into the review's body. `⌘↵` saves, `Esc`
   cancels and puts focus back where you were. Comments are drafts, kept on this machine, until you send them.
 
   The drawer lists them by where they'll post: **On lines** (each with its file and line or range, the start of its
   text, its suggested change, Edit and Delete) and **In the review body** (your general notes, which follow what you
-  write in the body). Drafts that Claude Code added are marked "from Claude", so you read them before they go out under
+  write in the body; a linked note says "links to py/orders/tasks.py, line 5", and hovering it names the commit its
+  link shows, the PR's head when you wrote it). In the Diff tab, a linked note shows at its line or file when the diff
+  has it. Drafts that Claude Code added are marked "from Claude", so you read them before they go out under
   your name; Claude can add drafts but never send them. A draft written before the PR's latest commits is marked
   **Outdated**: **Rewrite** puts it in a new comment on the current code (check the line), or delete it; the review
   won't send until you've done one or the other. Below them, the review body, and at the bottom, always in view, the
@@ -113,7 +121,8 @@ Stop it with Ctrl+C.
   use it or import its file, and files that import it, each with its line. One that's in the diff opens its lines in
   place; the rest link to the file on GitHub at the PR's head commit. Each step has the same **Useful**, **Not useful**
   and **Dismiss** as the list, and **Comment** on the place, which opens the Comments drawer's editor there. After Alden's places, the model's other findings that point
-  at code follow as extra steps. `n` and `p` move, `Esc` leaves (and **Resume guided review at step 3** brings you back
+  at code follow as extra steps, with **Comment** too. On a line outside the diff, or a whole file, the comment goes in
+  the review body as a linked note. `n` and `p` move, `Esc` leaves (and **Resume guided review at step 3** brings you back
   there while the window is open), and the last step offers **Finish: review your comments**, which opens the drawer at the review body. Local changes get the
   places and their files to look at, without the code.
 - **My changes.** Your uncommitted changes in the repo `alden ui` started in, before you open a PR.
