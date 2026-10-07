@@ -149,6 +149,22 @@ const api: UiApi = {
     if (id === "gone") throw new ApiError(404, "No draft gone.");
     return { ok: true };
   },
+  diff: async (pr) => {
+    calls.push({ method: "diff", args: pr });
+    if (pr === "a/b#404") throw new ApiError(502, "GitHub couldn't find a/b#404.");
+    return {
+      headSha: "h1",
+      files: [
+        {
+          path: "src/\u001b[31mred.ts",
+          status: "modified",
+          hunks: [
+            { header: "@@ -1 +1 @@", lines: [{ kind: "add", newLine: 1, text: "x = 1;\u001b]8;;https://evil\u0007" }] },
+          ],
+        },
+      ],
+    };
+  },
   sendReview: async (input) => {
     calls.push({ method: "sendReview", args: input });
     if (input.pr === "a/b#403") throw new ApiError(403, "Your GitHub sign-in can't write reviews on a/b.");
@@ -476,6 +492,27 @@ describe("alden ui server", () => {
     ]);
     expect((await call("/api/memory", { method: "POST", headers: authed, body: { note: 1 } })).status).toBe(400);
     expect((await call("/api/memory/forget", { method: "POST", headers: authed, body: {} })).status).toBe(400);
+  });
+
+  it("serves a diff, for a PR or the local changes, with control sequences stripped", async () => {
+    const pr = await call("/api/diff?pr=a%2Fb%231", { headers: authed });
+    expect(pr.status).toBe(200);
+    const body = JSON.parse(pr.text);
+    expect(body.headSha).toBe("h1");
+    expect(body.files[0].path).toBe("src/red.ts");
+    expect(body.files[0].hunks[0].lines[0].text).toBe("x = 1;");
+    expect((await call("/api/diff", { headers: authed })).status).toBe(200);
+    expect((await call("/api/diff?pr=%20", { headers: authed })).status).toBe(200);
+    expect(calls).toEqual([
+      { method: "diff", args: "a/b#1" },
+      { method: "diff", args: undefined },
+      { method: "diff", args: undefined },
+    ]);
+    const missing = await call("/api/diff?pr=a%2Fb%23404", { headers: authed });
+    expect([missing.status, JSON.parse(missing.text)]).toEqual([502, { error: "GitHub couldn't find a/b#404." }]);
+    // The same session token and host checks as every route.
+    expect((await call("/api/diff?pr=a%2Fb%231")).status).toBe(401);
+    expect((await call("/api/diff", { headers: { ...authed, Host: "evil.example:80" } })).status).toBe(403);
   });
 
   it("passes drafts and sending through, always as yours, and checks their bodies", async () => {

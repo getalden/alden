@@ -78,6 +78,19 @@ describe("Api.review", () => {
   });
 });
 
+describe("Api.diff", () => {
+  it("asks for a PR's diff by name, or the local changes without one", async () => {
+    const urls: string[] = [];
+    const api = new Api("t", async (url) => {
+      urls.push(String(url));
+      return new Response(JSON.stringify({ headSha: "h", files: [] }));
+    });
+    await expect(api.diff("acme/shop#7")).resolves.toEqual({ headSha: "h", files: [] });
+    await api.diff();
+    expect(urls).toEqual(["/api/diff?pr=acme%2Fshop%237", "/api/diff"]);
+  });
+});
+
 describe("routes", () => {
   it("round-trips PRs, local changes and settings", () => {
     for (const path of ["/", "/pr/getalden/alden/12", "/local", "/stats", "/settings"]) {

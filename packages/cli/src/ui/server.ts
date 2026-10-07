@@ -10,6 +10,7 @@ import {
   type BriefingTarget,
   BriefingTargetSchema,
   type LocalSetupEvent,
+  type PrDiff,
   type RankRule,
   type ReviewDraft,
   type ReviewDrafts,
@@ -119,6 +120,11 @@ export interface UiApi {
    * GitHub: it runs on your click or command, never in the background, and Claude Code has no tool for it.
    */
   sendReview(input: { pr: string; event: ReviewVerdict; body?: string }): Promise<SendReviewResult>;
+  /**
+   * The Diff tab: a PR's diff at its current head ("owner/repo#12", a URL or a queue number), or without one the local
+   * changes a briefing of them covers. A PR's diff is kept per head commit, so opening it again costs one request.
+   */
+  diff(pr?: string): Promise<PrDiff>;
 }
 
 /** A new draft: on `path` at `line` (on `side`, default RIGHT), or without them a general note for the review's body. */
@@ -571,6 +577,12 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         const pr = url.searchParams.get("pr");
         if (!pr) throw new ApiError(400, "Send ?pr=owner/repo%2312.");
         send(res, 200, await api.drafts(pr));
+        return;
+      }
+      case "GET /api/diff": {
+        const pr = url.searchParams.get("pr")?.trim();
+        // Paths and lines are the PR author's text: `send` strips control sequences from every string.
+        send(res, 200, await api.diff(pr || undefined));
         return;
       }
       case "POST /api/drafts": {

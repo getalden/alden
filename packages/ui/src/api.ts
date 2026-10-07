@@ -8,6 +8,7 @@ import type {
   LocalSetupEvent,
   MemoryItem,
   ModelSetupState,
+  PrDiff,
   RankedQueue,
   RankingState,
   RankPreview,
@@ -350,6 +351,12 @@ export class Api {
 
   deleteDraft = (id: string) =>
     this.request<{ ok: true }>(`/api/drafts/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  /**
+   * The Diff tab: a PR's diff at its current head ("owner/repo#12"), or without one the local changes. The server keeps
+   * a PR's diff per head commit, so asking again costs it one GitHub request.
+   */
+  diff = (pr?: string) => this.request<PrDiff>(`/api/diff${pr ? `?pr=${encodeURIComponent(pr)}` : ""}`);
 
   /** Posts every draft on the PR to GitHub as one review. Only ever called from the Send you confirmed. */
   sendReview = (review: { pr: string; event: ReviewVerdict; body?: string }) =>

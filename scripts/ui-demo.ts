@@ -25,6 +25,7 @@ import {
   type Learning,
   loadConfig,
   loadLearning,
+  localDiffView,
   memoryItems,
   memoryRepos,
   mergeLookHere,
@@ -39,6 +40,7 @@ import {
   type StatsPullRequest,
   setLearning,
   summarizeStats,
+  toDiffView,
   toFacts,
 } from "../packages/core/src/index.js";
 import {
@@ -439,6 +441,21 @@ const api: UiApi = {
     if (key === "background.model") demoBackground = { ...demoBackground, model: value === "true" };
     if (key === "notifications.sound") demoSound = value === "true";
     return { path: "(demo)", config };
+  },
+  // The Diff tab, from the recorded diffs; local changes are this repo's own.
+  diff: async (pr) => {
+    if (pr === undefined) return localDiffView(ROOT);
+    const ref = /^(?:https:\/\/github\.com\/)?([\w.-]+\/[\w.-]+)(?:#|\/pull\/)(\d+)$/.exec(pr);
+    const match = recorded.find(
+      ({ raw }) => raw.repository.nameWithOwner === ref?.[1] && raw.number === Number(ref?.[2]),
+    );
+    if (!match) throw new Error("Demo mode has diffs for the recorded PRs only (owner/repo#123).");
+    const files = (
+      JSON.parse(readFileSync(join(FIXTURES, "diffs", `${match.name}-${match.raw.number}.json`), "utf8")) as Parameters<
+        typeof fromRestFile
+      >[0][]
+    ).map(fromRestFile);
+    return toDiffView(`demo-${match.raw.number}`, files);
   },
   // The desktop app's Save as Markdown, into a throwaway folder rather than your Downloads.
   saveBriefing: async (briefing) =>
