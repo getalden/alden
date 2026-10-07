@@ -5,15 +5,20 @@
  * PRs (with their wait times moved to recent hours so the ranking looks lived-in), reviews are the offline
  * deterministic briefings, and one PR gets an invented model section so its styling can be seen. A throwaway
  * database is seeded with feedback, opens and notes for vercel/next.js, so learning and the Memory view have
- * something to show.
+ * something to show, and with a few draft comments on cli/cli#10513, so the Comments drawer does too. Nothing
+ * is ever sent: Send review says so instead.
+ *
+ * Settings → Ranking saves to ALDEN_HOME's config.toml, and the queue reads it: set ALDEN_HOME to a temporary folder
+ * (as `pnpm screenshots` does) to keep your own as it is.
  */
+import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { briefingFileName, briefingMarkdown } from "../packages/cli/src/render/markdown.js";
 import { saveToDownloads } from "../packages/cli/src/ui/api.js";
 import { createRankingApi } from "../packages/cli/src/ui/rank.js";
-import { startUiServer, type UiApi } from "../packages/cli/src/ui/server.js";
+import { ApiError, startUiServer, type UiApi } from "../packages/cli/src/ui/server.js";
 import {
   addNote,
   buildBriefing,
@@ -30,9 +35,13 @@ import {
   memoryRepos,
   mergeLookHere,
   openStore,
+  placeOrLink,
   prFeatures,
+  prName,
+  publicDraft,
   queueRows,
   type RawPullRequest,
+  ReviewDrafts,
   rankQueue,
   recordReaction,
   redactFeedback,
@@ -42,6 +51,7 @@ import {
   summarizeStats,
   toDiffView,
   toFacts,
+  unaddressedPlaces,
 } from "../packages/core/src/index.js";
 import {
   type Briefing,
@@ -75,14 +85,42 @@ const facts: PullRequestFacts[] = recorded.map(({ raw }, i) => {
   return { ...pr, request: { ...pr.request, direct: i % 3 !== 0, requestedAt: asked } };
 });
 
-function briefingFor(repo: string, number: number, learning?: Learning, withModel = true): Briefing {
-  const match = recorded.find(({ raw }) => raw.repository.nameWithOwner === repo && raw.number === number);
-  if (!match) throw new Error(`${repo}#${number} isn't one of the recorded PRs.`);
-  const files = (
-    JSON.parse(readFileSync(join(FIXTURES, "diffs", `${match.name}-${number}.json`), "utf8")) as Parameters<
+/** A recorded PR's changed files, as GitHub sent them. */
+const filesOf = (name: string, number: number) =>
+  (
+    JSON.parse(readFileSync(join(FIXTURES, "diffs", `${name}-${number}.json`), "utf8")) as Parameters<
       typeof fromRestFile
     >[0][]
   ).map(fromRestFile);
+
+/** A made-up head commit per PR, the same every run, so drafts, the diff and the briefing agree on it. */
+const headOf = (repo: string, number: number) => createHash("sha1").update(`${repo}#${number}`).digest("hex");
+
+const PR_REF = /^(?:https:\/\/github\.com\/)?([\w.-]+\/[\w.-]+)(?:#|\/pull\/)(\d+)$/;
+
+/** A recorded PR from "owner/repo#12" or its URL: its name as drafts name it, its head and its files. */
+function recordedPr(ref: string) {
+  const parts = PR_REF.exec(ref);
+  const match = recorded.find(
+    ({ raw }) =>
+      raw.repository.nameWithOwner.toLowerCase() === parts?.[1]?.toLowerCase() && raw.number === Number(parts?.[2]),
+  );
+  if (!match) throw new ApiError(400, "Demo mode has the recorded PRs only (owner/repo#123).");
+  const { nameWithOwner: repo } = match.raw.repository;
+  const { number } = match.raw;
+  return {
+    repo,
+    number,
+    name: prName(repo, number),
+    headSha: headOf(repo, number),
+    files: filesOf(match.name, number),
+  };
+}
+
+function briefingFor(repo: string, number: number, learning?: Learning, withModel = true): Briefing {
+  const match = recorded.find(({ raw }) => raw.repository.nameWithOwner === repo && raw.number === number);
+  if (!match) throw new Error(`${repo}#${number} isn't one of the recorded PRs.`);
+  const files = filesOf(match.name, number);
   const pr = toFacts(match.raw, viewer);
   const briefing = buildBriefing({
     target: {
@@ -94,6 +132,7 @@ function briefingFor(repo: string, number: number, learning?: Learning, withMode
       author: pr.author,
       baseRef: pr.baseRef,
       headRef: pr.headRef,
+      headSha: headOf(pr.repo, pr.number),
     },
     files,
     pr,
@@ -194,6 +233,53 @@ if (lifted) {
 }
 addNote(store, DEMO_REPO, "Server actions must check the session before they touch data.");
 addNote(store, DEMO_REPO, "Changes under examples/ don't ship; a quick look is enough.");
+
+// A review in progress on one PR, for the Comments drawer: a comment on a line, a suggested change on a range, a
+// linked note on code outside the diff, and a draft Claude Code added.
+const drafts = new ReviewDrafts(store);
+const DRAFTS_PR = "cli/cli#10513";
+{
+  const pr = recordedPr(DRAFTS_PR);
+  const draft = (
+    at: { path: string; line?: number; startLine?: number },
+    body: string,
+    options: { suggestion?: string; source?: "you" | "claude" } = {},
+  ) => {
+    const spot = placeOrLink(pr.files, at.path, at.line, "RIGHT", at.startLine);
+    if ("problem" in spot) throw new Error(spot.problem);
+    drafts.add({
+      pr: pr.name,
+      headSha: pr.headSha,
+      body,
+      source: options.source ?? "you",
+      ...spot,
+      ...(options.suggestion !== undefined ? { suggestion: options.suggestion } : {}),
+    });
+  };
+  if (drafts.list(pr.name).length === 0) {
+    draft(
+      { path: "git/client.go", line: 470 },
+      "What does `gh pr create` do when this errors? A test with an unknown value would show it.",
+    );
+    draft(
+      { path: "git/client.go", startLine: 466, line: 470 },
+      "Returning early reads a little easier, and %q shows an empty value:",
+      {
+        suggestion:
+          '\tif _, ok := validPushDefaults[s]; !ok {\n\t\treturn "", fmt.Errorf("unknown push.default value: %q", s)\n\t}\n\treturn PushDefault(s), nil',
+      },
+    );
+    draft(
+      { path: "git/client.go", line: 405 },
+      "Not for this PR: the other config readers in this file could get the same parse-and-check treatment in a follow-up.",
+    );
+    draft(
+      { path: "git/client.go", line: 479 },
+      "PushDefault now returns an error for a value it doesn't know, where before it passed the string through. The new tests cover the known values but not an unknown one.",
+      { source: "claude" },
+    );
+  }
+}
 
 const learningFor = (repo: string) => loadLearning(store, repo);
 const memoryOf = async (repo = DEMO_REPO) => {
@@ -331,7 +417,7 @@ const api: UiApi = {
     return ranked;
   },
   review: async (request, onStage) => {
-    const ref = /^(?:https:\/\/github\.com\/)?([\w.-]+\/[\w.-]+)(?:#|\/pull\/)(\d+)$/.exec(request.pr ?? "");
+    const ref = PR_REF.exec(request.pr ?? "");
     if (!ref?.[1] || !ref[2]) throw new Error("Demo mode reviews recorded PRs only (owner/repo#123).");
     onStage("fetch", `Fetching ${ref[1]}#${ref[2]}`);
     await sleep(400);
@@ -345,7 +431,9 @@ const api: UiApi = {
       onStage("model", "Asking claude-sonnet-5");
       await sleep(1_200);
     }
-    return briefingFor(ref[1], Number(ref[2]), await learningFor(ref[1]), request.llm !== false);
+    const briefing = briefingFor(ref[1], Number(ref[2]), await learningFor(ref[1]), request.llm !== false);
+    drafts.rememberBriefing(briefing);
+    return briefing;
   },
   spend: async () => ({
     today: new Date().toISOString().slice(0, 10),
@@ -445,17 +533,80 @@ const api: UiApi = {
   // The Diff tab, from the recorded diffs; local changes are this repo's own.
   diff: async (pr) => {
     if (pr === undefined) return localDiffView(ROOT);
-    const ref = /^(?:https:\/\/github\.com\/)?([\w.-]+\/[\w.-]+)(?:#|\/pull\/)(\d+)$/.exec(pr);
-    const match = recorded.find(
-      ({ raw }) => raw.repository.nameWithOwner === ref?.[1] && raw.number === Number(ref?.[2]),
-    );
-    if (!match) throw new Error("Demo mode has diffs for the recorded PRs only (owner/repo#123).");
-    const files = (
-      JSON.parse(readFileSync(join(FIXTURES, "diffs", `${match.name}-${match.raw.number}.json`), "utf8")) as Parameters<
-        typeof fromRestFile
-      >[0][]
-    ).map(fromRestFile);
-    return toDiffView(`demo-${match.raw.number}`, files);
+    const { headSha, files } = recordedPr(pr);
+    return toDiffView(headSha, files);
+  },
+  // Every briefing is current, except Laravel's #60005, whose base has moved on, to show Re-brief.
+  freshness: async (target) =>
+    target.kind === "pr" && target.repo === "laravel/framework" && target.number === 60005
+      ? { state: "base_moved", baseRef: target.baseRef ?? "main", commits: 4 }
+      : { state: "fresh" },
+  // No clones in the demo: PR briefings run on the diff alone.
+  clone: async (repo) => ({ repo, path: null, how: null }),
+  // Comments, kept in the throwaway database. A comment outside a PR's diff becomes a linked note, as in Alden.
+  drafts: async (pr) => {
+    const { name, headSha, files } = recordedPr(pr);
+    drafts.follow(name, headSha, files);
+    const list = drafts.list(name);
+    return {
+      drafts: list.map(publicDraft),
+      unaddressed: unaddressedPlaces(drafts.briefed(name)?.places ?? [], list),
+    };
+  },
+  addDraft: async (input, source = "you") => {
+    const pr = recordedPr(input.pr);
+    let spot: ReturnType<typeof placeOrLink> | undefined;
+    if (input.path !== undefined) {
+      spot = placeOrLink(pr.files, input.path, input.line, input.side ?? "RIGHT", input.startLine);
+      if ("problem" in spot) throw new ApiError(422, spot.problem);
+    }
+    try {
+      return publicDraft(
+        drafts.add({
+          pr: pr.name,
+          headSha: pr.headSha,
+          body: input.body,
+          source,
+          ...spot,
+          ...(input.suggestion !== undefined ? { suggestion: input.suggestion } : {}),
+        }),
+      );
+    } catch (error) {
+      throw new ApiError(400, (error as Error).message);
+    }
+  },
+  editDraft: async (id, change) => {
+    const draft = drafts.get(id);
+    if (!draft) throw new ApiError(404, `No draft ${id}.`);
+    let place: Parameters<ReviewDrafts["edit"]>[1]["place"];
+    let linkTo: Parameters<ReviewDrafts["edit"]>[1]["linkTo"];
+    if (change.path !== undefined) {
+      const pr = recordedPr(draft.pr);
+      const spot = placeOrLink(pr.files, change.path, change.line, change.side ?? "RIGHT", change.startLine);
+      if ("problem" in spot) throw new ApiError(422, spot.problem);
+      if ("place" in spot) place = { ...spot.place, headSha: pr.headSha };
+      else linkTo = { ...spot.linkTo, headSha: pr.headSha };
+    }
+    try {
+      const edited = drafts.edit(id, {
+        ...(change.body !== undefined ? { body: change.body } : {}),
+        ...(change.suggestion !== undefined ? { suggestion: change.suggestion } : {}),
+        ...(place ? { place } : {}),
+        ...(linkTo ? { linkTo } : {}),
+      });
+      if (!edited) throw new ApiError(404, `No draft ${id}.`);
+      return publicDraft(edited);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(400, (error as Error).message);
+    }
+  },
+  deleteDraft: async (id) => {
+    if (!drafts.delete(id)) throw new ApiError(404, `No draft ${id}.`);
+    return { ok: true };
+  },
+  sendReview: async () => {
+    throw new ApiError(409, "This is Alden's demo: it never sends anything to GitHub. Your drafts are kept.");
   },
   // The desktop app's Save as Markdown, into a throwaway folder rather than your Downloads.
   saveBriefing: async (briefing) =>
