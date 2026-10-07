@@ -20,7 +20,13 @@
       "type": "string"
     },
     "line": {
-      "description": "the line, on `side`; absent for a general note",
+      "description": "the line, on `side`; the last line of a multi-line comment; absent for a general note",
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "startLine": {
+      "description": "a multi-line comment's first line, on the same side and in the same hunk; always less than `line`",
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
@@ -35,7 +41,18 @@
     },
     "body": {
       "type": "string",
-      "minLength": 1
+      "description": "the comment, in Markdown; may be empty when the draft has a suggestion"
+    },
+    "suggestion": {
+      "description": "replacement code for the commented line(s), posted as a ```suggestion block after the body; empty deletes them. Only on the new side (RIGHT)",
+      "type": "string"
+    },
+    "originalLines": {
+      "description": "the text of the commented line(s) when the draft was placed: what a suggestion replaces",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "source": {
       "type": "string",

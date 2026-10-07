@@ -196,7 +196,9 @@ export {
 export {
   checkBody,
   checkSendable,
+  checkSuggestion,
   commentableLines,
+  commentBody,
   composeReviewBody,
   fetchPullRequestState,
   findAgain,
@@ -209,6 +211,7 @@ export {
   placeOnDiff,
   prName,
   publicDraft,
+  type ReviewComment,
   ReviewDrafts,
   reviewRequest,
   SendReviewError,
@@ -216,6 +219,7 @@ export {
   type Side,
   type StoredDraft,
   sendReview,
+  suggestionFence,
   unaddressedPlaces,
 } from "./review/drafts.js";
 export {

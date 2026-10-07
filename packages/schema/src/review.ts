@@ -7,24 +7,52 @@ import { z } from "zod";
  */
 export const REVIEW_SCHEMA_VERSION = 1;
 
-export const ReviewDraftSchema = z.object({
-  id: z.string(),
-  pr: z.string().describe('the PR, "owner/repo#123"'),
-  headSha: z.string().describe("the PR's head commit the draft's line refers to"),
-  path: z.string().optional().describe("the file; absent for a general note, which goes into the review's body"),
-  line: z.number().int().positive().optional().describe("the line, on `side`; absent for a general note"),
-  side: z
-    .enum(["RIGHT", "LEFT"])
-    .optional()
-    .describe("RIGHT: the line in the new file (added or unchanged); LEFT: in the old file (removed)"),
-  body: z.string().min(1),
-  source: z.enum(["you", "claude"]).describe("who wrote it: you, or Claude Code drafting for you"),
-  createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
-  state: z
-    .enum(["draft", "outdated"])
-    .describe("outdated: the PR moved on and the line couldn't be found again, so it can't be sent until it's placed"),
-});
+export const ReviewDraftSchema = z
+  .object({
+    id: z.string(),
+    pr: z.string().describe('the PR, "owner/repo#123"'),
+    headSha: z.string().describe("the PR's head commit the draft's line refers to"),
+    path: z.string().optional().describe("the file; absent for a general note, which goes into the review's body"),
+    line: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("the line, on `side`; the last line of a multi-line comment; absent for a general note"),
+    startLine: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("a multi-line comment's first line, on the same side and in the same hunk; always less than `line`"),
+    side: z
+      .enum(["RIGHT", "LEFT"])
+      .optional()
+      .describe("RIGHT: the line in the new file (added or unchanged); LEFT: in the old file (removed)"),
+    body: z.string().describe("the comment, in Markdown; may be empty when the draft has a suggestion"),
+    suggestion: z
+      .string()
+      .optional()
+      .describe(
+        "replacement code for the commented line(s), posted as a ```suggestion block after the body; empty deletes them. Only on the new side (RIGHT)",
+      ),
+    originalLines: z
+      .array(z.string())
+      .optional()
+      .describe("the text of the commented line(s) when the draft was placed: what a suggestion replaces"),
+    source: z.enum(["you", "claude"]).describe("who wrote it: you, or Claude Code drafting for you"),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+    state: z
+      .enum(["draft", "outdated"])
+      .describe(
+        "outdated: the PR moved on and the line couldn't be found again, so it can't be sent until it's placed",
+      ),
+  })
+  .refine((d) => d.body.trim() !== "" || d.suggestion !== undefined, {
+    message: "a comment needs some text, unless it's a suggestion",
+    path: ["body"],
+  });
 
 /** What a review says overall, as GitHub names it. */
 export const ReviewEventSchema = z.enum(["COMMENT", "APPROVE", "REQUEST_CHANGES"]);

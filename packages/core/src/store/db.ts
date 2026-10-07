@@ -91,6 +91,16 @@ const MIGRATIONS: ((store: AldenStore) => void)[] = [
       CREATE TABLE briefed_places (pr_key TEXT PRIMARY KEY, briefing_at TEXT NOT NULL, places TEXT NOT NULL);
     `);
   },
+  (store) => {
+    store.exec(`
+      -- Multi-line comments and suggested changes. start_line is a range's first line (line is its last);
+      -- suggestion is the replacement code ('' deletes the lines); lines is the commented lines' text when placed
+      -- (a JSON array), to find a range again and to tell whether a suggestion still replaces the same code.
+      ALTER TABLE drafts ADD COLUMN start_line INTEGER;
+      ALTER TABLE drafts ADD COLUMN suggestion TEXT;
+      ALTER TABLE drafts ADD COLUMN lines TEXT;
+    `);
+  },
 ];
 
 /** The JSON files Alden kept before the database, read once into it. */

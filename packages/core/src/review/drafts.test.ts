@@ -10,6 +10,8 @@ import type { GitHubClient } from "../github/client.js";
 import { loadLearning } from "../learn/learn.js";
 import { AldenStore } from "../store/db.js";
 import {
+  checkSendable,
+  commentBody,
   composeReviewBody,
   findAgain,
   type Placement,
@@ -18,6 +20,7 @@ import {
   reviewRequest,
   SendReviewError,
   sendReview,
+  suggestionFence,
   unaddressedPlaces,
 } from "./drafts.js";
 
@@ -102,6 +105,7 @@ describe("placing a comment on the diff", () => {
       line: 12,
       side: "RIGHT",
       anchor: { text: "const total = a + b + fee;", before: "const b = 2;", after: "log(total);" },
+      lines: ["const total = a + b + fee;"],
     });
     expect(placed([V1], 11).anchor.text).toBe("const b = 2;");
     expect(placed([V1], 12, "LEFT").anchor.text).toBe("const total = a + b;");
@@ -173,6 +177,200 @@ describe("the drafts store", () => {
     const again = placeOnDiff([V3], "src/pay.ts", 14);
     if ("problem" in again) throw new Error(again.problem);
     expect(drafts.edit(moving.id, { place: { ...again, headSha: "h3" } })).toMatchObject({ state: "draft", line: 14 });
+  });
+});
+
+// Two hunks: lines 10-15 and 41-43 of the new file.
+const TWO_HUNKS = file(
+  "src/pay.ts",
+  [patchOf(V1), "@@ -40,2 +41,3 @@ export function refund()", " const r = 1;", "+audit(r);", " return r;"].join("\n"),
+);
+// A line inserted inside the range 11-13: its lines are all still there, but no longer together.
+const V4 = file(
+  "src/pay.ts",
+  [
+    "@@ -10,6 +10,8 @@ export function pay()",
+    " const a = 1;",
+    " const b = 2;",
+    "+check(b);",
+    "-const total = a + b;",
+    "+const total = a + b + fee;",
+    "+log(total);",
+    " }",
+    " ",
+  ].join("\n"),
+);
+
+const range = (files = [V1], startLine = 11, line = 13) => {
+  const p = placeOnDiff(files, "src/pay.ts", line, "RIGHT", startLine);
+  if ("problem" in p) throw new Error(p.problem);
+  return p;
+};
+
+describe("multi-line comments", () => {
+  it("places a range within one hunk, with every line's text and the lines around it", () => {
+    expect(range()).toEqual({
+      path: "src/pay.ts",
+      line: 13,
+      side: "RIGHT",
+      startLine: 11,
+      anchor: { text: "log(total);", before: "const a = 1;", after: "}" },
+      lines: ["const b = 2;", "const total = a + b + fee;", "log(total);"],
+    });
+    // A range of one line is just that line.
+    expect(placeOnDiff([V1], "src/pay.ts", 12, "RIGHT", 12)).toEqual(placed());
+  });
+
+  it("says why GitHub wouldn't take a range", () => {
+    expect(placeOnDiff([V1], "src/pay.ts", 11, "RIGHT", 13)).toEqual({
+      problem: expect.stringMatching(/13 comes after 11/),
+    });
+    expect(placeOnDiff([V1], "src/pay.ts", 12, "RIGHT", 4)).toEqual({
+      problem: expect.stringMatching(/^Line 4 of src\/pay.ts isn't in this PR's diff: every line of a multi-line/),
+    });
+    expect(placeOnDiff([V1], "src/pay.ts", 30, "RIGHT", 12)).toEqual({
+      problem: expect.stringMatching(/^Line 30 /),
+    });
+    expect(placeOnDiff([TWO_HUNKS], "src/pay.ts", 42, "RIGHT", 13)).toEqual({
+      problem: expect.stringMatching(
+        /Lines 13-42 of src\/pay.ts span 2 hunks .* only takes a multi-line comment within one hunk/,
+      ),
+    });
+    expect("problem" in placeOnDiff([TWO_HUNKS], "src/pay.ts", 43, "RIGHT", 41)).toBe(false);
+  });
+
+  it("follows a range only when all its lines are found together, unchanged", () => {
+    expect(findAgain(range(), [V2])).toMatchObject({ line: 15, startLine: 13, lines: range().lines });
+    // One of its lines changed.
+    expect(findAgain(range(), [V3])).toBeUndefined();
+    // A line landed in the middle of it.
+    expect(findAgain(range(), [V4])).toBeUndefined();
+  });
+
+  it("is near a flagged place anywhere along its lines", () => {
+    const drafts = new ReviewDrafts(store);
+    const d = drafts.add({ pr: PR, headSha: "h1", body: "a", source: "you", place: range([TWO_HUNKS], 41, 43) });
+    const at = (line: number): LookHere => ({ title: "t", reason: "r", anchor: { path: "src/pay.ts", line } });
+    expect(unaddressedPlaces([at(37), at(38), at(46), at(47)], [d]).map((p) => p.line)).toEqual([37, 47]);
+  });
+});
+
+describe("drafts written before 0.6", () => {
+  it("are still read, sent and followed after the migration that adds ranges and suggestions", async () => {
+    const path = join(home, "alden.db");
+    store.close();
+    // The drafts table as 0.5 left it, with one comment on a line.
+    const { DatabaseSync } = await import("node:sqlite");
+    const old = new DatabaseSync(path);
+    old.exec("ALTER TABLE drafts DROP COLUMN start_line; ALTER TABLE drafts DROP COLUMN suggestion;");
+    old.exec("ALTER TABLE drafts DROP COLUMN lines; PRAGMA user_version = 3;");
+    const { anchor } = placed();
+    old
+      .prepare(
+        `INSERT INTO drafts (id, pr, pr_key, head_sha, path, line, side, anchor, body, source, state, created_at, updated_at)
+         VALUES ('old1', ?, ?, 'h1', 'src/pay.ts', 12, 'RIGHT', ?, 'Cents?', 'you', 'draft', ?, ?)`,
+      )
+      .run(PR, PR.toLowerCase(), JSON.stringify(anchor), "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z");
+    old.close();
+    store = AldenStore.open(path);
+    expect(store.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(4);
+    const drafts = new ReviewDrafts(store);
+    const [draft] = drafts.list(PR);
+    expect(draft).toMatchObject({ id: "old1", line: 12, body: "Cents?" });
+    expect(draft).not.toHaveProperty("startLine");
+    expect(draft).not.toHaveProperty("suggestion");
+    expect(drafts.follow(PR, "h2", [V2])).toEqual({ moved: ["old1"], outdated: [] });
+    expect(drafts.get("old1")).toMatchObject({ line: 14, originalLines: ["const total = a + b + fee;"] });
+  });
+});
+
+describe("suggested changes", () => {
+  it("fences the replacement so nothing in it can close the block", () => {
+    expect(suggestionFence("const x = 1;")).toBe("```");
+    expect(suggestionFence("const s = `a` + ``b``;")).toBe("```");
+    expect(suggestionFence("/** ```ts\n * x\n * ``` */")).toBe("````");
+    expect(suggestionFence("`````")).toBe("``````");
+    expect(commentBody({ body: "Cents, please.", suggestion: "const total = cents(a + b);" })).toBe(
+      "Cents, please.\n\n```suggestion\nconst total = cents(a + b);\n```",
+    );
+    expect(commentBody({ body: "", suggestion: "a\n```\nb" })).toBe("````suggestion\na\n```\nb\n````");
+    // Empty: delete the lines.
+    expect(commentBody({ body: "Not needed.\n", suggestion: "" })).toBe("Not needed.\n\n```suggestion\n```");
+    expect(commentBody({ body: "Plain." })).toBe("Plain.");
+  });
+
+  it("stores a suggestion with the code it replaces, and only where GitHub can apply it", () => {
+    const drafts = new ReviewDrafts(store);
+    const d = drafts.add({ pr: PR, headSha: "h1", body: "", source: "you", place: range(), suggestion: "x();" });
+    expect(drafts.get(d.id)).toMatchObject({
+      startLine: 11,
+      line: 13,
+      body: "",
+      suggestion: "x();",
+      originalLines: ["const b = 2;", "const total = a + b + fee;", "log(total);"],
+    });
+    expect(() => drafts.add({ pr: PR, headSha: "h1", body: "", source: "you", suggestion: "x" })).toThrow(
+      /not a general note/,
+    );
+    expect(() =>
+      drafts.add({ pr: PR, headSha: "h1", body: "b", source: "you", place: placed([V1], 12, "LEFT"), suggestion: "x" }),
+    ).toThrow(/new side \(RIGHT\)/);
+    expect(() =>
+      drafts.add({ pr: PR, headSha: "h1", body: "b", source: "you", place: placed(), suggestion: "x".repeat(70_000) }),
+    ).toThrow(/with its suggestion; GitHub takes at most/);
+    // Editing: the suggestion changes, and without it the comment needs text.
+    expect(drafts.edit(d.id, { suggestion: "" })?.suggestion).toBe("");
+    expect(() => drafts.edit(d.id, { suggestion: null })).toThrow(/needs some text/);
+    expect(drafts.edit(d.id, { body: "Drop it", suggestion: null })).toMatchObject({ body: "Drop it" });
+    expect(drafts.get(d.id)?.suggestion).toBeUndefined();
+    const note = drafts.add({ pr: PR, headSha: "h1", body: "n", source: "you" });
+    expect(() => drafts.edit(note.id, { suggestion: "x" })).toThrow(/not a general note/);
+  });
+
+  it("moves a suggestion only onto the same code, and is outdated otherwise", () => {
+    const drafts = new ReviewDrafts(store);
+    const d = drafts.add({ pr: PR, headSha: "h1", body: "", source: "you", place: range(), suggestion: "x();" });
+    expect(drafts.follow(PR, "h2", [V2])).toEqual({ moved: [d.id], outdated: [] });
+    expect(drafts.get(d.id)).toMatchObject({ startLine: 13, line: 15, headSha: "h2", state: "draft" });
+    expect(drafts.follow(PR, "h4", [V4])).toEqual({ moved: [], outdated: [d.id] });
+    // Placed again, it's against the code there now.
+    const again = range([V4], 13, 14);
+    expect(drafts.edit(d.id, { place: { ...again, headSha: "h4" } })).toMatchObject({
+      state: "draft",
+      startLine: 13,
+      originalLines: ["const total = a + b + fee;", "log(total);"],
+    });
+  });
+
+  it("refuses to send a suggestion whose code changed under it", () => {
+    const drafts = new ReviewDrafts(store);
+    const d = drafts.add({ pr: PR, headSha: "h1", body: "", source: "you", place: placed(), suggestion: "x();" });
+    store.run("UPDATE drafts SET lines = ? WHERE id = ?", JSON.stringify(["something else"]), d.id);
+    expect(() => checkSendable(drafts.list(PR), [V1], "COMMENT", undefined)).toThrow(
+      /src\/pay.ts:12\) changed: place it again/,
+    );
+  });
+
+  it("posts a range as start_line to line, with the suggestion block in its body", () => {
+    const drafts = new ReviewDrafts(store);
+    const d = drafts.add({
+      pr: PR,
+      headSha: "h1",
+      body: "Simpler:",
+      source: "you",
+      place: range(),
+      suggestion: "x();",
+    });
+    expect(reviewRequest("h1", "COMMENT", undefined, [d]).comments).toEqual([
+      {
+        path: "src/pay.ts",
+        start_line: 11,
+        start_side: "RIGHT",
+        line: 13,
+        side: "RIGHT",
+        body: "Simpler:\n\n```suggestion\nx();\n```",
+      },
+    ]);
   });
 });
 
@@ -261,6 +459,7 @@ describe("sending a review", () => {
       fromYou: 1,
       fromClaude: 1,
       hasBody: true,
+      suggestions: 0,
       unaddressed: 2,
       learned: 1,
     });
@@ -295,6 +494,25 @@ describe("sending a review", () => {
     expect(second.counts.learned).toBe(0);
     expect(await new FeedbackLog(store).events(REPO)).toHaveLength(1);
     expect((await loadLearning(store, REPO)).checkTallies.get("paths.sensitive")).toEqual({ agree: 1, notNeeded: 0 });
+  });
+
+  it("sends a suggestion like a comment, and learns from it the same way", async () => {
+    const drafts = new ReviewDrafts(store);
+    drafts.rememberBriefing(briefing("2026-10-01T00:00:00.000Z"));
+    drafts.add({ pr: PR, headSha: "h1", body: "", source: "claude", place: range(), suggestion: "" });
+    const gh = fakeGitHub({ head: "h1", patch: V1 });
+    const result = await sendReview(gh.client, store, { repo: REPO, number: 7, event: "COMMENT" });
+    expect(result.counts).toMatchObject({ inline: 1, suggestions: 1, learned: 1 });
+    expect(gh.posted[0]?.comments).toEqual([
+      {
+        path: "src/pay.ts",
+        start_line: 11,
+        start_side: "RIGHT",
+        line: 13,
+        side: "RIGHT",
+        body: "```suggestion\n```",
+      },
+    ]);
   });
 
   it("never overrides a verdict you gave the place yourself", async () => {
