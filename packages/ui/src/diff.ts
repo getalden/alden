@@ -114,6 +114,28 @@ export function rowFinder(diff: PrDiff): (path: string, line: number, side?: str
   };
 }
 
+/**
+ * Whether GitHub takes an inline comment on these lines: in the PR's diff, on that side, a range within one hunk (as
+ * the server's placeOnDiff decides). When it doesn't, a comment there is saved as a note in the review body that
+ * links to the code. A whole file (no `line`) never does.
+ */
+export function takesInline(
+  diff: PrDiff,
+  place: { path: string; line?: number | undefined; startLine?: number | undefined; side?: string | undefined },
+): boolean {
+  const file = diff.files.find((f) => f.path === place.path);
+  if (!file || file.binary || file.patchMissing || place.line === undefined) return false;
+  const left = place.side === "LEFT";
+  const hunkOf = (line: number) =>
+    file.hunks.findIndex((h) =>
+      h.lines.some((l) => (left ? l.kind !== "add" && l.oldLine === line : l.kind !== "del" && l.newLine === line)),
+    );
+  const last = hunkOf(place.line);
+  if (last === -1) return false;
+  if (place.startLine === undefined || place.startLine >= place.line) return true;
+  return hunkOf(place.startLine) === last;
+}
+
 export const findRow = (diff: PrDiff, path: string, line: number, side?: string) => rowFinder(diff)(path, line, side);
 
 /** Added and removed lines: from the server's counts, or counted (a patch's lines when the counts are absent). */

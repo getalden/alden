@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Briefing } from "@alden/schema";
+import type { Briefing, PrDiff } from "@alden/schema";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,6 +8,7 @@ import {
   cannotSend,
   type DraftPatch,
   groupDrafts,
+  linkedText,
   type NewDraft,
   type ReviewDraft,
   type ReviewEvent,
@@ -18,7 +19,7 @@ import {
   whereText,
 } from "../drafts";
 import { BriefingView } from "./BriefingView";
-import { parseLines, useReviewActions } from "./Comments";
+import { goesInBody, linkedNotice, parseLines, useReviewActions } from "./Comments";
 import { QueueView } from "./QueueView";
 import { ReviewPane } from "./ReviewPane";
 
@@ -103,7 +104,14 @@ const draft = (id: string, extra: Partial<ReviewDraft> = {}): ReviewDraft => ({
 
 /** The local API's drafts routes, in memory. */
 function fakeApi(start: ReviewDraft[] = [], unaddressed: Unaddressed[] = []) {
-  const state = { drafts: [...start], unaddressed, calls: [] as string[], sendError: undefined as string | undefined };
+  const state = {
+    drafts: [...start],
+    unaddressed,
+    calls: [] as string[],
+    sendError: undefined as string | undefined,
+    /** Paths the server would link to rather than comment on inline (a whole file always is). */
+    outside: new Set<string>(),
+  };
   let next = 0;
   const api = {
     drafts: async (pr: string) => {
@@ -112,7 +120,18 @@ function fakeApi(start: ReviewDraft[] = [], unaddressed: Unaddressed[] = []) {
     },
     addDraft: async (input: NewDraft & { pr: string }) => {
       state.calls.push(`POST ${JSON.stringify(input)}`);
-      const saved = draft(`n${next++}`, { ...input, body: input.body });
+      const { path, line, startLine, side: _side, pr: _pr, ...rest } = input;
+      const linked = path !== undefined && (line === undefined || state.outside.has(path));
+      const saved = linked
+        ? draft(`n${next++}`, {
+            ...rest,
+            linkTo: {
+              path,
+              ...(line !== undefined ? { line } : {}),
+              ...(startLine !== undefined ? { startLine } : {}),
+            },
+          })
+        : draft(`n${next++}`, { ...input, body: input.body });
       state.drafts.push(saved);
       return saved;
     },
@@ -142,7 +161,17 @@ function fakeApi(start: ReviewDraft[] = [], unaddressed: Unaddressed[] = []) {
 }
 
 /** The PR pane as App shows it: the briefing, and the Comments drawer beside it. */
-function Harness({ api, b = briefing, children }: { api: Api; b?: Briefing; children?: ReactNode }) {
+function Harness({
+  api,
+  b = briefing,
+  loadDiff,
+  children,
+}: {
+  api: Api;
+  b?: Briefing;
+  loadDiff?: (pr?: string) => Promise<PrDiff>;
+  children?: ReactNode;
+}) {
   const comments = useDrafts(api, PR);
   const request = { pr: PR } as ReviewRequest;
   return (
@@ -156,6 +185,7 @@ function Harness({ api, b = briefing, children }: { api: Api; b?: Briefing; chil
       request={request}
       emptyHint=""
       comments={comments}
+      loadDiff={loadDiff}
     >
       {children}
     </ReviewPane>
@@ -250,10 +280,10 @@ describe("the Comments drawer", () => {
 describe("commenting on a place", () => {
   it("opens the drawer's editor on a place in Needs your eyes, saves with Ctrl+Enter, and gives focus back", async () => {
     const { state } = await setup([], [], false);
-    // The place in Needs your eyes and the check's evidence line both have a line; the whole-file one doesn't.
+    // The place in Needs your eyes and the check's evidence line; the whole-file evidence has its own.
     const buttons = screen.getAllByRole("button", { name: "Comment on src/api.ts, line 9" });
     expect(buttons).toHaveLength(2);
-    expect(screen.queryByRole("button", { name: /Comment on src\/web\.ts/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Comment on src/web.ts" })).toBeTruthy();
     fireEvent.click(buttons[0] as HTMLElement);
     const aside = drawer() as HTMLElement;
     expect(within(aside).getByRole("heading", { name: "Comment on src/api.ts, line 9" })).toBeTruthy();
@@ -363,6 +393,117 @@ describe("onComment and onFinish, for the diff and the guided review", () => {
     fireEvent.click(screen.getByRole("button", { name: "Finish" }));
     expect(drawer()).not.toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Review body" }));
+  });
+});
+
+describe("notes linking to code outside the diff", () => {
+  const diff: PrDiff = {
+    headSha: "abc",
+    files: [
+      {
+        path: "src/charge.ts",
+        status: "modified",
+        hunks: [
+          {
+            header: "@@ -1,2 +1,2 @@",
+            lines: [
+              { kind: "del", oldLine: 1, text: "charge(a)" },
+              { kind: "add", newLine: 1, text: "charge(a, b)" },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  it("comments on a whole file as a note in the review body, linking to it", async () => {
+    const { state } = await setup([], [], false);
+    fireEvent.click(screen.getByRole("button", { name: "Comment on src/web.ts" }));
+    const aside = drawer() as HTMLElement;
+    expect(within(aside).getByRole("heading", { name: "Comment on src/web.ts, the whole file" })).toBeTruthy();
+    expect(within(aside).getByRole("note").textContent).toBe(
+      "A comment on a whole file goes in the review body, with a link to the file.",
+    );
+    expect(within(aside).queryByRole("button", { name: /Suggest a change/ })).toBeNull();
+    const area = within(aside).getByRole("textbox", { name: "Comment on src/web.ts" });
+    fireEvent.change(area, { target: { value: "Does this still call charge?" } });
+    fireEvent.keyDown(area, { key: "Enter", ctrlKey: true });
+    await waitFor(() =>
+      expect(state.calls).toContain(
+        `POST ${JSON.stringify({ pr: PR, path: "src/web.ts", side: "RIGHT", body: "Does this still call charge?" })}`,
+      ),
+    );
+    const body = await within(aside).findByRole("region", { name: "In the review body · 1" });
+    const where = body.querySelector(".draft-where") as HTMLElement;
+    expect(where.textContent).toBe("In the review body · links to src/web.ts");
+    expect(where.querySelector("[title]")?.getAttribute("title")).toMatch(/code at abc, the PR's head when this was/);
+    // It shows at the place in the briefing too.
+    expect(screen.getByRole("list", { name: "Your comments on src/web.ts" }).textContent).toContain("Does this still");
+  });
+
+  it("says before saving when a line isn't in the diff, keeps a suggestion as code, and shows the link in the body", async () => {
+    const fake = fakeApi();
+    fake.state.outside.add("src/api.ts");
+    render(<Harness api={fake.api} loadDiff={async () => diff} />);
+    await waitFor(() => expect(fake.state.calls).toContain(`GET ${PR}`));
+    fireEvent.click(screen.getAllByRole("button", { name: "Comment on src/api.ts, line 9" })[0] as HTMLElement);
+    const aside = drawer() as HTMLElement;
+    expect((await within(aside).findByRole("note")).textContent).toBe(
+      "This line isn't in the PR's diff, so it goes in the review body with a link to it.",
+    );
+    fireEvent.click(within(aside).getByRole("button", { name: /Suggest a change/ }));
+    expect(aside.textContent).toContain("In the review body GitHub can't apply it, so it posts as code");
+    fireEvent.change(within(aside).getByRole("textbox", { name: "Suggested change for line 9" }), {
+      target: { value: "charge(a, b)" },
+    });
+    fireEvent.click(within(aside).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(within(aside).queryByRole("textbox", { name: /^Comment on/ })).toBeNull());
+    const body = within(aside).getByRole("region", { name: "In the review body · 1" });
+    expect(body.querySelector(".draft-where")?.textContent).toBe("In the review body · links to src/api.ts, line 9");
+    expect(within(body).getByText("charge(a, b)")).toBeTruthy();
+
+    // What posts: the note in the body, starting with its link.
+    fireEvent.click(within(aside).getByRole("button", { name: "Send review · 1 comment" }));
+    const confirm = await within(aside).findByRole("region", { name: /Send this review/ });
+    expect(confirm.textContent).toContain(
+      "**[`src/api.ts` line 9](https://github.com/acme/api/blob/abc/src/api.ts#L9)**\n\nSuggested change:\n\n```\ncharge(a, b)\n```",
+    );
+
+    // A line in the diff says nothing extra.
+    fireEvent.click(within(confirm).getByRole("button", { name: "Back" }));
+    fireEvent.click(within(aside).getByRole("button", { name: "Comment on a line…" }));
+    expect(within(aside).queryByRole("note")).toBeNull();
+    fireEvent.change(within(aside).getByRole("textbox", { name: "Line" }), { target: { value: "40" } });
+    expect(within(aside).getByRole("note").textContent).toMatch(/^This line isn't in the PR's diff/);
+    fireEvent.change(within(aside).getByRole("textbox", { name: "Line" }), { target: { value: "1" } });
+    expect(within(aside).queryByRole("note")).toBeNull();
+  });
+
+  it("offers Comment on what the model also noticed", async () => {
+    const fake = fakeApi();
+    const withFindings: Briefing = {
+      ...briefing,
+      llm: {
+        status: "ok",
+        findings: [
+          {
+            title: "Retry loops",
+            detail: "It never stops.",
+            severity: "medium",
+            anchors: [{ path: "py/orders/tasks.py", line: 5 }],
+          },
+        ],
+        droppedFindings: 0,
+        omittedFiles: [],
+      },
+    };
+    render(<Harness api={fake.api} b={withFindings} />);
+    await waitFor(() => expect(fake.state.calls).toContain(`GET ${PR}`));
+    const noticed = screen.getByRole("region", { name: "The model also noticed · 1" });
+    fireEvent.click(within(noticed).getByRole("button", { name: "Comment on py/orders/tasks.py, line 5" }));
+    expect(
+      within(drawer() as HTMLElement).getByRole("heading", { name: "Comment on py/orders/tasks.py, line 5" }),
+    ).toBeTruthy();
   });
 });
 
@@ -689,6 +830,64 @@ describe("drafts helpers", () => {
     expect(cannotSend("COMMENT", "", [draft("a", { state: "outdated" }), draft("b", { state: "outdated" })])).toBe(
       "Rewrite or delete the 2 outdated comments first.",
     );
+  });
+
+  it("builds a linked note's body with its link, as the server does", () => {
+    const note = draft("a", { body: "Retry here too?", linkTo: { path: "py/orders/tasks.py", line: 5 } });
+    expect(reviewBody("Looks good.", [note])).toBe(
+      "Looks good.\n\n**[`py/orders/tasks.py` line 5](https://github.com/acme/api/blob/abc/py/orders/tasks.py#L5)**: Retry here too?",
+    );
+    expect(linkedText(note)).toBe("links to py/orders/tasks.py, line 5");
+    expect(linkedText(draft("b", { linkTo: { path: "a.ts", line: 9, startLine: 4 } }))).toBe(
+      "links to a.ts, lines 4–9",
+    );
+    expect(cannotSend("COMMENT", "", [note])).toBeUndefined();
+  });
+
+  it("tells which places go in the review body, as the server will", () => {
+    const diff: PrDiff = {
+      headSha: "abc",
+      files: [
+        {
+          path: "a.ts",
+          status: "modified",
+          hunks: [
+            {
+              header: "@@ -1,2 +1,2 @@",
+              lines: [
+                { kind: "del", oldLine: 1, text: "x" },
+                { kind: "add", newLine: 1, text: "y" },
+                { kind: "ctx", oldLine: 2, newLine: 2, text: "z" },
+              ],
+            },
+            { header: "@@ -20 +20 @@", lines: [{ kind: "add", newLine: 20, text: "w" }] },
+          ],
+        },
+        { path: "big.json", status: "modified", patchMissing: true, hunks: [] },
+      ],
+    };
+    const inBody = (place: Parameters<typeof goesInBody>[1]) => goesInBody(diff, place);
+    expect([
+      inBody({ path: "a.ts", line: 1 }),
+      inBody({ path: "a.ts", line: 2, startLine: 1 }),
+      inBody({ path: "a.ts", line: 1, side: "LEFT" }),
+    ]).toEqual([false, false, undefined]);
+    expect([
+      inBody({ path: "a.ts", line: 5 }),
+      inBody({ path: "a.ts", line: 20, startLine: 2 }),
+      inBody({ path: "b.ts", line: 1 }),
+      inBody({ path: "big.json", line: 1 }),
+      inBody({ path: "a.ts" }),
+    ]).toEqual([true, true, true, true, true]);
+    // Without the diff only a whole file is known; the server decides the rest.
+    expect([goesInBody(undefined, { path: "a.ts", line: 5 }), goesInBody(undefined, { path: "a.ts" })]).toEqual([
+      undefined,
+      true,
+    ]);
+    expect(linkedNotice({ line: 5 })).toBe(
+      "This line isn't in the PR's diff, so it goes in the review body with a link to it.",
+    );
+    expect(linkedNotice({ line: 9, startLine: 4 })).toMatch(/^These lines aren't in the PR's diff/);
   });
 
   it("calls the drafts routes with the session key", async () => {

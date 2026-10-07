@@ -14,10 +14,13 @@ import type {
 /** A PR's diff as `GET /api/diff` returns it (from @alden/schema). */
 export type { PrDiff, PrDiffFile, PrDiffHunk, PrDiffLine };
 
-/** A place to comment on: a line on the new side (RIGHT) or the old one (LEFT), as GitHub's review comments take. */
+/**
+ * A place to comment on: a line on the new side (RIGHT) or the old one (LEFT), as GitHub's review comments take, or
+ * without `line` a whole file (which goes in the review body as a linked note).
+ */
 export interface CommentPlace {
   path: string;
-  line: number;
+  line?: number | undefined;
   side: "RIGHT" | "LEFT";
 }
 

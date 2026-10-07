@@ -195,14 +195,25 @@ export function GuidedReview({ briefing, feedback, loadDiff, onComment, onFinish
         </div>
       )}
 
-      {(feedback || (onComment && anchor?.line)) && (
+      {(feedback || (onComment && anchor)) && (
         <div className="guided-acts">
           {feedback && <Verdicts item={fbItem} feedback={feedback} />}
-          {onComment && anchor?.line && (
+          {onComment && anchor && (
             <button
               type="button"
               className="btn sm"
-              onClick={() => onComment({ path: anchor.path, line: anchor.line as number, side: "RIGHT" })}
+              title={
+                anchor.line === undefined || (diff.state === "ok" && !excerpt)
+                  ? "Not in the PR's diff: it goes in the review body, with a link to the code."
+                  : undefined
+              }
+              onClick={() =>
+                onComment({
+                  path: anchor.path,
+                  ...(anchor.line !== undefined ? { line: anchor.line } : {}),
+                  side: "RIGHT",
+                })
+              }
             >
               Comment
             </button>

@@ -5,6 +5,7 @@ import type {
   SendReviewResult,
   UnaddressedPlace,
 } from "@alden/schema";
+import { linkLines, noteText } from "@alden/schema/note-text";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Api } from "./api";
 
@@ -35,12 +36,13 @@ export interface DraftPatch {
 }
 
 /**
- * Where a comment goes: a line (or lines) of a file. What the diff and the guided review hand to `onComment`.
- * `lineText` is the text of the line(s), when known, to start a suggested change from.
+ * Where a comment goes: a line (or lines) of a file, or without `line` the whole file. What the diff, the briefing and
+ * the guided review hand to `onComment`. `lineText` is the text of the line(s), when known, to start a suggested
+ * change from. Anywhere GitHub won't take an inline comment, it's saved as a note in the review body linking there.
  */
 export interface CommentPlace {
   path: string;
-  line: number;
+  line?: number | undefined;
   side: "RIGHT" | "LEFT";
   startLine?: number | undefined;
   lineText?: string | undefined;
@@ -49,6 +51,17 @@ export interface CommentPlace {
 type Placed = { path?: string | undefined; line?: number | undefined; startLine?: number | undefined };
 
 const range = (d: Placed) => (d.startLine && d.line && d.startLine < d.line ? `${d.startLine}–${d.line}` : undefined);
+
+/** What a linked note links to, in plain words: "links to src/api.ts, line 9", or "links to src/api.ts". */
+export const linkedText = (d: Pick<ReviewDraft, "linkTo">) => {
+  if (!d.linkTo) return "";
+  const lines = linkLines(d.linkTo);
+  return `links to ${d.linkTo.path}${lines ? `, ${lines}` : ""}`;
+};
+
+/** The tooltip on a linked note: which code its link shows. */
+export const linkedTitle = (d: Pick<ReviewDraft, "headSha">) =>
+  `The link shows the code at ${d.headSha.slice(0, 7)}, the PR's head when this was written: the code you saw.`;
 
 /** "src/api.ts:9", "src/api.ts:4–9" for lines, or "src/api.ts" for a whole file. */
 export const placeText = (d: Placed) => (d.path ? `${d.path}${d.line ? `:${range(d) ?? d.line}` : ""}` : "");
@@ -85,11 +98,12 @@ export function groupDrafts(
 }
 
 /**
- * What the review's body says on GitHub: what you wrote for it, then each general note, a blank line between. (The
- * server builds it the same way; the confirmation shows it so what you see is what posts.)
+ * What the review's body says on GitHub: what you wrote for it, then each general note, a blank line between, a
+ * linked note starting with its link. (The server builds it with the same `noteText`; the confirmation shows it so
+ * what you see is what posts.)
  */
 export function reviewBody(body: string, drafts: ReviewDraft[]): string {
-  return [body.trim(), ...drafts.filter((d) => !d.path).map((d) => d.body.trim())].filter(Boolean).join("\n\n");
+  return [body.trim(), ...drafts.filter((d) => !d.path).map(noteText)].filter(Boolean).join("\n\n");
 }
 
 /** What GitHub needs before it takes a review, or undefined when it's ready to send. */
