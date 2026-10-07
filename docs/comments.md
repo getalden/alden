@@ -175,6 +175,39 @@ A comment (or a suggestion) you sent near a place Alden flagged is the clearest 
 any of them. A linked note counts the same at the code it links to; one on a whole file is near anything in it. It never overrides a verdict you gave that place yourself. See
 [Learning and memory](memory.md#comments-you-send).
 
+## After you send
+
+What the PR's author does with your comments is evidence too: a suggestion they apply, or a comment thread that gets
+resolved, means the review landed. Alden notices both and learns from them, without you doing anything.
+
+When a review is sent, Alden keeps, for each line comment, where it went: the review GitHub made, the file, its line
+(or lines) and side at the head you sent it on, whether it was a suggestion (and the code it replaced), and the check
+of the flagged place it was near, if any. Not the comment's text. These are kept 30 days in `~/.alden/alden.db`.
+
+For PRs you sent a review on in the last 14 days, Alden then asks GitHub about the review threads you started, at most
+once a day per PR: when the queue refreshes (in the background, after the queue is shown) and when you run
+`alden feedback`. It counts:
+
+- **Applied** (weight 2): a suggestion whose thread is resolved, or outdated by a push since, and whose code is now in
+  the file at the PR's head near where you suggested it, with the code it replaced gone (a deletion: those lines gone).
+  GitHub's API doesn't say a suggestion was applied, so Alden compares the file; leading and trailing spaces don't
+  count, so a formatter's re-indent still matches.
+- **Resolved** (weight 1): any other comment whose thread was resolved (by anyone), or went outdated because a push
+  after your review changed its lines. A suggestion resolved without its code landing counts as resolved; if the code
+  lands later, it counts as applied too.
+
+Each is recorded once per comment, as a `review_signal` with `source: "outcome"` carrying the check, file and line of
+the comment, and `alden feedback` shows them: "Outcomes: 3 suggestions applied, 2 comments resolved (last 14 days)".
+Claude Code's `alden_feedback` adds the same line to its answer. A merged or closed PR is checked once more after it
+closes, then never again.
+
+**Cost:** one GraphQL request per PR per day at most (the PR's state, head, last 50 commits and first 100 review
+threads), plus one more that day only when a resolved suggestion needs comparing with its file at the head (all such
+files in one request, and never twice at the same head). PRs you reviewed more than 14 days ago cost nothing. A PR
+that fails to answer is left until the next day. Nothing is written to GitHub.
+
+To turn it off, set `fromReviews = false` under `[learning]` in `~/.alden/config.toml`.
+
 ## Where drafts are kept
 
 In `~/.alden/alden.db`, on your machine, until you send or delete them. They're never in usage stats (which count

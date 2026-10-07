@@ -77,6 +77,15 @@ the check's lesson like a click on Useful and shows in `alden feedback`.
   teach nothing either.
 - Comments by Claude Code count the same once you send them: you sent them.
 
+### What comes of them
+
+After you send, Alden watches the review threads your line comments started for 14 days, asking GitHub at most once a
+day per PR. A suggestion the author applies counts twice; a comment whose thread is resolved, or goes outdated after a
+push changed its lines, counts once. Each is recorded once, as a `review_signal` event (`source: "outcome"`) with the
+check of the flagged place the comment was near, and `alden feedback` totals them: "Outcomes: 3 suggestions applied, 2
+comments resolved (last 14 days)". `learning.fromReviews = false` in your user config turns it off. Details and the
+request count: [After you send](comments.md#after-you-send).
+
 ## Seeing it build
 
 Every useful or not useful says what it did to learning, in `alden ui` (next to the button), in `alden_feedback`'s
@@ -127,8 +136,8 @@ To take back a reaction, press the same button again in `alden ui` (it toggles o
 
 In `~/.alden/alden.db`, a SQLite database (WAL mode, so the CLI and the UI can write at once). Feedback, opens and
 notes are stored as append-only events with unique ids, so a future sync can upload just what it hasn't sent. The same
-file holds spending, when you first used Alden on each repo, and the comments you're drafting (until you send or delete
-them).
+file holds spending, when you first used Alden on each repo, the comments you're drafting (until you send or delete
+them), and where your sent line comments went (30 days, without their text).
 
 Alden needs Node 22.13 or later for the database (the standalone binary has it built in). The first run on an older
 `~/.alden` imports the old JSON files (`feedback/`, `spend/`, `usage.json`) once and moves them to `~/.alden/legacy/`.
