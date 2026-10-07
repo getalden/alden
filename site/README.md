@@ -5,8 +5,10 @@ The landing page and the docs, built into `site/dist` and served by Cloudflare P
 - `site/src` is the landing page from the "Alden Site v2" Claude Design project: static HTML, CSS and a small script for
   its animations (still under reduced motion). Fonts are the same bundled Geist files as the app.
 - The docs are the repo's own `docs/*.md`, rendered by `site/build.ts` in the order `docs/README.md` lists them.
-- `site/src/assets/screens` are real screenshots of `alden ui` over the demo data (checks only, no model):
-  `pnpm screenshots` retakes them; `site/src/assets/og.png` is the social card made from one.
+- `site/src/assets/screens` are real screenshots of `alden ui` over the demo data (checks only, no model), for the home
+  page, the README and the docs: `pnpm screenshots` retakes them; `site/src/assets/og.png` is the social card made from
+  one. Docs pages show them with a relative link, `![alt](../site/src/assets/screens/x.png)`, which works on GitHub and
+  which `build.ts` turns into `/assets/screens/x.png` on the site.
 
 ```sh
 pnpm site:build                       # site/dist

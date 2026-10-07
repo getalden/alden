@@ -63,8 +63,9 @@ deterministic checks don't depend on the model.
 
 ## Code graph
 
-**"Run `alden review` from a clone of owner/repo to check callers outside the diff."** For PR reviews, Alden needs a
-clone of the PR's repo. `cd` into one and run the review again. See [Reviewing PRs](code-graph.md#reviewing-prs).
+**"No local clone of owner/repo found, so callers outside the diff weren't checked."** For PR reviews, Alden needs a
+clone of the PR's repo. Run Alden once in a clone of it, and Alden remembers it, or tell Alden where your clones live:
+`alden config set clones.folders ~/src`. See [Reviewing PRs](code-graph.md#reviewing-prs).
 
 **"This clone has no remote for owner/repo."** None of the clone's remotes point at the PR's repo. Add one, e.g.
 `git remote add upstream https://github.com/owner/repo`.

@@ -2,7 +2,9 @@
  * Builds getalden.dev into site/dist: `pnpm site:build`.
  *
  * The landing page is static (site/src). The docs are the repo's own docs/*.md, rendered into the site's look, in the
- * order docs/README.md lists them, so the site and the repo never disagree. /benchmarks/ and /cloud/ are
+ * order docs/README.md lists them, so the site and the repo never disagree. A doc shows a screenshot with a relative
+ * link that works on GitHub too, `![alt](../site/src/assets/screens/x.png)`, served here as /assets/screens/x.png.
+ * /benchmarks/ and /cloud/ are
  * src/benchmarks.html and src/cloud.html in the same frame. Every page loads site.js (page view counts and copy
  * buttons). Cloudflare Pages serves site/dist as is (`pnpm site:deploy`), with the security headers in _headers.
  */
@@ -31,6 +33,7 @@ for (const font of ["Geist-Variable.woff2", "GeistMono-Variable.woff2", "OFL.txt
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const slugOf = (file: string) => (file === "README.md" ? "" : file.replace(/\.md$/, ""));
 const hrefOf = (file: string) => (file === "README.md" ? "/docs/" : `/docs/${slugOf(file)}/`);
+const ASSETS = "../site/src/assets/";
 
 /** docs/README.md's lists, in order: the sidebar. */
 const index = readFileSync(join(DOCS, "README.md"), "utf8");
@@ -54,6 +57,17 @@ const marked = new Marked({
       else if (href.startsWith("../")) target = `${GITHUB}/${href.slice(3)}`;
       const external = /^https?:/.test(target) && !target.startsWith("https://getalden.dev");
       return `<a href="${esc(target)}"${title ? ` title="${esc(title)}"` : ""}${external ? ' rel="noopener"' : ""}>${text}</a>`;
+    },
+    // Images are the site's own assets, linked from docs/ as ../site/src/assets/…; anything else would be a broken
+    // image on one of the two, so the build stops.
+    image({ href, title, text }) {
+      if (!href.startsWith(ASSETS) || !existsSync(join(SRC, "assets", href.slice(ASSETS.length)))) {
+        throw new Error(
+          `A doc shows ${href}: link images as ${ASSETS}<file>, and run \`pnpm screenshots\` for screens.`,
+        );
+      }
+      const src = `/assets/${href.slice(ASSETS.length)}`;
+      return `<a class="shot" href="${esc(src)}"><img src="${esc(src)}" alt="${esc(text)}"${title ? ` title="${esc(title)}"` : ""} loading="lazy" /></a>`;
     },
     heading({ tokens, depth }) {
       const text = this.parser.parseInline(tokens);

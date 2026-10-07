@@ -135,7 +135,7 @@ still doesn't fit it skips the model and says so. The deterministic briefing alw
 Costs are at Anthropic's list prices. On Bedrock and Vertex, which bill at their own rates, they're an estimate. Alden
 can't price local models, so those calls aren't capped.
 
-`alden spend` shows today's spend and recent days. The ledger is kept in `~/.alden/spend`, one file per day.
+`alden spend` shows today's spend and recent days. The ledger is kept in `~/.alden/alden.db`.
 
 ## When the model doesn't run
 

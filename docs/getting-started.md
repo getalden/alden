@@ -84,7 +84,7 @@ See [Briefings and checks](checks.md).
 alden ui
 ```
 
-The queue, briefings, your feedback and what Alden learned, in a local web page. See [The web UI](web-ui.md).
+The queue, briefings, your feedback and what Alden learned, in a local web page. See [Alden in your browser](web-ui.md).
 
 ## Add a model (optional)
 
@@ -123,7 +123,9 @@ cd ~/code/their-repo
 alden review 123
 ```
 
-See [The code graph](code-graph.md).
+Alden remembers each clone you run it in, so later briefings of that repo's PRs find callers from anywhere. If your
+clones live in one folder, `alden config set clones.folders ~/src` lets Alden find them all. See
+[The code graph](code-graph.md).
 
 ## In Claude Code
 
