@@ -20,7 +20,7 @@ import { Mark } from "./Mark";
 
 const anchorKey = (a: Anchor) => `${a.path}:${a.line ?? ""}`;
 
-/** Only a place with a line takes a comment: GitHub puts review comments on lines. */
+/** Only a place with a line can be picked with `c`; any place takes Comment (a whole file's goes in the review body). */
 const withLine = (a: Anchor | undefined): (Anchor & { line: number }) | undefined =>
   a?.line ? { ...a, line: a.line } : undefined;
 
@@ -329,10 +329,13 @@ export function BriefingView({
     target.kind === "pr" && allComments?.pr.toLowerCase() === `${target.repo}#${target.number}`.toLowerCase()
       ? allComments
       : undefined;
+  /**
+   * Your drafts on a place and its Comment: inline when the line is in the diff, otherwise (or for a whole file) a
+   * note in the review body linking to it.
+   */
   const slot = (anchor: Anchor | undefined, compact = false) => {
-    const place = withLine(anchor);
-    if (!comments || !onComment || !place) return null;
-    return <CommentSlot anchor={place} comments={comments} compact={compact} onComment={onComment} />;
+    if (!comments || !onComment || !anchor) return null;
+    return <CommentSlot anchor={anchor} comments={comments} compact={compact} onComment={onComment} />;
   };
   /** `c` comments on the place you're on. */
   const placeOf = (anchor: Anchor | undefined) => {
@@ -491,6 +494,7 @@ export function BriefingView({
                     {f.anchors.map((a) => (
                       <Place key={anchorKey(a)} anchor={a} links={links} />
                     ))}
+                    {slot(f.anchors[0])}
                   </div>
                   <div className="acts">
                     <span className={`sev ${f.severity}`}>{SEVERITY[f.severity]}</span>
@@ -574,7 +578,7 @@ export function BriefingView({
                     {check.evidence.length > 0 && (
                       <ul className="evidence">
                         {check.evidence.map((e) => {
-                          const commentable = !!(comments && onComment && withLine(e.anchor));
+                          const commentable = !!(comments && onComment && e.anchor);
                           return (
                             <li
                               key={`${e.text}${e.anchor ? anchorKey(e.anchor) : ""}`}

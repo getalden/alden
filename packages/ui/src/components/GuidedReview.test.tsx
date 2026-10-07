@@ -259,6 +259,48 @@ describe("guided review", () => {
     expect(onComment).toHaveBeenCalledWith({ path: "src/charge.ts", line: 2, side: "RIGHT" });
   });
 
+  it("comments on the model's extra steps too: a line outside the diff or a whole file goes in the review body", async () => {
+    const onComment = vi.fn();
+    const withExtras: Briefing = {
+      ...briefing,
+      llm: {
+        status: "ok",
+        findings: [
+          {
+            title: "Retry loops",
+            detail: "It never stops.",
+            severity: "medium",
+            anchors: [{ path: "src/web.ts", line: 5 }],
+          },
+          {
+            title: "Stale docs",
+            detail: "The README is out of date.",
+            severity: "low",
+            anchors: [{ path: "README.md" }],
+          },
+        ],
+        droppedFindings: 0,
+        omittedFiles: [],
+      },
+    };
+    render(<BriefingView briefing={withExtras} guided={{ loadDiff: async () => diff, onComment }} />);
+    await key("g");
+    await key("n");
+    await key("n");
+    const retry = screen.getByRole("region", { name: "Retry loops" });
+    const comment = within(retry).getByRole("button", { name: "Comment" });
+    await waitFor(() =>
+      expect(comment.getAttribute("title")).toMatch(/Not in the PR's diff: it goes in the review body/),
+    );
+    fireEvent.click(comment);
+    expect(onComment).toHaveBeenLastCalledWith({ path: "src/web.ts", line: 5, side: "RIGHT" });
+    await key("n");
+    fireEvent.click(
+      within(screen.getByRole("region", { name: "Stale docs" })).getByRole("button", { name: "Comment" }),
+    );
+    expect(onComment).toHaveBeenLastCalledWith({ path: "README.md", side: "RIGHT" });
+  });
+
   it("has no Comment without somewhere to write it", async () => {
     setup();
     await key("g");

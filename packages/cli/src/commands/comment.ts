@@ -21,10 +21,15 @@ export function parseWhere(text: string): { path: string; line: number; startLin
   return { path: match[1] as string, line: last, ...(last !== first ? { startLine: first } : {}) };
 }
 
+const lines = (d: { line?: number | undefined; startLine?: number | undefined }) =>
+  d.line === undefined ? "" : `:${d.startLine !== undefined ? `${d.startLine}-` : ""}${d.line}`;
+
 const placeOf = (d: ReviewDraft) =>
   d.path === undefined
-    ? "general note"
-    : `${d.path}:${d.startLine !== undefined ? `${d.startLine}-` : ""}${d.line}${d.side === "LEFT" ? " (old side)" : ""}`;
+    ? d.linkTo
+      ? `general note, linking to ${d.linkTo.path}${lines(d.linkTo)}`
+      : "general note"
+    : `${d.path}${lines(d)}${d.side === "LEFT" ? " (old side)" : ""}`;
 const indent = (text: string, by: string) =>
   text
     .split("\n")
@@ -34,8 +39,9 @@ const indent = (text: string, by: string) =>
 /** A suggested change as lines: the code it replaces (-) and the code it suggests (+), or that it deletes them. */
 export function renderSuggestion(d: ReviewDraft, color: boolean, by = "    "): string[] {
   if (d.suggestion === undefined) return [];
+  const on = d.linkTo ?? d;
   const lines =
-    d.originalLines?.length ?? (d.startLine !== undefined && d.line !== undefined ? d.line - d.startLine + 1 : 1);
+    d.originalLines?.length ?? (on.startLine !== undefined && on.line !== undefined ? on.line - on.startLine + 1 : 1);
   const out = [
     paint(
       `${by}suggested change: ${d.suggestion === "" ? `delete ${lines === 1 ? "this line" : `these ${lines} lines`}` : `replace ${lines === 1 ? "this line" : `these ${lines} lines`}`}`,
@@ -87,6 +93,22 @@ export function renderDrafts(pr: string, untrusted: ReviewDraft[], color: boolea
   }
   out.push(`Send them as one review: alden send ${pr} --comment | --approve | --request-changes`);
   return `${out.join("\n")}\n`;
+}
+
+/** What `alden comment` says once a comment is drafted: where it went (a linked note says why), and how to send. */
+export function draftedLines(untrusted: ReviewDraft, pr: string): string[] {
+  const draft = stripControlDeep(untrusted);
+  const kind = draft.suggestion !== undefined ? ", a suggested change" : "";
+  const out: string[] = [];
+  if (draft.linkTo) {
+    const suggested =
+      draft.suggestion !== undefined ? " GitHub can't apply a suggestion from there: it posts as code to copy." : "";
+    out.push(
+      `${draft.linkTo.path}${lines(draft.linkTo)} isn't in the PR's diff, so this goes in the review body with a link to it, at the PR's head now (${draft.headSha.slice(0, 7)}).${suggested}`,
+    );
+  }
+  out.push(`Drafted ${draft.id} (${placeOf(draft)}${kind}) for ${pr}. Nothing is posted until you send it:`);
+  return out;
 }
 
 const VERDICT_NAMES: Record<ReviewEvent, string> = {
@@ -216,7 +238,7 @@ export function registerCommentCommands(program: Command, version: string): void
   program
     .command("comment")
     .description(
-      "Write a comment on a PR, kept in Alden until you send it: on a line (file:line), on lines (file:12-14), or without one a general note. --suggest makes it a suggested change GitHub can apply. With no text, list the PR's comments.",
+      "Write a comment on a PR, kept in Alden until you send it: on a line (file:line), on lines (file:12-14), or without one a general note. A line outside the PR's diff becomes a general note linking to it. --suggest makes it a suggested change GitHub can apply. With no text, list the PR's comments.",
     )
     .argument("<pr>", "a PR URL, owner/repo#123, or a # from `alden queue`")
     .argument(
@@ -264,8 +286,7 @@ export function registerCommentCommands(program: Command, version: string): void
         console.log(JSON.stringify(draft, null, 2));
         return;
       }
-      const kind = draft.suggestion !== undefined ? ", a suggested change" : "";
-      console.log(`Drafted ${draft.id} (${placeOf(draft)}${kind}) for ${pr}. Nothing is posted until you send it:`);
+      for (const line of draftedLines(draft, pr)) console.log(line);
       console.log(paint(`  alden send ${pr} --comment | --approve | --request-changes`, "dim", color));
     });
 

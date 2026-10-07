@@ -4,11 +4,16 @@ import { join } from "node:path";
 import type { Briefing } from "@alden/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/** A fake GitHub for the whole file: one PR with one changed file. Nothing reaches GitHub. */
+/** A fake GitHub for the whole file: one PR with one changed file, and the repo's files. Nothing reaches GitHub. */
 const github = vi.hoisted(() => ({
   head: "h1",
   posted: [] as Record<string, unknown>[],
   refuse: undefined as { status: number; message: string } | undefined,
+  /** The repo's files at the head, for linked notes. */
+  contents: {
+    "src/pay.ts": "const a = 1;\nconst fee = 2;\nexport { a };\n",
+    "py/orders/tasks.py": "import x\n\n\ndef run():\n    retry()\n",
+  } as Record<string, string>,
 }));
 
 vi.mock("@alden/core", async (original) => ({
@@ -25,6 +30,11 @@ vi.mock("@alden/core", async (original) => ({
               ? [{ filename: "src/pay.ts", status: "modified", additions: 1, deletions: 0, patch }]
               : [],
         };
+      }
+      if (route === "GET /repos/{owner}/{repo}/contents/{path}") {
+        const text = github.contents[params.path as string];
+        if (text === undefined) throw Object.assign(new Error("Not Found"), { status: 404 });
+        return { data: { type: "file", encoding: "base64", content: Buffer.from(text).toString("base64") } };
       }
       if (route === "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews") {
         if (github.refuse) throw Object.assign(new Error(github.refuse.message), { status: github.refuse.status });
@@ -89,7 +99,7 @@ describe("drafts through the UI's API", () => {
     expect(claude.source).toBe("claude");
     await expect(api.addDraft({ pr: "acme/shop#7", path: "src/pay.ts", line: 9, body: "x" })).rejects.toMatchObject({
       status: 422,
-      message: expect.stringMatching(/isn't in this PR's diff/),
+      message: expect.stringMatching(/src\/pay.ts has 3 lines at the PR's head \(h1\), so there's no line 9/),
     });
 
     expect(await api.drafts("acme/shop#7")).toEqual({
@@ -147,7 +157,7 @@ describe("suggested changes through the UI's API", () => {
     });
     await expect(
       api.addDraft({ pr: "acme/shop#7", path: "src/pay.ts", startLine: 1, line: 9, body: "x" }),
-    ).rejects.toMatchObject({ status: 422, message: expect.stringMatching(/^Line 9 of src\/pay.ts isn't in/) });
+    ).rejects.toMatchObject({ status: 422, message: expect.stringMatching(/^src\/pay.ts has 3 lines/) });
     await expect(
       api.addDraft({ pr: "acme/shop#7", path: "src/pay.ts", line: 1, side: "LEFT", body: "x", suggestion: "y" }),
     ).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/new side/) });
@@ -174,6 +184,69 @@ describe("suggested changes through the UI's API", () => {
         body: "```suggestion\n```",
       },
     ]);
+  });
+});
+
+describe("linked notes through the UI's API", () => {
+  it("saves a comment outside the diff as a note linking to it, and sends it in the body", async () => {
+    const api = createUiApi({ version: "test", cwd: home });
+    const note = await api.addDraft({
+      pr: "acme/shop#7",
+      path: "py/orders/tasks.py",
+      line: 5,
+      body: "Retry here too?",
+    });
+    expect(note).toMatchObject({
+      headSha: "h1",
+      linkTo: { path: "py/orders/tasks.py", line: 5 },
+      body: "Retry here too?",
+    });
+    expect(note).not.toHaveProperty("path");
+    const file = await api.addDraft({ pr: "acme/shop#7", path: "src/pay.ts", body: "Split this file?" });
+    expect(file.linkTo).toEqual({ path: "src/pay.ts" });
+    await expect(api.addDraft({ pr: "acme/shop#7", path: "py/nope.py", line: 1, body: "x" })).rejects.toMatchObject({
+      status: 422,
+      message: expect.stringMatching(/py\/nope.py isn't in acme\/shop at the PR's head/),
+    });
+    // Placed on a line of the diff, it's an inline comment again.
+    expect(await api.editDraft(file.id, { path: "src/pay.ts", line: 2 })).toMatchObject({
+      path: "src/pay.ts",
+      line: 2,
+    });
+
+    // A push: the inline comment follows its line (looked over in the drawer), the note keeps its link.
+    github.head = "h2";
+    expect((await api.drafts("acme/shop#7")).drafts.map((d) => d.headSha)).toEqual(["h1", "h2"]);
+    await api.sendReview({ pr: "acme/shop#7", event: "COMMENT" });
+    expect(github.posted[0]).toMatchObject({
+      commit_id: "h2",
+      body: "**[`py/orders/tasks.py` line 5](https://github.com/acme/shop/blob/h1/py/orders/tasks.py#L5)**: Retry here too?",
+      comments: [{ path: "src/pay.ts", line: 2, body: "Split this file?" }],
+    });
+  });
+
+  it("tells Claude when alden_draft_comment made a linked note", async () => {
+    const tool = aldenTools({ version: "test", cwd: home }).find((t) => t.name === "alden_draft_comment");
+    expect(tool?.description).toMatch(/linked note/);
+    const said = await tool?.call(
+      tool.input.parse({ pr: "acme/shop#7", path: "py/orders/tasks.py", start_line: 4, line: 5, body: "Same bug?" }),
+    );
+    expect(said).toMatch(
+      /^py\/orders\/tasks.py:4-5 isn't in the PR's diff, so GitHub won't take an inline comment there. Drafted \w+ as a linked note instead: it goes in the review body, starting with a link to py\/orders\/tasks.py:4-5 at the PR's head \(h1\). Nothing is posted/,
+    );
+    const whole = await tool?.call(tool.input.parse({ pr: "acme/shop#7", path: "src/pay.ts", body: "Split it?" }));
+    expect(whole).toMatch(/^GitHub's inline comments go on lines, not a whole file \(src\/pay.ts\)\. Drafted/);
+    const suggested = await tool?.call(
+      tool.input.parse({ pr: "acme/shop#7", path: "py/orders/tasks.py", line: 5, suggestion: "    retry(3)" }),
+    );
+    expect(suggested).toMatch(/posts as a code block for the author to copy/);
+    const { drafts } = await createUiApi({ version: "test", cwd: home }).drafts("acme/shop#7");
+    expect(drafts.map((d) => d.linkTo)).toEqual([
+      { path: "py/orders/tasks.py", line: 5, startLine: 4 },
+      { path: "src/pay.ts" },
+      { path: "py/orders/tasks.py", line: 5 },
+    ]);
+    expect(github.posted).toEqual([]);
   });
 });
 

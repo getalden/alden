@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import type { Api, ReviewRequest } from "../api";
+import { cachedDiff } from "../diff";
 import { type BriefingComments, type CommentPlace, useDrawerOpen } from "../drafts";
 import type { BriefingFeedback } from "../feedback";
 import type { ReviewRun } from "../reviews";
@@ -267,7 +268,15 @@ function BriefingTabs(props: {
       ),
     [briefing],
   );
-  const drafts = pr && props.comments?.pr.toLowerCase() === pr.toLowerCase() ? props.comments.drafts : undefined;
+  const all = pr && props.comments?.pr.toLowerCase() === pr.toLowerCase() ? props.comments.drafts : undefined;
+  // A linked note shows at the code it links to, when the diff has it (or on its file).
+  const drafts = useMemo(
+    () =>
+      all?.map((d) =>
+        d.linkTo ? { ...d, path: d.linkTo.path, line: d.linkTo.line, startLine: d.linkTo.startLine, side: "RIGHT" } : d,
+      ),
+    [all],
+  );
   const onTabKey = (event: ReactKeyboardEvent) => {
     if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
       const next = tab === "diff" ? "briefing" : "diff";
@@ -336,11 +345,47 @@ function BriefingTabs(props: {
   );
 }
 
+/**
+ * The PR's diff for the Comments drawer, loaded (from the Diff tab's cache) once you start writing a comment, so the
+ * editor can say before you save when a line isn't in it. Undefined until then, and for local changes.
+ */
+function useDrawerDiff(
+  briefing: Briefing | undefined,
+  load: ((pr: string) => Promise<PrDiff>) | undefined,
+  writing: boolean,
+): PrDiff | undefined {
+  const target = briefing?.target;
+  const pr = target?.kind === "pr" ? `${target.repo}#${target.number}` : undefined;
+  const headSha = target?.kind === "pr" ? target.headSha : undefined;
+  const key = pr && `${pr}@${headSha ?? briefing?.generatedAt}`;
+  const [loaded, setLoaded] = useState<{ key: string; diff: PrDiff }>();
+  const has = loaded?.key === key;
+  useEffect(() => {
+    if (!writing || !load || !pr || !key || has) return;
+    let live = true;
+    cachedDiff((p) => load(p ?? pr), pr, headSha).then(
+      (diff) => {
+        if (live) setLoaded({ key, diff });
+      },
+      () => undefined, // The server decides where the comment goes; the drawer lists it there.
+    );
+    return () => {
+      live = false;
+    };
+  }, [writing, load, pr, key, headSha, has]);
+  return has ? loaded?.diff : undefined;
+}
+
 /** A PR (or your local changes) and its briefing: run it, watch it, read it; on a PR, the Comments drawer beside it. */
 export function ReviewPane(props: ReviewPaneProps) {
   const { run, comments } = props;
   const files = run?.briefing && !run.running && run.briefing.files.length > 0 ? run.briefing.files : undefined;
   const drawer = useCommentsDrawer(comments, files !== undefined);
+  const drawerDiff = useDrawerDiff(
+    run?.running ? undefined : run?.briefing,
+    props.loadDiff ?? props.guided?.loadDiff,
+    drawer.editing !== undefined && drawer.editing.kind !== "note",
+  );
   const count = comments && !comments.loading ? comments.drafts.length : 0;
   useEffect(() => {
     if (!run?.running) return;
@@ -503,6 +548,7 @@ export function ReviewPane(props: ReviewPaneProps) {
             onEditing={drawer.setEditing}
             focus={drawer.focus}
             returnFocus={drawer.returnFocus}
+            diff={drawerDiff}
           />
         )}
       </div>

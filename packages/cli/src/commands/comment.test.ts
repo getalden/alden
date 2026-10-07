@@ -1,6 +1,6 @@
 import type { ReviewDraft } from "@alden/schema";
 import { describe, expect, it } from "vitest";
-import { parseWhere, renderDrafts, renderSendSummary, suggestionFrom } from "./comment.js";
+import { draftedLines, parseWhere, renderDrafts, renderSendSummary, suggestionFrom } from "./comment.js";
 
 const draft = (extra: Partial<ReviewDraft>): ReviewDraft => ({
   id: "a1b2c3d4",
@@ -161,5 +161,37 @@ describe("alden send's summary", () => {
     expect(out).toContain("Review for acme/shop#7: Approve");
     expect(out).toContain("Body\n  (none)");
     expect(out).toContain("Places Alden flagged that you didn't comment on\n  ! No tests\n  ! Fee (src/pay.ts:40)");
+  });
+});
+
+describe("linked notes in the terminal", () => {
+  const note = {
+    id: "n1",
+    pr: "acme/shop#7",
+    headSha: "0123456789abcdef",
+    body: "Retry here too?",
+    linkTo: { path: "py/orders/tasks.py", line: 5 },
+    source: "you" as const,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+    state: "draft" as const,
+  };
+
+  it("says a line outside the diff became a note linking to it", () => {
+    expect(draftedLines(note, "acme/shop#7")).toEqual([
+      "py/orders/tasks.py:5 isn't in the PR's diff, so this goes in the review body with a link to it, at the PR's head now (0123456).",
+      "Drafted n1 (general note, linking to py/orders/tasks.py:5) for acme/shop#7. Nothing is posted until you send it:",
+    ]);
+    const suggested = { ...note, linkTo: { path: "a.py", line: 3, startLine: 1 }, suggestion: "x = 1" };
+    expect(draftedLines(suggested, "acme/shop#7")[0]).toMatch(/^a.py:1-3 isn't .* it posts as code to copy\.$/);
+  });
+
+  it("lists it, and shows it in the body alden send posts", () => {
+    expect(renderDrafts("acme/shop#7", [note], false)).toContain("n1  general note, linking to py/orders/tasks.py:5");
+    const summary = renderSendSummary({ pr: "acme/shop#7", event: "COMMENT", drafts: [note], unaddressed: [] }, false);
+    expect(summary).toContain(
+      "**[`py/orders/tasks.py` line 5](https://github.com/acme/shop/blob/0123456789abcdef/py/orders/tasks.py#L5)**: Retry here too?",
+    );
+    expect(summary).toContain("Comments (0)");
   });
 });

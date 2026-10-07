@@ -564,6 +564,15 @@ describe("alden ui server", () => {
     expect((await send("DELETE", "/api/drafts/gone")).status).toBe(404);
     expect((await send("POST", "/api/drafts", { pr: "a/b#1", suggestion: "x" })).status).toBe(200);
     expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", startLine: 2 })).status).toBe(400);
+    // A whole file: path alone, which the engine makes a note linking to it. A range still needs its last line.
+    calls.length = 0;
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", path: "README.md" })).status).toBe(200);
+    expect(calls).toEqual([
+      { method: "addDraft", args: { input: { pr: "a/b#1", body: "x", path: "README.md" }, source: "you" } },
+    ]);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", path: "a.ts", startLine: 2 })).status).toBe(
+      400,
+    );
     expect(
       (await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", path: "x.ts", line: 3, startLine: 1.5 })).status,
     ).toBe(400);

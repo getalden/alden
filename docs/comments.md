@@ -28,17 +28,52 @@ alden comment acme/shop#7 --delete a1b2c3d4
 `file:line` is a line in the new file, and `file:12-14` the lines from 12 to 14; add `--left` for removed lines,
 numbered in the old file.
 
-- **A comment on a line** becomes an inline comment on that line. GitHub only takes comments on lines in the PR's diff
-  (changed lines and the few shown around them), so Alden checks the line when you write the comment and says if it
-  isn't one.
+- **A comment on a line** becomes an inline comment on that line, when GitHub takes one there: on lines in the PR's
+  diff (changed lines and the few shown around them). Anywhere else it becomes a [linked note](#comments-on-code-outside-the-diff).
 - **A comment on several lines** covers a range, as GitHub's own multi-line comments do. GitHub only takes a range on
-  one side of the diff and within one hunk (one `@@` block), so Alden checks that too and says which line is outside
-  the diff, or that the range spans two hunks. In the UI, give the line as `4–9`.
+  one side of the diff and within one hunk (one `@@` block); a range outside that is a linked note too. In the UI,
+  give the line as `4–9`.
 - **A suggested change** on a comment ("Suggest a change" in the UI, on the new side only) posts after the comment's
   text as a `suggestion` block, which the author can accept on GitHub. The UI starts it from the line's text when it
   has it; left empty, it suggests deleting the line(s). A comment with a suggestion needs no other text.
 - **A comment without a line** is a general note. Notes go into the review's body, after anything you write for the
   body itself, oldest first.
+
+## Comments on code outside the diff
+
+Alden often points at code the PR doesn't change: a caller in an unchanged file, a file under **Look at these too**,
+a finding about a whole file. GitHub won't take an inline comment there, so a comment on it becomes a **linked note**:
+a general note in the review body that starts with a link to that code.
+
+- In the UI, the editor says so before you save: "This line isn't in the PR's diff, so it goes in the review body with
+  a link to it." (once it has the PR's diff to check against). The drawer lists the note under **In the review body**,
+  with "links to py/orders/tasks.py, line 5".
+- In a terminal, `alden comment acme/shop#7 py/orders/tasks.py:5 "Retry here too?"` on a line outside the diff saves
+  a linked note and says so.
+- From Claude Code, `alden_draft_comment` does the same and tells Claude the draft became a linked note.
+- **Comment** on a whole file (a place or finding with no line) is always a linked note, to the file.
+
+In the review body it reads:
+
+```md
+**[`py/orders/tasks.py` line 5](https://github.com/acme/shop/blob/4f1c2e9…/py/orders/tasks.py#L5)**: Retry here too?
+```
+
+A range links to `#L4-L9` and reads "lines 4–9"; a whole file has no line. Your text follows exactly as you wrote it.
+If it starts with a list, a quote or a code block, it goes on the next paragraph instead, so it still renders.
+
+The link is pinned to the PR's head commit **when you wrote the note**: it shows the code you were looking at, even
+after the author pushes. Linked notes don't need following when the PR moves, and never go outdated. Hover the note in
+the drawer to see the commit.
+
+Before saving one, Alden asks GitHub whether the file is there at the head, and has that many lines: a path or line
+that doesn't exist is refused with a sentence saying so, rather than posted as a broken link. A removed line (the old
+side, `--left`) outside the diff can't be linked, since it isn't in the file at the head.
+
+**A suggested change in a linked note** can't be applied: GitHub only applies suggestions on lines in the diff. Alden
+keeps it rather than dropping it: it follows the text as a code block headed "Suggested change", for the author to copy
+(or "Suggested change: delete this line." when it's empty). The editor says so under **Suggest a change**. A whole
+file takes no suggestion.
 
 ## Suggesting changes
 
@@ -56,7 +91,9 @@ alden comment acme/shop#7 src/pay.ts:20 "Leftover debugging" --suggest ""   # de
   From a file or stdin, one trailing newline is dropped (editors add one); anything else is kept.
 - An empty suggestion deletes the lines.
 - The comment's text is optional with a suggestion.
-- Suggestions apply to the new file, so they go on the new side only: not with `--left`, and not as a general note.
+- Suggestions apply to the new file, so they go on the new side only: not with `--left`, and not on a plain general
+  note. On a line outside the diff, the suggestion goes in a [linked note](#comments-on-code-outside-the-diff) as code
+  to copy.
 
 What posts is your text, a blank line, then the suggestion in a ` ```suggestion ` block. If the code itself contains a
 run of three or more backticks (a Markdown snippet in a doc comment, say), Alden fences it with one more backtick than
@@ -75,7 +112,8 @@ yours, marked "drafted by Claude Code", and post as you only when you send them.
 A comment is written against the PR's head commit. When the author pushes, Alden brings your comments along the next
 time it lists them or sends them:
 
-- A general note just moves to the new head.
+- A general note just moves to the new head. A linked note stays as it is: its link is to the code at the head you
+  wrote it against.
 - A comment on a line looks for its line again in the new diff of that file (or the file it was renamed to): the same
   text, on the same side, preferring a line whose neighbours still match, then the one nearest where it was. Found,
   the comment moves there.
@@ -98,13 +136,15 @@ alden send acme/shop#7 --comment          # or --approve, or --request-changes
 alden send acme/shop#7 --approve -m "Thanks, looks good."
 ```
 
-Before anything posts, Alden shows the whole review: the body (your `-m` text, then the general notes), each comment
+Before anything posts, Alden shows the whole review: the body (your `-m` text, then the general notes, a linked note
+with its link), each comment
 with its file and line (or lines), each suggestion as old lines and new ones, who drafted it, and the verdict. Before an approval it also lists the places Alden flagged in
 its latest briefing of this PR that none of your comments is near (within three lines, on the same file). Then it asks.
 `--yes` skips the question; without a terminal to ask on and without `--yes`, it refuses.
 
 It sends one request, `POST /repos/{owner}/{repo}/pulls/{n}/reviews`, at the PR's current head commit, with exactly
-what you wrote. Alden adds nothing to it but a suggestion's ` ```suggestion ` block: no signature, no footer. A comment
+what you wrote. Alden adds nothing to it but a suggestion's ` ```suggestion ` block and a linked note's link (and its
+"Suggested change" block): no signature, no footer. A comment
 on several lines goes as `start_line` and `start_side` to `line` and `side`.
 
 Alden won't send, and says why, when:
@@ -132,7 +172,7 @@ website and haven't submitted blocks a new one: submit or discard it there first
 
 A comment (or a suggestion) you sent near a place Alden flagged is the clearest sign that the place was worth your eyes, so it counts as
 "useful" for that check, once per place per PR. A comment on several lines is near anything within three lines of
-any of them. It never overrides a verdict you gave that place yourself. See
+any of them. A linked note counts the same at the code it links to; one on a whole file is near anything in it. It never overrides a verdict you gave that place yourself. See
 [Learning and memory](memory.md#comments-you-send).
 
 ## Where drafts are kept

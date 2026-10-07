@@ -1,4 +1,5 @@
-import type { Anchor, Briefing } from "@alden/schema";
+import type { Anchor, Briefing, PrDiff } from "@alden/schema";
+import { linkLines } from "@alden/schema/note-text";
 import {
   createContext,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -9,11 +10,13 @@ import {
   useRef,
   useState,
 } from "react";
+import { takesInline } from "../diff";
 import {
   type BriefingComments,
   type CommentPlace,
   cannotSend,
   groupDrafts,
+  linkedTitle,
   type NewDraft,
   placeText,
   type ReviewDraft,
@@ -71,7 +74,7 @@ export const useReviewActions = () => useContext(ReviewActionsContext);
  * can use it too.
  */
 export const placeAttrs = (place: CommentPlace | undefined): Record<string, string | undefined> =>
-  place
+  place?.line !== undefined
     ? {
         "data-comment-path": place.path,
         "data-comment-line": String(place.line),
@@ -110,25 +113,55 @@ const VERDICTS: { event: ReviewEvent; label: string; past: string }[] = [
 const verdictOf = (event: ReviewEvent) =>
   VERDICTS.find((v) => v.event === event) ?? (VERDICTS[0] as (typeof VERDICTS)[0]);
 
-const onPlace = (d: ReviewDraft, a: Anchor) => d.path === a.path && d.line === a.line;
+/** A draft on this place: on its line, or a note linking to it (a whole file's anchor matches a whole-file note). */
+const onPlace = (d: ReviewDraft, a: Anchor) => {
+  const on = d.linkTo ?? d;
+  return on.path === a.path && on.line === a.line;
+};
 
-/** "line 4" or "lines 4–9": what a suggestion replaces. */
-const linesText = (p: { line: number; startLine?: number | undefined }) =>
-  p.startLine && p.startLine < p.line ? `lines ${p.startLine}–${p.line}` : `line ${p.line}`;
+/** "line 4" or "lines 4–9": what a suggestion replaces; "the whole file" without a line. */
+const linesText = (p: { line?: number | undefined; startLine?: number | undefined }) =>
+  p.line === undefined
+    ? "the whole file"
+    : p.startLine && p.startLine < p.line
+      ? `lines ${p.startLine}–${p.line}`
+      : `line ${p.line}`;
 
 /** Leaves out what isn't set, so the request carries only what you wrote. */
 const lineDraft = (
-  p: { path: string; line: number; startLine?: number | undefined; side: "RIGHT" | "LEFT" },
+  p: { path: string; line?: number | undefined; startLine?: number | undefined; side: "RIGHT" | "LEFT" },
   body: string,
   suggestion: string | undefined,
 ): NewDraft => ({
   path: p.path,
-  line: p.line,
-  ...(p.startLine && p.startLine < p.line ? { startLine: p.startLine } : {}),
+  ...(p.line !== undefined ? { line: p.line } : {}),
+  ...(p.line !== undefined && p.startLine && p.startLine < p.line ? { startLine: p.startLine } : {}),
   side: p.side,
   body,
   ...(suggestion !== undefined ? { suggestion } : {}),
 });
+
+/**
+ * Whether a comment on this place goes in the review body as a linked note: a whole file always; a line (or lines)
+ * when the diff is known and GitHub wouldn't take it inline. Undefined while that can't be told (the server decides).
+ * Removed (LEFT) lines outside the diff can't be linked, so they're never a note.
+ */
+export function goesInBody(
+  diff: PrDiff | undefined,
+  place: { path: string; line?: number | undefined; startLine?: number | undefined; side?: string | undefined },
+): boolean | undefined {
+  if (place.line === undefined) return true;
+  if (!diff || place.side === "LEFT") return undefined;
+  return !takesInline(diff, place);
+}
+
+/** What the editor says before you save a comment that goes in the review body, in a sentence. */
+export function linkedNotice(place: { line?: number | undefined; startLine?: number | undefined }): string {
+  if (place.line === undefined) return "A comment on a whole file goes in the review body, with a link to the file.";
+  return place.startLine && place.startLine < place.line
+    ? "These lines aren't in the PR's diff, so this goes in the review body with a link to them."
+    : "This line isn't in the PR's diff, so it goes in the review body with a link to it.";
+}
 
 /** Replacement code for the line(s), offered on the new side only (GitHub applies suggestions there). */
 interface Suggest {
@@ -138,6 +171,8 @@ interface Suggest {
   lineText?: string | undefined;
   /** A suggestion the draft already has. */
   initial?: string | undefined;
+  /** In a note in the review body, where GitHub can't apply it: it posts as code to copy. */
+  inBody?: boolean | undefined;
 }
 
 /**
@@ -153,6 +188,8 @@ export function CommentEditor(props: {
   firstField?: RefObject<HTMLElement | null>;
   /** Why it can't be saved yet, checked on Save. */
   validate?: () => string | undefined;
+  /** Something to know before saving: where it will post, when that isn't where you'd expect. */
+  notice?: string | undefined;
   suggest?: Suggest | undefined;
   onSave: (body: string, suggestion: string | undefined) => Promise<void>;
   onCancel: () => void;
@@ -211,6 +248,11 @@ export function CommentEditor(props: {
       }}
     >
       {props.fields}
+      {props.notice && (
+        <p className="small muted linked-notice" role="note">
+          {props.notice}
+        </p>
+      )}
       <textarea
         ref={area}
         className="input"
@@ -250,10 +292,17 @@ export function CommentEditor(props: {
                 onChange={(e) => setCode(e.target.value)}
                 onKeyDown={saveKeys}
               />
-              <span className="faint small">
-                Replaces {props.suggest.lines} when the author accepts it on GitHub. Left empty, it suggests deleting{" "}
-                {props.suggest.lines.startsWith("lines") ? "them" : "it"}.
-              </span>
+              {props.suggest.inBody ? (
+                <span className="faint small">
+                  In the review body GitHub can't apply it, so it posts as code headed "Suggested change" for the author
+                  to copy. Left empty, it suggests deleting {props.suggest.lines.startsWith("lines") ? "them" : "it"}.
+                </span>
+              ) : (
+                <span className="faint small">
+                  Replaces {props.suggest.lines} when the author accepts it on GitHub. Left empty, it suggests deleting{" "}
+                  {props.suggest.lines.startsWith("lines") ? "them" : "it"}.
+                </span>
+              )}
             </>
           )}
         </div>
@@ -296,7 +345,7 @@ function SuggestionBlock({ code }: { code: string }) {
  * Comments drawer.
  */
 export function CommentSlot(props: {
-  anchor: Anchor & { line: number };
+  anchor: Anchor;
   comments: BriefingComments;
   onComment: (place: CommentPlace) => void;
   compact?: boolean;
@@ -325,7 +374,11 @@ export function CommentSlot(props: {
         onClick={(e) => {
           // Safari doesn't focus a button you click; focus comes back here when the editor closes.
           e.currentTarget.focus();
-          props.onComment({ path: anchor.path, line: anchor.line, side: "RIGHT" });
+          props.onComment({
+            path: anchor.path,
+            ...(anchor.line !== undefined ? { line: anchor.line } : {}),
+            side: "RIGHT",
+          });
         }}
       >
         Comment
@@ -347,6 +400,8 @@ export function parseLines(text: string): { line: number; startLine?: number } |
 /** Any line (or lines) of a changed file: pick the file and the line, then write. */
 function LineForm(props: {
   files: { path: string; status: string }[];
+  /** The PR's diff, to say before saving when a line isn't in it. */
+  diff?: PrDiff | undefined;
   initial?: Extract<Editing, { kind: "line" }>["initial"];
   onSave: (draft: NewDraft) => Promise<void>;
   onCancel: () => void;
@@ -364,14 +419,18 @@ function LineForm(props: {
   const lines = parseLines(lineInput);
   const file = props.files.find((f) => f.path === path);
   const side = file?.status === "removed" ? "LEFT" : "RIGHT";
+  const inBody = lines && path ? goesInBody(props.diff, { path, ...lines, side }) : undefined;
   return (
     <CommentEditor
       label="Comment"
       initial={initial?.body}
       firstField={select}
       validate={() => (!path ? "Pick a file." : !lines ? "Give a line number, or a range like 4–9." : undefined)}
+      notice={inBody && lines ? linkedNotice(lines) : undefined}
       suggest={
-        side === "RIGHT" ? { lines: lines ? linesText(lines) : "the line", initial: initial?.suggestion } : undefined
+        side === "RIGHT"
+          ? { lines: lines ? linesText(lines) : "the line", initial: initial?.suggestion, inBody }
+          : undefined
       }
       fields={
         <div className="line-fields">
@@ -435,9 +494,14 @@ function DraftRow(props: {
     restore.current = true;
     setEditing(false);
   };
-  const what = draft.path ? `comment on ${whereText(draft)}` : "general note";
+  const what = draft.path
+    ? `comment on ${whereText(draft)}`
+    : draft.linkTo
+      ? `note linking to ${whereText(draft.linkTo)}`
+      : "general note";
   const outdated = draft.state === "outdated";
-  const canSuggest = !!draft.path && !!draft.line && draft.side !== "LEFT";
+  const canSuggest = (!!draft.path && !!draft.line && draft.side !== "LEFT") || !!draft.linkTo?.line;
+  const suggestLines = draft.linkTo ?? draft;
   return (
     <li className={`draft${outdated ? " outdated" : ""}`}>
       <div className="draft-head">
@@ -448,6 +512,11 @@ function DraftRow(props: {
               {draft.line ? `, ${linesText({ line: draft.line, startLine: draft.startLine })}` : ""}
               {draft.side === "LEFT" ? " (old side)" : ""}
             </>
+          ) : draft.linkTo ? (
+            <span title={linkedTitle(draft)}>
+              In the review body · links to <span className="mono">{draft.linkTo.path}</span>
+              {draft.linkTo.line !== undefined ? `, ${linkLines(draft.linkTo)}` : ""}
+            </span>
           ) : (
             "In the review body"
           )}
@@ -461,7 +530,11 @@ function DraftRow(props: {
           initial={draft.body}
           suggest={
             canSuggest
-              ? { lines: linesText({ line: draft.line ?? 1, startLine: draft.startLine }), initial: draft.suggestion }
+              ? {
+                  lines: linesText({ line: suggestLines.line ?? 1, startLine: suggestLines.startLine }),
+                  initial: draft.suggestion,
+                  inBody: !!draft.linkTo,
+                }
               : undefined
           }
           onCancel={stopEditing}
@@ -667,8 +740,14 @@ export function CommentsDrawer(props: {
   focus: DrawerFocus | undefined;
   /** Where focus goes back to when a place's editor closes: the Comment button or the line it came from. */
   returnFocus: RefObject<HTMLElement | null>;
+  /**
+   * The PR's diff, once loaded: the editor says before you save when a line isn't in it (so the comment goes in the
+   * review body, linking there). Without it, the server decides, and the drawer lists the comment where it went.
+   */
+  diff?: PrDiff | undefined;
 }) {
   const { comments, editing, onEditing, open, files } = props;
+  const placeInBody = editing?.kind === "place" ? goesInBody(props.diff, editing.place) : undefined;
   const [confirming, setConfirming] = useState(false);
   const [sent, setSent] = useState<SendReviewResult>();
   const [checking, setChecking] = useState(false);
@@ -820,12 +899,14 @@ export function CommentsDrawer(props: {
                   key={editing.n}
                   label={`Comment on ${whereText(editing.place)}`}
                   initial={editing.initial?.body}
+                  notice={placeInBody ? linkedNotice(editing.place) : undefined}
                   suggest={
-                    editing.place.side === "RIGHT"
+                    editing.place.side === "RIGHT" && editing.place.line !== undefined
                       ? {
                           lines: linesText(editing.place),
                           lineText: editing.place.lineText,
                           initial: editing.initial?.suggestion,
+                          inBody: placeInBody,
                         }
                       : undefined
                   }
@@ -845,6 +926,7 @@ export function CommentsDrawer(props: {
                 </h3>
                 <LineForm
                   files={lineFiles}
+                  diff={props.diff}
                   initial={editing.initial}
                   onCancel={() => closeForm(lineButton)}
                   onSave={async (draft) => {
@@ -893,7 +975,10 @@ export function CommentsDrawer(props: {
                     <h3 className="label" id="drafts-in-body">
                       In the review body · {notes.length}
                     </h3>
-                    <p className="faint small">Added after what you write below, oldest first.</p>
+                    <p className="faint small">
+                      Added after what you write below, oldest first. A note on code outside the diff starts with a link
+                      to it.
+                    </p>
                     <ul className="visually-plain card drafts">{notes.map(row)}</ul>
                   </section>
                 )}

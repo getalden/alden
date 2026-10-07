@@ -7,12 +7,31 @@ import { z } from "zod";
  */
 export const REVIEW_SCHEMA_VERSION = 1;
 
+/**
+ * Where a general note links to: code GitHub won't take an inline comment on (a line outside the PR's diff, a file the
+ * PR doesn't change, or a whole file). The link is to that line at the draft's `headSha`: the code you saw when you
+ * wrote it.
+ */
+export const DraftLinkSchema = z.object({
+  path: z.string().min(1).describe("the file, as in the repo at the draft's head commit"),
+  line: z.number().int().positive().optional().describe("the line (a range's last line); absent for a whole file"),
+  startLine: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("a range's first line, less than `line`; absent for one line"),
+});
+
 export const ReviewDraftSchema = z
   .object({
     id: z.string(),
     pr: z.string().describe('the PR, "owner/repo#123"'),
     headSha: z.string().describe("the PR's head commit the draft's line refers to"),
-    path: z.string().optional().describe("the file; absent for a general note, which goes into the review's body"),
+    path: z
+      .string()
+      .optional()
+      .describe("the file of an inline comment; absent for a general note, which goes into the review's body"),
     line: z
       .number()
       .int()
@@ -34,12 +53,15 @@ export const ReviewDraftSchema = z
       .string()
       .optional()
       .describe(
-        "replacement code for the commented line(s), posted as a ```suggestion block after the body; empty deletes them. Only on the new side (RIGHT)",
+        'replacement code for the commented line(s), posted as a ```suggestion block after the body; empty deletes them. Only on the new side (RIGHT). On a linked note it can\'t be applied, so it posts as a code block headed "Suggested change"',
       ),
     originalLines: z
       .array(z.string())
       .optional()
       .describe("the text of the commented line(s) when the draft was placed: what a suggestion replaces"),
+    linkTo: DraftLinkSchema.optional().describe(
+      "on a general note: the line (or lines, or file) it's about, outside the PR's diff. It posts in the review body with a link to that code at `headSha`, the PR's head when it was written. Absent on an inline comment and a plain note",
+    ),
     source: z.enum(["you", "claude"]).describe("who wrote it: you, or Claude Code drafting for you"),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
@@ -52,6 +74,10 @@ export const ReviewDraftSchema = z
   .refine((d) => d.body.trim() !== "" || d.suggestion !== undefined, {
     message: "a comment needs some text, unless it's a suggestion",
     path: ["body"],
+  })
+  .refine((d) => d.linkTo === undefined || d.path === undefined, {
+    message: "a linked note goes in the review body: it has linkTo, not a path of its own",
+    path: ["linkTo"],
   });
 
 /** What a review says overall, as GitHub names it. */
@@ -77,6 +103,7 @@ export const ReviewDraftsSchema = z.object({
 });
 
 export type ReviewDraft = z.infer<typeof ReviewDraftSchema>;
+export type DraftLink = z.infer<typeof DraftLinkSchema>;
 export type ReviewEvent = z.infer<typeof ReviewEventSchema>;
 export type SendReviewResult = z.infer<typeof SendReviewResultSchema>;
 export type UnaddressedPlace = z.infer<typeof UnaddressedPlaceSchema>;
