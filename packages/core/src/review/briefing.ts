@@ -3,6 +3,7 @@ import { fileKind, isLockfile } from "../queue/files.js";
 import { CHECKS } from "./checks.js";
 import { filesOutsideGraph } from "./graph-context.js";
 import { pickWithLearning } from "./pick.js";
+import { withRelated } from "./related.js";
 import type { Check, ReviewContext } from "./types.js";
 
 /**
@@ -91,7 +92,7 @@ export function buildBriefing(context: ReviewContext, now: Date = new Date()): B
       patchMissing: f.patchMissing,
     })),
     checks,
-    needsYourEyes: eyes,
+    needsYourEyes: withRelated(eyes, context.graph),
     notChecked: [
       ...notCheckedFor(context),
       ...context.files.filter((f) => f.patchMissing).map((f) => `${f.path}: too large for GitHub to send its diff`),

@@ -128,6 +128,27 @@ describe("briefingMarkdown, to share", () => {
     expect(text).toContain("## Also noted by Alden's model\n- low: **Log says user** `src/rank.ts:2`\n  A nit.");
   });
 
+  it("lists a place's related files under its reason", () => {
+    const [first, ...rest] = briefing().needsYourEyes;
+    const out = briefingMarkdown(
+      briefing({
+        needsYourEyes: [
+          {
+            ...(first as Briefing["needsYourEyes"][number]),
+            related: [
+              { path: "src/queue.ts", line: 30, why: "caller" },
+              { path: "src/rank.test.ts", why: "test" },
+            ],
+          },
+          ...rest,
+        ],
+      }),
+    );
+    expect(out).toContain(
+      "   Dropping a column can't be undone.\n   Look at these too: `src/queue.ts:30` (caller), `src/rank.test.ts` (test)\n",
+    );
+  });
+
   it("lists every check with evidence, callers in a section of their own, and what wasn't checked", () => {
     expect(text).toContain(
       "- ! **Migration may lose data** (critical): A column is dropped.\n  - `db/migrate.ts:4` drops users.email",

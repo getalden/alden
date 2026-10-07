@@ -140,6 +140,28 @@ describe("renderBriefing", () => {
     expect(out).toContain("  1. Possible secret in src/keys.ts:12\n     GitHub token: ghp_…(44 chars). Rotate it.");
   });
 
+  it("lists a place's related files under its reason", () => {
+    const out = plain(
+      briefing({
+        needsYourEyes: [
+          {
+            title: "Caller of changed code in src/cli.ts",
+            reason: "calls rankQueue (signature changed).",
+            anchor: { path: "src/cli.ts", line: 2 },
+            checkId: "callers.outside",
+            related: [
+              { path: "src/api.ts", line: 2, why: "caller" },
+              { path: "src/rank.test.ts", line: 9, why: "test" },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(out).toContain(
+      "     calls rankQueue (signature changed).\n     Look at these too: src/api.ts:2 (caller), src/rank.test.ts:9 (test)",
+    );
+  });
+
   it("shows evidence for flagged checks only, with the line where the text names the file", () => {
     const out = plain(
       briefing({

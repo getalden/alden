@@ -32,6 +32,16 @@ export const CheckResultSchema = z.object({
   heuristic: z.boolean().describe("true when the check infers from the diff alone and may be wrong"),
 });
 
+/**
+ * A file worth opening beside a place to look: code that calls the changed symbol there, a test that uses it or imports
+ * its file, or a file importing the changed module. From the code graph, so only when it ran.
+ */
+export const RelatedFileSchema = z.object({
+  path: z.string(),
+  line: z.number().int().positive().optional().describe("the call or import in that file"),
+  why: z.enum(["caller", "test", "importer"]),
+});
+
 export const LookHereSchema = z.object({
   title: z.string(),
   reason: z.string().describe("why a human should look, in one sentence"),
@@ -42,6 +52,12 @@ export const LookHereSchema = z.object({
     .string()
     .optional()
     .describe("why your feedback put it here, e.g. 'you usually mark migration flags useful'"),
+  related: z
+    .array(RelatedFileSchema)
+    .optional()
+    .describe(
+      "files to look at too: callers of the changed code here, tests that use it, files importing it; absent without the code graph or when there are none",
+    ),
 });
 
 /** What the reviewer's feedback changed in this briefing, so nothing is hidden silently. */
@@ -182,6 +198,7 @@ export type CheckStatus = z.infer<typeof CheckStatusSchema>;
 export type Severity = z.infer<typeof SeveritySchema>;
 export type CheckResult = z.infer<typeof CheckResultSchema>;
 export type LookHere = z.infer<typeof LookHereSchema>;
+export type RelatedFile = z.infer<typeof RelatedFileSchema>;
 export type BriefingLearning = z.infer<typeof BriefingLearningSchema>;
 export type BriefingFile = z.infer<typeof BriefingFileSchema>;
 export type BriefingTarget = z.infer<typeof BriefingTargetSchema>;

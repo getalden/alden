@@ -33,6 +33,8 @@ export {
   LlmSectionSchema,
   type LookHere,
   LookHereSchema,
+  type RelatedFile,
+  RelatedFileSchema,
   type Severity,
   SeveritySchema,
 } from "./briefing.js";
