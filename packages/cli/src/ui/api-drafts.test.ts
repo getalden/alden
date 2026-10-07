@@ -126,7 +126,74 @@ describe("drafts through the UI's API", () => {
   });
 });
 
+describe("suggested changes through the UI's API", () => {
+  it("drafts a suggestion on a range, shows the code it replaces, and posts it as one", async () => {
+    const api = createUiApi({ version: "test", cwd: home });
+    const draft = await api.addDraft({
+      pr: "acme/shop#7",
+      path: "src/pay.ts",
+      startLine: 1,
+      line: 2,
+      body: "",
+      suggestion: "const a = 1;\nconst fee = cents(2);",
+    });
+    expect(draft).toMatchObject({
+      startLine: 1,
+      line: 2,
+      side: "RIGHT",
+      body: "",
+      suggestion: "const a = 1;\nconst fee = cents(2);",
+      originalLines: ["const a = 1;", "const fee = 2;"],
+    });
+    await expect(
+      api.addDraft({ pr: "acme/shop#7", path: "src/pay.ts", startLine: 1, line: 9, body: "x" }),
+    ).rejects.toMatchObject({ status: 422, message: expect.stringMatching(/^Line 9 of src\/pay.ts isn't in/) });
+    await expect(
+      api.addDraft({ pr: "acme/shop#7", path: "src/pay.ts", line: 1, side: "LEFT", body: "x", suggestion: "y" }),
+    ).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/new side/) });
+    await expect(api.addDraft({ pr: "acme/shop#7", body: "", suggestion: "y" })).rejects.toMatchObject({
+      status: 400,
+    });
+    expect((await api.editDraft(draft.id, { suggestion: "" })).suggestion).toBe("");
+    // Placed on one line again, it's against that line's code.
+    expect(await api.editDraft(draft.id, { path: "src/pay.ts", line: 3 })).toMatchObject({
+      line: 3,
+      originalLines: ["export { a };"],
+    });
+    expect((await api.drafts("acme/shop#7")).drafts[0]).not.toHaveProperty("startLine");
+
+    await api.editDraft(draft.id, { path: "src/pay.ts", startLine: 2, line: 3 });
+    await api.sendReview({ pr: "acme/shop#7", event: "COMMENT" });
+    expect(github.posted[0]?.comments).toEqual([
+      {
+        path: "src/pay.ts",
+        start_line: 2,
+        start_side: "RIGHT",
+        line: 3,
+        side: "RIGHT",
+        body: "```suggestion\n```",
+      },
+    ]);
+  });
+});
+
 describe("Claude Code's side", () => {
+  it("drafts a suggested change through alden_draft_comment", async () => {
+    const tools = aldenTools({ version: "test", cwd: home });
+    const tool = tools.find((t) => t.name === "alden_draft_comment");
+    expect(tool?.description).toMatch(/suggestion/);
+    expect(() => tool?.input.parse({ pr: "acme/shop#7", path: "src/pay.ts", line: 2 })).toThrow(/body/);
+    const said = await tool?.call(
+      tool.input.parse({ pr: "acme/shop#7", path: "src/pay.ts", start_line: 1, line: 2, suggestion: "x();" }),
+    );
+    expect(said).toMatch(/^Drafted \w+ \(a suggested change\) on src\/pay.ts:1-2 for acme\/shop#7. Nothing is posted/);
+    const { drafts } = await createUiApi({ version: "test", cwd: home }).drafts("acme/shop#7");
+    expect(drafts).toEqual([
+      expect.objectContaining({ source: "claude", body: "", suggestion: "x();", startLine: 1, line: 2 }),
+    ]);
+    expect(github.posted).toEqual([]);
+  });
+
   it("drafts as Claude through alden_draft_comment, and has no way to send", async () => {
     const tools = aldenTools({ version: "test", cwd: home });
     expect(tools.map((t) => t.name).filter((n) => /send|post|approve|submit/.test(n))).toEqual([]);

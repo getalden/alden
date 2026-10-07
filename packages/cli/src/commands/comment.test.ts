@@ -1,6 +1,6 @@
 import type { ReviewDraft } from "@alden/schema";
 import { describe, expect, it } from "vitest";
-import { parseWhere, renderDrafts, renderSendSummary } from "./comment.js";
+import { parseWhere, renderDrafts, renderSendSummary, suggestionFrom } from "./comment.js";
 
 const draft = (extra: Partial<ReviewDraft>): ReviewDraft => ({
   id: "a1b2c3d4",
@@ -20,6 +20,56 @@ describe("alden comment", () => {
     expect(parseWhere("looks")).toBeUndefined();
     expect(parseWhere("src/pay.ts:0")).toBeUndefined();
     expect(parseWhere("fix this:2 now")).toBeUndefined();
+    expect(parseWhere("src/pay.ts:12-14")).toEqual({ path: "src/pay.ts", startLine: 12, line: 14 });
+    expect(parseWhere("src/pay.ts:12-12")).toEqual({ path: "src/pay.ts", line: 12 });
+    // The wrong way round is kept, for the engine to say so.
+    expect(parseWhere("src/pay.ts:14-12")).toEqual({ path: "src/pay.ts", startLine: 14, line: 12 });
+    expect(parseWhere("src/pay.ts:12-0")).toBeUndefined();
+    expect(parseWhere("src/pay.ts:12-")).toBeUndefined();
+  });
+
+  it("takes a suggestion as typed, from a file or from stdin, without the final newline of either", async () => {
+    const read = { stdin: async () => "a();\nb();\n", file: async (path: string) => `// ${path}\r\n` };
+    expect(await suggestionFrom({}, read)).toBeUndefined();
+    expect(await suggestionFrom({ suggest: "x();\n" }, read)).toBe("x();\n");
+    expect(await suggestionFrom({ suggest: "" }, read)).toBe("");
+    expect(await suggestionFrom({ suggest: "-" }, read)).toBe("a();\nb();");
+    expect(await suggestionFrom({ suggestFile: "fix.ts" }, read)).toBe("// fix.ts");
+    await expect(suggestionFrom({ suggest: "x", suggestFile: "fix.ts" }, read)).rejects.toThrow(/not both/);
+    const missing = { ...read, file: async () => Promise.reject(new Error("ENOENT")) };
+    await expect(suggestionFrom({ suggestFile: "nope.ts" }, missing)).rejects.toThrow(/Couldn't read nope.ts: ENOENT/);
+  });
+
+  it("lists a range and a suggested change as the lines it replaces and the lines it suggests", () => {
+    const out = renderDrafts(
+      "acme/shop#7",
+      [
+        draft({
+          path: "src/pay.ts",
+          startLine: 12,
+          line: 13,
+          side: "RIGHT",
+          body: "Use cents:",
+          suggestion: "const total = cents(a + b);",
+          originalLines: ["const total = a + b;", "log(total);"],
+        }),
+        draft({ id: "d2", path: "src/pay.ts", line: 20, body: "", suggestion: "", originalLines: ["debug();"] }),
+      ],
+      false,
+    );
+    expect(out).toContain(
+      [
+        "  a1b2c3d4  src/pay.ts:12-13",
+        "    Use cents:",
+        "    suggested change: replace these 2 lines",
+        "    - const total = a + b;",
+        "    - log(total);",
+        "    + const total = cents(a + b);",
+      ].join("\n"),
+    );
+    expect(out).toContain(
+      ["  d2  src/pay.ts:20", "    suggested change: delete this line", "    - debug();", ""].join("\n"),
+    );
   });
 
   it("lists comments with their places, who drafted them, and which are outdated", () => {
@@ -69,6 +119,39 @@ describe("alden send's summary", () => {
         "",
         "1 of these was drafted by Claude Code: they post as you.",
         "",
+      ].join("\n"),
+    );
+  });
+
+  it("shows suggested changes as old lines and new ones", () => {
+    const out = renderSendSummary(
+      {
+        pr: "acme/shop#7",
+        event: "COMMENT",
+        drafts: [
+          draft({
+            path: "src/pay.ts",
+            line: 12,
+            body: "",
+            suggestion: "a();\nb();",
+            originalLines: ["a()"],
+            source: "claude",
+          }),
+        ],
+        unaddressed: [],
+      },
+      false,
+    );
+    expect(out).toContain(
+      [
+        "Comments (1)",
+        "  src/pay.ts:12 · drafted by Claude Code",
+        "    suggested change: replace this line",
+        "    - a()",
+        "    + a();",
+        "    + b();",
+        "",
+        "The suggested change posts as a GitHub suggestion: the author can apply it with a click.",
       ].join("\n"),
     );
   });

@@ -13,7 +13,7 @@ export const INSTRUCTIONS = `Alden is the user's code review companion. It runs 
 - alden_review: a briefing on a PR, or on the uncommitted changes in this repo when no PR is given: what Alden's checks found (with evidence), callers of the changed code outside the diff, the few places that need a reviewer's eyes, and what this reviewer cares about. Use it before reviewing a PR or the user's own changes, then read the diff yourself and add your judgement. Alden's own model is off by default, because you are the model here.
 - alden_feedback and alden_missed: when the user says a flagged place was or wasn't useful, or that Alden missed something, record it. That's how Alden learns them.
 - alden_memory and alden_remember: what Alden knows about the reviewer in a repo, and adding a note to it ("money is in cents").
-- alden_draft_comment: when the user asks you to write a review comment, draft it in Alden, on a line of the PR's diff or as a general note. Drafts stay on the user's machine.
+- alden_draft_comment: when the user asks you to write a review comment or suggest a change, draft it in Alden, on a line (or lines) of the PR's diff or as a general note. Drafts stay on the user's machine.
 
 Alden posts only what the user sends from the UI or terminal; you can draft comments, the user reviews and sends. There is no tool to send, approve or request changes, and you shouldn't post reviews or comments any other way (gh, the API): point the user at \`alden send <pr>\` or Alden's UI instead.
 
@@ -190,28 +190,59 @@ export function aldenTools(options: { version: string; cwd: string }): McpTool[]
       name: "alden_draft_comment",
       title: "Draft a review comment",
       description:
-        "Draft a review comment on a PR for the user, in Alden: on a line of the PR's diff (path and line, on the new side unless side is LEFT), or without them a general note for the review's body. Only when the user asks you to write or draft a comment, in words they've seen or asked for. It isn't posted: Alden posts only what the user sends from the UI or terminal; you can draft comments, the user reviews and sends (`alden send <pr>`). The line must be in the PR's diff, which GitHub requires.",
-      input: z.object({
-        pr: PR.describe("the PR: a URL, owner/repo#123, or its number in the last queue"),
-        path: z.string().min(1).optional().describe("the file, as in the diff; leave out for a general note"),
-        line: z.number().int().positive().optional().describe("the line, in the new file unless side is LEFT"),
-        side: z.enum(["RIGHT", "LEFT"]).optional().describe("LEFT for a removed line (its number in the old file)"),
-        body: z.string().min(1).max(65_536).describe("the comment, in Markdown, as the user will post it"),
-      }),
+        "Draft a review comment on a PR for the user, in Alden: on a line of the PR's diff (path and line, on the new side unless side is LEFT), on lines start_line to line (one hunk, one side), or without them a general note for the review's body. With suggestion, it's a suggested change GitHub can apply: the replacement code for exactly those lines of the new file (RIGHT side only; empty deletes them), and body may be empty. Only when the user asks you to write a comment or suggest a change, in words or code they've seen or asked for. It isn't posted: Alden posts only what the user sends from the UI or terminal; you can draft comments, the user reviews and sends (`alden send <pr>`). The lines must be in the PR's diff, which GitHub requires.",
+      input: z
+        .object({
+          pr: PR.describe("the PR: a URL, owner/repo#123, or its number in the last queue"),
+          path: z.string().min(1).optional().describe("the file, as in the diff; leave out for a general note"),
+          line: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("the line (a range's last line), in the new file unless side is LEFT"),
+          start_line: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("for a comment on several lines: the first, less than line, in the same hunk"),
+          side: z.enum(["RIGHT", "LEFT"]).optional().describe("LEFT for a removed line (its number in the old file)"),
+          body: z
+            .string()
+            .max(65_536)
+            .default("")
+            .describe("the comment, in Markdown, as the user will post it; may be empty with a suggestion"),
+          suggestion: z
+            .string()
+            .max(65_536)
+            .optional()
+            .describe(
+              "replacement code for line (or start_line to line) in the new file, exactly as it should read: no fence, no diff markers, indentation kept. Empty deletes the lines",
+            ),
+        })
+        .refine((input) => input.body.trim() !== "" || input.suggestion !== undefined, {
+          message: "a comment needs a body, unless it's a suggestion",
+          path: ["body"],
+        }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-      async call({ pr, path, line, side, body }) {
+      async call({ pr, path, line, start_line, side, body, suggestion }) {
         const draft = await api.addDraft(
           {
             pr,
             body,
             ...(path !== undefined ? { path } : {}),
             ...(line !== undefined ? { line } : {}),
+            ...(start_line !== undefined ? { startLine: start_line } : {}),
             ...(side ? { side } : {}),
+            ...(suggestion !== undefined ? { suggestion } : {}),
           },
           "claude",
         );
-        const where = draft.path === undefined ? "as a general note" : `on ${draft.path}:${draft.line}`;
-        return `Drafted ${draft.id} ${where} for ${draft.pr}. Nothing is posted: the user reviews it and sends the review from Alden's UI or with \`alden send ${draft.pr} --comment | --approve | --request-changes\`.`;
+        const lines = draft.startLine !== undefined ? `${draft.startLine}-${draft.line}` : `${draft.line}`;
+        const where = draft.path === undefined ? "as a general note" : `on ${draft.path}:${lines}`;
+        const what = draft.suggestion !== undefined ? "a suggested change" : "";
+        return `Drafted ${draft.id}${what ? ` (${what})` : ""} ${where} for ${draft.pr}. Nothing is posted: the user reviews it and sends the review from Alden's UI or with \`alden send ${draft.pr} --comment | --approve | --request-changes\`.`;
       },
     }),
 

@@ -488,6 +488,17 @@ describe("alden ui server", () => {
     await send("PATCH", "/api/drafts/d1", { body: "Hm!" });
     await send("PATCH", "/api/drafts/d1", { path: "x.ts", line: 4, side: "LEFT" });
     await send("DELETE", "/api/drafts/d1");
+    await send("POST", "/api/drafts", {
+      pr: "a/b#1",
+      path: "x.ts",
+      startLine: 2,
+      line: 4,
+      body: "",
+      suggestion: "y();",
+    });
+    await send("PATCH", "/api/drafts/d2", { suggestion: "" });
+    await send("PATCH", "/api/drafts/d2", { suggestion: null, body: "No change after all" });
+    await send("PATCH", "/api/drafts/d2", { path: "x.ts", startLine: 5, line: 6 });
     await send("POST", "/api/review/send", { pr: "a/b#1", event: "APPROVE" });
     expect(calls).toEqual([
       { method: "drafts", args: "a/b#1" },
@@ -496,6 +507,16 @@ describe("alden ui server", () => {
       { method: "editDraft", args: { id: "d1", change: { body: "Hm!" } } },
       { method: "editDraft", args: { id: "d1", change: { path: "x.ts", line: 4, side: "LEFT" } } },
       { method: "deleteDraft", args: "d1" },
+      {
+        method: "addDraft",
+        args: {
+          input: { pr: "a/b#1", body: "", path: "x.ts", line: 4, startLine: 2, suggestion: "y();" },
+          source: "you",
+        },
+      },
+      { method: "editDraft", args: { id: "d2", change: { suggestion: "" } } },
+      { method: "editDraft", args: { id: "d2", change: { body: "No change after all", suggestion: null } } },
+      { method: "editDraft", args: { id: "d2", change: { path: "x.ts", line: 6, startLine: 5 } } },
       { method: "sendReview", args: { pr: "a/b#1", event: "APPROVE" } },
     ]);
     expect((await send("GET", "/api/drafts")).status).toBe(400);
@@ -504,6 +525,13 @@ describe("alden ui server", () => {
     expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", path: "x.ts", line: 0 })).status).toBe(400);
     expect((await send("PATCH", "/api/drafts/d1", {})).status).toBe(400);
     expect((await send("DELETE", "/api/drafts/gone")).status).toBe(404);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", suggestion: "x" })).status).toBe(200);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", startLine: 2 })).status).toBe(400);
+    expect(
+      (await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", path: "x.ts", line: 3, startLine: 1.5 })).status,
+    ).toBe(400);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", suggestion: 3 })).status).toBe(400);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", suggestion: null })).status).toBe(400);
     expect((await send("POST", "/api/review/send", { pr: "a/b#1", event: "MERGE" })).status).toBe(400);
     const refused = await send("POST", "/api/review/send", { pr: "a/b#403", event: "COMMENT", body: "x" });
     expect(refused.status).toBe(403);
