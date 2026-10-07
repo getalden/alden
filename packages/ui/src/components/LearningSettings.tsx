@@ -24,8 +24,9 @@ export function LearningSettings(props: { api: Pick<Api, "setConfig">; on: boole
       <p className="faint small">
         When you send a review, Alden learns from what you commented on and what you let pass: a place you looked at and
         approved without a word counts as a quiet "not worth my time". To tell, Alden notes which places you saw (a
-        guided step, or a marker in the Diff tab, in front of you for a second or two). That stays on this machine. Off,
-        Alden notes nothing and learns only from Useful and Not useful.
+        guided step, or a marker in the Diff tab, in front of you for a second or two). Afterwards it checks, at most
+        once a day per PR, whether the author applied your suggestions or resolved your comments. That stays on this
+        machine. Off, Alden notes nothing and learns only from Useful and Not useful.
       </p>
       {error && <p className="error-text small">{error}</p>}
     </div>

@@ -101,12 +101,6 @@ Default sensitive paths:
 | --- | --- | --- |
 | `review.eyes` | `3` | How many places "Needs your eyes" holds, 1 to 10: the few a careful reviewer would look at first. More catches more, and asks more of your attention. |
 
-## learning
-
-| Key | Default | What it does |
-| --- | --- | --- |
-| `learning.fromReviews` | `true` | Learn from the reviews you send: comments and suggestions near Alden's flags, approving past a flag you saw, comments where it flagged nothing. Off records none of it; Useful and Not useful still count, and what was already learned stays. Your user config only. See [Reviews you send](memory.md#reviews-you-send). |
-
 ## background
 
 For the [desktop app](desktop.md#while-youre-away), which briefs your top PRs while you're away.
@@ -129,7 +123,7 @@ For the [desktop app](desktop.md#while-youre-away).
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `learning.fromReviews` | `true` | Learn from the reviews you send, including which of Alden's places you saw and passed without a word. Off, Alden notes nothing about what you saw. Read from your user config only. Settings → Learning sets it too. See [Places you saw](memory.md#places-you-saw). |
+| `learning.fromReviews` | `true` | Learn from the reviews you send: comments and suggestions near Alden's flags, approving past a place you saw, comments where it flagged nothing, and what the author did with your comments afterwards (suggestions applied, comments resolved). Off records none of it: Alden notes nothing about what you saw, keeps no record of where your comments went and asks GitHub nothing about them; Useful and Not useful still count, and what was already learned stays. Read from your user config only. Settings → Learning sets it too. See [Reviews you send](memory.md#reviews-you-send), [Places you saw](memory.md#places-you-saw) and [What comes of them](memory.md#what-comes-of-them). |
 
 ## telemetry
 
@@ -180,7 +174,7 @@ Everything is under `~/.alden` (or `ALDEN_HOME`):
 | `cache/` | GitHub responses, cached briefly, and your last queue (for `alden open` and `alden review <#>`). |
 | `index/` | The code graph's per-file cache. Around 100 MB for a repo the size of Kubernetes. |
 | `worktrees/` | Checkouts of PRs for the code graph, one per repo. |
-| `alden.db` | The local database: feedback, the PRs you open, your notes, your draft comments, the places you saw (90 days), model spending, first use per repo, queued usage stats, the clone Alden last saw for each repo, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
+| `alden.db` | The local database: feedback, the PRs you open, your notes, your draft comments, the places you saw (90 days), where your sent line comments went (30 days, without their text), model spending, first use per repo, queued usage stats, the clone Alden last saw for each repo, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
 | `legacy/` | Files from before the database, kept after their one-time import. Safe to delete. |
 
 Deleting any of these is safe, but deleting `alden.db` also deletes your feedback, notes and what Alden learned, and

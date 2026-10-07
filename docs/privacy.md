@@ -37,7 +37,9 @@ memory](memory.md)). So do the comments you're drafting, until you send or delet
 or the feedback export ([Comments and sending a review](comments.md)). So do the [places you
 saw](memory.md#places-you-saw) in guided review and the Diff tab: which of Alden's places (check, file and line) were
 in front of you for 1.5 seconds, kept 90 days. They're never in usage stats or the feedback export either, and
-**Learn from my reviews** off (`learning.fromReviews`) stops Alden noting them. So do your notes, what you've spent on models, usage stats waiting to be sent (only if you said
+**Learn from my reviews** off (`learning.fromReviews`) stops Alden noting them. So does where each line comment you sent
+went (file, line, and a suggestion's code, never the comment's text, kept 30 days), to ask GitHub later whether it was
+applied or resolved ([After you send](comments.md#after-you-send)). So do your notes, what you've spent on models, usage stats waiting to be sent (only if you said
 yes), and this install's anonymous id and the salt for repo hashes. Checkouts of PRs for the code graph are in
 `~/.alden/worktrees`. See [Files Alden keeps](configuration.md#files-alden-keeps). Your GitHub token is stored in the
 OS keychain, or, where there's no keychain, in a file only your user can read. `alden auth logout` removes it. So is an
