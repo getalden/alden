@@ -15,7 +15,14 @@ import type {
   RankWeight,
   RepoStats,
 } from "@alden/schema";
-import type { DraftsResponse, NewDraft, ReviewDraft, ReviewEvent as ReviewVerdict, SendReviewResult } from "./drafts";
+import type {
+  DraftPatch,
+  DraftsResponse,
+  NewDraft,
+  ReviewDraft,
+  ReviewEvent as ReviewVerdict,
+  SendReviewResult,
+} from "./drafts";
 
 export interface Memory {
   repo: string;
@@ -342,10 +349,11 @@ export class Api {
   addDraft = (draft: NewDraft & { pr: string }) =>
     this.request<ReviewDraft>("/api/drafts", { method: "POST", body: JSON.stringify(draft) });
 
-  editDraft = (id: string, body: string) =>
+  /** A plain string changes the text only. */
+  editDraft = (id: string, patch: string | DraftPatch) =>
     this.request<ReviewDraft>(`/api/drafts/${encodeURIComponent(id)}`, {
       method: "PATCH",
-      body: JSON.stringify({ body }),
+      body: JSON.stringify(typeof patch === "string" ? { body: patch } : patch),
     });
 
   deleteDraft = (id: string) =>

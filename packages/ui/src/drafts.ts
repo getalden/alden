@@ -1,4 +1,10 @@
-import type { ReviewDraft, ReviewDrafts, ReviewEvent, SendReviewResult, UnaddressedPlace } from "@alden/schema";
+import type {
+  ReviewDraft as BaseDraft,
+  ReviewDrafts as BaseDrafts,
+  ReviewEvent,
+  SendReviewResult,
+  UnaddressedPlace,
+} from "@alden/schema";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Api } from "./api";
 
@@ -7,20 +13,65 @@ import type { Api } from "./api";
  * GitHub as one review. The types are the local API's, from @alden/schema.
  */
 
-export type { ReviewDraft, ReviewEvent, SendReviewResult };
+/**
+ * Suggested changes (a multi-line range, and replacement code posted as a ```suggestion block after the body). The
+ * schema gains these on the suggestions branch; mirrored here until it lands.
+ */
+export interface DraftExtras {
+  /** A multi-line comment's first line; `line` is its last. */
+  startLine?: number | undefined;
+  /** Replacement code for the line(s); empty deletes them. Only on the new side. */
+  suggestion?: string | undefined;
+  /** The text of the line(s) when the draft was placed: what a suggestion replaces. */
+  originalLines?: string[] | undefined;
+}
+
+export type ReviewDraft = BaseDraft & DraftExtras;
+export type { ReviewEvent, SendReviewResult };
 export type Unaddressed = UnaddressedPlace;
-export type DraftsResponse = ReviewDrafts;
+export type DraftsResponse = Omit<BaseDrafts, "drafts"> & { drafts: ReviewDraft[] };
 
 export interface NewDraft {
   path?: string;
   line?: number;
+  startLine?: number;
   side?: "RIGHT" | "LEFT";
   body: string;
+  suggestion?: string;
 }
 
-/** "src/api.ts:9", or "src/api.ts" for a whole file. */
-export const placeText = (d: { path?: string | undefined; line?: number | undefined }) =>
-  d.path ? `${d.path}${d.line ? `:${d.line}` : ""}` : "";
+/** A change to a draft: its text, and its suggestion (`null` takes the suggestion off). */
+export interface DraftPatch {
+  body: string;
+  suggestion?: string | null;
+}
+
+/**
+ * Where a comment goes: a line (or lines) of a file. What the diff and the guided review hand to `onComment`.
+ * `lineText` is the text of the line(s), when known, to start a suggested change from.
+ */
+export interface CommentPlace {
+  path: string;
+  line: number;
+  side: "RIGHT" | "LEFT";
+  startLine?: number | undefined;
+  lineText?: string | undefined;
+}
+
+type Placed = { path?: string | undefined; line?: number | undefined; startLine?: number | undefined };
+
+const range = (d: Placed) => (d.startLine && d.line && d.startLine < d.line ? `${d.startLine}–${d.line}` : undefined);
+
+/** "src/api.ts:9", "src/api.ts:4–9" for lines, or "src/api.ts" for a whole file. */
+export const placeText = (d: Placed) => (d.path ? `${d.path}${d.line ? `:${range(d) ?? d.line}` : ""}` : "");
+
+/** In plain words: "src/api.ts, line 9", "src/api.ts, lines 4–9", or "the review body" for a general note. */
+export const whereText = (d: Placed) => {
+  if (!d.path) return "the review body";
+  if (!d.line) return d.path;
+  const lines = range(d);
+  return lines ? `${d.path}, lines ${lines}` : `${d.path}, line ${d.line}`;
+};
 
 /**
  * Drafts by file, in the order the briefing lists its files (others after, by name), lines in order. General notes
@@ -79,7 +130,7 @@ export interface BriefingComments {
   setEvent(event: ReviewEvent): void;
   /** Throws with a message to show by the editor, so its text isn't lost. */
   add(draft: NewDraft): Promise<ReviewDraft>;
-  edit(id: string, body: string): Promise<void>;
+  edit(id: string, patch: DraftPatch): Promise<void>;
   remove(id: string): Promise<void>;
   /** Reads the drafts again: Claude Code may have added some. */
   reload(): Promise<void>;
@@ -143,8 +194,8 @@ export function useDrafts(api: DraftsApi | undefined, pr: string | undefined): B
       void reload();
       return saved;
     },
-    async edit(id, body) {
-      const saved = await api.editDraft(id, body);
+    async edit(id, patch) {
+      const saved = await api.editDraft(id, patch);
       setData((d) => ({ ...d, drafts: d.drafts.map((x) => (x.id === id ? saved : x)) }));
     },
     async remove(id) {
@@ -167,4 +218,36 @@ export function useDrafts(api: DraftsApi | undefined, pr: string | undefined): B
       return result;
     },
   };
+}
+
+const DRAWER_KEY = "alden.comments.drawer";
+
+/**
+ * Whether the Comments drawer is open, remembered for this window (a tab, or the desktop app's window) across reloads.
+ * Until you choose, it starts open only when the window has room for it beside the queue and the briefing. In a narrow
+ * window, where it's a sheet over the briefing, it always starts closed.
+ */
+export function useDrawerOpen(): [boolean, (open: boolean | ((was: boolean) => boolean)) => void] {
+  const [open, setOpen] = useState(() => {
+    if (window.innerWidth <= 700) return false;
+    try {
+      const saved = window.sessionStorage.getItem(DRAWER_KEY);
+      if (saved !== null) return saved === "1";
+    } catch {
+      // storage blocked: fall back to the window's width
+    }
+    return window.innerWidth >= 1280;
+  });
+  const update = useCallback((next: boolean | ((was: boolean) => boolean)) => {
+    setOpen((was) => {
+      const value = typeof next === "function" ? next(was) : next;
+      try {
+        window.sessionStorage.setItem(DRAWER_KEY, value ? "1" : "0");
+      } catch {
+        // storage blocked: the choice lasts for this page
+      }
+      return value;
+    });
+  }, []);
+  return [open, update];
 }

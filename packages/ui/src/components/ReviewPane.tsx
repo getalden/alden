@@ -1,12 +1,21 @@
 import type { Briefing, BriefingFreshness, BriefingTarget } from "@alden/schema";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Api, ReviewRequest } from "../api";
-import type { BriefingComments } from "../drafts";
+import { type BriefingComments, type CommentPlace, useDrawerOpen } from "../drafts";
 import type { BriefingFeedback } from "../feedback";
 import type { ReviewRun } from "../reviews";
 import { onLinkClick } from "../router";
 import { BriefingAge } from "./BriefingAge";
 import { BriefingView } from "./BriefingView";
+import {
+  CommentsDrawer,
+  type DrawerFocus,
+  type Editing,
+  placeFromElement,
+  type ReviewActions,
+  ReviewActionsContext,
+  typing,
+} from "./Comments";
 import { ExportMenu } from "./ExportMenu";
 import { StateCard } from "./StateCard";
 
@@ -92,11 +101,93 @@ interface ReviewPaneProps {
   freshness?: ((target: BriefingTarget) => Promise<BriefingFreshness>) | undefined;
   /** Export (copy, save, print) the briefing; `desktop` saves to Downloads through the server. */
   exportWith?: { api: Pick<Api, "briefingMarkdown" | "saveBriefing">; desktop: boolean } | undefined;
+  /**
+   * More of the PR under the briefing (the diff, the guided review). Inside the pane, `useReviewActions()` gives them
+   * `onComment` and `onFinish`.
+   */
+  children?: ReactNode;
 }
 
-/** A PR (or your local changes) and its briefing: run it, watch it, read it. */
+/**
+ * The Comments drawer's state for a PR: open or not (remembered for the window), what's being written, and where focus
+ * goes. Gives the review's actions (`onComment`, `onFinish`) to everything inside the pane through context, and wires
+ * `s` (toggle the drawer) and `c` (comment on the place you're on). Never while you type.
+ */
+function useCommentsDrawer(comments: BriefingComments | undefined, hasFiles: boolean) {
+  const [open, setOpen] = useDrawerOpen();
+  const [editing, setEditing] = useState<Editing>();
+  const [focus, setFocus] = useState<DrawerFocus>();
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const toggleButton = useRef<HTMLButtonElement>(null);
+  const opened = useRef(0);
+  const enabled = comments !== undefined;
+  const pr = comments?.pr;
+
+  // Another PR: nothing half-written carries over.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the PR changes
+  useEffect(() => setEditing(undefined), [pr]);
+
+  const onComment = useCallback(
+    (place: CommentPlace) => {
+      const active = document.activeElement;
+      returnFocus.current = active instanceof HTMLElement && active !== document.body ? active : null;
+      opened.current += 1;
+      setOpen(true);
+      setEditing({ kind: "place", place, n: opened.current });
+    },
+    [setOpen],
+  );
+  const onFinish = useCallback(() => {
+    setOpen(true);
+    setFocus((f) => ({ to: "finish", n: (f?.n ?? 0) + 1 }));
+  }, [setOpen]);
+  const actions = useMemo<ReviewActions | undefined>(
+    () => (enabled ? { onComment, onFinish } : undefined),
+    [enabled, onComment, onFinish],
+  );
+
+  const close = useCallback(() => {
+    const inside = document.activeElement?.closest?.("#comments-drawer");
+    setOpen(false);
+    if (inside) toggleButton.current?.focus();
+  }, [setOpen]);
+  const toggle = useCallback(() => {
+    if (open) return close();
+    setOpen(true);
+    setFocus((f) => ({ to: "head", n: (f?.n ?? 0) + 1 }));
+  }, [open, close, setOpen]);
+
+  const latest = useRef({ toggle, onComment, hasFiles });
+  latest.current = { toggle, onComment, hasFiles };
+  useEffect(() => {
+    if (!enabled) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
+      if (event.key === "s") latest.current.toggle();
+      else if (event.key === "c") {
+        const place = placeFromElement(document.activeElement);
+        if (place) latest.current.onComment(place);
+        else {
+          returnFocus.current = null;
+          setOpen(true);
+          setEditing(latest.current.hasFiles ? { kind: "line" } : { kind: "note" });
+        }
+      } else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [enabled, setOpen]);
+
+  return { open, close, toggle, editing, setEditing, focus, returnFocus, toggleButton, actions };
+}
+
+/** A PR (or your local changes) and its briefing: run it, watch it, read it; on a PR, the Comments drawer beside it. */
 export function ReviewPane(props: ReviewPaneProps) {
-  const { run } = props;
+  const { run, comments } = props;
+  const files = run?.briefing && !run.running && run.briefing.files.length > 0 ? run.briefing.files : undefined;
+  const drawer = useCommentsDrawer(comments, files !== undefined);
+  const count = comments && !comments.loading ? comments.drafts.length : 0;
   useEffect(() => {
     if (!run?.running) return;
     const onKey = (event: KeyboardEvent) => {
@@ -107,107 +198,142 @@ export function ReviewPane(props: ReviewPaneProps) {
   }, [run?.running, props.onCancel]);
 
   return (
-    <section aria-labelledby="review-title" style={{ display: "flex", flexDirection: "column" }}>
-      <header className="brief-head">
-        <div className="crumbs">
-          {props.backToQueue && (
-            <a className="back-link" href="/" onClick={onLinkClick({ view: "queue" })}>
-              ← Queue
-            </a>
-          )}
-          {props.crumbs}
-        </div>
-        <h1 className="brief-title" id="review-title">
-          {props.title}
-        </h1>
-        {props.why && props.why.items.length > 0 && (
-          <div className="why">
-            <span className="why-label">{props.why.label}</span>
-            {props.why.items.map((w) => (
-              <span key={w} className="chip">
-                {w}
-              </span>
-            ))}
+    <ReviewActionsContext.Provider value={drawer.actions}>
+      <div className={`review-pane${comments && drawer.open ? " drawer-open" : ""}`}>
+        <section className="review-main" aria-labelledby="review-title">
+          <header className="brief-head">
+            <div className="crumbs">
+              {props.backToQueue && (
+                <a className="back-link" href="/" onClick={onLinkClick({ view: "queue" })}>
+                  ← Queue
+                </a>
+              )}
+              {props.crumbs}
+            </div>
+            <h1 className="brief-title" id="review-title">
+              {props.title}
+            </h1>
+            {props.why && props.why.items.length > 0 && (
+              <div className="why">
+                <span className="why-label">{props.why.label}</span>
+                {props.why.items.map((w) => (
+                  <span key={w} className="chip">
+                    {w}
+                  </span>
+                ))}
+              </div>
+            )}
+            {run?.briefing && !run.running && run.briefing.target.kind === "pr" && (
+              <BriefingAge
+                briefing={run.briefing}
+                check={props.freshness}
+                onRebrief={() => props.onStart(props.request)}
+              />
+            )}
+          </header>
+          <div className="toolbar" role="toolbar" aria-label="Review options">
+            {run?.running ? (
+              <button type="button" className="btn" onClick={props.onCancel}>
+                Stop <kbd>Esc</kbd>
+              </button>
+            ) : (
+              <button type="button" className="btn primary" onClick={() => props.onStart(props.request)}>
+                {run?.briefing ? "Brief again" : "Brief me"} <kbd>B</kbd>
+              </button>
+            )}
+            {props.controls}
+            {run?.briefing && !run.running && props.exportWith && (
+              <ExportMenu briefing={run.briefing} {...props.exportWith} />
+            )}
+            {comments && (
+              <button
+                ref={drawer.toggleButton}
+                type="button"
+                className={`btn drawer-toggle${drawer.open ? " on neutral" : ""}`}
+                aria-expanded={drawer.open}
+                aria-controls="comments-drawer"
+                aria-keyshortcuts="s"
+                title={drawer.open ? "Hide your comments  s" : "Show your comments  s"}
+                onClick={drawer.toggle}
+              >
+                {count > 0 ? `Comments · ${count}` : "Comments"} <kbd>S</kbd>
+              </button>
+            )}
           </div>
-        )}
-        {run?.briefing && !run.running && run.briefing.target.kind === "pr" && (
-          <BriefingAge briefing={run.briefing} check={props.freshness} onRebrief={() => props.onStart(props.request)} />
-        )}
-      </header>
-      <div className="toolbar" role="toolbar" aria-label="Review options">
-        {run?.running ? (
-          <button type="button" className="btn" onClick={props.onCancel}>
-            Stop <kbd>Esc</kbd>
-          </button>
-        ) : (
-          <button type="button" className="btn primary" onClick={() => props.onStart(props.request)}>
-            {run?.briefing ? "Brief again" : "Brief me"} <kbd>B</kbd>
-          </button>
-        )}
-        {props.controls}
-        {run?.briefing && !run.running && props.exportWith && (
-          <ExportMenu briefing={run.briefing} {...props.exportWith} />
+          {props.notice && (
+            <div className="notice note-box">
+              <span className="q" aria-hidden="true">
+                ?
+              </span>
+              <span className="text">{props.notice}</span>
+            </div>
+          )}
+
+          {run?.running && <Progress run={run} onCancel={props.onCancel} />}
+          {run && !run.running && run.error && (
+            <StateCard
+              tone={run.error === "Stopped." ? "dashed" : "warn"}
+              glyph={run.error === "Stopped." ? "–" : "!"}
+              title={run.error === "Stopped." ? "Stopped" : "The briefing didn't finish"}
+              body={run.error === "Stopped." ? "Nothing was kept. Brief again when you're ready." : run.error}
+              action={
+                <button type="button" className="btn primary" onClick={() => props.onStart(props.request)}>
+                  {run.error === "Stopped." ? "Brief me" : "Retry now"}
+                </button>
+              }
+              alternative={
+                run.error !== "Stopped." ? (
+                  <button
+                    type="button"
+                    className="btn quiet"
+                    onClick={() => navigator.clipboard?.writeText(run.error ?? "")}
+                  >
+                    Copy error
+                  </button>
+                ) : undefined
+              }
+            />
+          )}
+          {run?.briefing && !run.running && run.prepared && (
+            <div className="notice note-box">
+              <span className="q" aria-hidden="true">
+                ✓
+              </span>
+              <span className="text">
+                Prepared while you were away, at{" "}
+                {new Date(run.prepared).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                {run.briefing.llm?.status === "ok" ? ", with the model" : ", checks only"}. Brief again for a fresh one.
+              </span>
+            </div>
+          )}
+          {run?.briefing && !run.running && (
+            <BriefingView
+              briefing={run.briefing}
+              feedback={props.feedbackFor?.(run.briefing)}
+              perReviewUsd={props.perReviewUsd}
+              comments={props.comments}
+            />
+          )}
+          {!run && (
+            <p className="muted" style={{ padding: "28px 32px", maxWidth: 640 }}>
+              {props.emptyHint}
+            </p>
+          )}
+          {props.children}
+        </section>
+        {comments && (
+          <CommentsDrawer
+            comments={comments}
+            files={files}
+            open={drawer.open}
+            onClose={drawer.close}
+            editing={drawer.editing}
+            onEditing={drawer.setEditing}
+            focus={drawer.focus}
+            returnFocus={drawer.returnFocus}
+          />
         )}
       </div>
-      {props.notice && (
-        <div className="notice note-box">
-          <span className="q" aria-hidden="true">
-            ?
-          </span>
-          <span className="text">{props.notice}</span>
-        </div>
-      )}
-
-      {run?.running && <Progress run={run} onCancel={props.onCancel} />}
-      {run && !run.running && run.error && (
-        <StateCard
-          tone={run.error === "Stopped." ? "dashed" : "warn"}
-          glyph={run.error === "Stopped." ? "–" : "!"}
-          title={run.error === "Stopped." ? "Stopped" : "The briefing didn't finish"}
-          body={run.error === "Stopped." ? "Nothing was kept. Brief again when you're ready." : run.error}
-          action={
-            <button type="button" className="btn primary" onClick={() => props.onStart(props.request)}>
-              {run.error === "Stopped." ? "Brief me" : "Retry now"}
-            </button>
-          }
-          alternative={
-            run.error !== "Stopped." ? (
-              <button
-                type="button"
-                className="btn quiet"
-                onClick={() => navigator.clipboard?.writeText(run.error ?? "")}
-              >
-                Copy error
-              </button>
-            ) : undefined
-          }
-        />
-      )}
-      {run?.briefing && !run.running && run.prepared && (
-        <div className="notice note-box">
-          <span className="q" aria-hidden="true">
-            ✓
-          </span>
-          <span className="text">
-            Prepared while you were away, at{" "}
-            {new Date(run.prepared).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-            {run.briefing.llm?.status === "ok" ? ", with the model" : ", checks only"}. Brief again for a fresh one.
-          </span>
-        </div>
-      )}
-      {run?.briefing && !run.running && (
-        <BriefingView
-          briefing={run.briefing}
-          feedback={props.feedbackFor?.(run.briefing)}
-          perReviewUsd={props.perReviewUsd}
-          comments={props.comments}
-        />
-      )}
-      {!run && (
-        <p className="muted" style={{ padding: "28px 32px", maxWidth: 640 }}>
-          {props.emptyHint}
-        </p>
-      )}
-    </section>
+    </ReviewActionsContext.Provider>
   );
 }

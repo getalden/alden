@@ -2009,30 +2009,92 @@ details > summary {
   color: var(--acc);
   background: var(--acc-soft);
 }
-.review-panel {
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+/* The PR pane: the briefing (it scrolls) and, beside it, the Comments drawer. */
+.review-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
-.review-panel h2:focus,
-.review-panel h3:focus {
+.review-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.drawer-toggle kbd {
+  margin-left: 2px;
+}
+.comments-drawer {
+  width: 380px;
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+.comments-drawer[hidden] {
+  display: none;
+}
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 4px;
+}
+.drawer-head .h3 {
+  flex: 1;
+}
+.drawer-head .h3:focus,
+.comments-drawer h3:focus {
   outline: none;
+}
+.drawer-intro {
+  padding: 0 16px 12px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.drawer-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.drawer-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.drawer-scroll .field textarea {
+  width: 100%;
+}
+/* Always in view at the bottom: the verdict and Send. */
+.drawer-foot {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.drawer-foot .segmented {
+  display: flex;
+}
+.drawer-foot .segmented button {
+  flex: auto;
+  white-space: nowrap;
+}
+.drawer-foot .send {
+  justify-content: center;
 }
 .drafts {
   overflow: hidden;
-}
-.draft-group {
-  border-top: 1px solid var(--line);
-}
-.draft-group:first-child {
-  border-top: 0;
-}
-.draft-file {
-  margin: 0;
-  padding: 8px 14px;
-  background: var(--sunk);
-  font: 600 12px / 1.4 var(--font-mono);
-  color: var(--ink2);
-  overflow-wrap: anywhere;
 }
 .draft {
   display: flex;
@@ -2040,6 +2102,64 @@ details > summary {
   gap: 6px;
   padding: 10px 14px;
   border-top: 1px solid var(--line);
+}
+.draft:first-child {
+  border-top: 0;
+}
+.comment-target {
+  margin: 0;
+  font: 600 13px / 1.4 var(--font-ui);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.comment-target .mono {
+  font: 600 12px / 1.4 var(--font-mono);
+}
+.draft-where {
+  font: 500 12px / 1.4 var(--font-ui);
+  color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+.draft-where .mono {
+  font: 600 12px / 1.4 var(--font-mono);
+  color: var(--ink);
+}
+/* The start of a long comment; Edit shows all of it. */
+.draft-body.excerpt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+.draft-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.draft-suggestion pre {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow: auto;
+  border-left: 2px solid var(--ok);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--ok-soft);
+  color: var(--ink);
+  font: 12px / 1.45 var(--font-mono);
+  white-space: pre;
+}
+.suggest {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.suggest-code {
+  width: 100%;
+  font: 12px / 1.45 var(--font-mono);
+  white-space: pre;
+  overflow-x: auto;
 }
 .draft.outdated {
   background: var(--warn-soft);
@@ -2115,6 +2235,29 @@ details > summary {
 @media (max-width: 720px) {
   .line-fields {
     grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 1100px) {
+  .comments-drawer {
+    width: 340px;
+  }
+}
+/* Narrow windows: the drawer is a full-width sheet over the briefing; × or s or Esc puts it away. */
+@media (max-width: 700px) {
+  .comments-drawer {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    width: auto;
+    border-left: 0;
+  }
+  .drawer-head {
+    padding-top: 12px;
+  }
+  .drawer-head .btn.icon {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
   }
 }
 
@@ -2309,6 +2452,8 @@ details > summary {
   .app,
   .workspace,
   .main-pane,
+  .review-pane,
+  .review-main,
   .page {
     height: auto;
     overflow: visible;
@@ -2331,7 +2476,7 @@ details > summary {
       .link-button,
       .verdicts,
       .comment-slot,
-      .review-panel,
+      .comments-drawer,
       .missed,
       .export,
       .banner.error,
