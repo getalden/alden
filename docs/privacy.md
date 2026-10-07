@@ -49,7 +49,9 @@ running server's memory, and are gone when you quit.
 `alden feedback --export <file>` writes your feedback to a file you can share, for example with Alden's developers.
 It replaces repo names with a hash salted with a value that never leaves your machine, and each flag's title with a
 code salted fresh for each export, and drops paths, lines and notes. PR numbers, check ids, verdicts, times and the
-model stay. `--full` keeps everything. Settings → Your feedback in `alden ui` always exports redacted.
+model stay. What your sent reviews taught Alden ([review signals](memory.md#reviews-you-send)) is exported the same way:
+which check, the kind of signal and its weight, without the file or line. `--full` keeps everything. Settings → Your
+feedback in `alden ui` always exports redacted.
 
 ## Usage stats
 

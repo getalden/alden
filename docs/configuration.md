@@ -101,6 +101,12 @@ Default sensitive paths:
 | --- | --- | --- |
 | `review.eyes` | `3` | How many places "Needs your eyes" holds, 1 to 10: the few a careful reviewer would look at first. More catches more, and asks more of your attention. |
 
+## learning
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `learning.fromReviews` | `true` | Learn from the reviews you send: comments and suggestions near Alden's flags, approving past a flag you saw, comments where it flagged nothing. Off records none of it; Useful and Not useful still count, and what was already learned stays. Your user config only. See [Reviews you send](memory.md#reviews-you-send). |
+
 ## background
 
 For the [desktop app](desktop.md#while-youre-away), which briefs your top PRs while you're away.
