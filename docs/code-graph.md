@@ -51,6 +51,23 @@ Kubernetes (13,500 Go files outside `vendor/`) indexes in about 18 seconds the f
 and symfony/symfony (12,000 PHP files) in about 12 seconds and 1 second.
 `vendor/`, `node_modules/` and build output are skipped.
 
+## Related files
+
+Each place in "Needs your eyes" also suggests files to look at beside it ("Look at these too" in the terminal, the
+web UI's guided review and `alden_review`), worked out from the graph the briefing already built, so they cost no
+extra parsing:
+
+- **caller**: code calling the changed symbols at that place (the definition around its line, or all of the file's
+  changed ones), outside the diff. For a place that is itself a caller, the symbol's other callers. Up to 4, sure
+  matches before name-only ones.
+- **test**: tests calling those symbols or importing the changed file (test files by name, as the checks tell them
+  apart). Up to 2; a test's call comes before its import line.
+- **importer**: files importing the changed file (in Go, its package). For a file still importing a moved or deleted
+  one, the other files importing the old path. Up to 2.
+
+One entry per file, never the place's own. Without the graph (no clone, `--no-graph`, a language it doesn't read) a
+place has none, and model findings never have any.
+
 ## Signatures
 
 For Go and PHP, "Changed public signatures" uses the graph: it compares each function's and method's whole

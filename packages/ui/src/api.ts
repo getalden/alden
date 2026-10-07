@@ -23,6 +23,7 @@ import type {
   ReviewEvent as ReviewVerdict,
   SendReviewResult,
 } from "./drafts";
+import type { PrDiff } from "./guided";
 
 export interface Memory {
   repo: string;
@@ -345,6 +346,9 @@ export class Api {
 
   /** A PR's drafts ("owner/repo#12"), and the places Alden flagged that have no comment near them. */
   drafts = (pr: string) => this.request<DraftsResponse>(`/api/drafts?pr=${encodeURIComponent(pr)}`);
+
+  /** A PR's diff ("owner/repo#12"), file by file and hunk by hunk, with the head commit it's from. */
+  diff = (pr: string) => this.request<PrDiff>(`/api/diff?pr=${encodeURIComponent(pr)}`);
 
   addDraft = (draft: NewDraft & { pr: string }) =>
     this.request<ReviewDraft>("/api/drafts", { method: "POST", body: JSON.stringify(draft) });

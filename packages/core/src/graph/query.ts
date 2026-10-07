@@ -27,6 +27,8 @@ interface Binding {
   target: string;
   imported: string;
   reexport: boolean;
+  /** The import's line in the importing file. */
+  line: number;
 }
 
 /**
@@ -271,7 +273,7 @@ export class CodeGraph {
           const declared = members.map((m) => files.get(m)?.goPackage).find(Boolean);
           const local = imp.implicitName && declared ? declared : imp.local;
           for (const member of members) {
-            list.push({ local, namespace: true, target: member, imported: "*", reexport: false });
+            list.push({ local, namespace: true, target: member, imported: "*", reexport: false, line: imp.line });
           }
           continue;
         }
@@ -281,7 +283,14 @@ export class CodeGraph {
         if (path.endsWith(".py") && imp.imported !== "*") {
           const submodule = resolve(path, `${imp.from}${imp.from.endsWith(".") ? "" : "."}${imp.imported}`);
           if (submodule !== undefined && submodule !== target) {
-            list.push({ local: imp.local, namespace: true, target: submodule, imported: "*", reexport: false });
+            list.push({
+              local: imp.local,
+              namespace: true,
+              target: submodule,
+              imported: "*",
+              reexport: false,
+              line: imp.line,
+            });
           }
         }
         // Python `import a.b` binds "a" but calls look like a.b.fn(), so the object to match is the module path.
@@ -294,6 +303,7 @@ export class CodeGraph {
           // In Python a name a module imports can be imported from it in turn (how packages expose things through
           // __init__.py), so every named import passes the name on.
           reexport: imp.reexport === true || (path.endsWith(".py") && imp.imported !== "*"),
+          line: imp.line,
         });
       }
       this.bindings.set(path, list);
@@ -428,6 +438,26 @@ export class CodeGraph {
       }
       frontier = next;
     }
+    return found;
+  }
+
+  /**
+   * The files importing each of `paths` (one site per importing file: its first import of it), in one pass over the
+   * imports resolved when the graph was built. A Go import names a package, so it imports every file in it. Import
+   * lines in `exclude` (the diff's own changes) don't count, and neither does a file importing itself.
+   */
+  importersOf(paths: Iterable<string>, exclude: Map<string, Set<number>> = new Map()): Map<string, CallSite[]> {
+    const found = new Map<string, CallSite[]>([...paths].map((p) => [p, []]));
+    for (const [path, bindings] of this.bindings) {
+      for (const b of bindings) {
+        const sites = found.get(b.target);
+        if (!sites || b.target === path || exclude.get(path)?.has(b.line)) continue;
+        const existing = sites.find((s) => s.path === path);
+        if (!existing) sites.push({ path, line: b.line, confidence: "import" });
+        else if (b.line < existing.line) existing.line = b.line;
+      }
+    }
+    for (const sites of found.values()) sites.sort((a, b) => a.path.localeCompare(b.path));
     return found;
   }
 

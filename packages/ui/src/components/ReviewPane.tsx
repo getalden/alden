@@ -17,6 +17,7 @@ import {
   typing,
 } from "./Comments";
 import { ExportMenu } from "./ExportMenu";
+import type { GuidedReviewProps } from "./GuidedReview";
 import { StateCard } from "./StateCard";
 
 const STEPS: { stage: string; done: string; doing: string }[] = [
@@ -106,6 +107,8 @@ interface ReviewPaneProps {
    * `onComment` and `onFinish`.
    */
   children?: ReactNode;
+  /** Guided review: the PR's diff for its code excerpts. */
+  guided?: Pick<GuidedReviewProps, "loadDiff"> | undefined;
 }
 
 /**
@@ -312,6 +315,7 @@ export function ReviewPane(props: ReviewPaneProps) {
               feedback={props.feedbackFor?.(run.briefing)}
               perReviewUsd={props.perReviewUsd}
               comments={props.comments}
+              guided={props.guided}
             />
           )}
           {!run && (

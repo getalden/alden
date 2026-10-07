@@ -337,6 +337,37 @@
           "learned": {
             "description": "why your feedback put it here, e.g. 'you usually mark migration flags useful'",
             "type": "string"
+          },
+          "related": {
+            "description": "files to look at too: callers of the changed code here, tests that use it, files importing it; absent without the code graph or when there are none",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "line": {
+                  "description": "the call or import in that file",
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "why": {
+                  "type": "string",
+                  "enum": [
+                    "caller",
+                    "test",
+                    "importer"
+                  ]
+                }
+              },
+              "required": [
+                "path",
+                "why"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [

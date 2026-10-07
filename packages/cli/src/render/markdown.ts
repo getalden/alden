@@ -1,5 +1,5 @@
 import type { Anchor, Briefing, CheckResult, LlmFinding, LlmSection, MemoryItem } from "@alden/schema";
-import { briefedAgainst } from "./briefing.js";
+import { briefedAgainst, lookAtTheseToo } from "./briefing.js";
 import { stripControlDeep } from "./style.js";
 
 /**
@@ -161,6 +161,7 @@ export function briefingMarkdown(untrusted: Briefing, options: BriefingMarkdownO
     const id = forModel ? ` [E${i + 1}]` : "";
     out.push(`${i + 1}.${id} **${text(item.title)}**${critical}${by} ${place(item.anchor)}`.trimEnd());
     out.push(`   ${text(item.reason)}`);
+    if (item.related?.length) out.push(`   ${lookAtTheseToo(item.related, (where) => `\`${quote(where)}\``)}`);
     // Shared, what the reviewer's own feedback did stays with them.
     if (forModel && item.learned) out.push(`   ↑ ${quote(item.learned)}`);
   });

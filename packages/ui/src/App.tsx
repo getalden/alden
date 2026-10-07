@@ -554,6 +554,7 @@ function PrPane(props: {
       comments={comments}
       freshness={props.freshness}
       exportWith={props.draftsApi ? { api: props.draftsApi, desktop: !!session?.desktop } : undefined}
+      guided={props.draftsApi ? { loadDiff: props.draftsApi.diff } : undefined}
     />
   );
 }

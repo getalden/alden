@@ -44,6 +44,9 @@ Sign in to GitHub first (`alden auth login`); the tools say so if you haven't.
 | `alden_remember` | Adds a note to it ("Money is in cents, never floats"). | `text` (up to 500 characters), `repo` (this clone's `origin`) |
 | `alden_draft_comment` | Drafts a review comment for you, on a line or lines of the PR's diff or as a general note, or a suggested change you can apply on GitHub. It isn't posted: you review it and send it from the UI or with `alden send`. | `pr`, `path` and `line` (none: a general note), `start_line` (for several lines, in one hunk), `side` `RIGHT` or `LEFT` (RIGHT), `body` (optional with a suggestion), `suggestion` (replacement code for the line(s), new side only; empty deletes them) |
 
+Each place in a briefing lists the files to look at too, when the code graph ran: callers of the changed code, tests
+that use it, and files importing it, each with its line (see [Related files](code-graph.md#related-files)).
+
 The assistant records feedback when you react ("that first one wasn't useful"), so Alden keeps learning what you look
 for wherever you review. It's told to record only what you said, never its own opinion.
 

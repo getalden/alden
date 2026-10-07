@@ -1,4 +1,4 @@
-import type { Anchor, Briefing, CheckResult, Evidence, LlmSection } from "@alden/schema";
+import type { Anchor, Briefing, CheckResult, Evidence, LlmSection, RelatedFile } from "@alden/schema";
 import { fit, paint, type RenderOptions, type Style, stripControlDeep, wrap } from "./style.js";
 
 const MARK: Record<CheckResult["status"], { symbol: string; style: Style }> = {
@@ -64,6 +64,10 @@ const VERDICT_STYLE: Record<NonNullable<LlmSection["matchesTitle"]>["verdict"], 
   no: "red",
   unclear: "dim",
 };
+
+/** "Look at these too: src/cli.ts:2 (caller), src/rank.test.ts:9 (test)", for a place's related files. */
+export const lookAtTheseToo = (related: RelatedFile[], wrapPath: (where: string) => string = (w) => w) =>
+  `Look at these too: ${related.map((r) => `${wrapPath(`${r.path}${r.line ? `:${r.line}` : ""}`)} (${r.why})`).join(", ")}`;
 
 const place = (anchor: Anchor) => `${anchor.path}${anchor.line ? `:${anchor.line}` : ""}`;
 
@@ -282,6 +286,7 @@ export function renderBriefing(untrusted: Briefing, options: RenderOptions): str
     }
     out.push(...wrap(item.reason, width, "     ").map((l) => paint(l, "dim", color)));
     if (item.learned) out.push(...wrap(`↑ ${item.learned}`, width, "     ").map((l) => paint(l, "cyan", color)));
+    if (item.related?.length) out.push(...wrap(lookAtTheseToo(item.related), width, "     "));
   });
   out.push(...learnedNote(briefing, options));
   out.push("");

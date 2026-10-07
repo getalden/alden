@@ -126,12 +126,19 @@ export async function buildGraphReview(root: string, files: DiffFile[], budgetMs
     }
   }
 
+  // Who imports each changed file, for the related files a briefing suggests beside each place.
+  const importers = graph.importersOf(
+    files.filter((f) => f.status !== "removed" && index.files.has(f.path)).map((f) => f.path),
+    exclude,
+  );
+
   return {
     context: {
       changes,
       callers,
       complete: index.complete,
       modules,
+      importers,
       covered: new Set(
         files.filter((f) => after.has(f.path) || before.has(f.previousPath ?? f.path)).map((f) => f.path),
       ),

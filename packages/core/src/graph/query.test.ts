@@ -480,3 +480,18 @@ describe("Python callers", () => {
     ]);
   });
 });
+
+describe("importersOf", () => {
+  it("lists each importing file once, at its first import, skipping changed import lines", async () => {
+    const graph = await repo({
+      "src/price.ts": "export const total = 1;\nexport const tax = 2;\n",
+      "src/cart.ts": 'import { total } from "./price";\nimport { tax } from "./price";\n',
+      "src/index.ts": 'export * from "./price";\n',
+      "src/new.ts": 'import { total } from "./price";\n',
+      "src/other.ts": 'import { x } from "./elsewhere";\n',
+    });
+    const found = graph.importersOf(["src/price.ts", "src/missing.ts"], new Map([["src/new.ts", new Set([1])]]));
+    expect(sites(found.get("src/price.ts") ?? [])).toEqual(["src/cart.ts:1", "src/index.ts:1"]);
+    expect(found.get("src/missing.ts")).toEqual([]);
+  });
+});

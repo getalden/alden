@@ -44,6 +44,8 @@ the same sign-in, settings, memory and spend.
   them to GitHub as one review. Drafts Claude Code added show there too, marked "from Claude". The window remembers
   whether the drawer is open until you quit; in a narrow window it's a full-width sheet. Nothing is sent until you
   press Send.
+- [Guided review](web-ui.md#views) works the same in the window: `g` takes the places that need your eyes one at a
+  time, with the code at each and the files to look at too. Links to files on GitHub open in your browser.
 - **Export** in a briefing works in the window too. **Save as Markdown** saves to your Downloads folder (the window
   can't download files itself) and says where, e.g. "Saved to ~/Downloads/acme-shop-412-briefing.md."; **Print / Save
   as PDF** opens the macOS print dialog, whose **PDF** menu saves it. See [Export](web-ui.md#views).

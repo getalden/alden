@@ -243,6 +243,7 @@ export { addModelReview, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, type ModelReviewOp
 export { type ValidatedFindings, validateFindings } from "./review/llm/validate.js";
 export { loadLocalManifests, loadPullRequestManifests, reverseApply } from "./review/manifests.js";
 export { MAX_LOOK_HERE, pickLookHere, pickWithLearning } from "./review/pick.js";
+export { RELATED_CALLERS, RELATED_IMPORTERS, RELATED_TESTS, relatedFiles, withRelated } from "./review/related.js";
 export {
   fetchPullRequest,
   type GraphOptions,

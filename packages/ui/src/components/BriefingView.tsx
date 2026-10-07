@@ -14,6 +14,7 @@ import type { BriefingFeedback, Verdict } from "../feedback";
 import { formatUsd, plural, prFileUrl } from "../format";
 import { onLinkClick, routePath } from "../router";
 import { CommentSlot, placeAttrs, useReviewActions } from "./Comments";
+import { GuidedReview, type GuidedReviewProps } from "./GuidedReview";
 import { Mark } from "./Mark";
 
 const anchorKey = (a: Anchor) => `${a.path}:${a.line ?? ""}`;
@@ -76,7 +77,7 @@ export function groupHidden(hidden: Hidden): { reason: string; items: Hidden }[]
   return [...groups].map(([reason, items]) => ({ reason, items }));
 }
 
-function eyesItem(item: LookHere, checks: CheckResult[]): FeedbackItem {
+export function eyesItem(item: LookHere, checks: CheckResult[]): FeedbackItem {
   const severity = checks.find((c) => c.id === item.checkId)?.severity;
   return {
     source: item.source ?? "check",
@@ -88,7 +89,7 @@ function eyesItem(item: LookHere, checks: CheckResult[]): FeedbackItem {
   };
 }
 
-function findingItem(finding: LlmFinding): FeedbackItem {
+export function findingItem(finding: LlmFinding): FeedbackItem {
   return {
     source: "llm",
     ...(finding.checkId ? { checkId: finding.checkId } : {}),
@@ -110,7 +111,7 @@ const NOTES: Record<Verdict, string> = {
 };
 
 /** Useful, not useful, or dismiss. Pressing the chosen one again takes it back. */
-function Verdicts({ item, feedback }: { item: FeedbackItem; feedback: BriefingFeedback }) {
+export function Verdicts({ item, feedback }: { item: FeedbackItem; feedback: BriefingFeedback }) {
   const current = feedback.verdictOf(item);
   const button = (verdict: Verdict, label: string, onLabel: string, className = "") => (
     <button
@@ -285,6 +286,7 @@ export function BriefingView({
   perReviewUsd,
   comments: allComments,
   onComment: givenOnComment,
+  guided,
 }: {
   briefing: Briefing;
   feedback?: BriefingFeedback | undefined;
@@ -293,6 +295,8 @@ export function BriefingView({
   comments?: BriefingComments | undefined;
   /** Opens the Comments drawer's editor on a place; ReviewPane provides it (through context) on a PR. */
   onComment?: ((place: CommentPlace) => void) | undefined;
+  /** Guided review's diff, for the code at each step; its Comment and Finish go to the Comments drawer unless given. */
+  guided?: Pick<GuidedReviewProps, "loadDiff" | "onComment" | "onFinish"> | undefined;
 }) {
   const actions = useReviewActions();
   const onComment = givenOnComment ?? actions?.onComment;
@@ -396,44 +400,52 @@ export function BriefingView({
               : "Nothing flagged. The checks below found nothing that needs a closer look."}
           </p>
         ) : (
-          <ol className="visually-plain section" style={{ gap: 12 }}>
-            {briefing.needsYourEyes.map((item, i) => {
-              const fbItem = eyesItem(item, briefing.checks);
-              const verdict = feedback?.verdictOf(fbItem);
-              const guess = item.source !== "llm" && item.checkId !== undefined && heuristic.has(item.checkId);
-              return (
-                <li
-                  key={`${item.title}${item.anchor ? anchorKey(item.anchor) : ""}`}
-                  {...placeOf(item.anchor)}
-                  className={`card eye${guess ? " guess" : ""}${verdict === "agree" ? " agreed" : ""}${verdict === "dismiss" ? " dismissed" : ""}`}
-                >
-                  <span className="eye-n">{i + 1}</span>
-                  <div className="eye-body">
-                    {item.anchor && <Place anchor={item.anchor} links={links} arrow />}
-                    <p className="eye-text">
-                      <strong>{item.title}.</strong> {item.reason}
-                      {item.source === "llm" && (
-                        <span className="chip" style={{ marginLeft: 6 }}>
-                          model
+          <GuidedReview
+            briefing={briefing}
+            feedback={feedback}
+            loadDiff={guided?.loadDiff}
+            onComment={guided?.onComment ?? onComment}
+            onFinish={guided?.onFinish ?? actions?.onFinish}
+          >
+            <ol className="visually-plain section" style={{ gap: 12 }}>
+              {briefing.needsYourEyes.map((item, i) => {
+                const fbItem = eyesItem(item, briefing.checks);
+                const verdict = feedback?.verdictOf(fbItem);
+                const guess = item.source !== "llm" && item.checkId !== undefined && heuristic.has(item.checkId);
+                return (
+                  <li
+                    key={`${item.title}${item.anchor ? anchorKey(item.anchor) : ""}`}
+                    {...placeOf(item.anchor)}
+                    className={`card eye${guess ? " guess" : ""}${verdict === "agree" ? " agreed" : ""}${verdict === "dismiss" ? " dismissed" : ""}`}
+                  >
+                    <span className="eye-n">{i + 1}</span>
+                    <div className="eye-body">
+                      {item.anchor && <Place anchor={item.anchor} links={links} arrow />}
+                      <p className="eye-text">
+                        <strong>{item.title}.</strong> {item.reason}
+                        {item.source === "llm" && (
+                          <span className="chip" style={{ marginLeft: 6 }}>
+                            model
+                          </span>
+                        )}
+                      </p>
+                      {guess && (
+                        <span className="guess-line">
+                          <span className="q" aria-hidden="true">
+                            ?
+                          </span>
+                          Inferred from the diff, so it can be wrong.
                         </span>
                       )}
-                    </p>
-                    {guess && (
-                      <span className="guess-line">
-                        <span className="q" aria-hidden="true">
-                          ?
-                        </span>
-                        Inferred from the diff, so it can be wrong.
-                      </span>
-                    )}
-                    {item.learned && <span className="learned-why">↑ {item.learned}</span>}
-                    {feedback && <Verdicts item={fbItem} feedback={feedback} />}
-                    {slot(item.anchor)}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+                      {item.learned && <span className="learned-why">↑ {item.learned}</span>}
+                      {feedback && <Verdicts item={fbItem} feedback={feedback} />}
+                      {slot(item.anchor)}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </GuidedReview>
         )}
       </section>
 

@@ -41,6 +41,11 @@ export interface GraphContext {
   covered?: Set<string>;
   /** Code files the change moved or deleted, with the places still importing them by their old path. */
   modules?: ModuleChange[];
+  /**
+   * Changed code files (by new path) and the files importing them, one site per file, excluding import lines the diff
+   * changed. For "Look at these too" on a briefing's places.
+   */
+  importers?: Map<string, CallSite[]>;
 }
 
 /** A module gone from its old path: moved (`movedTo`) or deleted. Its importers break like a removed symbol's callers. */

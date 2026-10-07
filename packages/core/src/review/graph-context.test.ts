@@ -185,6 +185,34 @@ class SignupController
     expect(briefing.notChecked.some((n) => n.includes("Sender.php"))).toBe(false);
   });
 
+  it("suggests related files beside each place: other callers, tests and importers", async () => {
+    await writeFile(
+      join(repo, "src/api.ts"),
+      'import { rankQueue } from "./rank";\nexport const top = () => rankQueue([]);\n',
+    );
+    await writeFile(join(repo, "src/rank.test.ts"), 'import { rankQueue } from "./rank";\nrankQueue([1]);\n');
+    await writeFile(join(repo, "src/types.ts"), 'import * as rank from "./rank";\nexport type Rank = typeof rank;\n');
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "more");
+    await writeFile(join(repo, "src/rank.ts"), "export function rankQueue(queue, now) {\n  return queue;\n}\n");
+    const briefing = await reviewLocalChanges(config, repo);
+
+    const place = briefing.needsYourEyes.find((i) => i.checkId === "callers.outside");
+    expect(place?.anchor).toEqual({ path: "src/api.ts", line: 2 });
+    expect(place?.related).toEqual([
+      { path: "src/cli.ts", line: 2, why: "caller" },
+      { path: "src/rank.test.ts", line: 2, why: "test" },
+      { path: "src/types.ts", line: 1, why: "importer" },
+    ]);
+  });
+
+  it("suggests nothing without the code graph", async () => {
+    await writeFile(join(repo, "src/rank.ts"), "export function rankQueue(queue, now) {\n  return queue;\n}\n");
+    const briefing = await reviewLocalChanges(config, repo, undefined, { enabled: false });
+    expect(briefing.needsYourEyes.length).toBeGreaterThan(0);
+    expect(briefing.needsYourEyes.every((i) => i.related === undefined)).toBe(true);
+  });
+
   it("can be switched off", async () => {
     await writeFile(join(repo, "src/rank.ts"), "export function rankQueue(queue, now) {\n  return queue;\n}\n");
     const briefing = await reviewLocalChanges(config, repo, undefined, { enabled: false });
