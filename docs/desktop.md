@@ -42,6 +42,9 @@ the same sign-in, settings, memory and spend.
 - [Comment from Alden](web-ui.md#views) works the same in the window: write comments in a briefing, check the summary,
   and send them to GitHub as one review. Drafts Claude Code added show there too, marked "from Claude". Nothing is
   sent until you press Send.
+- The [Diff tab](web-ui.md#views) works in the window too: `d` switches between a briefing and its PR's diff, with
+  Alden's places marked at their lines. A place's `file:line` opens the diff there; its **GitHub ↗** link, like every
+  link to GitHub, opens in your browser. The window remembers which tab you were on until it closes.
 - **Export** in a briefing works in the window too. **Save as Markdown** saves to your Downloads folder (the window
   can't download files itself) and says where, e.g. "Saved to ~/Downloads/acme-shop-412-briefing.md."; **Print / Save
   as PDF** opens the macOS print dialog, whose **PDF** menu saves it. See [Export](web-ui.md#views).

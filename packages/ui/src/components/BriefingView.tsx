@@ -8,12 +8,13 @@ import type {
   LookHere,
   Severity,
 } from "@alden/schema";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useContext, useEffect, useRef, useState } from "react";
 import type { BriefingComments } from "../drafts";
 import type { BriefingFeedback, Verdict } from "../feedback";
 import { formatUsd, plural, prFileUrl } from "../format";
 import { onLinkClick, routePath } from "../router";
 import { CommentSlot, type Editing, ReviewPanel, typing } from "./Comments";
+import { ShowInDiffContext } from "./DiffView";
 import { Mark } from "./Mark";
 
 const anchorKey = (a: Anchor) => `${a.path}:${a.line ?? ""}`;
@@ -74,6 +75,27 @@ function useAnchorLinks(briefing: Briefing): Map<string, string> {
 function Place({ anchor, links, arrow = false }: { anchor: Anchor; links: Map<string, string>; arrow?: boolean }) {
   const text = `${anchor.path}${anchor.line ? `:${anchor.line}` : ""}`;
   const href = links.get(anchorKey(anchor));
+  const showInDiff = useContext(ShowInDiffContext);
+  if (showInDiff) {
+    // With a Diff tab: the place opens the diff there, and GitHub's diff stays a link beside it.
+    return (
+      <span className="place-links">
+        <button
+          type="button"
+          className="place place-diff"
+          title="Show in the Diff tab"
+          onClick={() => showInDiff({ path: anchor.path, line: anchor.line })}
+        >
+          {text}
+        </button>
+        {href && (
+          <a className="place-gh" href={href} target="_blank" rel="noreferrer" aria-label={`${text} on GitHub`}>
+            GitHub ↗
+          </a>
+        )}
+      </span>
+    );
+  }
   return href ? (
     <a className="place" href={href} target="_blank" rel="noreferrer">
       {text}
