@@ -1,0 +1,82 @@
+{
+  "$id": "https://getalden.dev/schema/review-signal-event.v1.json",
+  "title": "Alden review signal (what a sent review taught Alden, in its feedback log)",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "const": "review_signal"
+    },
+    "repo": {
+      "type": "string",
+      "description": "owner/name"
+    },
+    "pr": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "signal": {
+      "type": "string",
+      "enum": [
+        "request_changes",
+        "suggestion",
+        "comment",
+        "silent_pass",
+        "miss",
+        "applied",
+        "resolved"
+      ]
+    },
+    "checkId": {
+      "description": "the check (or model topic) of the flagged place; absent for a miss",
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "line": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "weight": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "review",
+        "outcome"
+      ],
+      "description": "from a review you sent, or from what the author did afterwards"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "type",
+    "repo",
+    "pr",
+    "at",
+    "signal",
+    "weight",
+    "source"
+  ],
+  "additionalProperties": false
+}

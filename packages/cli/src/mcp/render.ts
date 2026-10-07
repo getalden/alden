@@ -1,5 +1,6 @@
 import { formatAge } from "@alden/core";
 import type { Briefing, FeedbackItem, MemoryItem, RankedPullRequest, RankedQueue } from "@alden/schema";
+import { sourcesText } from "../commands/memory.js";
 import { otherFindings, quote, briefingMarkdown as renderMarkdown, UNTRUSTED_NOTE } from "../render/markdown.js";
 import { stripControlDeep } from "../render/style.js";
 
@@ -111,9 +112,11 @@ export function memoryMarkdown(repo: string, untrusted: MemoryItem[], paused: bo
     out.push(`## ${title}`);
     for (const item of list) {
       const effect = item.effect?.replace(/\.$/, "");
+      const reviews = (item.sources ?? []).filter((source) => source.from === "review" || source.from === "outcome");
       const detail = [
         item.source === "you" ? "they said" : item.evidence,
         item.confirmed && `confirmed ${item.confirmed}×`,
+        reviews.length > 0 && `from ${sourcesText(reviews)}`,
         effect && effect.charAt(0).toLowerCase() + effect.slice(1),
       ].filter(Boolean);
       out.push(`- ${quote(item.text)} (${detail.join("; ")}; since ${item.since.slice(0, 10)})`);

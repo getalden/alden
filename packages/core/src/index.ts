@@ -25,7 +25,14 @@ export {
 export { fetchPullRequestDiff, fromRestFile, type LocalDiff, readLocalDiff } from "./diff/sources.js";
 export { DiffCache, localDiffView, pullRequestDiffView, toDiffView, toDiffViewFile } from "./diff/view.js";
 export { embeddedFile, embeddedFilesUnder, isStandaloneBinary, registerEmbeddedFiles } from "./embedded.js";
-export { FeedbackLog, feedbackItemKey, redactFeedback, summarizeFeedback } from "./feedback/log.js";
+export {
+  FeedbackLog,
+  feedbackItemKey,
+  recordReviewSignals,
+  redactFeedback,
+  signalCounts,
+  summarizeFeedback,
+} from "./feedback/log.js";
 export * from "./github/index.js";
 export {
   type ChangedSymbol,
@@ -67,6 +74,9 @@ export { createResolver, loadResolverConfig, type Resolver, type ResolverConfig 
 export { AI_AGENT_LOGINS, type AuthorKind, authorName, prAuthor } from "./learn/authors.js";
 export {
   addNote,
+  type CheckLesson,
+  type CheckTally,
+  checkEvidence,
   checkLesson,
   checkName,
   checkProgress,
@@ -77,21 +87,27 @@ export {
   editNote,
   forget,
   forgetAll,
+  formatWeight,
   type Learning,
+  type LessonWeights,
   learn,
   loadLearning,
   memoryItems,
   memoryRepos,
+  neverQuietened,
   noteArea,
   notePath,
   prFeatures,
+  type QueueLesson,
   type QueueRow,
+  type QueueTally,
   queueBoost,
   quietenedReason,
   reactionProgress,
   recordOpen,
   recordReaction,
   restore,
+  reviewProgress,
   scopeNote,
   setLearning,
 } from "./learn/learn.js";
@@ -210,7 +226,6 @@ export {
   findAgain,
   isNear,
   type LineAnchor,
-  learnFromComments,
   linkText,
   MAX_COMMENT_CHARS,
   NEAR_LINES,
@@ -222,6 +237,7 @@ export {
   type ReviewComment,
   ReviewDrafts,
   reviewRequest,
+  type SendLearning,
   SendReviewError,
   type SentCounts,
   type Side,
@@ -261,6 +277,17 @@ export {
   type WithModel,
 } from "./review/run.js";
 export { findSecrets, mask, redactSecrets, type SecretFinding, shannonEntropy } from "./review/secrets.js";
+export {
+  type BriefedPlace,
+  briefedPlaces,
+  confirmNotes,
+  learnFromReview,
+  noSeenPlaces,
+  reviewSignals,
+  type SeenReader,
+  SIGNAL_WEIGHTS,
+  wasSeen,
+} from "./review/signals.js";
 export { type Declaration, declarationIn, type SignatureChange, signatureChanges } from "./review/signatures.js";
 export { type Check, type CheckOutcome, type GraphContext, type ReviewContext, symbolKey } from "./review/types.js";
 export {
@@ -276,7 +303,7 @@ export {
 } from "./stats/stats.js";
 export { UsageLog } from "./stats/usage.js";
 export { AldenStore, closeStores, MIGRATION_COUNT, openStore } from "./store/db.js";
-export { queueEvent, reviewEvent, statsEvent } from "./telemetry/events.js";
+export { queueEvent, reviewEvent, signalsEvent, statsEvent } from "./telemetry/events.js";
 export {
   type Consent,
   configureTelemetry,

@@ -6,11 +6,14 @@ import {
   type MemoryEvent,
   MemoryEventSchema,
   type MemoryItem,
+  type MemorySource,
   type OpenEvent,
   OpenEventSchema,
   type PullRequestFacts,
   type ReactionEvent,
   ReactionEventSchema,
+  type ReviewSignalEvent,
+  type ReviewSignalKind,
 } from "@alden/schema";
 import { FeedbackLog } from "../feedback/log.js";
 import { fileKind, isLockfile, sensitiveMatcher } from "../queue/files.js";
@@ -37,6 +40,21 @@ export const OPEN_BOOST = 1.5;
 export const MAX_OPEN_BOOST = 3;
 /** Checks Alden never quietens, however often they're marked not useful. */
 const NEVER_QUIETENED = new Set(["secrets.likely", "injection.ai"]);
+/** Whether a check's flags can never be quietened: likely secrets and text aimed at AI reviewers. */
+export const neverQuietened = (checkId: string) => NEVER_QUIETENED.has(checkTopic(checkId));
+
+/** Review signals that say a place was worth a word: they count toward "useful", at their weight. */
+const UP_SIGNALS = new Set<ReviewSignalKind>(["request_changes", "suggestion", "comment", "applied", "resolved"]);
+/** Review signals that are comments on code, so they say where in a repo you look. */
+const COMMENT_SIGNALS = new Set<ReviewSignalKind>(["request_changes", "suggestion", "comment", "miss"]);
+
+/** Weights add up in tenths (a silent pass is 0.2): rounded, so fifteen of them make exactly 3. */
+const round = (n: number) => Math.round(n * 100) / 100;
+/** A weighted count as a sentence shows it: "3", "2.4". */
+export const formatWeight = (n: number) => {
+  const r = Math.round(n * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+};
 
 /**
  * Checks that teach one lesson together. A changed public signature and the callers of it outside the diff are two
@@ -71,7 +89,20 @@ export const MODEL_TOPICS = {
   dependencies: "dependencies.changed",
 } as const;
 
-/** A check topic whose flags you consistently find useful, or consistently don't. */
+/** How much of a lesson's side came from each kind of evidence, in weight. */
+export interface LessonWeights {
+  /** Your clicks on Useful or Not useful. */
+  reactions: number;
+  /** Reviews you sent: comments, suggestions and requested changes near a flag (up), or approving past it (down). */
+  review: number;
+  /** What authors did with your comments: applied a suggestion, resolved a comment. */
+  outcome: number;
+}
+
+/**
+ * A check topic whose flags you consistently find useful, or consistently don't. `agree` and `notNeeded` are weights:
+ * a click counts 1, a review signal its own weight.
+ */
 export interface CheckLesson {
   id: string;
   /** The check's id, or "api" for signature and caller flags together. */
@@ -79,7 +110,22 @@ export interface CheckLesson {
   direction: "up" | "down";
   agree: number;
   notNeeded: number;
+  /** The lesson's side (agree for up, notNeeded for down), by where it came from. */
+  weights: LessonWeights;
+  sources: MemorySource[];
   since: string;
+}
+
+/** Where a check topic stands, lesson or not: weights for each side, and clicks on Not useful among them. */
+export interface CheckTally {
+  agree: number;
+  notNeeded: number;
+  /** Clicks on Not useful: a lesson to quieten needs at least one, so approving in silence never quietens alone. */
+  saidNotNeeded: number;
+  /** Of `agree`, what came from reviews and their outcomes. */
+  reviewAgree: number;
+  /** Of `notNeeded`, what came from approving past a flag you saw. */
+  reviewNotNeeded: number;
 }
 
 /** The lesson in force for a check's flags, through its topic. */
@@ -100,9 +146,20 @@ export interface QueueLesson {
   jumps: number;
   /** Rows marked useful (up) or not useful (down). */
   reactions: number;
+  /** Up: reviews you sent with comments in this code area, each counted like an open ahead of rank. Down: 0. */
+  reviews: number;
+  sources: MemorySource[];
   /** Everything counted for this direction's ratio. */
   total: number;
   since: string;
+}
+
+export interface QueueTally {
+  opens: number;
+  jumps: number;
+  ups: number;
+  downs: number;
+  reviews: number;
 }
 
 export interface Note {
@@ -122,10 +179,13 @@ export interface Learning {
   /** Lessons by check topic: see `checkLesson`. */
   checks: Map<string, CheckLesson>;
   /** Useful and not useful counted so far per check topic, lesson or not, so feedback can say how close it is. */
-  checkTallies: Map<string, { agree: number; notNeeded: number }>;
+  checkTallies: Map<string, CheckTally>;
   queue: QueueLesson[];
-  /** Evidence counted so far per queue feature, lesson or not: PRs opened, opened ahead, marked useful, not useful. */
-  queueTallies: Map<string, { opens: number; jumps: number; ups: number; downs: number }>;
+  /**
+   * Evidence counted so far per queue feature, lesson or not: PRs opened, opened ahead, marked useful, not useful, and
+   * reviews with comments in it.
+   */
+  queueTallies: Map<string, QueueTally>;
   /** Places you dismissed, per PR (or local changes), so a re-review doesn't raise them again. */
   dismissed: Map<string, string>;
   /** PRs dismissed from the queue ("owner/repo#n", lowercased) and their updatedAt then. */
@@ -288,12 +348,57 @@ export function dismissKey(
   return [target, item.source, item.checkId ?? "", item.title, item.anchor?.path ?? ""].join("|");
 }
 
+/** One piece of evidence toward a lesson, before it's summed. */
+interface Evidence {
+  from: MemorySource["from"];
+  pr?: string;
+  weight: number;
+  at: string;
+}
+
+/** A check topic's evidence, each side apart. */
+interface TopicEvidence {
+  up: Evidence[];
+  down: Evidence[];
+  saidNotNeeded: number;
+  since: string;
+}
+
+const sumWeights = (evidence: Evidence[]) => round(evidence.reduce((sum, e) => sum + e.weight, 0));
+
+/** At most this many sources are listed per learned item, the latest. */
+const MAX_SOURCES = 10;
+
+/**
+ * A lesson's evidence as sources to list (your clicks together, each review or outcome by PR; the latest first) and
+ * as weights by kind.
+ */
+function describeEvidence(evidence: Evidence[]): { weights: LessonWeights; sources: MemorySource[] } {
+  const weights: LessonWeights = { reactions: 0, review: 0, outcome: 0 };
+  const byPlace = new Map<string, MemorySource>();
+  for (const e of evidence) {
+    weights[e.from === "opens" ? "reactions" : e.from] += e.weight;
+    const key = `${e.from}|${e.pr ?? ""}`;
+    const held = byPlace.get(key);
+    if (held) {
+      held.weight = round(held.weight + e.weight);
+      if (e.at > held.at) held.at = e.at;
+    } else byPlace.set(key, { from: e.from, ...(e.pr ? { pr: e.pr } : {}), weight: e.weight, at: e.at });
+  }
+  return {
+    weights: { reactions: round(weights.reactions), review: round(weights.review), outcome: round(weights.outcome) },
+    sources: [...byPlace.values()].sort((a, b) => b.at.localeCompare(a.at)).slice(0, MAX_SOURCES),
+  };
+}
+
 export function learn(input: {
   repo: string;
   feedback: FeedbackEvent[];
   opens: OpenEvent[];
   memory: MemoryEvent[];
   reactions?: ReactionEvent[];
+  /** What your sent reviews (and their outcomes) said: see `ReviewSignalEventSchema`. */
+  signals?: ReviewSignalEvent[];
   now?: Date;
 }): Learning {
   const now = input.now ?? new Date();
@@ -376,24 +481,76 @@ export function learn(input: {
   // Each direction counts after its own forget, by topic or (from before topics) by the check's own id.
   const afterCheck = (checkId: string, direction: "up" | "down", at: string) =>
     after(`check:${checkTopic(checkId)}:${direction}`, at) && after(`check:${checkId}:${direction}`, at);
-  const tallies = new Map<string, { agree: number; notNeeded: number; since: string }>();
+  const tallies = new Map<string, TopicEvidence>();
+  const topicOf = (topic: string, at: string) => {
+    const tally = tallies.get(topic) ?? { up: [], down: [], saidNotNeeded: 0, since: at };
+    if (at < tally.since) tally.since = at;
+    tallies.set(topic, tally);
+    return tally;
+  };
   for (const event of latest.values()) {
     const checkId = event.item.checkId;
     if (!checkId || (event.verdict !== "agree" && event.verdict !== "not_needed")) continue;
-    const topic = checkTopic(checkId);
-    const tally = tallies.get(topic) ?? { agree: 0, notNeeded: 0, since: event.at };
-    if (event.verdict === "agree" && afterCheck(checkId, "up", event.at)) tally.agree++;
-    if (event.verdict === "not_needed" && afterCheck(checkId, "down", event.at)) tally.notNeeded++;
-    if (event.at < tally.since) tally.since = event.at;
-    tallies.set(topic, tally);
+    const tally = topicOf(checkTopic(checkId), event.at);
+    // A verdict marked `via: "comment"` was a comment in a review you sent, from before review signals.
+    const evidence: Evidence =
+      event.via === "comment"
+        ? { from: "review", pr: feedbackTargetKey(event), weight: 1, at: event.at }
+        : { from: "reactions", weight: 1, at: event.at };
+    if (event.verdict === "agree" && afterCheck(checkId, "up", event.at)) tally.up.push(evidence);
+    if (event.verdict === "not_needed" && afterCheck(checkId, "down", event.at)) {
+      tally.down.push(evidence);
+      tally.saidNotNeeded++;
+    }
   }
+  // Review signals count once per PR per topic, at the strongest: two suggestions on one PR's untested code count 2,
+  // not 4, so no single review teaches a lesson on its own. A comment on a topic in a PR outweighs approving past
+  // another of its flags there. What the author did afterwards counts on its own, once per PR per topic too.
+  const strongest = new Map<string, { topic: string; evidence: Evidence; direction: "up" | "down" }>();
+  for (const signal of input.signals ?? []) {
+    if (!signal.checkId) continue;
+    const direction = UP_SIGNALS.has(signal.signal) ? "up" : signal.signal === "silent_pass" ? "down" : undefined;
+    if (!direction || !afterCheck(signal.checkId, direction, signal.at)) continue;
+    const topic = checkTopic(signal.checkId);
+    const pr = `${signal.repo.toLowerCase()}#${signal.pr}`;
+    const key = `${signal.source}|${pr}|${topic}`;
+    const held = strongest.get(key);
+    const evidence: Evidence = { from: signal.source, pr, weight: signal.weight, at: signal.at };
+    if (
+      !held ||
+      (direction === "up" && held.direction === "down") ||
+      (direction === held.direction && signal.weight > held.evidence.weight)
+    ) {
+      strongest.set(key, { topic, evidence, direction });
+    }
+  }
+  for (const { topic, evidence, direction } of strongest.values()) {
+    topicOf(topic, evidence.at)[direction].push(evidence);
+  }
+
   const checks = new Map<string, CheckLesson>();
-  for (const [topic, { agree, notNeeded, since }] of tallies) {
+  const checkTallies = new Map<string, CheckTally>();
+  for (const [topic, { up, down, saidNotNeeded, since }] of tallies) {
+    const agree = sumWeights(up);
+    const notNeeded = sumWeights(down);
     const total = agree + notNeeded;
+    checkTallies.set(topic, {
+      agree,
+      notNeeded,
+      saidNotNeeded,
+      reviewAgree: sumWeights(up.filter((e) => e.from !== "reactions")),
+      reviewNotNeeded: sumWeights(down.filter((e) => e.from !== "reactions")),
+    });
+    const lesson = { topic, agree, notNeeded, since };
     if (agree >= MIN_EVIDENCE && agree / total >= CHECK_RATIO) {
-      checks.set(topic, { id: `check:${topic}:up`, topic, direction: "up", agree, notNeeded, since });
-    } else if (notNeeded >= MIN_EVIDENCE && notNeeded / total >= CHECK_RATIO && !NEVER_QUIETENED.has(topic)) {
-      checks.set(topic, { id: `check:${topic}:down`, topic, direction: "down", agree, notNeeded, since });
+      checks.set(topic, { ...lesson, id: `check:${topic}:up`, direction: "up", ...describeEvidence(up) });
+    } else if (
+      notNeeded >= MIN_EVIDENCE &&
+      notNeeded / total >= CHECK_RATIO &&
+      saidNotNeeded > 0 &&
+      !NEVER_QUIETENED.has(topic)
+    ) {
+      checks.set(topic, { ...lesson, id: `check:${topic}:down`, direction: "down", ...describeEvidence(down) });
     }
   }
 
@@ -409,14 +566,30 @@ export function learn(input: {
   }
 
   const windowStart = new Date(now.getTime() - OPEN_WINDOW_DAYS * 86_400_000).toISOString();
-  type Tally = { opens: number; jumps: number; ups: number; downs: number; upSince?: string; downSince?: string };
+  type Tally = QueueTally & {
+    upSince?: string;
+    downSince?: string;
+    /** When each kind of evidence was last seen, and reviews by PR, for the sources a lesson lists. */
+    jumpsAt?: string;
+    upsAt?: string;
+    downsAt?: string;
+    reviewed: Map<string, { n: number; at: string }>;
+  };
   const byFeature = new Map<string, Tally>();
   const tally = (feature: string) => {
-    const t = byFeature.get(feature) ?? { opens: 0, jumps: 0, ups: 0, downs: 0 };
+    const t: Tally = byFeature.get(feature) ?? {
+      opens: 0,
+      jumps: 0,
+      ups: 0,
+      downs: 0,
+      reviews: 0,
+      reviewed: new Map(),
+    };
     byFeature.set(feature, t);
     return t;
   };
   const earliest = (a: string | undefined, b: string) => (a && a < b ? a : b);
+  const latestOf = (a: string | undefined, b: string) => (a && a > b ? a : b);
   // Each PR counts once per feature, as opened ahead if any of its opens was: opening one PR on three days is one
   // PR, not three. An open jumped ahead for a feature only when a PR it passed lacked that feature (events from
   // before that was recorded: when it passed any PR), so a feature on every PR in the queue never jumps.
@@ -438,7 +611,26 @@ export function learn(input: {
     if (jumped) {
       t.jumps++;
       t.upSince = earliest(t.upSince, at);
+      t.jumpsAt = latestOf(t.jumpsAt, at);
     }
+  }
+  // A review you sent with comments in a code area counts as opening a PR there ahead of its rank: once per review
+  // per area, however many comments it has there. Signals from one review share its time.
+  const reviewed = new Map<string, { feature: string; pr: string; at: string }>();
+  for (const signal of input.signals ?? []) {
+    if (signal.source !== "review" || !COMMENT_SIGNALS.has(signal.signal) || !signal.path) continue;
+    if (signal.at < windowStart || isLockfile(signal.path)) continue;
+    const feature = `area:${codeArea(signal.path)}`;
+    if (!after(`queue:${feature}:up`, signal.at)) continue;
+    const pr = `${signal.repo.toLowerCase()}#${signal.pr}`;
+    reviewed.set(`${feature}|${pr}@${signal.at}`, { feature, pr, at: signal.at });
+  }
+  for (const { feature, pr, at } of reviewed.values()) {
+    const t = tally(feature);
+    t.reviews++;
+    t.upSince = earliest(t.upSince, at);
+    const held = t.reviewed.get(pr);
+    t.reviewed.set(pr, { n: (held?.n ?? 0) + 1, at: latestOf(held?.at, at) });
   }
   for (const r of reactionByPr.values()) {
     if (r.at < windowStart || (r.reaction !== "up" && r.reaction !== "down")) continue;
@@ -447,24 +639,33 @@ export function learn(input: {
       if (r.reaction === "up" && after(`queue:${feature}:up`, r.at)) {
         t.ups++;
         t.upSince = earliest(t.upSince, r.at);
+        t.upsAt = latestOf(t.upsAt, r.at);
       }
       if (r.reaction === "down" && after(`queue:${feature}:down`, r.at)) {
         t.downs++;
         t.downSince = earliest(t.downSince, r.at);
+        t.downsAt = latestOf(t.downsAt, r.at);
       }
     }
   }
   const queue: QueueLesson[] = [];
   for (const [feature, t] of byFeature) {
-    const up = t.jumps + t.ups;
-    const upTotal = t.opens + t.ups + t.downs;
+    const up = t.jumps + t.ups + t.reviews;
+    const upTotal = t.opens + t.reviews + t.ups + t.downs;
     if (up >= MIN_EVIDENCE && up / upTotal >= OPEN_RATIO && t.upSince) {
+      const sources: MemorySource[] = [
+        ...[...t.reviewed].map(([pr, { n, at }]): MemorySource => ({ from: "review", pr, weight: n, at })),
+        ...(t.jumps > 0 && t.jumpsAt ? [{ from: "opens" as const, weight: t.jumps, at: t.jumpsAt }] : []),
+        ...(t.ups > 0 && t.upsAt ? [{ from: "reactions" as const, weight: t.ups, at: t.upsAt }] : []),
+      ];
       queue.push({
         id: `queue:${feature}:up`,
         feature,
         direction: "up",
         jumps: t.jumps,
         reactions: t.ups,
+        reviews: t.reviews,
+        sources: sources.sort((a, b) => b.at.localeCompare(a.at)).slice(0, MAX_SOURCES),
         total: upTotal,
         since: t.upSince,
       });
@@ -475,21 +676,29 @@ export function learn(input: {
         direction: "down",
         jumps: 0,
         reactions: t.downs,
+        reviews: 0,
+        sources: t.downsAt ? [{ from: "reactions", weight: t.downs, at: t.downsAt }] : [],
         total: t.downs + up,
         since: t.downSince,
       });
     }
   }
-  queue.sort((a, b) => b.jumps + b.reactions - (a.jumps + a.reactions) || a.feature.localeCompare(b.feature));
+  queue.sort(
+    (a, b) =>
+      b.jumps + b.reactions + b.reviews - (a.jumps + a.reactions + a.reviews) || a.feature.localeCompare(b.feature),
+  );
 
   return {
     repo: input.repo.toLowerCase(),
     paused,
     checks,
-    checkTallies: new Map([...tallies].map(([topic, t]) => [topic, { agree: t.agree, notNeeded: t.notNeeded }])),
+    checkTallies,
     queue,
     queueTallies: new Map(
-      [...byFeature].map(([feature, t]) => [feature, { opens: t.opens, jumps: t.jumps, ups: t.ups, downs: t.downs }]),
+      [...byFeature].map(([feature, t]) => [
+        feature,
+        { opens: t.opens, jumps: t.jumps, ups: t.ups, downs: t.downs, reviews: t.reviews },
+      ]),
     ),
     dismissed,
     dismissedPrs,
@@ -501,9 +710,11 @@ export function learn(input: {
 
 /** Everything learned for `repo`, from the store. */
 export async function loadLearning(store: AldenStore, repo: string, now: Date = new Date()): Promise<Learning> {
+  const log = new FeedbackLog(store);
   return learn({
     repo,
-    feedback: await new FeedbackLog(store).events(repo),
+    feedback: await log.events(repo),
+    signals: log.signals(repo),
     opens: store.events<unknown>("open", { repo }).flatMap((raw) => {
       const parsed = OpenEventSchema.safeParse(raw);
       return parsed.success ? [parsed.data] : [];
@@ -552,6 +763,9 @@ export function queueReason(lesson: QueueLesson): string {
   const what = describeFeature(lesson.feature);
   if (lesson.direction === "down")
     return `ranked lower: you usually skip ${what} (${lesson.reactions} marked not useful)`;
+  if (lesson.reviews > lesson.jumps && lesson.reviews >= lesson.reactions) {
+    return `ranked higher: you often comment on ${what} in your reviews`;
+  }
   return lesson.jumps >= lesson.reactions
     ? `ranked higher: you usually open ${what} first`
     : `ranked higher: you marked ${lesson.reactions} ${what} useful`;
@@ -559,10 +773,15 @@ export function queueReason(lesson: QueueLesson): string {
 
 /** The sentence for a check lesson, as a place to look shows it. */
 export function checkReason(lesson: CheckLesson): string {
-  const total = lesson.agree + lesson.notNeeded;
-  return lesson.direction === "up"
-    ? `You usually mark ${checkName(lesson.topic)} useful (${lesson.agree} of ${total})`
-    : `You usually mark ${checkName(lesson.topic)} not useful (${lesson.notNeeded} of ${total})`;
+  const total = formatWeight(lesson.agree + lesson.notNeeded);
+  const up = lesson.direction === "up";
+  const fromReviews = lesson.weights.review + lesson.weights.outcome;
+  // "Mark" while it's all clicks, as before; "find" once your reviews said some of it.
+  const verb = fromReviews > 0 ? "find" : "mark";
+  const tail = fromReviews > 0 ? `, ${formatWeight(fromReviews)} from your reviews` : "";
+  return up
+    ? `You usually ${verb} ${checkName(lesson.topic)} useful (${formatWeight(lesson.agree)} of ${total}${tail})`
+    : `You usually ${verb} ${checkName(lesson.topic)} not useful (${formatWeight(lesson.notNeeded)} of ${total}${tail})`;
 }
 
 /** A check row quietened by your feedback says so, the same way everywhere: "quietened by your feedback: …". */
@@ -571,6 +790,30 @@ export function quietenedReason(lesson: CheckLesson): string {
 }
 
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
+/**
+ * What a check lesson was learned from, in words: "you marked 3 of 4 useful" while it's all clicks, otherwise "5 of 5
+ * useful: you marked 1, 4 from comments in your reviews (acme/shop#412, acme/shop#413)".
+ */
+export function checkEvidence(lesson: CheckLesson): string {
+  const up = lesson.direction === "up";
+  const total = formatWeight(lesson.agree + lesson.notNeeded);
+  const side = formatWeight(up ? lesson.agree : lesson.notNeeded);
+  const label = up ? "useful" : "not useful";
+  const { reactions, review, outcome } = lesson.weights;
+  if (review + outcome === 0) return `you marked ${side} of ${total} ${label}`;
+  const prs = (from: MemorySource["from"]) => {
+    const list = lesson.sources.filter((s) => s.from === from && s.pr).map((s) => s.pr as string);
+    return list.length === 0 ? "" : ` (${list.slice(0, 3).join(", ")}${list.length > 3 ? ", …" : ""})`;
+  };
+  const parts = [
+    reactions > 0 && `you marked ${formatWeight(reactions)}`,
+    review > 0 &&
+      `${formatWeight(review)} from ${up ? "comments in your reviews" : "approving past them in your reviews"}${prs("review")}`,
+    outcome > 0 && `${formatWeight(outcome)} from what authors did with your comments${prs("outcome")}`,
+  ].filter(Boolean);
+  return `${side} of ${total} ${label}: ${parts.join(", ")}`;
+}
 
 /** What Alden knows about you in a repo, as `alden memory` and the UI list it: your notes first. */
 export function memoryItems(learning: Learning): MemoryItem[] {
@@ -594,6 +837,7 @@ export function memoryItems(learning: Learning): MemoryItem[] {
     const total = lesson.agree + lesson.notNeeded;
     const up = lesson.direction === "up";
     return {
+      sources: lesson.sources,
       id: lesson.id,
       repo,
       source: "learned",
@@ -602,8 +846,8 @@ export function memoryItems(learning: Learning): MemoryItem[] {
       text: up
         ? `You find ${checkName(lesson.topic)} useful`
         : `You usually find ${checkName(lesson.topic)} not useful`,
-      evidence: `${up ? `you marked ${lesson.agree} of ${total} useful` : `you marked ${lesson.notNeeded} of ${total} not useful`}${lesson.topic === "api" ? " (public signature and caller flags count together)" : ""}`,
-      examples: total,
+      evidence: `${checkEvidence(lesson)}${lesson.topic === "api" ? " (public signature and caller flags count together)" : ""}`,
+      examples: Math.round(total),
       effect: up
         ? "Picked first among the places to look, and the model is told you care."
         : "Left out of the places to look unless high or critical severity, marked quietened in the checks, and the model is told not to raise them unless serious.",
@@ -617,6 +861,7 @@ export function memoryItems(learning: Learning): MemoryItem[] {
       ? [
           lesson.jumps > 0 && `opened ahead of their rank ${lesson.jumps} times`,
           lesson.reactions > 0 && `marked useful ${lesson.reactions} times`,
+          lesson.reviews > 0 && `commented on in ${lesson.reviews} review${lesson.reviews === 1 ? "" : "s"} you sent`,
         ]
           .filter(Boolean)
           .join(", ")
@@ -629,8 +874,9 @@ export function memoryItems(learning: Learning): MemoryItem[] {
       group: up ? "look" : "skip",
       text: up ? `You look at ${what} first` : `You usually skip ${what}`,
       evidence,
-      examples: lesson.jumps + lesson.reactions,
+      examples: lesson.jumps + lesson.reactions + lesson.reviews,
       effect: up ? "Ranked higher in your queue." : "Ranked lower in your queue.",
+      sources: lesson.sources,
       since: lesson.since,
     };
   });
@@ -711,24 +957,75 @@ export function checkProgress(
     return `Saved. Alden never quietens ${name}, however often they're marked not useful.`;
   }
   const up = verdict === "agree";
-  const { agree, notNeeded } = learning.checkTallies.get(topic) ?? { agree: 0, notNeeded: 0 };
+  const tally = learning.checkTallies.get(topic) ?? EMPTY_TALLY;
+  const { agree, notNeeded } = tally;
   const count = up ? agree : notNeeded;
   const other = up ? notNeeded : agree;
   const label = up ? "useful" : "not useful";
   const outcome = up ? "put them first among the places to look" : "quieten them";
+  const fromReviews = up ? tally.reviewAgree : tally.reviewNotNeeded;
+  const from = fromReviews > 0 ? ` (${formatWeight(fromReviews)} from your reviews)` : "";
   const lesson = learning.checks.get(topic);
   if (lesson?.direction === (up ? "up" : "down")) {
-    return `${count} of ${count + other} ${label} on ${name}${together}: Alden ${up ? "puts them first among the places to look" : "quietens them"} in this repo.`;
+    return `${formatWeight(count)} of ${formatWeight(count + other)} ${label}${from} on ${name}${together}: Alden ${up ? "puts them first among the places to look" : "quietens them"} in this repo.`;
   }
   if (lesson) {
     const kept = lesson.direction === "up" ? lesson.agree : lesson.notNeeded;
-    return `Saved. You still mostly mark ${name} ${lesson.direction === "up" ? "useful" : "not useful"} (${kept} of ${lesson.agree + lesson.notNeeded}), so that stays for now.`;
+    return `Saved. You still mostly mark ${name} ${lesson.direction === "up" ? "useful" : "not useful"} (${formatWeight(kept)} of ${formatWeight(lesson.agree + lesson.notNeeded)}), so that stays for now.`;
   }
-  // Three alike, at least three to one.
-  const needed = Math.max(MIN_EVIDENCE - count, 3 * other - count, 1);
+  const needed = stillNeeded(count, other);
   const so =
-    count < MIN_EVIDENCE && other === 0 ? `${count} of ${MIN_EVIDENCE}` : `${agree} useful, ${notNeeded} not useful`;
-  return `${so}: ${more(needed)} ${label} on ${name}${together} and Alden will ${outcome}.`;
+    count < MIN_EVIDENCE && other === 0
+      ? `${formatWeight(count)} of ${MIN_EVIDENCE}`
+      : `${formatWeight(agree)} useful, ${formatWeight(notNeeded)} not useful`;
+  return `${so}${from}: ${more(needed)} ${label} on ${name}${together} and Alden will ${outcome}.`;
+}
+
+const EMPTY_TALLY: CheckTally = { agree: 0, notNeeded: 0, saidNotNeeded: 0, reviewAgree: 0, reviewNotNeeded: 0 };
+
+/** Clicks still needed for a lesson, from `count` on its side and `other` against it: three alike, three to one. */
+const stillNeeded = (count: number, other: number) =>
+  Math.max(Math.ceil(round(MIN_EVIDENCE - count)), Math.ceil(round(3 * other - count)), 1);
+
+/**
+ * What a review you sent did to learning, one line per check topic it said something useful about, read from learning
+ * after its signals were saved: "2 of 3 (2 from your review of acme/shop#412): one more useful on untested-change
+ * flags and Alden will put them first among the places to look." A PR counts once per topic, at its strongest signal
+ * (a suggestion or requested change counts 2, a comment 1). Approving past a flag says too little to report.
+ */
+export function reviewProgress(
+  learning: Learning,
+  signals: Pick<ReviewSignalEvent, "signal" | "checkId" | "weight">[],
+  pr: string,
+): string[] {
+  if (learning.paused) return [];
+  const byTopic = new Map<string, { checkId: string; weight: number }>();
+  for (const signal of signals) {
+    if (!signal.checkId || !UP_SIGNALS.has(signal.signal)) continue;
+    const topic = checkTopic(signal.checkId);
+    const held = byTopic.get(topic);
+    if (!held || signal.weight > held.weight) byTopic.set(topic, { checkId: signal.checkId, weight: signal.weight });
+  }
+  return [...byTopic]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([topic, { checkId, weight }]) => {
+      const name = checkName(checkId);
+      const together = topic === "api" ? " (public signature and caller flags count together)" : "";
+      const { agree, notNeeded } = learning.checkTallies.get(topic) ?? EMPTY_TALLY;
+      const from = `${formatWeight(weight)} from your review of ${pr}`;
+      const lesson = learning.checks.get(topic);
+      if (lesson?.direction === "up") {
+        return `${formatWeight(agree)} of ${formatWeight(agree + notNeeded)} useful on ${name}${together}, ${from}: Alden puts them first among the places to look in this repo.`;
+      }
+      if (lesson) {
+        return `Your review of ${pr} counted ${formatWeight(weight)} useful on ${name}${together}, but you still mostly find them not useful (${formatWeight(notNeeded)} of ${formatWeight(agree + notNeeded)}), so they stay quietened.`;
+      }
+      const so =
+        agree < MIN_EVIDENCE && notNeeded === 0
+          ? `${formatWeight(agree)} of ${MIN_EVIDENCE}`
+          : `${formatWeight(agree)} useful, ${formatWeight(notNeeded)} not useful`;
+      return `${so} (${from}): ${more(stillNeeded(agree, notNeeded))} useful on ${name}${together} and Alden will put them first among the places to look.`;
+    });
 }
 
 /**
@@ -747,16 +1044,16 @@ export function reactionProgress(
   if (learned) return `Alden ranks ${describeFeature(learned.feature)} ${up ? "higher" : "lower"} in this repo.`;
   const closest = features
     .map((feature) => {
-      const t = learning.queueTallies.get(feature) ?? { opens: 0, jumps: 0, ups: 0, downs: 0 };
-      const count = up ? t.jumps + t.ups : t.downs;
-      // Up needs three, 60% of opens and reactions; down needs three, three to one.
+      const t = learning.queueTallies.get(feature) ?? { opens: 0, jumps: 0, ups: 0, downs: 0, reviews: 0 };
+      const count = up ? t.jumps + t.ups + t.reviews : t.downs;
+      // Up needs three, 60% of opens, reviews and reactions; down needs three, three to one.
       const needed = up
         ? Math.max(
             MIN_EVIDENCE - count,
-            Math.ceil((OPEN_RATIO * (t.opens + t.ups + t.downs) - count) / (1 - OPEN_RATIO) - 1e-9),
+            Math.ceil((OPEN_RATIO * (t.opens + t.reviews + t.ups + t.downs) - count) / (1 - OPEN_RATIO) - 1e-9),
             1,
           )
-        : Math.max(MIN_EVIDENCE - count, 3 * (t.jumps + t.ups) - count, 1);
+        : Math.max(MIN_EVIDENCE - count, 3 * (t.jumps + t.ups + t.reviews) - count, 1);
       return { feature, count, needed };
     })
     .sort((a, b) => a.needed - b.needed || b.count - a.count || a.feature.localeCompare(b.feature))[0];

@@ -80,8 +80,10 @@ export const AldenConfigSchema = z.object({
   learning: z
     .object({
       /**
-       * Whether Alden learns from the reviews you send: a place you saw and approved without a word on counts as a
-       * quiet "not worth my time". Off, Alden also stops noting which places you saw. Read from your user config only.
+       * Whether Alden learns from the reviews you send: comments near its flags, suggestions, approving past a place you
+       * saw (a quiet "not worth my time"), comments where it flagged nothing, and what the author did with your comments
+       * afterwards. Off records none of it and Alden stops noting which places you saw; Useful and Not useful still
+       * count. Read from your user config only.
        */
       fromReviews: z.boolean().default(true),
     })

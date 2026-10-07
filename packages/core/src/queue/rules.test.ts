@@ -199,6 +199,8 @@ describe("rules in the queue", () => {
           direction: "down",
           jumps: 0,
           reactions: 4,
+          reviews: 0,
+          sources: [],
           total: 4,
           since: "2026-09-01T00:00:00.000Z",
         },

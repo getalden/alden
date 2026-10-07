@@ -344,6 +344,8 @@ export function registerCommentCommands(program: Command, version: string): void
           .sendReview({ pr, event, ...(options.message !== undefined ? { body: options.message } : {}) })
           .catch(fail);
         console.log(`Sent: ${sent.url} (${sent.posted} comment${sent.posted === 1 ? "" : "s"}).`);
+        // What the review taught Alden, so learning from it is never invisible.
+        for (const line of sent.learning ?? []) console.log(paint(line, "dim", color));
       },
     );
 }

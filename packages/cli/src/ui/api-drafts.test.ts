@@ -113,6 +113,9 @@ describe("drafts through the UI's API", () => {
       url: "https://github.com/acme/shop/pull/7#pullrequestreview-9",
       posted: 2,
       review: "COMMENT",
+      learning: [
+        "1 of 3 (1 from your review of acme/shop#7): 2 more useful on sensitive-path flags and Alden will put them first among the places to look.",
+      ],
     });
     expect(github.posted[0]).toMatchObject({
       commit_id: "h1",

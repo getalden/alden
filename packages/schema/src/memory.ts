@@ -89,6 +89,17 @@ export const ReactionEventSchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
+/**
+ * Where a learned item came from: your clicks on Useful and Not useful (`reactions`), the PRs you opened ahead of
+ * their rank (`opens`), one review you sent (`review`), or what a PR's author did with your comments (`outcome`).
+ */
+export const MemorySourceSchema = z.object({
+  from: z.enum(["reactions", "opens", "review", "outcome"]),
+  pr: z.string().optional().describe('"owner/repo#n", for a review or an outcome'),
+  weight: z.number().describe("what it counted for toward the lesson; a click on Useful counts 1"),
+  at: z.iso.datetime().describe("the latest evidence from this source"),
+});
+
 /** One thing Alden knows about the reviewer in a repo, as the CLI and the UI list it. */
 export const MemoryItemSchema = z.object({
   id: z.string().describe("stable: notes have their own, learned items are named after what they're about"),
@@ -109,10 +120,15 @@ export const MemoryItemSchema = z.object({
     .array(z.string())
     .optional()
     .describe("for notes: folders and files it no longer applies under, e.g. app/api"),
+  sources: z
+    .array(MemorySourceSchema)
+    .optional()
+    .describe("for learned items: where the evidence came from, most recent first, at most 10"),
   since: z.iso.datetime(),
 });
 
 export type OpenEvent = z.infer<typeof OpenEventSchema>;
 export type MemoryEvent = z.infer<typeof MemoryEventSchema>;
 export type MemoryItem = z.infer<typeof MemoryItemSchema>;
+export type MemorySource = z.infer<typeof MemorySourceSchema>;
 export type ReactionEvent = z.infer<typeof ReactionEventSchema>;

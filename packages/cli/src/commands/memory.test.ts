@@ -79,4 +79,30 @@ describe("renderMemory", () => {
       ].join("\n"),
     );
   });
+
+  it("says which reviews a learned item came from", () => {
+    const out = renderMemory(
+      "acme/shop",
+      [
+        {
+          id: "check:tests.missing:up",
+          repo: "acme/shop",
+          source: "learned",
+          kind: "check",
+          group: "look",
+          text: "You find untested-change flags useful",
+          evidence: "3 of 3 useful: you marked 1, 2 from comments in your reviews (acme/shop#412)",
+          sources: [
+            { from: "review", pr: "acme/shop#412", weight: 2, at: "2026-10-02T00:00:00.000Z" },
+            { from: "reactions", weight: 1, at: "2026-10-01T00:00:00.000Z" },
+          ],
+          since: "2026-10-01T00:00:00.000Z",
+        },
+      ],
+      false,
+    );
+    expect(out).toContain(
+      "    3 of 3 useful: you marked 1, 2 from comments in your reviews (acme/shop#412) · since 2026-10-01 · id check:tests.missing:up\n    from your review of acme/shop#412 (2)\n",
+    );
+  });
 });

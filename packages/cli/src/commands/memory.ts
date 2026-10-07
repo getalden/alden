@@ -5,6 +5,7 @@ import {
   editNote,
   forget,
   forgetAll,
+  formatWeight,
   loadLearning,
   memoryItems,
   notePath,
@@ -14,7 +15,7 @@ import {
   scopeNote,
   setLearning,
 } from "@alden/core";
-import type { MemoryItem } from "@alden/schema";
+import type { MemoryItem, MemorySource } from "@alden/schema";
 import type { Command } from "commander";
 import { paint, shouldColor, stripControlDeep } from "../render/style.js";
 
@@ -28,6 +29,17 @@ export async function originOf(cwd: string = process.cwd()): Promise<string | un
   }
 }
 
+/** "your review of acme/shop#412 (2), what the author did on acme/shop#413 (1)": where a learned item came from. */
+export function sourcesText(sources: MemorySource[]): string {
+  return sources
+    .map((s) => {
+      const what =
+        s.from === "outcome" ? `what the author did on ${s.pr ?? "a PR"}` : `your review of ${s.pr ?? "a PR"}`;
+      return `${what} (${formatWeight(s.weight)})`;
+    })
+    .join(", ");
+}
+
 export function renderMemory(repo: string, untrusted: MemoryItem[], color: boolean, paused = false): string {
   const items = stripControlDeep(untrusted);
   const out = [paint(`What Alden knows about you in ${repo}`, "bold", color), ""];
@@ -38,7 +50,7 @@ export function renderMemory(repo: string, untrusted: MemoryItem[], color: boole
     );
   if (items.length === 0) {
     out.push(
-      "Nothing yet. Alden learns from what you mark useful or not useful, and from the PRs you open first.",
+      "Nothing yet. Alden learns from what you mark useful or not useful, the reviews you send, and the PRs you open first.",
       'Add a note yourself: alden memory add "Check that new endpoints have auth"',
     );
     return `${out.join("\n")}\n`;
@@ -64,6 +76,8 @@ export function renderMemory(repo: string, untrusted: MemoryItem[], color: boole
           paint(`    not applied under ${item.excluded.join(", ")} · alden memory include <id> <path>`, "dim", color),
         );
       }
+      const reviews = (item.sources ?? []).filter((source) => source.from === "review" || source.from === "outcome");
+      if (reviews.length > 0) out.push(paint(`    from ${sourcesText(reviews)}`, "dim", color));
     }
     out.push("");
   };

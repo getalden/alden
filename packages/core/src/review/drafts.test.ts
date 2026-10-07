@@ -85,12 +85,17 @@ const patchOf = (f: DiffFile) =>
 
 let home: string;
 let store: AldenStore;
+const savedHome = process.env.ALDEN_HOME;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "alden-drafts-"));
+  // Sending reads learning.fromReviews from the user config: this one, never yours.
+  process.env.ALDEN_HOME = home;
   store = AldenStore.open(join(home, "alden.db"));
 });
 afterEach(() => {
   store.close();
+  if (savedHome === undefined) delete process.env.ALDEN_HOME;
+  else process.env.ALDEN_HOME = savedHome;
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -465,6 +470,15 @@ describe("sending a review", () => {
       linked: 0,
       unaddressed: 2,
       learned: 1,
+      signals: {
+        request_changes: 1,
+        suggestion: 0,
+        comment: 0,
+        silent_pass: 0,
+        miss: 0,
+        applied: 0,
+        resolved: 0,
+      },
     });
     expect(gh.posted).toEqual([
       {
@@ -483,20 +497,36 @@ describe("sending a review", () => {
     expect(sent).toHaveLength(1);
     expect(JSON.stringify(sent)).not.toMatch(/Cents|Claude\.|Fix fees/);
 
-    // The comment near the flagged place counted as "useful", once per place per PR.
-    const verdicts = await new FeedbackLog(store).events(REPO);
-    expect(verdicts).toEqual([
+    // The comment near the flagged place, in a review requesting changes, is the strongest signal there is.
+    const signals = new FeedbackLog(store).signals(REPO);
+    expect(signals).toEqual([
       expect.objectContaining({
-        verdict: "agree",
-        via: "comment",
-        item: expect.objectContaining({ checkId: "paths.sensitive" }),
+        type: "review_signal",
+        pr: 7,
+        signal: "request_changes",
+        checkId: "paths.sensitive",
+        path: "src/pay.ts",
+        line: 14,
+        weight: 2,
+        source: "review",
       }),
     ]);
+    expect(result.counts.signals).toMatchObject({ request_changes: 1, comment: 0, miss: 0 });
+    expect(result.learning).toEqual([
+      "2 of 3 (2 from your review of acme/shop#7): one more useful on sensitive-path flags and Alden will put them first among the places to look.",
+    ]);
+    // A second review of the same PR, saying less about the same place, adds nothing.
     drafts.add({ pr: PR, headSha: "h1", body: "Again", source: "you", place: placed() });
     const second = await sendReview(gh.client, store, { repo: REPO, number: 7, event: "COMMENT" });
     expect(second.counts.learned).toBe(0);
-    expect(await new FeedbackLog(store).events(REPO)).toHaveLength(1);
-    expect((await loadLearning(store, REPO)).checkTallies.get("paths.sensitive")).toEqual({ agree: 1, notNeeded: 0 });
+    expect(new FeedbackLog(store).signals(REPO)).toHaveLength(1);
+    expect((await loadLearning(store, REPO)).checkTallies.get("paths.sensitive")).toMatchObject({
+      agree: 2,
+      notNeeded: 0,
+      reviewAgree: 2,
+    });
+    // Nothing went to the old verdict log.
+    expect(await new FeedbackLog(store).events(REPO)).toEqual([]);
   });
 
   it("counts a comment near a place from one of your notes toward the note, not a check", async () => {
@@ -526,6 +556,9 @@ describe("sending a review", () => {
     const gh = fakeGitHub({ head: "h1", patch: V1 });
     const result = await sendReview(gh.client, store, { repo: REPO, number: 7, event: "COMMENT" });
     expect(result.counts).toMatchObject({ inline: 1, suggestions: 1, learned: 1 });
+    expect(new FeedbackLog(store).signals(REPO)).toEqual([
+      expect.objectContaining({ signal: "suggestion", checkId: "paths.sensitive", weight: 2 }),
+    ]);
     expect(gh.posted[0]?.comments).toEqual([
       {
         path: "src/pay.ts",

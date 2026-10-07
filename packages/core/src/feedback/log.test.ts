@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { FeedbackInput } from "@alden/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeStores } from "../store/db.js";
-import { FeedbackLog, redactFeedback, summarizeFeedback } from "./log.js";
+import { FeedbackLog, recordReviewSignals, redactFeedback, summarizeFeedback } from "./log.js";
 
 let dir: string;
 let log: FeedbackLog;
@@ -152,5 +152,66 @@ describe("redactFeedback", () => {
     // A new export, a new salt: codes from one export can't be matched to another's.
     const again = redactFeedback(await log.events());
     expect(again[0]?.kind === "verdict" && again[0].item.title).not.toBe(titles[0]);
+  });
+});
+
+describe("review signals", () => {
+  const signal = { repo: "acme/api", pr: 7, signal: "suggestion" as const, checkId: "tests.missing", weight: 2 };
+
+  it("are kept beside verdicts, counted apart in the summary, and shared without paths", async () => {
+    const at = new Date("2026-10-01T10:00:00.000Z");
+    await recordReviewSignals(
+      [
+        { ...signal, path: "src/charge.ts", line: 4, source: "review" },
+        { repo: "acme/api", pr: 7, signal: "miss", path: "src/cart.ts", weight: 1, source: "review" },
+        {
+          ...signal,
+          signal: "applied",
+          weight: 1,
+          source: "outcome",
+          type: "review_signal",
+          at: "2026-10-02T00:00:00.000Z",
+        },
+      ],
+      { store: join(dir, "alden.db"), enabled: true, now: at },
+    );
+    const signals = log.signals("ACME/api");
+    expect(signals).toHaveLength(3);
+    expect(signals[0]).toMatchObject({ schemaVersion: 1, type: "review_signal", at: at.toISOString(), weight: 2 });
+    expect(signals[2]?.at).toBe("2026-10-02T00:00:00.000Z");
+    // Verdict readers never see them.
+    expect(await log.events()).toEqual([]);
+
+    const summary = await log.summary();
+    expect(summary).toMatchObject({
+      verdicts: 0,
+      missed: 0,
+      reviews: 1,
+      reviewSignals: { suggestion: 1, miss: 1, applied: 1, comment: 0, silent_pass: 0 },
+      since: at.toISOString(),
+    });
+
+    const shared = log.redactedSignals();
+    expect(JSON.stringify(shared)).not.toMatch(/acme|charge|cart/);
+    expect(shared[0]).toMatchObject({ repo: expect.stringMatching(/^repo-/), signal: "suggestion", weight: 2 });
+    expect(shared[0]).not.toHaveProperty("path");
+  });
+
+  it("are refused whole when one is malformed, and not recorded at all when learning from reviews is off", async () => {
+    const store = join(dir, "alden.db");
+    await expect(
+      recordReviewSignals(
+        [
+          { ...signal, source: "review" },
+          { ...signal, source: "review", weight: -1 },
+        ],
+        {
+          store,
+          enabled: true,
+        },
+      ),
+    ).rejects.toThrow();
+    expect(await recordReviewSignals([{ ...signal, source: "review" }], { store, enabled: false })).toEqual([]);
+    expect(log.signals()).toEqual([]);
   });
 });

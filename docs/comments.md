@@ -170,10 +170,18 @@ website and haven't submitted blocks a new one: submit or discard it there first
 
 ## What Alden learns from it
 
-A comment (or a suggestion) you sent near a place Alden flagged is the clearest sign that the place was worth your eyes, so it counts as
-"useful" for that check, once per place per PR. A comment on several lines is near anything within three lines of
-any of them. A linked note counts the same at the code it links to; one on a whole file is near anything in it. It never overrides a verdict you gave that place yourself. See
-[Learning and memory](memory.md#comments-you-send).
+The review you send teaches Alden more than a click on Useful would. Each place to look in the PR's latest briefing
+that one of your comments is near counts toward that check's lesson: **2** when the review requests changes or a
+comment there suggests a change, **1** for a plain comment. A comment on several lines is near anything within three
+lines of any of them; a linked note counts the same at the code it links to, and one on a whole file is near anything
+in it. A place you saw (in guided review or the diff) and approved past without a word counts a little the other way
+(0.2), never for secrets, text aimed at AI reviewers or high and critical flags. A comment where Alden flagged nothing
+is noted as something it missed, and the code areas you comment in rank higher in your queue. Your own verdict on a
+place always wins, and `learning.fromReviews = false` turns all of this off.
+
+After sending, `alden send` says what the review moved, e.g. "2 of 3 (2 from your review of acme/shop#412): one more
+useful on untested-change flags and Alden will put them first among the places to look." See
+[Reviews you send](memory.md#reviews-you-send).
 
 ## Where drafts are kept
 

@@ -67,6 +67,44 @@
         "type": "string"
       }
     },
+    "sources": {
+      "description": "for learned items: where the evidence came from, most recent first, at most 10",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "enum": [
+              "reactions",
+              "opens",
+              "review",
+              "outcome"
+            ]
+          },
+          "pr": {
+            "description": "\"owner/repo#n\", for a review or an outcome",
+            "type": "string"
+          },
+          "weight": {
+            "type": "number",
+            "description": "what it counted for toward the lesson; a click on Useful counts 1"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "description": "the latest evidence from this source"
+          }
+        },
+        "required": [
+          "from",
+          "weight",
+          "at"
+        ],
+        "additionalProperties": false
+      }
+    },
     "since": {
       "type": "string",
       "format": "date-time",

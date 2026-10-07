@@ -623,6 +623,81 @@
           "properties": {
             "event": {
               "type": "string",
+              "const": "review_signals"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "review",
+                    "outcome"
+                  ],
+                  "description": "a review you sent, or what the author did with it afterwards"
+                },
+                "request_changes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "suggestion": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "comment": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "silent_pass": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "places you were shown and approved without a comment"
+                },
+                "miss": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "comments where Alden had flagged nothing"
+                },
+                "applied": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "resolved": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "source",
+                "request_changes",
+                "suggestion",
+                "comment",
+                "silent_pass",
+                "miss",
+                "applied",
+                "resolved"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
               "const": "stats_viewed"
             },
             "properties": {

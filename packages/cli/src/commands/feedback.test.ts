@@ -55,6 +55,35 @@ describe("renderFeedback", () => {
     );
   });
 
+  it("counts what your reviews said, apart from your clicks", () => {
+    const signal = (pr: number, kind: "comment" | "suggestion" | "silent_pass" | "miss", at: string) => ({
+      schemaVersion: 1 as const,
+      id: `${pr}${kind}`,
+      type: "review_signal" as const,
+      repo: "acme/api",
+      pr,
+      at,
+      signal: kind,
+      weight: 1,
+      source: "review" as const,
+    });
+    const summary = summarizeFeedback(
+      [],
+      [
+        signal(1, "suggestion", "2026-10-01T00:00:00.000Z"),
+        signal(1, "miss", "2026-10-01T00:00:00.000Z"),
+        signal(2, "comment", "2026-10-02T00:00:00.000Z"),
+        signal(2, "silent_pass", "2026-10-02T00:00:00.000Z"),
+      ],
+    );
+    const text = renderFeedback(summary, false);
+    expect(text).not.toContain("No feedback yet");
+    expect(text).toContain("Missed: 0 (and 1 from comments in your reviews)");
+    expect(text).toContain(
+      "From 2 reviews you sent: 1 suggestion, 1 comment near flags; 1 flag you saw and approved past; 1 comment where Alden flagged nothing",
+    );
+  });
+
   it("says how to give feedback when there's none", () => {
     expect(renderFeedback(summarizeFeedback([]), false)).toContain("No feedback yet");
   });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BRIEFING_SCHEMA_VERSION, BriefingSchema } from "./briefing.js";
-import { FEEDBACK_SCHEMA_VERSION, FeedbackEventSchema } from "./feedback.js";
+import { FEEDBACK_SCHEMA_VERSION, FeedbackEventSchema, ReviewSignalEventSchema } from "./feedback.js";
 import { MEMORY_SCHEMA_VERSION, MemoryItemSchema } from "./memory.js";
 import { QUEUE_SCHEMA_VERSION, RankedQueueSchema } from "./queue.js";
 import { RANK_SETTINGS_SCHEMA_VERSION, RankSettingsSchema } from "./rank.js";
@@ -30,6 +30,11 @@ export function jsonSchemas(): Record<string, unknown> {
       $id: `https://getalden.dev/schema/feedback-event.v${FEEDBACK_SCHEMA_VERSION}.json`,
       title: "Alden feedback event",
       ...z.toJSONSchema(FeedbackEventSchema, { target: "draft-2020-12" }),
+    },
+    [`review-signal-event.v${FEEDBACK_SCHEMA_VERSION}.json`]: {
+      $id: `https://getalden.dev/schema/review-signal-event.v${FEEDBACK_SCHEMA_VERSION}.json`,
+      title: "Alden review signal (what a sent review taught Alden, in its feedback log)",
+      ...z.toJSONSchema(ReviewSignalEventSchema, { target: "draft-2020-12" }),
     },
     [`memory-item.v${MEMORY_SCHEMA_VERSION}.json`]: {
       $id: `https://getalden.dev/schema/memory-item.v${MEMORY_SCHEMA_VERSION}.json`,
