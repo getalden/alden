@@ -44,6 +44,7 @@ import {
   ReviewDrafts,
   rankQueue,
   recordReaction,
+  recordSeen,
   redactFeedback,
   restore,
   type StatsPullRequest,
@@ -291,6 +292,7 @@ let demoConsent: "on" | "off" | "unset" = "unset";
 const DEMO_DESKTOP = process.env.ALDEN_DEMO_DESKTOP === "1";
 let demoBackground = { enabled: true, model: false };
 let demoSound = true;
+let demoLearnFromReviews = true;
 const DEMO_DOWNLOADS = mkdtempSync(join(tmpdir(), "alden-demo-downloads-"));
 const preparedAt = new Date(Date.now() - 25 * 60_000).toISOString();
 // ALDEN_DEMO_NO_MODEL=1 starts with no model, to show "Set up a model". Its key test and Ollama download are pretend:
@@ -328,6 +330,7 @@ const api: UiApi = {
     desktop: DEMO_DESKTOP,
     background: demoBackground,
     notifications: { sound: demoSound },
+    learning: { fromReviews: demoLearnFromReviews },
   }),
   prepareNext: async () => ({ prepared: null, reason: "demo" }),
   setModelKey: async (key) => {
@@ -528,6 +531,7 @@ const api: UiApi = {
     if (key === "background.enabled") demoBackground = { ...demoBackground, enabled: value === "true" };
     if (key === "background.model") demoBackground = { ...demoBackground, model: value === "true" };
     if (key === "notifications.sound") demoSound = value === "true";
+    if (key === "learning.fromReviews") demoLearnFromReviews = value !== "false";
     return { path: "(demo)", config };
   },
   // The Diff tab, from the recorded diffs; local changes are this repo's own.
@@ -604,6 +608,11 @@ const api: UiApi = {
   deleteDraft: async (id) => {
     if (!drafts.delete(id)) throw new ApiError(404, `No draft ${id}.`);
     return { ok: true };
+  },
+  // The places you saw, kept in the throwaway database as Alden keeps them in yours.
+  recordSeen: async ({ pr, headSha, places }) => {
+    if (!demoLearnFromReviews) return { recorded: 0 };
+    return { recorded: places.filter((place) => recordSeen(store, { pr, headSha, ...place })).length };
   },
   sendReview: async () => {
     throw new ApiError(409, "This is Alden's demo: it never sends anything to GitHub. Your drafts are kept.");
