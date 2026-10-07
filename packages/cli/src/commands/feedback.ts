@@ -1,6 +1,5 @@
 import { writeFile } from "node:fs/promises";
 import {
-  checkOutcomes,
   checkProgress,
   createGitHubClient,
   FeedbackLog,
@@ -13,6 +12,7 @@ import {
 } from "@alden/core";
 import type { FeedbackSummary } from "@alden/schema";
 import type { Command } from "commander";
+import { checkSentOutcomes } from "../outcomes.js";
 import { paint, shouldColor } from "../render/style.js";
 
 const percent = (rate: number | null) => (rate === null ? "no verdicts yet" : `${Math.round(rate * 100)}%`);
@@ -145,7 +145,7 @@ async function outcomesLine(): Promise<string | undefined> {
   try {
     const store = openStore();
     const resolved = await resolveToken().catch(() => undefined);
-    if (resolved) await checkOutcomes(createGitHubClient(resolved.token), store).catch(() => undefined);
+    if (resolved) await checkSentOutcomes(createGitHubClient(resolved.token), store).catch(() => undefined);
     return outcomeLine(outcomeSummary(store));
   } catch {
     return undefined;

@@ -1,5 +1,4 @@
 import {
-  checkOutcomes,
   createGitHubClient,
   fetchReviewQueue,
   JsonCache,
@@ -25,6 +24,7 @@ import type { Command } from "commander";
 import { describeGitHubError } from "../github-errors.js";
 import { learningForQueue } from "../learning.js";
 import { nextLine, queueNext, wantsNext } from "../next.js";
+import { checkSentOutcomes } from "../outcomes.js";
 import { startProgress } from "../progress.js";
 import { renderQueue, shouldColor } from "../render/queue.js";
 import { LAST_QUEUE_KEY, type LastQueue } from "./open.js";
@@ -134,7 +134,7 @@ export function registerQueueCommand(program: Command): void {
       // Once the queue is in: what came of the comments you sent lately (at most a request per PR per day), in the
       // background. Its errors are its own.
       void Promise.resolve()
-        .then(() => checkOutcomes(client, openStore()))
+        .then(() => checkSentOutcomes(client, openStore()))
         .catch(() => {});
       progress.update("Seeing what needs your eyes…");
       let ranked: ReturnType<typeof rankQueue>;

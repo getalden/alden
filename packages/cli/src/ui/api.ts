@@ -8,7 +8,6 @@ import {
   checkFreshness,
   checkLinkTarget,
   checkModelKey,
-  checkOutcomes,
   checkProgress,
   cloneAt,
   createGitHubClient,
@@ -78,6 +77,7 @@ import { spendReport } from "../commands/spend.js";
 import { loadRepoStats } from "../commands/stats.js";
 import { describeGitHubError, reviewWriteFix } from "../github-errors.js";
 import { learningFor, learningForQueue, noteOpened } from "../learning.js";
+import { checkSentOutcomes } from "../outcomes.js";
 import { parsePrRef } from "../pr-ref.js";
 import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
 import { createModelSetupApi } from "./model-setup.js";
@@ -357,7 +357,7 @@ export function createUiApi(options: {
         // What came of the comments you sent lately, after the queue is in: at most a request per PR per day.
         if (!cached) {
           void Promise.resolve()
-            .then(() => checkOutcomes(client, openStore()))
+            .then(() => checkSentOutcomes(client, openStore()))
             .catch(() => {});
         }
         // Shared with the CLI, so `alden review 3` means the same PR in both.
