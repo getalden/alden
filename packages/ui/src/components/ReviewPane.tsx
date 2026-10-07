@@ -8,6 +8,7 @@ import { onLinkClick } from "../router";
 import { BriefingAge } from "./BriefingAge";
 import { BriefingView } from "./BriefingView";
 import { ExportMenu } from "./ExportMenu";
+import type { GuidedReviewProps } from "./GuidedReview";
 import { StateCard } from "./StateCard";
 
 const STEPS: { stage: string; done: string; doing: string }[] = [
@@ -92,6 +93,8 @@ interface ReviewPaneProps {
   freshness?: ((target: BriefingTarget) => Promise<BriefingFreshness>) | undefined;
   /** Export (copy, save, print) the briefing; `desktop` saves to Downloads through the server. */
   exportWith?: { api: Pick<Api, "briefingMarkdown" | "saveBriefing">; desktop: boolean } | undefined;
+  /** Guided review: the PR's diff for its code excerpts, and where Comment and Finish go. */
+  guided?: Pick<GuidedReviewProps, "loadDiff" | "onComment" | "onFinish"> | undefined;
 }
 
 /** A PR (or your local changes) and its briefing: run it, watch it, read it. */
@@ -201,6 +204,7 @@ export function ReviewPane(props: ReviewPaneProps) {
           feedback={props.feedbackFor?.(run.briefing)}
           perReviewUsd={props.perReviewUsd}
           comments={props.comments}
+          guided={props.guided}
         />
       )}
       {!run && (

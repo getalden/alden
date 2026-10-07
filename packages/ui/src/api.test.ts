@@ -86,3 +86,16 @@ describe("routes", () => {
     expect(parseRoute("/pr/a/b/not-a-number")).toEqual({ view: "queue" });
   });
 });
+
+describe("Api.diff", () => {
+  it("asks for a PR's diff by owner/repo#number, with the session token", async () => {
+    const seen: { url: string; token: string | null }[] = [];
+    const api = new Api("t", async (input, init) => {
+      seen.push({ url: String(input), token: new Headers(init?.headers).get("X-Alden-Token") });
+      return new Response(JSON.stringify({ headSha: "abc", files: [] }), { status: 200 });
+    });
+    await expect(api.diff("acme/api#12")).resolves.toEqual({ headSha: "abc", files: [] });
+    expect(seen).toEqual([{ url: "/api/diff?pr=acme%2Fapi%2312", token: "t" }]);
+    expect(new URLSearchParams(seen[0]?.url.split("?")[1]).get("pr")).toBe("acme/api#12");
+  });
+});
