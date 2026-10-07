@@ -47,7 +47,7 @@ Stop it with Ctrl+C.
     960px wide, where the list and the briefing already take turns, there's nothing to collapse.
 - **A PR.** Above the briefing, which clone its callers come from (when it isn't the folder `alden ui` runs in), or that
   there's none, with how to point Alden at your clones (`clones.folders`). "Brief me" runs the review and shows each stage as it goes (fetching, finding callers, checks, the
-  model). The briefing follows the CLI's order. Every place links into the PR's "Files changed" view at that line.
+  model). The briefing follows the CLI's order. Every place opens the Diff tab at that line, and links into the PR's "Files changed" view on GitHub.
   A review keeps running if you look at another PR, and its briefing is there when you come back. **Useful** and
   **Not useful** on each place, finding and flagged check teach Alden; **Dismiss** hides one place on this PR. "Shaped
   by your feedback" says what your feedback changed. Briefing a PR from
@@ -56,6 +56,20 @@ Stop it with Ctrl+C.
   and **Re-brief**: "main has 4 new commits since" (callers merged there since aren't in it) or "the PR has 2 new
   commits". Alden asks GitHub (one request) when the briefing is shown and when the window comes back to the front, at
   most once a minute; it doesn't poll. See [Keeping up with the base](code-graph.md#keeping-up-with-the-base).
+- **Diff.** Once a briefing is there, a **Briefing | Diff** switch sits above it (`d` switches). **Diff** shows the
+  code itself, so you don't have to go to GitHub to read it: every changed file, with its `+`/`−` counts, "old →
+  new" for a rename, and a note for a binary file or one whose diff is too large for GitHub to send (with a link to it
+  on GitHub). Each file opens and closes from its header (or `f`); **Collapse all** folds them all. Lines are unified,
+  with the old and new line numbers. Alden's places to look are marked **E1**, **E2**… at their lines (a place on a
+  whole file sits in its header), and your comments with a ✎ badge; hover one for its text, or click it to open the
+  text under the line. `]` and `[` go to the next and previous place. On a PR, **+** beside a line opens a comment on it in the Comments
+  drawer; shift-click a second line, or drag, for a range on the same side of one hunk. In the briefing, a place's `file:line` opens the
+  Diff tab at that line, highlighted; the **GitHub ↗** beside it still opens GitHub's diff. For a PR, the diff is the
+  PR's latest push; if that's newer than the briefing, a line above it says so, since places may have moved. For **My
+  changes**, it's your uncommitted changes, as the briefing read them. Large diffs stay quick: rows render as you
+  scroll to them, and files over 400 lines of diff start collapsed with **Show**. Alden keeps a PR's diff per push
+  while `alden ui` runs, so switching back, or opening the PR again, is instant. The window remembers which of the two
+  you were on, until you close it.
 - **Export.** Once a briefing is there, **Export** (or `e`) in its toolbar copies it, saves it or prints it:
   **Copy as Markdown** puts the same document as [`alden review --markdown`](commands.md#alden-review) on the
   clipboard; **Save as Markdown** downloads it as `owner-repo-123-briefing.md` (in the desktop app, which can't
@@ -151,11 +165,14 @@ tab; Settings changes the defaults.
 | `s` | Open or close the Comments drawer |
 | `g` | Start guided review, or resume it at the step you left |
 | `n` `p` | Next and previous step in a guided review |
+| `d` | Switch between the briefing and its Diff tab |
+| `]` `[` | In the Diff tab: next and previous place to look (E1, E2…) |
+| `f` | In the Diff tab: open or close the file you're in |
 | `e` | Open the Export menu (`↑` `↓` move, `↵` picks, `Esc` closes) |
 | `⌘↵` / `Ctrl+↵` | Save the comment you're writing |
 | `r` | Refresh the queue |
 | `/` | Search the queue (opens it first if it's collapsed); `Esc` clears the search, `Enter` opens the first match |
-| `[` | Collapse the queue to a rail, or bring it back (windows 960px and wider) |
+| `[` | Collapse the queue to a rail, or bring it back (windows 960px and wider; in the Diff tab, `[` is the previous place) |
 | `Esc` | Cancel the comment you're writing, or leave the send summary; leave guided review; in the Comments drawer otherwise, close it; stop a running briefing; in a narrow window, back to the list |
 
 Keys never fire while you're typing in a text box.

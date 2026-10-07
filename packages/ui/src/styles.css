@@ -2814,3 +2814,351 @@ details > summary {
     grid-row: 2;
   }
 }
+
+/* ---- Briefing | Diff ------------------------------------------------------------------------------------------ */
+
+.pane-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.pane-tabs [role="tab"] {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink2);
+  padding: 10px 10px 8px;
+  font: 600 13px var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.pane-tabs [role="tab"]:hover {
+  color: var(--ink);
+}
+.pane-tabs [role="tab"][aria-selected="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--acc);
+}
+
+/* A place in the briefing: its file:line opens the Diff tab there; GitHub's diff is the link beside it. */
+.place-links {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.place-diff {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--acc);
+  text-align: left;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.place-diff:hover {
+  text-decoration-style: solid;
+}
+.place-gh {
+  font: 500 11px var(--font-ui);
+  color: var(--ink3);
+  white-space: nowrap;
+}
+.evidence .place-links {
+  flex: none;
+  max-width: 50%;
+}
+.evidence .place-links .place {
+  max-width: none;
+}
+
+.diff-panel {
+  padding: 20px 32px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.diff-panel[hidden] {
+  display: none;
+}
+.diff-panel > .state {
+  margin: 24px 0;
+}
+/* Positioned, so the visually hidden text in its rows stays inside the pane instead of lengthening the page. */
+.diff-view {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.diff-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+}
+.diff-bar .diff-all {
+  margin-left: auto;
+}
+.diff-file {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  overflow: hidden;
+  min-width: 0;
+}
+.diff-file-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  padding: 6px 12px 6px 6px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.diff-toggle {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  text-align: left;
+}
+.diff-toggle:hover {
+  background: var(--sunk);
+}
+.diff-toggle .caret {
+  flex: none;
+  width: 12px;
+  color: var(--ink3);
+  font-size: 11px;
+}
+.diff-path {
+  font: 500 12px / 1.5 var(--font-mono);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.diff-file-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.diff-notice {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--ink2);
+}
+.diff-said {
+  margin-top: -4px;
+}
+.banner.diff-newer {
+  margin: 0;
+}
+.diff-scroll {
+  overflow-x: auto;
+}
+.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font: 12px / 20px var(--font-mono);
+  tab-size: 4;
+}
+.diff-table col.c-ln {
+  width: 48px;
+}
+.diff-table col.c-gut {
+  width: 56px;
+}
+.diff-table td {
+  padding: 0;
+  vertical-align: top;
+}
+.diff-table .ln {
+  padding: 0 8px 0 4px;
+  text-align: right;
+  color: var(--ink3);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+.diff-table .code {
+  padding: 0 12px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+.diff-table .sign {
+  display: inline-block;
+  width: 16px;
+  color: var(--ink3);
+  user-select: none;
+}
+.diff-table tr.add {
+  background: var(--ok-soft);
+}
+.diff-table tr.add .sign {
+  color: var(--ok);
+}
+.diff-table tr.del {
+  background: var(--bad-soft);
+}
+.diff-table tr.del .sign {
+  color: var(--bad);
+}
+.diff-table tr.hunk td {
+  background: var(--sunk);
+  color: var(--ink3);
+  padding: 2px 8px;
+}
+.diff-table tr.hunk .ln {
+  text-align: center;
+}
+.diff-table .hunk-head {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diff-table tr.sel td {
+  background: var(--acc-soft);
+}
+.diff-table tr.sel .ln {
+  color: var(--acc);
+}
+.diff-table tr.hl td {
+  box-shadow:
+    inset 0 1px 0 var(--acc),
+    inset 0 -1px 0 var(--acc);
+}
+.diff-table tr.hl td:first-child {
+  box-shadow:
+    inset 3px 0 0 var(--acc),
+    inset 0 1px 0 var(--acc),
+    inset 0 -1px 0 var(--acc);
+}
+.diff-table .gut-in {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  min-height: 20px;
+  padding: 1px 2px;
+}
+.diff-place,
+.diff-draft {
+  height: 18px;
+  padding: 0 4px;
+  border-radius: var(--r-sm);
+  font: 600 10px / 16px var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+.diff-place {
+  border: 1px solid var(--acc);
+  background: var(--panel);
+  color: var(--acc);
+}
+.diff-draft {
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--ink2);
+}
+.diff-draft.outdated {
+  border-style: dashed;
+  color: var(--warn);
+}
+.diff-place.static,
+.diff-draft.static {
+  cursor: default;
+}
+.diff-plus {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--acc);
+  color: var(--acc-ink);
+  font: 700 13px / 18px var(--font-mono);
+  margin-left: auto;
+  opacity: 0;
+}
+.diff-table tr:hover .diff-plus,
+.diff-plus:focus-visible,
+.diff-table tr.sel .diff-plus {
+  opacity: 1;
+}
+@media (hover: none) {
+  .diff-plus {
+    opacity: 0.6;
+  }
+}
+.diff-table tr.diff-note-row td {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.diff-note {
+  padding: 8px 12px 8px 112px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font: 13px / 1.45 var(--font-ui);
+}
+.diff-note-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.diff-note-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diff-table tr.diff-placeholder td {
+  background: repeating-linear-gradient(var(--panel) 0 19px, var(--sunk) 19px 20px);
+}
+
+@media (max-width: 720px) {
+  .pane-tabs {
+    padding: 0 16px;
+  }
+  .diff-panel {
+    padding: 16px 16px 40px;
+  }
+  .diff-table col.c-ln {
+    width: 38px;
+  }
+  .diff-table col.c-gut {
+    width: 44px;
+  }
+  .diff-table .ln {
+    padding: 0 4px 0 2px;
+  }
+  .diff-note {
+    padding-left: 12px;
+  }
+}
+
+@media print {
+  .pane-tabs,
+  .diff-panel {
+    display: none;
+  }
+  .briefing-panel[hidden] {
+    display: block;
+  }
+}

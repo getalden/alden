@@ -1,5 +1,14 @@
-import type { Briefing, BriefingFreshness, BriefingTarget } from "@alden/schema";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Briefing, BriefingFreshness, BriefingTarget, PrDiff } from "@alden/schema";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Api, ReviewRequest } from "../api";
 import { type BriefingComments, type CommentPlace, useDrawerOpen } from "../drafts";
 import type { BriefingFeedback } from "../feedback";
@@ -16,6 +25,7 @@ import {
   ReviewActionsContext,
   typing,
 } from "./Comments";
+import { DiffPane, type DiffPlace, ShowInDiffContext } from "./DiffView";
 import { ExportMenu } from "./ExportMenu";
 import type { GuidedReviewProps } from "./GuidedReview";
 import { StateCard } from "./StateCard";
@@ -109,6 +119,8 @@ interface ReviewPaneProps {
   children?: ReactNode;
   /** Guided review: the PR's diff for its code excerpts. */
   guided?: Pick<GuidedReviewProps, "loadDiff"> | undefined;
+  /** Fetches the diff for the Diff tab (`Api.diff`). Without it there's no Diff tab, only the briefing. */
+  loadDiff?: ((pr?: string) => Promise<PrDiff>) | undefined;
 }
 
 /**
@@ -183,6 +195,145 @@ function useCommentsDrawer(comments: BriefingComments | undefined, hasFiles: boo
   }, [enabled, setOpen]);
 
   return { open, close, toggle, editing, setEditing, focus, returnFocus, toggleButton, actions };
+}
+
+export type BriefingTab = "briefing" | "diff";
+const TAB_KEY = "alden.briefingTab";
+
+/** Briefing or Diff, remembered for this window (sessionStorage): a new window starts on the briefing. */
+function useBriefingTab(): [BriefingTab, (tab: BriefingTab) => void] {
+  const [tab, setTab] = useState<BriefingTab>(() => {
+    try {
+      return window.sessionStorage.getItem(TAB_KEY) === "diff" ? "diff" : "briefing";
+    } catch {
+      return "briefing";
+    }
+  });
+  const choose = useCallback((next: BriefingTab) => {
+    setTab(next);
+    try {
+      window.sessionStorage.setItem(TAB_KEY, next);
+    } catch {
+      // Storage can be blocked; the tab then holds for this page only.
+    }
+  }, []);
+  return [tab, choose];
+}
+
+/** The briefing and its Diff tab: d switches between them, and a place's file:line in the briefing opens the diff there. */
+function BriefingTabs(props: {
+  briefing: Briefing;
+  loadDiff: (pr?: string) => Promise<PrDiff>;
+  onComment?: ((place: CommentPlace) => void) | undefined;
+  comments?: BriefingComments | undefined;
+  children: ReactNode;
+}) {
+  const { briefing } = props;
+  const [tab, setTab] = useBriefingTab();
+  const id = useId();
+  // The Diff tab loads the first time it's opened, then stays, so switching back is instant.
+  const [diffSeen, setDiffSeen] = useState(tab === "diff");
+  const [focus, setFocus] = useState<{ path: string; line?: number | undefined }>();
+  const choose = useCallback(
+    (next: BriefingTab) => {
+      if (next === "diff") setDiffSeen(true);
+      setTab(next);
+    },
+    [setTab],
+  );
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "d" || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
+      event.preventDefault();
+      choose(tab === "diff" ? "briefing" : "diff");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab, choose]);
+  const showInDiff = useCallback(
+    (place: { path: string; line?: number | undefined }) => {
+      choose("diff");
+      setFocus({ ...place });
+    },
+    [choose],
+  );
+
+  const target = briefing.target;
+  const pr = target.kind === "pr" ? `${target.repo}#${target.number}` : undefined;
+  const places = useMemo<DiffPlace[]>(
+    () =>
+      briefing.needsYourEyes.flatMap((item, i) =>
+        item.anchor ? [{ path: item.anchor.path, line: item.anchor.line, title: item.title, index: i + 1 }] : [],
+      ),
+    [briefing],
+  );
+  const drafts = pr && props.comments?.pr.toLowerCase() === pr.toLowerCase() ? props.comments.drafts : undefined;
+  const onTabKey = (event: ReactKeyboardEvent) => {
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      const next = tab === "diff" ? "briefing" : "diff";
+      choose(next);
+      document.getElementById(`${id}tab-${next}`)?.focus();
+      event.preventDefault();
+    }
+  };
+
+  return (
+    <>
+      <div className="pane-tabs" role="tablist" aria-label="Briefing or diff" onKeyDown={onTabKey}>
+        <button
+          type="button"
+          role="tab"
+          id={`${id}tab-briefing`}
+          aria-selected={tab === "briefing"}
+          aria-controls={`${id}panel-briefing`}
+          tabIndex={tab === "briefing" ? 0 : -1}
+          onClick={() => choose("briefing")}
+        >
+          Briefing
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id={`${id}tab-diff`}
+          aria-selected={tab === "diff"}
+          aria-controls={`${id}panel-diff`}
+          tabIndex={tab === "diff" ? 0 : -1}
+          onClick={() => choose("diff")}
+        >
+          Diff <kbd>D</kbd>
+        </button>
+      </div>
+      <div
+        role="tabpanel"
+        id={`${id}panel-briefing`}
+        aria-labelledby={`${id}tab-briefing`}
+        hidden={tab !== "briefing"}
+        className="briefing-panel"
+      >
+        <ShowInDiffContext.Provider value={showInDiff}>{props.children}</ShowInDiffContext.Provider>
+      </div>
+      {diffSeen && (
+        <div
+          role="tabpanel"
+          id={`${id}panel-diff`}
+          aria-labelledby={`${id}tab-diff`}
+          hidden={tab !== "diff"}
+          className="diff-panel"
+        >
+          <DiffPane
+            load={props.loadDiff}
+            pr={pr}
+            headSha={target.kind === "pr" ? target.headSha : undefined}
+            prUrl={target.kind === "pr" ? target.url : undefined}
+            places={places}
+            drafts={drafts}
+            focus={focus}
+            onComment={props.onComment}
+          />
+        </div>
+      )}
+    </>
+  );
 }
 
 /** A PR (or your local changes) and its briefing: run it, watch it, read it; on a PR, the Comments drawer beside it. */
@@ -309,15 +460,32 @@ export function ReviewPane(props: ReviewPaneProps) {
               </span>
             </div>
           )}
-          {run?.briefing && !run.running && (
-            <BriefingView
-              briefing={run.briefing}
-              feedback={props.feedbackFor?.(run.briefing)}
-              perReviewUsd={props.perReviewUsd}
-              comments={props.comments}
-              guided={props.guided}
-            />
-          )}
+          {run?.briefing &&
+            !run.running &&
+            (props.loadDiff ? (
+              <BriefingTabs
+                briefing={run.briefing}
+                loadDiff={props.loadDiff}
+                onComment={drawer.actions?.onComment}
+                comments={props.comments}
+              >
+                <BriefingView
+                  briefing={run.briefing}
+                  feedback={props.feedbackFor?.(run.briefing)}
+                  perReviewUsd={props.perReviewUsd}
+                  comments={props.comments}
+                  guided={props.guided}
+                />
+              </BriefingTabs>
+            ) : (
+              <BriefingView
+                briefing={run.briefing}
+                feedback={props.feedbackFor?.(run.briefing)}
+                perReviewUsd={props.perReviewUsd}
+                comments={props.comments}
+                guided={props.guided}
+              />
+            ))}
           {!run && (
             <p className="muted" style={{ padding: "28px 32px", maxWidth: 640 }}>
               {props.emptyHint}

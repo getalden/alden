@@ -10,6 +10,7 @@ import {
   checkProgress,
   cloneAt,
   createGitHubClient,
+  DiffCache,
   type Effort,
   editNote,
   FeedbackLog,
@@ -22,6 +23,7 @@ import {
   JsonCache,
   loadConfig,
   loadLearning,
+  localDiffView,
   MODEL_ALIASES,
   memoryItems,
   memoryRepos,
@@ -31,6 +33,7 @@ import {
   placeOnDiff,
   prName,
   publicDraft,
+  pullRequestDiffView,
   queueEvent,
   queueRows,
   queueScope,
@@ -216,6 +219,8 @@ export function createUiApi(options: {
     }
   };
   const drafts = new ReviewDrafts();
+  /** The Diff tab's diffs, per PR and head commit, for as long as `alden ui` runs. */
+  const diffs = new DiffCache();
   const inline = (d: { path?: string | undefined }) => d.path !== undefined;
   const memoryOf = async (repo?: string) => {
     const target = await memoryRepo(repo);
@@ -737,6 +742,23 @@ export function createUiApi(options: {
           const fix = error.reason === "forbidden" ? ` ${reviewWriteFix(resolved.source)}` : "";
           throw new ApiError(error.status, `${error.message}${fix}`);
         }
+        throw new ApiError(502, describeGitHubError(error, resolved.source));
+      }
+    },
+
+    async diff(pr) {
+      if (pr === undefined) {
+        try {
+          return await localDiffView(options.cwd);
+        } catch (error) {
+          throw new ApiError(400, (error as Error).message);
+        }
+      }
+      const ref = await prOf(pr);
+      const resolved = await signedIn();
+      try {
+        return await pullRequestDiffView(createGitHubClient(resolved.token), ref.repo, ref.number, diffs);
+      } catch (error) {
         throw new ApiError(502, describeGitHubError(error, resolved.source));
       }
     },

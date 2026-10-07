@@ -1,32 +1,18 @@
-import type { Anchor, Briefing, LlmFinding, LookHere, RelatedFile, Severity } from "@alden/schema";
+import type {
+  Anchor,
+  Briefing,
+  LlmFinding,
+  LookHere,
+  PrDiff,
+  PrDiffFile,
+  PrDiffHunk,
+  PrDiffLine,
+  RelatedFile,
+  Severity,
+} from "@alden/schema";
 
-/**
- * A PR's diff as `GET /api/diff` returns it. Mirrors the server's type until it lands in `@alden/schema`.
- * Line numbers: `oldLine` on deleted and context lines, `newLine` on added and context lines.
- */
-export interface PrDiff {
-  headSha: string;
-  files: PrDiffFile[];
-}
-
-export interface PrDiffFile {
-  path: string;
-  previousPath?: string;
-  status: string;
-  hunks: PrDiffHunk[];
-}
-
-export interface PrDiffHunk {
-  header: string;
-  lines: PrDiffLine[];
-}
-
-export interface PrDiffLine {
-  kind: "add" | "del" | "ctx";
-  oldLine?: number;
-  newLine?: number;
-  text: string;
-}
+/** A PR's diff as `GET /api/diff` returns it (from @alden/schema). */
+export type { PrDiff, PrDiffFile, PrDiffHunk, PrDiffLine };
 
 /** A place to comment on: a line on the new side (RIGHT) or the old one (LEFT), as GitHub's review comments take. */
 export interface CommentPlace {

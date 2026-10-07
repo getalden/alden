@@ -8,6 +8,7 @@ import type {
   LocalSetupEvent,
   MemoryItem,
   ModelSetupState,
+  PrDiff,
   RankedQueue,
   RankingState,
   RankPreview,
@@ -23,7 +24,6 @@ import type {
   ReviewEvent as ReviewVerdict,
   SendReviewResult,
 } from "./drafts";
-import type { PrDiff } from "./guided";
 
 export interface Memory {
   repo: string;
@@ -348,7 +348,6 @@ export class Api {
   drafts = (pr: string) => this.request<DraftsResponse>(`/api/drafts?pr=${encodeURIComponent(pr)}`);
 
   /** A PR's diff ("owner/repo#12"), file by file and hunk by hunk, with the head commit it's from. */
-  diff = (pr: string) => this.request<PrDiff>(`/api/diff?pr=${encodeURIComponent(pr)}`);
 
   addDraft = (draft: NewDraft & { pr: string }) =>
     this.request<ReviewDraft>("/api/drafts", { method: "POST", body: JSON.stringify(draft) });
@@ -362,6 +361,12 @@ export class Api {
 
   deleteDraft = (id: string) =>
     this.request<{ ok: true }>(`/api/drafts/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  /**
+   * The Diff tab: a PR's diff at its current head ("owner/repo#12"), or without one the local changes. The server keeps
+   * a PR's diff per head commit, so asking again costs it one GitHub request.
+   */
+  diff = (pr?: string) => this.request<PrDiff>(`/api/diff${pr ? `?pr=${encodeURIComponent(pr)}` : ""}`);
 
   /** Posts every draft on the PR to GitHub as one review. Only ever called from the Send you confirmed. */
   sendReview = (review: { pr: string; event: ReviewVerdict; body?: string }) =>

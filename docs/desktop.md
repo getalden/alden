@@ -46,6 +46,9 @@ the same sign-in, settings, memory and spend.
   press Send.
 - [Guided review](web-ui.md#views) works the same in the window: `g` takes the places that need your eyes one at a
   time, with the code at each and the files to look at too. Links to files on GitHub open in your browser.
+- The [Diff tab](web-ui.md#views) works in the window too: `d` switches between a briefing and its PR's diff, with
+  Alden's places marked at their lines. A place's `file:line` opens the diff there; its **GitHub ↗** link, like every
+  link to GitHub, opens in your browser. The window remembers which tab you were on until it closes.
 - **Export** in a briefing works in the window too. **Save as Markdown** saves to your Downloads folder (the window
   can't download files itself) and says where, e.g. "Saved to ~/Downloads/acme-shop-412-briefing.md."; **Print / Save
   as PDF** opens the macOS print dialog, whose **PDF** menu saves it. See [Export](web-ui.md#views).

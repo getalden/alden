@@ -206,3 +206,19 @@ describe("Claude Code's side", () => {
     expect(github.posted).toEqual([]);
   });
 });
+
+describe("the Diff tab's diff", () => {
+  it("serves a PR's diff at its head, from the cache until a push, and the local changes without a PR", async () => {
+    const api = createUiApi({ version: "test", cwd: home });
+    const first = await api.diff("acme/shop#7");
+    expect(first.headSha).toBe("h1");
+    expect(first.files[0]).toMatchObject({ path: "src/pay.ts", status: "modified", additions: 1 });
+    expect(first.files[0]?.hunks[0]?.lines.map((l) => l.kind)).toEqual(["ctx", "add", "ctx"]);
+    expect(await api.diff("https://github.com/acme/shop/pull/7")).toBe(first);
+    github.head = "h2";
+    expect((await api.diff("acme/shop#7")).headSha).toBe("h2");
+    // The temporary ALDEN_HOME isn't a git repository.
+    await expect(api.diff()).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/git repository/) });
+    await expect(api.diff("not a pr")).rejects.toMatchObject({ status: 400 });
+  });
+});

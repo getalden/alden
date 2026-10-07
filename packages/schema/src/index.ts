@@ -40,6 +40,17 @@ export {
 } from "./briefing.js";
 export { type AldenConfig, AldenConfigSchema, DEFAULT_SENSITIVE_PATHS } from "./config.js";
 export {
+  DiffFileSchema,
+  DiffHunkSchema,
+  type DiffLineKind,
+  DiffLineSchema,
+  type PrDiff,
+  type PrDiffFile,
+  type PrDiffHunk,
+  type PrDiffLine,
+  PrDiffSchema,
+} from "./diff.js";
+export {
   FEEDBACK_SCHEMA_VERSION,
   type FeedbackEvent,
   FeedbackEventSchema,
