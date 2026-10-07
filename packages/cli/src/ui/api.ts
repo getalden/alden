@@ -608,7 +608,8 @@ export function createUiApi(options: {
     },
 
     async exportFeedback() {
-      return feedback.redacted();
+      // Verdicts, then review signals (told apart by their `type`), all redacted.
+      return [...(await feedback.redacted()), ...feedback.redactedSignals()];
     },
 
     async openLink(url) {
@@ -620,7 +621,7 @@ export function createUiApi(options: {
 
     async saveFeedback() {
       if (!options.desktop) throw new ApiError(400, "Only the desktop app saves the export; a browser downloads it.");
-      const events = await feedback.redacted();
+      const events = [...(await feedback.redacted()), ...feedback.redactedSignals()];
       const name = `alden-feedback-${new Date().toISOString().slice(0, 10)}.json`;
       const saved = await saveToDownloads(name, `${JSON.stringify(events, null, 2)}\n`, options.downloads);
       return { ...saved, events: events.length };
@@ -742,12 +743,14 @@ export function createUiApi(options: {
       const ref = await prOf(pr);
       const resolved = await signedIn();
       try {
-        const sent = await sendReview(createGitHubClient(resolved.token), openStore(), {
-          repo: ref.repo,
-          number: ref.number,
-          event,
-          ...(body !== undefined ? { body } : {}),
-        });
+        const config = await loadConfig(options.cwd);
+        const sent = await sendReview(
+          createGitHubClient(resolved.token),
+          openStore(),
+          { repo: ref.repo, number: ref.number, event, ...(body !== undefined ? { body } : {}) },
+          new Date(),
+          { fromReviews: config.learning.fromReviews },
+        );
         const { counts } = sent;
         void track("review_sent", {
           review: event === "APPROVE" ? "approve" : event === "REQUEST_CHANGES" ? "request_changes" : "comment",
@@ -758,7 +761,15 @@ export function createUiApi(options: {
           has_body: counts.hasBody,
           unaddressed: counts.unaddressed,
         });
-        return { url: sent.url, posted: sent.posted, review: sent.review };
+        if (Object.values(counts.signals).some((n) => n > 0)) {
+          void track("review_signals", { source: "review", ...counts.signals });
+        }
+        return {
+          url: sent.url,
+          posted: sent.posted,
+          review: sent.review,
+          ...(sent.learning ? { learning: sent.learning } : {}),
+        };
       } catch (error) {
         if (error instanceof SendReviewError) {
           const fix = error.reason === "forbidden" ? ` ${reviewWriteFix(resolved.source)}` : "";

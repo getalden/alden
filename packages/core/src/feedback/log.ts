@@ -8,7 +8,14 @@ import {
   type FeedbackItem,
   type FeedbackSummary,
   type FeedbackTarget,
+  type ReviewSignalEvent,
+  ReviewSignalEventSchema,
+  type ReviewSignalInput,
+  ReviewSignalInputSchema,
+  type ReviewSignalKind,
+  ReviewSignalKindSchema,
 } from "@alden/schema";
+import { loadConfig } from "../config.js";
 import { type StoreSource, storeFrom } from "../store/source.js";
 import { repoHash } from "../telemetry/telemetry.js";
 
@@ -48,6 +55,37 @@ export class FeedbackLog {
     return event;
   }
 
+  /** Records review signals (see `ReviewSignalEventSchema`), after checking their shape. All or none. */
+  addSignals(inputs: (ReviewSignalInput | unknown)[], now: Date = new Date()): ReviewSignalEvent[] {
+    const events = inputs.map((input) => {
+      const parsed = ReviewSignalInputSchema.parse(input);
+      return ReviewSignalEventSchema.parse({
+        ...parsed,
+        schemaVersion: FEEDBACK_SCHEMA_VERSION,
+        id: randomUUID(),
+        type: "review_signal",
+        at: parsed.at ?? now.toISOString(),
+      });
+    });
+    const store = storeFrom(this.source);
+    store.transaction(() => {
+      for (const event of events) {
+        store.addEvent({ id: event.id, at: event.at, type: "review_signal", repo: event.repo, body: event });
+      }
+    });
+    return events;
+  }
+
+  /** Every review signal, oldest first, optionally for one repo. Signals that fail the schema are skipped. */
+  signals(repo?: string): ReviewSignalEvent[] {
+    return storeFrom(this.source)
+      .events<unknown>("review_signal", repo === undefined ? {} : { repo })
+      .flatMap((raw) => {
+        const parsed = ReviewSignalEventSchema.safeParse(raw);
+        return parsed.success ? [parsed.data] : [];
+      });
+  }
+
   /** Every event, oldest first, optionally for one repo. Events that fail the schema are skipped. */
   async events(repo?: string): Promise<FeedbackEvent[]> {
     return storeFrom(this.source)
@@ -59,7 +97,7 @@ export class FeedbackLog {
   }
 
   async summary(): Promise<FeedbackSummary> {
-    return summarizeFeedback(await this.events());
+    return summarizeFeedback(await this.events(), this.signals());
   }
 
   /** Every event, fit to share: see `redactFeedback`. Repo names are hashed with this install's own salt. */
@@ -67,10 +105,45 @@ export class FeedbackLog {
     const store = storeFrom(this.source);
     return redactFeedback(await this.events(), (repo) => `repo-${repoHash(repo, store).slice(0, 12)}`);
   }
+
+  /** Every review signal, fit to share: repo names hashed as in `redacted`, and no paths or lines. */
+  redactedSignals(): ReviewSignalEvent[] {
+    const store = storeFrom(this.source);
+    return this.signals().map(({ path: _path, line: _line, ...signal }) => ({
+      ...signal,
+      repo: `repo-${repoHash(signal.repo, store).slice(0, 12)}`,
+    }));
+  }
 }
 
-/** The numbers the gate needs: the latest verdict per flag wins, and "clear" takes one back. */
-export function summarizeFeedback(events: FeedbackEvent[]): FeedbackSummary {
+/**
+ * Records what a review (or, with `source: "outcome"`, what the author did with it) taught Alden, unless
+ * `learning.fromReviews` is off: `enabled` says so, or your user config is read. Returns what was recorded.
+ */
+export async function recordReviewSignals(
+  signals: (ReviewSignalInput | unknown)[],
+  options: { store?: StoreSource; enabled?: boolean; now?: Date } = {},
+): Promise<ReviewSignalEvent[]> {
+  const enabled = options.enabled ?? (await loadConfig()).learning.fromReviews;
+  if (!enabled || signals.length === 0) return [];
+  return new FeedbackLog(options.store).addSignals(signals, options.now);
+}
+
+/** How many review signals of each kind. */
+export function signalCounts(signals: Pick<ReviewSignalEvent, "signal">[]): Record<ReviewSignalKind, number> {
+  const counts = Object.fromEntries(ReviewSignalKindSchema.options.map((k) => [k, 0])) as Record<
+    ReviewSignalKind,
+    number
+  >;
+  for (const { signal } of signals) counts[signal]++;
+  return counts;
+}
+
+/**
+ * The numbers the gate needs: the latest verdict per flag wins, and "clear" takes one back. Review signals are counted
+ * apart, by kind, so the useful rate stays what you clicked.
+ */
+export function summarizeFeedback(events: FeedbackEvent[], signals: ReviewSignalEvent[] = []): FeedbackSummary {
   const latest = new Map<string, Extract<FeedbackEvent, { kind: "verdict" }>>();
   const briefings = new Set<string>();
   let missed = 0;
@@ -92,8 +165,11 @@ export function summarizeFeedback(events: FeedbackEvent[]): FeedbackSummary {
     byCheck: {},
     dismissed: 0,
     missed,
+    reviewSignals: signalCounts(signals),
+    reviews: new Set(signals.filter((s) => s.source === "review").map((s) => `${s.repo.toLowerCase()}#${s.pr}@${s.at}`))
+      .size,
     briefings: briefings.size,
-    since: events[0]?.at ?? null,
+    since: [events[0]?.at, signals[0]?.at].filter((at) => at !== undefined).sort()[0] ?? null,
   };
   for (const { item, verdict } of latest.values()) {
     if (verdict === "clear") continue;

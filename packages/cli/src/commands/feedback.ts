@@ -24,19 +24,44 @@ export function learningLines(learning: Learning): string[] {
     });
 }
 
+/**
+ * What your sent reviews said without a click: "From 4 reviews you sent: 3 comments, 1 suggestion near flags, 2
+ * approved past without a word, 1 comment where Alden flagged nothing". Nothing when there are none.
+ */
+function reviewLine(summary: FeedbackSummary): string[] {
+  const s = summary.reviewSignals;
+  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  const near = [
+    s.request_changes > 0 && plural(s.request_changes, "comment requesting changes", "comments requesting changes"),
+    s.suggestion > 0 && plural(s.suggestion, "suggestion"),
+    s.comment > 0 && plural(s.comment, "comment"),
+  ].filter(Boolean);
+  const parts = [
+    near.length > 0 && `${near.join(", ")} near flags`,
+    s.silent_pass > 0 && `${plural(s.silent_pass, "flag")} you saw and approved past`,
+    s.miss > 0 && `${plural(s.miss, "comment")} where Alden flagged nothing`,
+    s.applied + s.resolved > 0 &&
+      `${plural(s.applied, "suggestion")} applied and ${plural(s.resolved, "comment")} resolved by authors`,
+  ].filter(Boolean);
+  if (summary.reviews === 0 && parts.length === 0) return [];
+  return [`From ${plural(summary.reviews, "review")} you sent: ${parts.join("; ") || "nothing near a flag yet"}`];
+}
+
 export function renderFeedback(
   summary: FeedbackSummary,
   color: boolean,
   progress: { repo: string; lines: string[] }[] = [],
 ): string {
-  if (summary.briefings === 0) {
-    return "No feedback yet. Mark flags useful or not useful in `alden ui` (or through `alden mcp`), and report what Alden missed.\n";
+  const signals = summary.reviewSignals;
+  if (summary.briefings === 0 && summary.reviews === 0) {
+    return "No feedback yet. Mark flags useful or not useful in `alden ui` (or through `alden mcp`), report what Alden missed, or send a review from Alden.\n";
   }
   const eyes = summary.eyes.agree + summary.eyes.notNeeded;
   const out = [
     `${paint('Useful rate on "needs your eyes"', "bold", color)}: ${percent(summary.eyesAgreeRate)} (${summary.eyes.agree} of ${eyes})`,
     `Model findings: ${summary.modelFindings.agree} useful, ${summary.modelFindings.notNeeded} not useful`,
-    `Missed: ${summary.missed} · Briefings with feedback: ${summary.briefings}${summary.since ? ` · since ${summary.since.slice(0, 10)}` : ""}`,
+    `Missed: ${summary.missed}${signals.miss > 0 ? ` (and ${signals.miss} from comments in your reviews)` : ""} · Briefings with feedback: ${summary.briefings}${summary.since ? ` · since ${summary.since.slice(0, 10)}` : ""}`,
+    ...reviewLine(summary),
     "",
     paint("By check", "bold", color),
   ];
@@ -77,14 +102,15 @@ export function registerFeedbackCommand(program: Command): void {
       if (options.export) {
         const events = await log.events();
         const shared = options.full ? events : await log.redacted();
+        const signals = options.full ? log.signals() : log.redactedSignals();
         const summary = await log.summary();
         await writeFile(
           options.export,
-          `${JSON.stringify({ exportedAt: new Date().toISOString(), redacted: !options.full, summary, events: shared }, null, 2)}\n`,
+          `${JSON.stringify({ exportedAt: new Date().toISOString(), redacted: !options.full, summary, events: shared, signals }, null, 2)}\n`,
           "utf8",
         );
         console.log(
-          `Wrote ${events.length} feedback events to ${options.export}${options.full ? "." : ", with repos, titles, paths and notes removed."}`,
+          `Wrote ${events.length} feedback events${signals.length > 0 ? ` and ${signals.length} review signals` : ""} to ${options.export}${options.full ? "." : ", with repos, titles, paths and notes removed."}`,
         );
         return;
       }

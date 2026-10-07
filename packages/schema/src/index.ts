@@ -62,6 +62,12 @@ export {
   FeedbackSummarySchema,
   type FeedbackTarget,
   FeedbackTargetSchema,
+  type ReviewSignalEvent,
+  ReviewSignalEventSchema,
+  type ReviewSignalInput,
+  ReviewSignalInputSchema,
+  type ReviewSignalKind,
+  ReviewSignalKindSchema,
 } from "./feedback.js";
 export { jsonSchemas } from "./json-schema.js";
 export {
@@ -70,6 +76,8 @@ export {
   MemoryEventSchema,
   type MemoryItem,
   MemoryItemSchema,
+  type MemorySource,
+  MemorySourceSchema,
   type OpenEvent,
   OpenEventSchema,
   type ReactionEvent,

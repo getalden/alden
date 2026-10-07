@@ -87,6 +87,12 @@ export const SendReviewResultSchema = z.object({
   url: z.string().describe("the review on GitHub"),
   posted: z.number().int().min(0).describe("comments posted: inline ones and general notes"),
   review: ReviewEventSchema,
+  learning: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "what the review taught Alden, one line per lesson it moved, e.g. '2 of 3 (2 from your review of acme/shop#412): …'",
+    ),
 });
 
 /** A place Alden flagged in the latest briefing of a PR that no draft is near: worth a look before approving. */

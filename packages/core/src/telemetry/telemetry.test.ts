@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeStores, openStore } from "../store/db.js";
+import { signalsEvent } from "./events.js";
 import {
   configureTelemetry,
   flushTelemetry,
@@ -99,6 +100,28 @@ describe("tracking", () => {
       files: 3,
     });
     expect(JSON.stringify(events[2])).not.toContain("acme/secret");
+  });
+
+  it("counts what a review taught by kind, never where", async () => {
+    await setTelemetryConsent(true);
+    const signals = [
+      { signal: "suggestion" as const, path: "src/secret-plan.ts", checkId: "tests.missing" },
+      { signal: "miss" as const, path: "src/secret-plan.ts" },
+      { signal: "miss" as const },
+    ];
+    await track("review_signals", signalsEvent(signals, "review"));
+    const [, event] = queuedTelemetry();
+    expect(event?.properties).toMatchObject({
+      source: "review",
+      suggestion: 1,
+      miss: 2,
+      comment: 0,
+      silent_pass: 0,
+      request_changes: 0,
+      applied: 0,
+      resolved: 0,
+    });
+    expect(JSON.stringify(event)).not.toMatch(/secret-plan|tests\.missing/);
   });
 
   it("hashes repos with a local salt: stable here, unguessable elsewhere", () => {

@@ -54,6 +54,16 @@ describe("notification sound", () => {
   });
 });
 
+describe("learning from reviews", () => {
+  it("is on by default, and only your user config turns it off", async () => {
+    expect((await loadConfig(repo)).learning.fromReviews).toBe(true);
+    await writeFile(join(repo, ".alden.toml"), "[learning]\nfromReviews = false\n");
+    expect((await loadConfig(repo)).learning.fromReviews).toBe(true);
+    await setConfigValue("learning.fromReviews", "false");
+    expect((await loadConfig(repo)).learning.fromReviews).toBe(false);
+  });
+});
+
 describe("queue scope", () => {
   it("comes from this machine's user config, and a repo's config can't change it", async () => {
     await writeFile(userConfigPath(), '[queue]\norgs = ["acme"]\nignore = ["acme/legacy"]\n');

@@ -1,28 +1,29 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   type Briefing,
   codeFence,
   type DraftLink,
   DraftLinkSchema,
-  FEEDBACK_SCHEMA_VERSION,
-  FeedbackEventSchema,
-  type FeedbackItem,
-  type LookHere,
   linkLines,
   noteText,
   type ReviewDraft,
   ReviewDraftSchema,
   type ReviewEvent,
+  type ReviewSignalKind,
   type SendReviewResult,
   type UnaddressedPlace,
 } from "@alden/schema";
 import type { DiffFile } from "../diff/parse.js";
 import { fetchPullRequestDiff } from "../diff/sources.js";
-import { FeedbackLog } from "../feedback/log.js";
+import { signalCounts } from "../feedback/log.js";
 import type { GitHubClient } from "../github/client.js";
-import { dismissKey } from "../learn/learn.js";
+import { loadLearning, reviewProgress } from "../learn/learn.js";
 import type { AldenStore } from "../store/db.js";
 import { type StoreSource, storeFrom } from "../store/source.js";
+import { isNear } from "./near.js";
+import { type BriefedPlace, briefedPlaces, learnFromReview, type SeenReader } from "./signals.js";
+
+export { isNear, NEAR_LINES } from "./near.js";
 
 /**
  * Comments you write in Alden, kept as a pending review in the local database until you send them to GitHub as one
@@ -55,8 +56,6 @@ export interface Placement {
   lines?: string[];
 }
 
-/** How far (in lines) a comment can be from a flagged place and still count as about it. */
-export const NEAR_LINES = 3;
 /** GitHub's own limit on a comment's length. */
 export const MAX_COMMENT_CHARS = 65_536;
 
@@ -605,19 +604,19 @@ export class ReviewDrafts {
       "INSERT OR REPLACE INTO briefed_places (pr_key, briefing_at, places) VALUES (?, ?, ?)",
       keyOf(prName(briefing.target.repo, briefing.target.number)),
       briefing.generatedAt,
-      JSON.stringify(briefing.needsYourEyes),
+      JSON.stringify(briefedPlaces(briefing)),
     );
   }
 
   /** The places to look in a PR's latest briefing, and when it was made. */
-  briefed(pr: string): { briefingAt: string; places: LookHere[] } | undefined {
+  briefed(pr: string): { briefingAt: string; places: BriefedPlace[] } | undefined {
     const row = this.store.get<{ briefing_at: string; places: string }>(
       "SELECT briefing_at, places FROM briefed_places WHERE pr_key = ?",
       keyOf(pr),
     );
     if (!row) return undefined;
     try {
-      return { briefingAt: row.briefing_at, places: JSON.parse(row.places) as LookHere[] };
+      return { briefingAt: row.briefing_at, places: JSON.parse(row.places) as BriefedPlace[] };
     } catch {
       return undefined;
     }
@@ -626,24 +625,8 @@ export class ReviewDrafts {
 
 // --- What the review covers -------------------------------------------------------------------------------------
 
-/**
- * Whether a draft (a comment or a suggestion) is about a flagged place: on the same file, within `NEAR_LINES` of its
- * line or range (any line if the place has none).
- */
-export function isNear(draft: ReviewDraft, place: LookHere): boolean {
-  // A linked note is about its lines (or its whole file) as much as a comment on them.
-  const on = draft.linkTo ?? draft;
-  if (!place.anchor || on.path !== place.anchor.path) return false;
-  const at = place.anchor.line;
-  if (draft.linkTo && on.line === undefined) return true;
-  if (on.line === undefined) return false;
-  if (at === undefined) return true;
-  const first = on.startLine ?? on.line;
-  return (draft.side ?? "RIGHT") === "RIGHT" && at >= first - NEAR_LINES && at <= on.line + NEAR_LINES;
-}
-
 /** The places to look that no draft is near: worth a second look before approving. */
-export function unaddressedPlaces(places: LookHere[], drafts: ReviewDraft[]): UnaddressedPlace[] {
+export function unaddressedPlaces(places: BriefedPlace[], drafts: ReviewDraft[]): UnaddressedPlace[] {
   return places
     .filter((place) => !drafts.some((d) => isNear(d, place)))
     .map((place) => ({
@@ -843,21 +826,30 @@ export interface SentCounts {
   /** General notes linking to code outside the diff (counted in `notes` too). */
   linked: number;
   unaddressed: number;
-  /** Places to look that the review's comments were near, and so taught Alden "useful". */
+  /** Places to look that the review's comments were near, and so taught Alden "useful" (new this review). */
   learned: number;
+  /** Review signals recorded, by kind: see `learnFromReview`. */
+  signals: Record<ReviewSignalKind, number>;
+}
+
+/** How a sent review teaches Alden: `fromReviews` is the `learning.fromReviews` setting, `seen` what you saw. */
+export interface SendLearning {
+  fromReviews?: boolean;
+  seen?: SeenReader;
 }
 
 /**
  * Sends a PR's drafts as one review: brings them to the PR's current head, refuses if that moved or outdated any
  * inline comment (so what posts is what you last saw), checks every line against the diff, then makes one
- * POST /repos/{owner}/{repo}/pulls/{n}/reviews. Afterwards: a local `review_sent` event (counts only), "useful" for
- * each flagged place a comment was near (see `learnFromComments`), and the PR's drafts are deleted.
+ * POST /repos/{owner}/{repo}/pulls/{n}/reviews. Afterwards: a local `review_sent` event (counts only), what the review
+ * taught (see `learnFromReview`; never stops the send, which has posted by then), and the PR's drafts are deleted.
  */
 export async function sendReview(
   client: GitHubClient,
   store: AldenStore,
   input: { repo: string; number: number; event: ReviewEvent; body?: string },
   now: Date = new Date(),
+  learning: SendLearning = {},
 ): Promise<SendReviewResult & { counts: SentCounts }> {
   const pr = prName(input.repo, input.number);
   const drafts = new ReviewDrafts(store);
@@ -893,8 +885,8 @@ export async function sendReview(
 
   const inline = pending.filter((d) => d.path !== undefined);
   const briefed = drafts.briefed(pr);
-  const about = pending.filter((d) => d.path !== undefined || d.linkTo !== undefined);
-  const learned = briefed ? await learnFromComments(store, input, briefed, about, now) : 0;
+  const signals = briefed ? await learnSafely(store, { ...input, headSha }, briefed, pending, learning, now) : [];
+  const lines = signals.length > 0 ? await progressSafely(store, input.repo, signals, pr) : [];
   const counts: SentCounts = {
     inline: inline.length,
     notes: pending.length - inline.length,
@@ -904,7 +896,8 @@ export async function sendReview(
     suggestions: inline.filter((d) => d.suggestion !== undefined).length,
     linked: pending.filter((d) => d.linkTo !== undefined).length,
     unaddressed: briefed ? unaddressedPlaces(briefed.places, pending).length : 0,
-    learned,
+    learned: signals.filter((s) => s.signal !== "silent_pass" && s.signal !== "miss").length,
+    signals: signalCounts(signals),
   };
   store.addEvent({
     id: randomUUID(),
@@ -914,58 +907,47 @@ export async function sendReview(
     body: { pr, number: input.number, headSha, review: input.event, url, at: now.toISOString(), ...counts },
   });
   drafts.clear(pr);
-  return { url, posted: pending.length, review: input.event, counts };
+  return {
+    url,
+    posted: pending.length,
+    review: input.event,
+    ...(lines.length > 0 ? { learning: lines } : {}),
+    counts,
+  };
 }
 
 // --- Learning ---------------------------------------------------------------------------------------------------
 
-/**
- * A comment (or a suggested change) you sent near a flagged place is the strongest "useful" there is: it's recorded as a verdict (`agree`,
- * marked `via: "comment"`) on that place, so it counts toward the check's lesson like a click on "useful". Once per
- * place per PR (the event's id is derived from the place), and never over a verdict you gave that place yourself.
- */
-export async function learnFromComments(
+/** What the review taught, recorded; nothing (rather than an error) if that fails, since the review has posted. */
+async function learnSafely(
   store: AldenStore,
-  pr: { repo: string; number: number },
-  briefed: { briefingAt: string; places: LookHere[] },
-  inline: ReviewDraft[],
-  now: Date = new Date(),
-): Promise<number> {
-  const target = `${pr.repo.toLowerCase()}#${pr.number}`;
-  const inForce = new Map<string, string>();
-  for (const event of await new FeedbackLog(store).events(pr.repo)) {
-    if (event.kind !== "verdict" || event.target.kind !== "pr" || event.target.number !== pr.number) continue;
-    inForce.set(dismissKey(target, event.item), event.verdict);
-  }
-  let learned = 0;
-  for (const place of briefed.places) {
-    if (!inline.some((d) => isNear(d, place))) continue;
-    const item: FeedbackItem = {
-      source: place.source ?? "check",
-      ...(place.checkId ? { checkId: place.checkId } : {}),
-      title: place.title,
-      ...(place.anchor ? { anchor: place.anchor } : {}),
-      placement: "eyes",
-    };
-    const key = dismissKey(target, item);
-    const verdict = inForce.get(key);
-    if (verdict !== undefined && verdict !== "clear") continue;
-    const id = `comment-${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
-    const event = FeedbackEventSchema.parse({
-      schemaVersion: FEEDBACK_SCHEMA_VERSION,
-      id,
-      at: now.toISOString(),
-      kind: "verdict",
-      target: { kind: "pr", repo: pr.repo, number: pr.number },
-      briefingAt: briefed.briefingAt,
-      item,
-      verdict: "agree",
-      via: "comment",
+  pr: { repo: string; number: number; event: ReviewEvent; headSha: string },
+  briefed: { briefingAt: string; places: BriefedPlace[] },
+  drafts: ReviewDraft[],
+  learning: SendLearning,
+  now: Date,
+) {
+  try {
+    return await learnFromReview(store, pr, pr.event, briefed, drafts, {
+      ...(learning.fromReviews !== undefined ? { enabled: learning.fromReviews } : {}),
+      ...(learning.seen ? { seen: learning.seen } : {}),
+      now,
     });
-    // The id is the place's: a second review on the same PR doesn't count it again.
-    const before = store.get<{ n: number }>("SELECT COUNT(*) AS n FROM events WHERE id = ?", id)?.n ?? 0;
-    store.addEvent({ id, at: event.at, type: "feedback", repo: pr.repo, body: event });
-    if (Number(before) === 0) learned++;
+  } catch {
+    return [];
   }
-  return learned;
+}
+
+/** Where the lessons the review moved now stand, as lines: see `reviewProgress`. */
+async function progressSafely(
+  store: AldenStore,
+  repo: string,
+  signals: Parameters<typeof reviewProgress>[1],
+  pr: string,
+): Promise<string[]> {
+  try {
+    return reviewProgress(await loadLearning(store, repo), signals, pr);
+  } catch {
+    return [];
+  }
 }

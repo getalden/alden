@@ -7,8 +7,10 @@ import {
   FEEDBACK_SCHEMA_VERSION,
   type FeedbackEvent,
   MEMORY_SCHEMA_VERSION,
+  type MemoryEvent,
   type OpenEvent,
   type PullRequestFacts,
+  type ReviewSignalEvent,
 } from "@alden/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FeedbackLog } from "../feedback/log.js";
@@ -18,6 +20,7 @@ import { AldenStore, openStore } from "../store/db.js";
 import {
   addNote,
   checkProgress,
+  checkReason,
   describeFeature,
   editNote,
   forget,
@@ -33,6 +36,7 @@ import {
   recordOpen,
   recordReaction,
   restore,
+  reviewProgress,
   setLearning,
 } from "./learn.js";
 
@@ -578,7 +582,7 @@ describe("learning from who wrote a PR and where it changes", () => {
     const opens = [20, 21, 22].map((day) => ({ ...open(["area:py/pricing"], 2, day), number: 7 }));
     const learning = learn({ repo: REPO, feedback: [], opens, memory: [], now: NOW });
     expect(learning.queue).toEqual([]);
-    expect(learning.queueTallies.get("area:py/pricing")).toEqual({ opens: 1, jumps: 1, ups: 0, downs: 0 });
+    expect(learning.queueTallies.get("area:py/pricing")).toEqual({ opens: 1, jumps: 1, ups: 0, downs: 0, reviews: 0 });
   });
 
   it("records which features an open jumped for", () => {
@@ -681,6 +685,9 @@ describe("learning by topic", () => {
     ).toEqual({
       agree: 0,
       notNeeded: 1,
+      saidNotNeeded: 1,
+      reviewAgree: 0,
+      reviewNotNeeded: 0,
     });
     const untagged = [1, 2, 3].map((pr) => llmVerdict(undefined, "not_needed", pr));
     expect(learn({ repo: REPO, feedback: untagged, opens: [], memory: [], now: NOW }).checks.size).toBe(0);
@@ -755,6 +762,170 @@ describe("saying how close a lesson is", () => {
     });
     expect(reactionProgress(three, ["author:bot:dependabot", "by:bots"], "down")).toBe(
       "Alden ranks Dependabot PRs lower in this repo.",
+    );
+  });
+});
+
+describe("learning from the reviews you send", () => {
+  const signal = (
+    kind: ReviewSignalEvent["signal"],
+    pr: number,
+    options: { checkId?: string; path?: string; day?: number; weight?: number; source?: "review" | "outcome" } = {},
+  ): ReviewSignalEvent => ({
+    schemaVersion: FEEDBACK_SCHEMA_VERSION,
+    id: `s${n++}`,
+    type: "review_signal",
+    repo: REPO,
+    pr,
+    at: at(options.day ?? 20),
+    signal: kind,
+    ...(kind === "miss" ? {} : { checkId: options.checkId ?? "tests.missing" }),
+    path: options.path ?? "app/api/pay.ts",
+    weight:
+      options.weight ??
+      { request_changes: 2, suggestion: 2, comment: 1, silent_pass: 0.2, miss: 1, applied: 1, resolved: 1 }[kind],
+    source: options.source ?? (kind === "applied" || kind === "resolved" ? "outcome" : "review"),
+  });
+  const from = (signals: ReviewSignalEvent[], feedback: FeedbackEvent[] = []) =>
+    learn({ repo: REPO, feedback, opens: [], memory: [], signals, now: NOW });
+
+  it("weighs signals: two suggestions and a comment teach a lesson, and say where it came from", () => {
+    const learning = from([signal("suggestion", 1), signal("suggestion", 2), signal("comment", 3)]);
+    const lesson = learning.checks.get("tests.missing");
+    expect(lesson).toMatchObject({ direction: "up", agree: 5, notNeeded: 0 });
+    expect(lesson?.weights).toEqual({ reactions: 0, review: 5, outcome: 0 });
+    expect(checkReason(lesson as NonNullable<typeof lesson>)).toBe(
+      "You usually find untested-change flags useful (5 of 5, 5 from your reviews)",
+    );
+    const [item] = memoryItems(learning);
+    expect(item?.evidence).toBe(
+      "5 of 5 useful: 5 from comments in your reviews (acme/shop#1, acme/shop#2, acme/shop#3)",
+    );
+    expect(item?.sources?.map((s) => [s.from, s.pr, s.weight])).toEqual([
+      ["review", "acme/shop#1", 2],
+      ["review", "acme/shop#2", 2],
+      ["review", "acme/shop#3", 1],
+    ]);
+  });
+
+  it("counts a PR once per topic, at its strongest signal, and its outcome on top", () => {
+    const one = from([signal("suggestion", 1), signal("suggestion", 1), signal("comment", 1), signal("applied", 1)]);
+    expect(one.checkTallies.get("tests.missing")).toMatchObject({ agree: 3, reviewAgree: 3 });
+    expect(one.checks.get("tests.missing")?.weights).toEqual({ reactions: 0, review: 2, outcome: 1 });
+    // A comment on a topic outweighs approving past another of its flags in the same PR.
+    const mixed = from([signal("silent_pass", 2), signal("comment", 2)]);
+    expect(mixed.checkTallies.get("tests.missing")).toMatchObject({ agree: 1, notNeeded: 0 });
+  });
+
+  it("never quietens a check on silent passes alone, but lets them add to a Not useful", () => {
+    const fifteen = Array.from({ length: 15 }, (_, i) => signal("silent_pass", i + 1));
+    const alone = from(fifteen);
+    expect(alone.checkTallies.get("tests.missing")).toMatchObject({ notNeeded: 3, saidNotNeeded: 0 });
+    expect(alone.checks.size).toBe(0);
+    const ten = fifteen.slice(0, 10);
+    const withOne = from(ten, [verdict("tests.missing", "not_needed", { pr: 50 })]);
+    const lesson = withOne.checks.get("tests.missing");
+    expect(lesson).toMatchObject({ direction: "down", notNeeded: 3 });
+    expect(memoryItems(withOne)[0]?.evidence).toBe(
+      "3 of 3 not useful: you marked 1, 2 from approving past them in your reviews (acme/shop#1, acme/shop#2, acme/shop#3, …)",
+    );
+    // Not for what Alden never quietens.
+    const secrets = from(
+      ten.map((s) => ({ ...s, checkId: "secrets.likely" })),
+      [verdict("secrets.likely", "not_needed", { pr: 50 })],
+    );
+    expect(secrets.checks.size).toBe(0);
+  });
+
+  it("still counts comments recorded as verdicts before review signals, as from your reviews", () => {
+    const viaComment = (pr: number): FeedbackEvent => ({
+      ...(verdict("tests.missing", "agree", { pr }) as Extract<FeedbackEvent, { kind: "verdict" }>),
+      via: "comment",
+    });
+    const learning = from([], [viaComment(1), viaComment(2), verdict("tests.missing", "agree", { pr: 3 })]);
+    expect(learning.checks.get("tests.missing")?.weights).toEqual({ reactions: 1, review: 2, outcome: 0 });
+  });
+
+  it("respects a forget, and counts signals after it only", () => {
+    const forgot: MemoryEvent = {
+      schemaVersion: MEMORY_SCHEMA_VERSION,
+      id: "m1",
+      at: at(21),
+      repo: REPO,
+      action: "forget",
+      item: "check:tests.missing:up",
+    };
+    const signals = [signal("suggestion", 1), signal("suggestion", 2), signal("comment", 3, { day: 22 })];
+    const learning = learn({ repo: REPO, feedback: [], opens: [], memory: [forgot], signals, now: NOW });
+    expect(learning.checkTallies.get("tests.missing")).toMatchObject({ agree: 1 });
+    expect(learning.checks.size).toBe(0);
+  });
+
+  it("learns the code areas you comment on, once per review per area, like opening PRs there first", () => {
+    const signals = [
+      signal("comment", 1, { path: "app/api/a.ts" }),
+      signal("miss", 1, { path: "app/api/b.ts" }),
+      signal("suggestion", 2, { path: "app/api/c.ts" }),
+      signal("miss", 3, { path: "app/api/deep/d.ts", day: 22 }),
+      // Not comments, a lockfile, or outside the window: none of these count.
+      signal("silent_pass", 4, { path: "app/api/e.ts" }),
+      signal("applied", 5, { path: "app/api/f.ts" }),
+      signal("comment", 6, { path: "pnpm-lock.yaml" }),
+      signal("comment", 7, { path: "app/api/g.ts", day: -70 }),
+    ];
+    const learning = learn({ repo: REPO, feedback: [], opens: [], memory: [], signals, now: new Date(at(28)) });
+    expect(learning.queueTallies.get("area:app/api")).toEqual({ opens: 0, jumps: 0, ups: 0, downs: 0, reviews: 3 });
+    const lesson = learning.queue.find((l) => l.feature === "area:app/api");
+    expect(lesson).toMatchObject({ direction: "up", reviews: 3 });
+    expect(queueBoost(learning, ["area:app/api"])).toEqual({
+      points: OPEN_BOOST,
+      reason: "ranked higher: you often comment on PRs touching app/api in your reviews",
+    });
+    expect(memoryItems(learning).find((i) => i.kind === "queue")).toMatchObject({
+      evidence: "commented on in 3 reviews you sent",
+      examples: 3,
+    });
+    // Two reviews: one more and the queue will rank them higher.
+    const two = learn({ repo: REPO, feedback: [], opens: [], memory: [], signals: signals.slice(0, 3), now: NOW });
+    expect(reactionProgress(two, ["area:app/api"], "up")).toBe(
+      "PRs touching app/api: 2 useful (or opened ahead of their rank) so far. One more and Alden will rank them higher.",
+    );
+  });
+
+  it("says what a review did to a lesson, and where it came from", () => {
+    const before = [signal("comment", 1)];
+    const review = [signal("suggestion", 412), signal("silent_pass", 412, { checkId: "paths.sensitive" })];
+    expect(reviewProgress(from([...before, ...review]), review, "acme/shop#412")).toEqual([
+      "3 of 3 useful on untested-change flags, 2 from your review of acme/shop#412: Alden puts them first among the places to look in this repo.",
+    ]);
+    expect(reviewProgress(from(review), review, "acme/shop#412")).toEqual([
+      "2 of 3 (2 from your review of acme/shop#412): one more useful on untested-change flags and Alden will put them first among the places to look.",
+    ]);
+    const api = [signal("comment", 9, { checkId: "callers.outside" })];
+    expect(reviewProgress(from(api), api, "acme/shop#9")).toEqual([
+      "1 of 3 (1 from your review of acme/shop#9): 2 more useful on API change flags (public signature and caller flags count together) and Alden will put them first among the places to look.",
+    ]);
+    const quiet = from(
+      review,
+      [1, 2, 3, 4, 5, 6].map((pr) => verdict("tests.missing", "not_needed", { pr: pr + 100 })),
+    );
+    expect(reviewProgress(quiet, review, "acme/shop#412")).toEqual([
+      "Your review of acme/shop#412 counted 2 useful on untested-change flags, but you still mostly find them not useful (6 of 8), so they stay quietened.",
+    ]);
+    expect(reviewProgress({ ...quiet, paused: true }, review, "acme/shop#412")).toEqual([]);
+  });
+
+  it("says how close a click brings a lesson, counting your reviews", () => {
+    const learning = from([signal("suggestion", 1)], [verdict("tests.missing", "agree", { pr: 2 })]);
+    expect(checkProgress(learning, { source: "check", checkId: "tests.missing" }, "agree")).toBe(
+      "3 of 3 useful (2 from your reviews) on untested-change flags: Alden puts them first among the places to look in this repo.",
+    );
+    const half = from(
+      [signal("silent_pass", 1), signal("silent_pass", 2)],
+      [verdict("tests.missing", "not_needed", { pr: 3 })],
+    );
+    expect(checkProgress(half, { source: "check", checkId: "tests.missing" }, "not_needed")).toBe(
+      "1.4 of 3 (0.4 from your reviews): 2 more not useful on untested-change flags and Alden will quieten them.",
     );
   });
 });

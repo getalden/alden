@@ -1,4 +1,5 @@
-import type { Briefing, RankedQueue, RepoStats, TelemetryProperties } from "@alden/schema";
+import type { Briefing, RankedQueue, RepoStats, ReviewSignalEvent, TelemetryProperties } from "@alden/schema";
+import { signalCounts } from "../feedback/log.js";
 import { languageOf } from "../graph/parser.js";
 import { repoHash } from "./telemetry.js";
 
@@ -45,6 +46,14 @@ export function queueEvent(queue: RankedQueue): TelemetryProperties<"queue_ranke
     repos: new Set(rows.map((r) => r.pr.repo.toLowerCase())).size,
     moved_by_learning: rows.filter((r) => (r.score.learned ?? 0) !== 0).length,
   };
+}
+
+/** What a review (or what its author did afterwards) taught Alden, as counts by kind: never where, or on what. */
+export function signalsEvent(
+  signals: Pick<ReviewSignalEvent, "signal">[],
+  source: ReviewSignalEvent["source"],
+): TelemetryProperties<"review_signals"> {
+  return { source, ...signalCounts(signals) };
 }
 
 const rounded = (h: number | null | undefined) => (h === null || h === undefined ? null : Math.round(h * 10) / 10);

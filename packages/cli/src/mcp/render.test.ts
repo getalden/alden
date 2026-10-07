@@ -177,6 +177,27 @@ describe("memoryMarkdown", () => {
     );
     expect(memoryMarkdown("a/b", [], false)).toContain("Nothing yet");
   });
+
+  it("names the reviews a lesson came from", () => {
+    const lesson: MemoryItem = {
+      id: "check:tests.missing:up",
+      repo: "a/b",
+      source: "learned",
+      kind: "check",
+      group: "look",
+      text: "You find untested-change flags useful",
+      evidence: "4 of 4 useful: you marked 1, 3 from comments in your reviews (a/b#412, a/b#7)",
+      sources: [
+        { from: "review", pr: "a/b#412", weight: 2, at: "2026-10-02T00:00:00.000Z" },
+        { from: "outcome", pr: "a/b#412", weight: 1, at: "2026-10-03T00:00:00.000Z" },
+        { from: "reactions", weight: 1, at: "2026-10-01T00:00:00.000Z" },
+      ],
+      since: "2026-10-01T00:00:00.000Z",
+    };
+    expect(memoryMarkdown("a/b", [lesson], false)).toContain(
+      "from your review of a/b#412 (2), what the author did on a/b#412 (1);",
+    );
+  });
 });
 
 describe("queueMarkdown", () => {

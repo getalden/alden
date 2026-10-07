@@ -45,6 +45,8 @@ const lesson = (feature: string, direction: "up" | "down"): QueueLesson => ({
   direction,
   jumps: direction === "up" ? 3 : 0,
   reactions: direction === "down" ? 3 : 0,
+  reviews: 0,
+  sources: [],
   total: 3,
   since: "2026-09-01T00:00:00.000Z",
 });

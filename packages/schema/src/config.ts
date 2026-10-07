@@ -58,6 +58,15 @@ export const AldenConfigSchema = z.object({
       eyes: z.number().int().min(1).max(10).default(3),
     })
     .prefault({}),
+  learning: z
+    .object({
+      /**
+       * Whether a review you send teaches Alden: comments near its flags, suggestions, approving past a place you saw,
+       * comments where it flagged nothing. Off records none of it; Useful and Not useful still count. User config only.
+       */
+      fromReviews: z.boolean().default(true),
+    })
+    .prefault({}),
   background: z
     .object({
       /** The desktop app briefs the top PRs waiting on you while you're away, so they're ready when you're back. */

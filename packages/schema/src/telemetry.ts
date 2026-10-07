@@ -128,6 +128,19 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
     }),
   }),
   z.object({
+    event: z.literal("review_signals"),
+    properties: z.object({
+      source: z.enum(["review", "outcome"]).describe("a review you sent, or what the author did with it afterwards"),
+      request_changes: count,
+      suggestion: count,
+      comment: count,
+      silent_pass: count.describe("places you were shown and approved without a comment"),
+      miss: count.describe("comments where Alden had flagged nothing"),
+      applied: count,
+      resolved: count,
+    }),
+  }),
+  z.object({
     event: z.literal("stats_viewed"),
     properties: z.object({
       repo_hash: z.string(),
