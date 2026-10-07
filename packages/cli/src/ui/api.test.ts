@@ -102,7 +102,8 @@ describe("saveToDownloads", () => {
       expect(saved.path.startsWith(downloads)).toBe(true);
     } finally {
       delete process.env.ALDEN_HOME;
-      await rm(home, { recursive: true, force: true });
+      // Windows can't delete the database while this process still has it open; the OS clears its temp folder.
+      await rm(home, { recursive: true, force: true }).catch(() => {});
       await rm(downloads, { recursive: true, force: true });
     }
   });
