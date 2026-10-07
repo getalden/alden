@@ -108,6 +108,39 @@ const MIGRATIONS: ((store: AldenStore) => void)[] = [
       ALTER TABLE drafts ADD COLUMN link_to TEXT;
     `);
   },
+  (store) => {
+    store.exec(`
+      -- Each line comment you sent, kept 30 days, to find its thread on GitHub again and see what came of it.
+      -- review_id is the review GitHub made; path, line, start_line and side are where it went at head_sha;
+      -- suggestion is its suggested code and lines the code it replaced (a JSON array); check_id the flagged place it
+      -- was near. compared_head is the head a suggestion was last compared against; applied and resolved say an
+      -- outcome was recorded.
+      CREATE TABLE sent_comments (
+        id INTEGER PRIMARY KEY,
+        pr_key TEXT NOT NULL,
+        repo TEXT NOT NULL,
+        number INTEGER NOT NULL,
+        review_id INTEGER NOT NULL,
+        head_sha TEXT NOT NULL,
+        sent_at TEXT NOT NULL,
+        path TEXT NOT NULL,
+        line INTEGER NOT NULL,
+        start_line INTEGER,
+        side TEXT NOT NULL,
+        suggestion TEXT,
+        lines TEXT,
+        check_id TEXT,
+        comment_id INTEGER,
+        compared_head TEXT,
+        applied INTEGER NOT NULL DEFAULT 0,
+        resolved INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX sent_comments_by_pr ON sent_comments (pr_key, sent_at);
+      -- When each PR's outcomes were last asked of GitHub (at most once a day), at which head, and whether it was
+      -- closed then (checked once after close, then never again).
+      CREATE TABLE outcome_checks (pr_key TEXT PRIMARY KEY, checked_at TEXT NOT NULL, head_sha TEXT, closed INTEGER NOT NULL DEFAULT 0);
+    `);
+  },
 ];
 
 /** The JSON files Alden kept before the database, read once into it. */

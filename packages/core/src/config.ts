@@ -169,6 +169,19 @@ export async function backgroundModelAllowed(): Promise<boolean> {
   }
 }
 
+/**
+ * Whether Alden learns from the reviews you send and what comes of them (`learning.fromReviews`). On unless your user
+ * config turns it off; read from the raw file, so it works before the setting is in the schema.
+ */
+export async function learningFromReviews(): Promise<boolean> {
+  try {
+    const user = await readToml(userConfigPath());
+    return (user.learning as { fromReviews?: unknown } | undefined)?.fromReviews !== false;
+  } catch {
+    return true;
+  }
+}
+
 /** A change to how you rank the queue. A weight of null (or 1, the default) and an empty rule list are removed. */
 export interface RankChange {
   weights?: Partial<Record<RankWeight, number | null>>;

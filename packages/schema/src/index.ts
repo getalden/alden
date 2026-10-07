@@ -62,6 +62,8 @@ export {
   FeedbackSummarySchema,
   type FeedbackTarget,
   FeedbackTargetSchema,
+  type ReviewSignal,
+  ReviewSignalSchema,
 } from "./feedback.js";
 export { jsonSchemas } from "./json-schema.js";
 export {

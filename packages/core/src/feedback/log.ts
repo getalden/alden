@@ -8,6 +8,8 @@ import {
   type FeedbackItem,
   type FeedbackSummary,
   type FeedbackTarget,
+  type ReviewSignal,
+  ReviewSignalSchema,
 } from "@alden/schema";
 import { type StoreSource, storeFrom } from "../store/source.js";
 import { repoHash } from "../telemetry/telemetry.js";
@@ -46,6 +48,28 @@ export class FeedbackLog {
       body: event,
     });
     return event;
+  }
+
+  /**
+   * Records a review signal (see `ReviewSignalSchema`) as a "review_signal" event. With `id`, at most once: a second
+   * signal with the same id is ignored. Returns whether it was new.
+   */
+  recordSignal(input: ReviewSignal, id: string = randomUUID()): boolean {
+    const signal = ReviewSignalSchema.parse(input);
+    const store = storeFrom(this.source);
+    const before = store.get<{ n: number }>("SELECT COUNT(*) AS n FROM events WHERE id = ?", id)?.n ?? 0;
+    store.addEvent({ id, at: signal.at, type: "review_signal", repo: signal.repo, body: signal });
+    return Number(before) === 0;
+  }
+
+  /** Review signals, oldest first, optionally for one repo and since a time. Ones that fail the schema are skipped. */
+  signals(options: { repo?: string; since?: string } = {}): ReviewSignal[] {
+    return storeFrom(this.source)
+      .events<unknown>("review_signal", options)
+      .flatMap((raw) => {
+        const parsed = ReviewSignalSchema.safeParse(raw);
+        return parsed.success ? [parsed.data] : [];
+      });
   }
 
   /** Every event, oldest first, optionally for one repo. Events that fail the schema are skipped. */

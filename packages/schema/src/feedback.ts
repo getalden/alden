@@ -67,6 +67,25 @@ export const FeedbackInputSchema = z.discriminatedUnion("kind", [
   FeedbackEventSchema.options[1].omit({ schemaVersion: true, id: true, at: true }),
 ]);
 
+/**
+ * What a review did, or what came of it: kept as its own event (type "review_signal") beside the verdicts.
+ * `source: "review"` is what you sent (requested changes, a suggestion, a comment, a pass without comments, a miss);
+ * `source: "outcome"` is what the author did with it afterwards: applied your suggestion, or resolved your comment.
+ * `weight` is how strongly it counts. `checkId`, `path` and `line` place it when it was near a flagged place.
+ */
+export const ReviewSignalSchema = z.object({
+  type: z.literal("review_signal"),
+  repo: z.string(),
+  pr: z.number().int(),
+  at: z.iso.datetime(),
+  signal: z.enum(["request_changes", "suggestion", "comment", "silent_pass", "miss", "applied", "resolved"]),
+  checkId: z.string().optional(),
+  path: z.string().optional(),
+  line: z.number().int().optional(),
+  weight: z.number(),
+  source: z.enum(["review", "outcome"]),
+});
+
 const counts = z.object({ agree: z.number().int(), notNeeded: z.number().int() });
 
 export const FeedbackSummarySchema = z.object({
@@ -91,3 +110,4 @@ export type FeedbackItem = z.infer<typeof FeedbackItemSchema>;
 export type FeedbackEvent = z.infer<typeof FeedbackEventSchema>;
 export type FeedbackInput = z.infer<typeof FeedbackInputSchema>;
 export type FeedbackSummary = z.infer<typeof FeedbackSummarySchema>;
+export type ReviewSignal = z.infer<typeof ReviewSignalSchema>;

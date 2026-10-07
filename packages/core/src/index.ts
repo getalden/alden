@@ -4,6 +4,7 @@ export {
   backgroundModelAllowed,
   getConfigValue,
   isKnownKey,
+  learningFromReviews,
   loadConfig,
   queueScope,
   type RankChange,
