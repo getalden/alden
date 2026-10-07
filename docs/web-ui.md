@@ -78,6 +78,16 @@ Stop it with Ctrl+C.
   Alden flagged that you didn't comment on. Only the button there sends it. Afterwards the panel says "Sent to GitHub"
   with a link to the review; if GitHub refuses, it shows why and keeps your drafts. A PR you've opened in this window
   shows "2 drafts" in the queue while it has some.
+- **Guided review.** When a briefing has places that need your eyes, **Start guided review** (or `g`) takes them one
+  at a time, in Alden's order: "Step 2 of 4", the place's title, why it's there (its reason, the check and how severe),
+  and the code at that place, a few lines either side from the PR's diff. **Look at these too** lists the files worth
+  opening beside it, from the [code graph](code-graph.md#related-files): other callers of the changed code, tests that
+  use it or import its file, and files that import it, each with its line. One that's in the diff opens its lines in
+  place; the rest link to the file on GitHub at the PR's head commit. Each step has the same **Useful**, **Not useful**
+  and **Dismiss** as the list, and **Comment** on the place. After Alden's places, the model's other findings that point
+  at code follow as extra steps. `n` and `p` move, `Esc` leaves (and **Resume guided review at step 3** brings you back
+  there while the window is open), and the last step offers **Finish: review your comments**. Local changes get the
+  places and their files to look at, without the code.
 - **My changes.** Your uncommitted changes in the repo `alden ui` started in, before you open a PR.
 - **Stats.** Time to first review and cycle time for a repo, before and after you started using Alden.
 - **Memory.** Each repo Alden knows about, then what you look for and what you skip there: where each item came from,
@@ -125,12 +135,14 @@ tab; Settings changes the defaults.
 | `+` `−` `x` | Useful, Not useful, Dismiss on this PR |
 | `c` | Comment on the place you're on in the briefing (a place in "Needs your eyes" or an evidence line), or else open "Comment on a line…" |
 | `s` | Go to the Review panel |
+| `g` | Start guided review, or resume it at the step you left |
+| `n` `p` | Next and previous step in a guided review |
 | `e` | Open the Export menu (`↑` `↓` move, `↵` picks, `Esc` closes) |
 | `⌘↵` / `Ctrl+↵` | Save the comment you're writing |
 | `r` | Refresh the queue |
 | `/` | Search the queue (opens it first if it's collapsed); `Esc` clears the search, `Enter` opens the first match |
 | `[` | Collapse the queue to a rail, or bring it back (windows 960px and wider) |
-| `Esc` | Cancel the comment you're writing, or leave the send summary; stop a running briefing; in a narrow window, back to the list |
+| `Esc` | Cancel the comment you're writing, or leave the send summary; leave guided review; stop a running briefing; in a narrow window, back to the list |
 
 Keys never fire while you're typing in a text box.
 
