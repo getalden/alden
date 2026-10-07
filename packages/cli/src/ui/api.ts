@@ -52,6 +52,7 @@ import {
   reviewLocalChanges,
   reviewPullRequest,
   SendReviewError,
+  seenPlaces,
   SpendLedger,
   scopeNote,
   selectProvider,
@@ -763,7 +764,8 @@ export function createUiApi(options: {
           openStore(),
           { repo: ref.repo, number: ref.number, event, ...(body !== undefined ? { body } : {}) },
           new Date(),
-          { fromReviews: config.learning.fromReviews },
+          // What you saw in guided review and the Diff tab, so approving past a place you saw counts as a silent pass.
+          { fromReviews: config.learning.fromReviews, seen: seenPlaces },
         );
         const { counts } = sent;
         void track("review_sent", {

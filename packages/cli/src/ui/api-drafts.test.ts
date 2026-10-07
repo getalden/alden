@@ -126,6 +126,28 @@ describe("drafts through the UI's API", () => {
     expect((await api.drafts("acme/shop#7")).drafts).toEqual([]);
   });
 
+  it("counts approving past a place you saw as a silent pass, from the places the UI recorded", async () => {
+    const { FeedbackLog } = await import("@alden/core");
+    const api = createUiApi({ version: "test", cwd: home });
+    new ReviewDrafts().rememberBriefing({
+      target: { kind: "pr", repo: "acme/shop", number: 7 },
+      generatedAt: "2026-10-01T00:00:00.000Z",
+      needsYourEyes: [
+        { title: "Fee added", reason: "r", checkId: "tests.missing", anchor: { path: "src/pay.ts", line: 2 } },
+      ],
+      checks: [{ id: "tests.missing", severity: "low" }],
+    } as unknown as Briefing);
+    await api.recordSeen({
+      pr: "acme/shop#7",
+      headSha: "h1",
+      places: [{ checkId: "tests.missing", path: "src/pay.ts", line: 2, how: "guided" }],
+    });
+    await api.sendReview({ pr: "acme/shop#7", event: "APPROVE" });
+    expect(new FeedbackLog().signals("acme/shop")).toEqual([
+      expect.objectContaining({ signal: "silent_pass", checkId: "tests.missing", source: "review" }),
+    ]);
+  });
+
   it("says how to fix a sign-in that can't write reviews, and keeps the drafts", async () => {
     const api = createUiApi({ version: "test", cwd: home });
     await api.addDraft({ pr: "acme/shop#7", path: "src/pay.ts", line: 2, body: "Cents?" });
