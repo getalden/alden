@@ -137,16 +137,19 @@ Checks only, no model · briefed 2026-10-06 09:30 UTC by Alden
 ## alden comment
 
 ```sh
-alden comment <pr> [file:line] "text"
+alden comment <pr> [file:line[-endLine]] "text" [--suggest "code" | --suggest-file <path> | --suggest -]
 ```
 
 Writes a comment on a PR, kept in Alden until you send it with `alden send`. With `file:line`, it's on that line of
-the diff; without, it's a general note for the review's body. With no text, lists the PR's comments, outdated ones
-marked. `pr` takes the same forms as `alden review`. See [Comments and sending a review](comments.md).
+the diff, and with `file:12-14` on lines 12 to 14 (one hunk, one side); without, it's a general note for the review's
+body. With a suggestion, it's a suggested change the author can apply on GitHub, and the text is optional. With no
+text, lists the PR's comments, ranges and suggestions (old lines and new) shown, outdated ones marked. `pr` takes the same forms as `alden review`. See [Comments and sending a review](comments.md).
 
 | Flag | What it does |
 | --- | --- |
-| `--left` | The line number is in the old file: a comment on a removed line. |
+| `--left` | The line numbers are in the old file: a comment on removed lines. Not with a suggestion. |
+| `--suggest <code>` | Suggests replacement code for the line(s), exactly as they should read. `-` reads it from stdin; `""` deletes the lines. See [Suggesting changes](comments.md#suggesting-changes). |
+| `--suggest-file <path>` | Suggests the replacement code in this file. From a file or stdin, one trailing newline is dropped. |
 | `--delete <id>` | Deletes a comment, by the id the list shows. |
 | `--json` | Print the comments (or the new one) as JSON. Schema: `packages/schema/json/review-draft.v1.json`. |
 
@@ -157,7 +160,7 @@ alden send <pr> --comment | --approve | --request-changes [-m body]
 ```
 
 Sends the PR's comments to GitHub as one review. First it shows exactly what will post (the body, then each comment
-with its file and line, and before an approval the places Alden flagged that you didn't comment on), then asks. Nothing
+with its file and line or lines, each suggestion as the lines it replaces and the lines it suggests, and before an approval the places Alden flagged that you didn't comment on), then asks. Nothing
 else in Alden posts to GitHub. See [Comments and sending a review](comments.md#sending).
 
 | Flag | What it does |

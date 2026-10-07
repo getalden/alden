@@ -652,12 +652,21 @@ export function createUiApi(options: {
         if (input.path === undefined || input.line === undefined) {
           throw new ApiError(400, "A comment on a line needs both the file and the line.");
         }
-        const placed = placeOnDiff(files, input.path, input.line, input.side ?? "RIGHT");
+        const placed = placeOnDiff(files, input.path, input.line, input.side ?? "RIGHT", input.startLine);
         if ("problem" in placed) throw new ApiError(422, placed.problem);
         place = placed;
+      } else if (input.startLine !== undefined) {
+        throw new ApiError(400, "A multi-line comment needs the file and its last line too.");
       }
       try {
-        const draft = drafts.add({ pr: ref.name, headSha, body: input.body, source, ...(place ? { place } : {}) });
+        const draft = drafts.add({
+          pr: ref.name,
+          headSha,
+          body: input.body,
+          source,
+          ...(place ? { place } : {}),
+          ...(input.suggestion !== undefined ? { suggestion: input.suggestion } : {}),
+        });
         void track("draft_changed", { action: "add", source, inline: inline(draft) });
         return publicDraft(draft);
       } catch (error) {
@@ -674,14 +683,17 @@ export function createUiApi(options: {
           throw new ApiError(400, "Placing a comment on a line needs both the file and the line.");
         }
         const { headSha, files } = await followPr(await prOf(draft.pr));
-        const placed = placeOnDiff(files, change.path, change.line, change.side ?? "RIGHT");
+        const placed = placeOnDiff(files, change.path, change.line, change.side ?? "RIGHT", change.startLine);
         if ("problem" in placed) throw new ApiError(422, placed.problem);
         place = { ...placed, headSha };
+      } else if (change.startLine !== undefined) {
+        throw new ApiError(400, "Placing a comment on lines needs the file and its last line too.");
       }
       let edited: ReturnType<ReviewDrafts["edit"]>;
       try {
         edited = drafts.edit(id, {
           ...(change.body !== undefined ? { body: change.body } : {}),
+          ...(change.suggestion !== undefined ? { suggestion: change.suggestion } : {}),
           ...(place ? { place } : {}),
         });
       } catch (error) {

@@ -121,20 +121,31 @@ export interface UiApi {
   sendReview(input: { pr: string; event: ReviewVerdict; body?: string }): Promise<SendReviewResult>;
 }
 
-/** A new draft: on `path` at `line` (on `side`, default RIGHT), or without them a general note for the review's body. */
+/**
+ * A new draft: on `path` at `line` (on `side`, default RIGHT), or from `startLine` to `line` (one hunk, one side), or
+ * without them a general note for the review's body. `suggestion` is replacement code for those lines, on the RIGHT
+ * side only; with one, `body` may be empty.
+ */
 export interface DraftInput {
   pr: string;
   path?: string;
   line?: number;
+  startLine?: number;
   side?: "RIGHT" | "LEFT";
   body: string;
+  suggestion?: string;
 }
 
-/** A change to a draft: its text, or (with `path` and `line`) a new place, which brings an outdated draft back. */
+/**
+ * A change to a draft: its text, its suggestion (`null` removes it), or (with `path` and `line`, and `startLine` for a
+ * range) a new place, which brings an outdated draft back.
+ */
 export interface DraftChange {
   body?: string;
+  suggestion?: string | null;
   path?: string;
   line?: number;
+  startLine?: number;
   side?: "RIGHT" | "LEFT";
 }
 
@@ -242,9 +253,15 @@ async function briefingFrom(req: IncomingMessage): Promise<Briefing> {
   return parsed.data;
 }
 
-/** A draft's line from a request: `path` and `line` together (and optionally `side`), or nothing. */
-function placeFrom(body: Record<string, unknown>): Pick<DraftInput, "path" | "line" | "side"> | undefined {
-  if (body.path === undefined && body.line === undefined) return undefined;
+/** A draft's line from a request: `path` and `line` together (and optionally `side` and `startLine`), or nothing. */
+function placeFrom(
+  body: Record<string, unknown>,
+): Pick<DraftInput, "path" | "line" | "side" | "startLine"> | undefined {
+  if (body.path === undefined && body.line === undefined) {
+    if (body.startLine !== undefined)
+      throw new ApiError(400, "A startLine needs { path, line } too: line is the range's last line.");
+    return undefined;
+  }
   const sides = ["RIGHT", "LEFT"] as const;
   const side = sides.find((s) => s === body.side);
   if (
@@ -260,7 +277,28 @@ function placeFrom(body: Record<string, unknown>): Pick<DraftInput, "path" | "li
       "A line comment needs { path, line } (line a positive whole number), and side RIGHT or LEFT.",
     );
   }
-  return { path: body.path, line: body.line, ...(side ? { side } : {}) };
+  const { startLine } = body;
+  if (startLine !== undefined && (typeof startLine !== "number" || !Number.isInteger(startLine) || startLine < 1)) {
+    throw new ApiError(400, "startLine is a range's first line: a positive whole number, less than line.");
+  }
+  return {
+    path: body.path,
+    line: body.line,
+    ...(side ? { side } : {}),
+    ...(startLine !== undefined ? { startLine } : {}),
+  };
+}
+
+/** A suggestion from a request: replacement code (a string, empty to delete the lines), or nothing. */
+function suggestionFrom(body: Record<string, unknown>, removable: boolean): { suggestion?: string | null } {
+  if (body.suggestion === undefined) return {};
+  if (typeof body.suggestion === "string" || (removable && body.suggestion === null)) {
+    return { suggestion: body.suggestion };
+  }
+  throw new ApiError(
+    400,
+    `suggestion is the replacement code, as a string (empty deletes the lines)${removable ? ", or null to remove it" : ""}.`,
+  );
 }
 
 /**
@@ -352,13 +390,24 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       }
       const body = await readJsonBody(req);
       const place = placeFrom(body);
-      if ((body.body !== undefined && typeof body.body !== "string") || (body.body === undefined && !place)) {
-        throw new ApiError(400, "Send { body }, or { path, line, side? } to place it on a line again.");
+      const suggestion = suggestionFrom(body, true);
+      if (
+        (body.body !== undefined && typeof body.body !== "string") ||
+        (body.body === undefined && body.suggestion === undefined && !place)
+      ) {
+        throw new ApiError(
+          400,
+          "Send { body?, suggestion? }, or { path, line, side?, startLine? } to place it on a line again.",
+        );
       }
       send(
         res,
         200,
-        await api.editDraft(id, { ...(typeof body.body === "string" ? { body: body.body } : {}), ...place }),
+        await api.editDraft(id, {
+          ...(typeof body.body === "string" ? { body: body.body } : {}),
+          ...suggestion,
+          ...place,
+        }),
       );
       return;
     }
@@ -575,11 +624,30 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       }
       case "POST /api/drafts": {
         const body = await readJsonBody(req);
-        if (typeof body.pr !== "string" || typeof body.body !== "string") {
-          throw new ApiError(400, "Send { pr, body }, and { path, line, side? } for a comment on a line.");
+        const { suggestion } = suggestionFrom(body, false);
+        if (
+          typeof body.pr !== "string" ||
+          (typeof body.body !== "string" && !(body.body === undefined && suggestion !== undefined))
+        ) {
+          throw new ApiError(
+            400,
+            "Send { pr, body }, and { path, line, side?, startLine?, suggestion? } for a comment on a line.",
+          );
         }
         // Always yours: only Claude Code (through `alden mcp`) drafts as "claude".
-        send(res, 200, await api.addDraft({ pr: body.pr, body: body.body, ...placeFrom(body) }, "you"));
+        send(
+          res,
+          200,
+          await api.addDraft(
+            {
+              pr: body.pr,
+              body: typeof body.body === "string" ? body.body : "",
+              ...placeFrom(body),
+              ...(typeof suggestion === "string" ? { suggestion } : {}),
+            },
+            "you",
+          ),
+        );
         return;
       }
       case "POST /api/review/send": {

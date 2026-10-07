@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { composeReviewBody, JsonCache } from "@alden/core";
 import type { ReviewDraft, ReviewEvent, UnaddressedPlace } from "@alden/schema";
@@ -8,20 +9,51 @@ import { createUiApi } from "../ui/api.js";
 import { originOf } from "./memory.js";
 import { LAST_QUEUE_KEY, type LastQueue } from "./open.js";
 
-/** `src/pay.ts:12` → a file and line; anything else isn't a place. */
-export function parseWhere(text: string): { path: string; line: number } | undefined {
-  const match = /^(\S+):(\d+)$/.exec(text.trim());
-  if (!match || Number(match[2]) < 1) return undefined;
-  return { path: match[1] as string, line: Number(match[2]) };
+/**
+ * `src/pay.ts:12` → a file and line; `src/pay.ts:12-14` → a file and the lines from 12 to 14 (the last is `line`);
+ * anything else isn't a place. A range the wrong way round is kept as typed, for the engine to say so.
+ */
+export function parseWhere(text: string): { path: string; line: number; startLine?: number } | undefined {
+  const match = /^(\S+):(\d+)(?:-(\d+))?$/.exec(text.trim());
+  if (!match || Number(match[2]) < 1 || (match[3] !== undefined && Number(match[3]) < 1)) return undefined;
+  const first = Number(match[2]);
+  const last = match[3] === undefined ? first : Number(match[3]);
+  return { path: match[1] as string, line: last, ...(last !== first ? { startLine: first } : {}) };
 }
 
 const placeOf = (d: ReviewDraft) =>
-  d.path === undefined ? "general note" : `${d.path}:${d.line}${d.side === "LEFT" ? " (old side)" : ""}`;
+  d.path === undefined
+    ? "general note"
+    : `${d.path}:${d.startLine !== undefined ? `${d.startLine}-` : ""}${d.line}${d.side === "LEFT" ? " (old side)" : ""}`;
 const indent = (text: string, by: string) =>
   text
     .split("\n")
     .map((l) => (l ? `${by}${l}` : l))
     .join("\n");
+
+/** A suggested change as lines: the code it replaces (-) and the code it suggests (+), or that it deletes them. */
+export function renderSuggestion(d: ReviewDraft, color: boolean, by = "    "): string[] {
+  if (d.suggestion === undefined) return [];
+  const lines =
+    d.originalLines?.length ?? (d.startLine !== undefined && d.line !== undefined ? d.line - d.startLine + 1 : 1);
+  const out = [
+    paint(
+      `${by}suggested change: ${d.suggestion === "" ? `delete ${lines === 1 ? "this line" : `these ${lines} lines`}` : `replace ${lines === 1 ? "this line" : `these ${lines} lines`}`}`,
+      "dim",
+      color,
+    ),
+  ];
+  for (const old of d.originalLines ?? []) out.push(paint(`${by}- ${old}`, "red", color));
+  if (d.suggestion !== "")
+    for (const line of d.suggestion.split("\n")) out.push(paint(`${by}+ ${line}`, "green", color));
+  return out;
+}
+
+/** A comment's text and its suggestion, as listed. */
+const renderComment = (d: ReviewDraft, color: boolean): string[] => [
+  ...(d.body.trim() ? [indent(d.body, "    ")] : []),
+  ...renderSuggestion(d, color),
+];
 
 /** A PR's drafts, as `alden comment <pr>` lists them. Text from drafts is shown, never run: escape codes are removed. */
 export function renderDrafts(pr: string, untrusted: ReviewDraft[], color: boolean): string {
@@ -46,7 +78,7 @@ export function renderDrafts(pr: string, untrusted: ReviewDraft[], color: boolea
         ),
       );
     }
-    out.push(indent(d.body, "    "), "");
+    out.push(...renderComment(d, color), "");
   }
   if (outdated > 0) {
     out.push(
@@ -78,7 +110,18 @@ export function renderSendSummary(
   if (inline.length === 0) out.push(paint("  (none)", "dim", color));
   for (const d of inline) {
     out.push(`  ${placeOf(d)}${d.source === "claude" ? paint(" · drafted by Claude Code", "dim", color) : ""}`);
-    out.push(indent(d.body, "    "));
+    out.push(...renderComment(d, color));
+  }
+  const suggestions = inline.filter((d) => d.suggestion !== undefined).length;
+  if (suggestions > 0) {
+    out.push(
+      "",
+      paint(
+        `${suggestions === 1 ? "The suggested change posts as a GitHub suggestion" : `The ${suggestions} suggested changes post as GitHub suggestions`}: the author can apply ${suggestions === 1 ? "it" : "them"} with a click.`,
+        "dim",
+        color,
+      ),
+    );
   }
   if (fromClaude > 0) {
     out.push(
@@ -122,6 +165,50 @@ async function confirm(question: string): Promise<boolean> {
   }
 }
 
+interface CommentOptions {
+  left?: boolean;
+  suggest?: string;
+  suggestFile?: string;
+  delete?: string;
+  json?: boolean;
+}
+
+/** One trailing newline off code read from a file or stdin: editors add one, and it isn't a line of the suggestion. */
+const withoutFinalNewline = (code: string) => code.replace(/\r?\n$/, "");
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk as Buffer));
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** The suggestion from --suggest (as typed, or stdin for -) or --suggest-file; at most one of them. */
+export async function suggestionFrom(
+  options: Pick<CommentOptions, "suggest" | "suggestFile">,
+  read: { stdin: () => Promise<string>; file: (path: string) => Promise<string> } = {
+    stdin: readStdin,
+    file: (path) => readFile(path, "utf8"),
+  },
+): Promise<string | undefined> {
+  if (options.suggest !== undefined && options.suggestFile !== undefined) {
+    throw new Error("Give the suggestion once: --suggest or --suggest-file, not both.");
+  }
+  if (options.suggestFile !== undefined) {
+    try {
+      return withoutFinalNewline(await read.file(options.suggestFile));
+    } catch (error) {
+      throw new Error(`Couldn't read ${options.suggestFile}: ${(error as Error).message}`);
+    }
+  }
+  if (options.suggest === "-") {
+    if (process.stdin.isTTY && read.stdin === readStdin) {
+      throw new Error("--suggest - reads the code from stdin: pipe it in (pbpaste | alden comment ...).");
+    }
+    return withoutFinalNewline(await read.stdin());
+  }
+  return options.suggest;
+}
+
 export function registerCommentCommands(program: Command, version: string): void {
   const api = () => createUiApi({ version, cwd: process.cwd() });
   const fail = (error: unknown): never => program.error((error as Error).message);
@@ -129,14 +216,19 @@ export function registerCommentCommands(program: Command, version: string): void
   program
     .command("comment")
     .description(
-      "Write a comment on a PR, kept in Alden until you send it: on a line (file:line) or, without one, a general note. With no text, list the PR's comments.",
+      "Write a comment on a PR, kept in Alden until you send it: on a line (file:line), on lines (file:12-14), or without one a general note. --suggest makes it a suggested change GitHub can apply. With no text, list the PR's comments.",
     )
     .argument("<pr>", "a PR URL, owner/repo#123, or a # from `alden queue`")
-    .argument("[text...]", 'where and what: src/pay.ts:12 "Is this in cents?", or just the text for a general note')
-    .option("--left", "the line number is in the old file (a removed line)")
+    .argument(
+      "[text...]",
+      'where and what: src/pay.ts:12 "Is this in cents?", src/pay.ts:12-14 "..." for several lines, or just the text for a general note',
+    )
+    .option("--left", "the line numbers are in the old file (removed lines)")
+    .option("--suggest <code>", "suggest replacement code for the line(s), - to read it from stdin; empty deletes them")
+    .option("--suggest-file <path>", "suggest the replacement code in this file")
     .option("--delete <id>", "delete a comment instead")
     .option("--json", "print the comments as JSON")
-    .action(async (prArg: string, words: string[], options: { left?: boolean; delete?: string; json?: boolean }) => {
+    .action(async (prArg: string, words: string[], options: CommentOptions) => {
       const pr = await prFrom(program, prArg, "alden comment");
       const color = shouldColor(process.stdout);
       if (options.delete) {
@@ -150,22 +242,30 @@ export function registerCommentCommands(program: Command, version: string): void
         else process.stdout.write(renderDrafts(pr, drafts, color));
         return;
       }
+      const suggestion = await suggestionFrom(options).catch(fail);
       const where = parseWhere(words[0] as string);
       const text = (where ? words.slice(1) : words).join(" ");
-      if (where && !text.trim())
+      if (suggestion !== undefined && !where) {
+        program.error(
+          `A suggestion replaces lines: say which, as file:line or file:12-14 (alden comment ${pr} src/file.ts:12 --suggest "...").`,
+        );
+      }
+      if (where && !text.trim() && suggestion === undefined)
         program.error(`Add the comment's text: alden comment ${pr} ${words[0]} "Your comment"`);
       const draft = await api()
         .addDraft({
           pr,
           body: text,
           ...(where ? { ...where, ...(options.left ? { side: "LEFT" as const } : {}) } : {}),
+          ...(suggestion !== undefined ? { suggestion } : {}),
         })
         .catch(fail);
       if (options.json) {
         console.log(JSON.stringify(draft, null, 2));
         return;
       }
-      console.log(`Drafted ${draft.id} (${placeOf(draft)}) for ${pr}. Nothing is posted until you send it:`);
+      const kind = draft.suggestion !== undefined ? ", a suggested change" : "";
+      console.log(`Drafted ${draft.id} (${placeOf(draft)}${kind}) for ${pr}. Nothing is posted until you send it:`);
       console.log(paint(`  alden send ${pr} --comment | --approve | --request-changes`, "dim", color));
     });
 

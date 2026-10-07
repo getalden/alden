@@ -21,8 +21,10 @@ Review `$ARGUMENTS` (no argument: the uncommitted changes in this repo) as the u
    `alden_feedback` (useful, not_useful or dismiss, by its id). If they point out something Alden should have flagged,
    record it with `alden_missed`. Record only what the user said, never your own view.
 5. **Draft, don't post.** If the user wants a comment written on the PR, draft it with `alden_draft_comment` (on a
-   line of the diff, or without one as a general note), in words they've seen or asked for. Tell them it's waiting in
-   Alden: they review it and send the review from Alden's UI or with `alden send <pr>`.
+   line or lines of the diff, or without one as a general note), in words they've seen or asked for. If they want a
+   change suggested, pass the replacement code as `suggestion` (with `start_line` for several lines): GitHub shows it
+   as a suggestion the author can apply. Tell them it's waiting in Alden: they review it and send the review from
+   Alden's UI or with `alden send <pr>`.
 
 Rules:
 

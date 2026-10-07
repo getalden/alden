@@ -34,12 +34,20 @@ export interface LineAnchor {
   after?: string;
 }
 
-/** Where an inline draft sits: a line on one side of a file's diff. */
+/**
+ * Where an inline draft sits: a line on one side of a file's diff, or (with `startLine`) the lines from `startLine` to
+ * `line`, all on that side and in one hunk, which is the only kind of range GitHub takes.
+ */
 export interface Placement {
   path: string;
   line: number;
   side: Side;
+  /** The line's text and its neighbours; for a range, the last line's text and the lines just outside the range. */
   anchor: LineAnchor;
+  /** A range's first line; absent for a single line. */
+  startLine?: number;
+  /** The commented lines' text, first to last: what a suggestion replaces. Absent on drafts from before 0.6. */
+  lines?: string[];
 }
 
 /** How far (in lines) a comment can be from a flagged place and still count as about it. */
@@ -54,15 +62,18 @@ const keyOf = (pr: string) => pr.toLowerCase();
 
 interface SideLine extends LineAnchor {
   line: number;
+  /** Which hunk of the file it's in, from 0: a multi-line comment can't cross from one to another. */
+  hunk: number;
 }
 
 /**
  * The lines GitHub takes comments on, on one side of a file's diff: added and unchanged lines on the right, removed
- * and unchanged lines on the left. Each carries its neighbours within the hunk.
+ * and unchanged lines on the left. Each carries its neighbours within the hunk. Within a hunk, one side's lines are
+ * numbered without gaps.
  */
 export function commentableLines(file: DiffFile, side: Side): SideLine[] {
   const out: SideLine[] = [];
-  for (const hunk of file.hunks) {
+  for (const [index, hunk] of file.hunks.entries()) {
     const lines = hunk.lines.filter((l) => (side === "RIGHT" ? l.kind !== "del" : l.kind !== "add"));
     lines.forEach((l, i) => {
       const line = side === "RIGHT" ? l.newLine : l.oldLine;
@@ -71,6 +82,7 @@ export function commentableLines(file: DiffFile, side: Side): SideLine[] {
       const after = lines[i + 1]?.text;
       out.push({
         line,
+        hunk: index,
         text: l.text,
         ...(before !== undefined ? { before } : {}),
         ...(after !== undefined ? { after } : {}),
@@ -80,12 +92,24 @@ export function commentableLines(file: DiffFile, side: Side): SideLine[] {
   return out;
 }
 
-/** Places a comment on a line of the diff, or says (in a sentence) why GitHub wouldn't take one there. */
+/** A run of lines' anchor: the last line's text, with the line before the first and the line after the last. */
+const anchorOf = (first: SideLine, last: SideLine): LineAnchor => ({
+  text: last.text,
+  ...(first.before !== undefined ? { before: first.before } : {}),
+  ...(last.after !== undefined ? { after: last.after } : {}),
+});
+
+/**
+ * Places a comment on a line of the diff, or with `startLine` on the lines from there to `line`, or says (in a
+ * sentence) why GitHub wouldn't take one there. A range must be on one side and within one hunk; a `startLine` equal
+ * to `line` is just that line.
+ */
 export function placeOnDiff(
   files: DiffFile[],
   path: string,
   line: number,
   side: Side = "RIGHT",
+  startLine?: number,
 ): Placement | { problem: string } {
   const file = files.find((f) => f.path === path);
   if (!file) return { problem: `${path} isn't changed in this PR, so GitHub won't take a comment on it.` };
@@ -94,42 +118,78 @@ export function placeOnDiff(
       problem: `GitHub doesn't show ${path}'s diff (it's binary or too large), so there's no line to comment on. Write a general note instead.`,
     };
   }
-  const found = commentableLines(file, side).find((l) => l.line === line);
-  if (!found) {
-    const where = side === "LEFT" ? " on the old side" : "";
+  const lines = commentableLines(file, side);
+  const where = side === "LEFT" ? " on the old side" : "";
+  const found = lines.find((l) => l.line === line);
+  if (startLine === undefined || startLine === line) {
+    if (!found) {
+      return {
+        problem: `Line ${line} of ${path} isn't in this PR's diff${where}: GitHub only takes comments on changed lines and the few shown around them.`,
+      };
+    }
+    return { path, line, side, anchor: anchorOf(found, found), lines: [found.text] };
+  }
+  if (startLine > line) {
+    return { problem: `A range goes from its first line to its last, and ${startLine} comes after ${line}.` };
+  }
+  const first = lines.find((l) => l.line === startLine);
+  if (!first || !found) {
     return {
-      problem: `Line ${line} of ${path} isn't in this PR's diff${where}: GitHub only takes comments on changed lines and the few shown around them.`,
+      problem: `Line ${first ? line : startLine} of ${path} isn't in this PR's diff${where}: every line of a multi-line comment must be in one hunk of the diff (the changed lines and the few shown around them).`,
     };
   }
-  const { line: _line, ...anchor } = found;
-  return { path, line, side, anchor };
+  if (first.hunk !== found.hunk) {
+    return {
+      problem: `Lines ${startLine}-${line} of ${path} span ${found.hunk - first.hunk + 1} hunks of this PR's diff${where}: GitHub only takes a multi-line comment within one hunk. Shorten the range, or write two comments.`,
+    };
+  }
+  const range = lines.filter((l) => l.hunk === found.hunk && l.line >= startLine && l.line <= line);
+  return { path, line, side, startLine, anchor: anchorOf(first, found), lines: range.map((l) => l.text) };
 }
 
 /**
- * Finds a draft's line again in a newer diff: the same text on the same side of the same file (or the file it was
- * renamed to), preferring the candidate whose neighbours still match, then the one nearest the old line. Undefined
- * when the line changed, left the diff, or can't be told apart from others like it: an `outdated` draft, which you
- * place again rather than have Alden guess.
+ * Finds a draft's line (or range of lines) again in a newer diff: the same text, every line of it, contiguous within
+ * one hunk on the same side of the same file (or the file it was renamed to), preferring the candidate whose
+ * neighbours still match, then the one nearest the old place. Undefined when any of the lines changed, left the diff,
+ * or can't be told apart from others like them: an `outdated` draft, which you place again rather than have Alden
+ * guess. A suggestion is only ever moved onto exactly the code it was written against.
  */
 export function findAgain(placement: Placement, files: DiffFile[]): Placement | undefined {
   const file = files.find((f) => f.path === placement.path) ?? files.find((f) => f.previousPath === placement.path);
   if (!file) return undefined;
   const { anchor } = placement;
-  const score = (l: SideLine) =>
-    (anchor.before !== undefined && l.before === anchor.before ? 1 : 0) +
-    (anchor.after !== undefined && l.after === anchor.after ? 1 : 0);
-  const candidates = commentableLines(file, placement.side).filter((l) => l.text === anchor.text);
+  const original = placement.lines ?? [anchor.text];
+  if (original.length === 0 || original[original.length - 1] !== anchor.text) return undefined;
+  const lines = commentableLines(file, placement.side);
+  const candidates: { first: SideLine; last: SideLine }[] = [];
+  for (let i = 0; i + original.length <= lines.length; i++) {
+    const run = lines.slice(i, i + original.length);
+    const first = run[0] as SideLine;
+    if (run.every((l, k) => l.text === original[k] && l.hunk === first.hunk)) {
+      candidates.push({ first, last: run[run.length - 1] as SideLine });
+    }
+  }
   if (candidates.length === 0) return undefined;
+  const score = ({ first, last }: { first: SideLine; last: SideLine }) =>
+    (anchor.before !== undefined && first.before === anchor.before ? 1 : 0) +
+    (anchor.after !== undefined && last.after === anchor.after ? 1 : 0);
   const best = Math.max(...candidates.map(score));
-  // A blank line or a lone brace is only itself when something around it agrees.
-  if (anchor.text.trim().length < 3 && best === 0) return undefined;
-  const top = candidates.filter((l) => score(l) === best);
-  const distance = (l: SideLine) => Math.abs(l.line - placement.line);
+  // Blank lines or lone braces are only themselves when something around them agrees.
+  if (original.every((text) => text.trim().length < 3) && best === 0) return undefined;
+  const top = candidates.filter((c) => score(c) === best);
+  const distance = (c: { last: SideLine }) => Math.abs(c.last.line - placement.line);
   const nearest = Math.min(...top.map(distance));
-  const closest = top.filter((l) => distance(l) === nearest);
+  const closest = top.filter((c) => distance(c) === nearest);
   if (closest.length !== 1) return undefined;
-  const { line, ...moved } = closest[0] as SideLine;
-  return { path: file.path, line, side: placement.side, anchor: moved };
+  const { first, last } = closest[0] as { first: SideLine; last: SideLine };
+  return {
+    path: file.path,
+    line: last.line,
+    side: placement.side,
+    ...(original.length > 1 ? { startLine: first.line } : {}),
+    anchor: anchorOf(first, last),
+    lines: original,
+  };
 }
 
 // --- The store --------------------------------------------------------------------------------------------------
@@ -140,9 +200,12 @@ interface DraftRow {
   head_sha: string;
   path: string | null;
   line: number | null;
+  start_line: number | null;
   side: string | null;
   anchor: string | null;
+  lines: string | null;
   body: string;
+  suggestion: string | null;
   source: string;
   state: string;
   created_at: string;
@@ -154,24 +217,32 @@ export interface StoredDraft extends ReviewDraft {
   anchor?: LineAnchor;
 }
 
+function json<T>(text: string | null): T | undefined {
+  try {
+    return text ? (JSON.parse(text) as T) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function fromRow(row: DraftRow): StoredDraft {
+  const lines = json<string[]>(row.lines);
+  const inline = row.path !== null && row.line !== null;
   const draft = ReviewDraftSchema.parse({
     id: row.id,
     pr: row.pr,
     headSha: row.head_sha,
-    ...(row.path !== null && row.line !== null ? { path: row.path, line: Number(row.line), side: row.side } : {}),
+    ...(inline ? { path: row.path, line: Number(row.line), side: row.side } : {}),
+    ...(inline && row.start_line !== null ? { startLine: Number(row.start_line) } : {}),
+    ...(inline && Array.isArray(lines) ? { originalLines: lines } : {}),
     body: row.body,
+    ...(row.suggestion !== null ? { suggestion: row.suggestion } : {}),
     source: row.source,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     state: row.state,
   });
-  let anchor: LineAnchor | undefined;
-  try {
-    anchor = row.anchor ? (JSON.parse(row.anchor) as LineAnchor) : undefined;
-  } catch {
-    anchor = undefined;
-  }
+  const anchor = json<LineAnchor>(row.anchor);
   return anchor ? { ...draft, anchor } : draft;
 }
 
@@ -180,16 +251,64 @@ export const publicDraft = ({ anchor: _anchor, ...draft }: StoredDraft): ReviewD
 
 const placementOf = (d: StoredDraft): Placement | undefined =>
   d.path !== undefined && d.line !== undefined && d.anchor
-    ? { path: d.path, line: d.line, side: d.side ?? "RIGHT", anchor: d.anchor }
+    ? {
+        path: d.path,
+        line: d.line,
+        side: d.side ?? "RIGHT",
+        anchor: d.anchor,
+        ...(d.startLine !== undefined ? { startLine: d.startLine } : {}),
+        ...(d.originalLines ? { lines: d.originalLines } : {}),
+      }
     : undefined;
 
-/** Checks a comment's text: something to say, within GitHub's limit. */
-export function checkBody(body: string): string {
-  if (body.trim() === "") throw new Error("A comment needs some text.");
-  if (body.length > MAX_COMMENT_CHARS) {
-    throw new Error(`That comment is ${body.length} characters; GitHub takes at most ${MAX_COMMENT_CHARS}.`);
+/**
+ * Checks a comment's text: something to say (or a suggestion, which can stand alone), within GitHub's limit once
+ * the suggestion block is added.
+ */
+export function checkBody(body: string, suggestion?: string): string {
+  if (body.trim() === "" && suggestion === undefined) throw new Error("A comment needs some text.");
+  const length = commentBody({ body, ...(suggestion !== undefined ? { suggestion } : {}) }).length;
+  if (length > MAX_COMMENT_CHARS) {
+    throw new Error(
+      `That comment is ${length} characters${suggestion !== undefined ? " with its suggestion" : ""}; GitHub takes at most ${MAX_COMMENT_CHARS}.`,
+    );
   }
   return body;
+}
+
+/** Checks a suggestion goes where GitHub can apply one: on a line, or a range, of the new file. */
+export function checkSuggestion(suggestion: string | undefined, place: Pick<Placement, "side"> | undefined): void {
+  if (suggestion === undefined) return;
+  if (!place) {
+    throw new Error(
+      "A suggestion replaces lines of a file: put it on a line (or lines) of the diff, not a general note.",
+    );
+  }
+  if (place.side !== "RIGHT") {
+    throw new Error(
+      "A suggestion replaces lines in the new file, so it goes on the new side (RIGHT), not on removed lines.",
+    );
+  }
+}
+
+/**
+ * The fence for a suggestion block: three backticks, or one more than the longest run of backticks in the code, so
+ * nothing in it can close the block early.
+ */
+export function suggestionFence(code: string): string {
+  const longest = Math.max(0, ...(code.match(/`+/g) ?? []).map((run) => run.length));
+  return "`".repeat(Math.max(3, longest + 1));
+}
+
+/**
+ * A line comment as it posts: what you wrote, then (for a suggestion) a blank line and a ```suggestion block with
+ * the replacement. An empty suggestion is an empty block, which GitHub offers as deleting the lines.
+ */
+export function commentBody(draft: { body: string; suggestion?: string | undefined }): string {
+  if (draft.suggestion === undefined) return draft.body;
+  const fence = suggestionFence(draft.suggestion);
+  const block = `${fence}suggestion\n${draft.suggestion === "" ? "" : `${draft.suggestion}\n`}${fence}`;
+  return draft.body.trim() === "" ? block : `${draft.body.replace(/\s+$/, "")}\n\n${block}`;
 }
 
 /** Drafts, in Alden's local database. Never synced, exported or sent anywhere except by `sendReview`. */
@@ -212,26 +331,41 @@ export class ReviewDrafts {
     return row ? fromRow(row) : undefined;
   }
 
-  /** Adds a draft: on a placed line, or (without one) a general note for the review's body. */
+  /**
+   * Adds a draft: on a placed line or range, or (without one) a general note for the review's body. With
+   * `suggestion`, replacement code for the placed lines (on the new side only); its text may then be empty.
+   */
   add(
-    input: { pr: string; headSha: string; body: string; source: ReviewDraft["source"]; place?: Placement },
+    input: {
+      pr: string;
+      headSha: string;
+      body: string;
+      source: ReviewDraft["source"];
+      place?: Placement;
+      suggestion?: string;
+    },
     now: Date = new Date(),
   ): StoredDraft {
     const at = now.toISOString();
     const id = randomUUID().replaceAll("-", "").slice(0, 8);
-    const { place } = input;
+    const { place, suggestion } = input;
+    checkSuggestion(suggestion, place);
     this.store.run(
-      `INSERT INTO drafts (id, pr, pr_key, head_sha, path, line, side, anchor, body, source, state, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
+      `INSERT INTO drafts (id, pr, pr_key, head_sha, path, line, start_line, side, anchor, lines, body, suggestion, source,
+         state, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
       id,
       input.pr,
       keyOf(input.pr),
       input.headSha,
       place?.path ?? null,
       place?.line ?? null,
+      place?.startLine ?? null,
       place?.side ?? null,
       place ? JSON.stringify(place.anchor) : null,
-      checkBody(input.body),
+      place?.lines ? JSON.stringify(place.lines) : null,
+      checkBody(input.body, suggestion),
+      suggestion ?? null,
       input.source,
       at,
       at,
@@ -239,35 +373,49 @@ export class ReviewDrafts {
     return this.get(id) as StoredDraft;
   }
 
-  /** Changes a draft's text, or places it on a line again (which brings an outdated draft back). */
+  /**
+   * Changes a draft's text or suggestion (`null` removes it), or places it on a line or range again (which brings an
+   * outdated draft back, against the code now there).
+   */
   edit(
     id: string,
-    change: { body?: string; place?: Placement & { headSha: string } },
+    change: { body?: string; suggestion?: string | null; place?: Placement & { headSha: string } },
     now: Date = new Date(),
   ): StoredDraft | undefined {
     const draft = this.get(id);
     if (!draft) return undefined;
-    if (change.body !== undefined) {
-      this.store.run(
-        "UPDATE drafts SET body = ?, updated_at = ? WHERE id = ?",
-        checkBody(change.body),
-        now.toISOString(),
-        id,
-      );
-    }
-    if (change.place) this.move(id, change.place, now);
+    const body = change.body ?? draft.body;
+    const suggestion = change.suggestion === null ? undefined : (change.suggestion ?? draft.suggestion);
+    const side = change.place?.side ?? (draft.path !== undefined ? (draft.side ?? "RIGHT") : undefined);
+    checkSuggestion(suggestion, side ? { side } : undefined);
+    checkBody(body, suggestion);
+    this.store.transaction(() => {
+      if (change.body !== undefined || change.suggestion !== undefined) {
+        this.store.run(
+          "UPDATE drafts SET body = ?, suggestion = ?, updated_at = ? WHERE id = ?",
+          body,
+          suggestion ?? null,
+          now.toISOString(),
+          id,
+        );
+      }
+      if (change.place) this.move(id, change.place, now);
+    });
     return this.get(id);
   }
 
-  /** Puts a draft on a (new) line at a (new) head, as a draft again. */
+  /** Puts a draft on a (new) line or range at a (new) head, as a draft again. */
   move(id: string, place: Placement & { headSha: string }, now?: Date): void {
     this.store.run(
-      `UPDATE drafts SET path = ?, line = ?, side = ?, anchor = ?, head_sha = ?, state = 'draft'${now ? ", updated_at = ?" : ""}
+      `UPDATE drafts SET path = ?, line = ?, start_line = ?, side = ?, anchor = ?, lines = ?, head_sha = ?,
+         state = 'draft'${now ? ", updated_at = ?" : ""}
        WHERE id = ?`,
       place.path,
       place.line,
+      place.startLine ?? null,
       place.side,
       JSON.stringify(place.anchor),
+      place.lines ? JSON.stringify(place.lines) : null,
       place.headSha,
       ...(now ? [now.toISOString()] : []),
       id,
@@ -343,11 +491,16 @@ export class ReviewDrafts {
 
 // --- What the review covers -------------------------------------------------------------------------------------
 
-/** Whether a draft is about a flagged place: on the same file, within `NEAR_LINES` of its line (any line if none). */
+/**
+ * Whether a draft (a comment or a suggestion) is about a flagged place: on the same file, within `NEAR_LINES` of its
+ * line or range (any line if the place has none).
+ */
 export function isNear(draft: ReviewDraft, place: LookHere): boolean {
   if (!place.anchor || draft.path !== place.anchor.path || draft.line === undefined) return false;
-  if (place.anchor.line === undefined) return true;
-  return (draft.side ?? "RIGHT") === "RIGHT" && Math.abs(draft.line - place.anchor.line) <= NEAR_LINES;
+  const at = place.anchor.line;
+  if (at === undefined) return true;
+  const first = draft.startLine ?? draft.line;
+  return (draft.side ?? "RIGHT") === "RIGHT" && at >= first - NEAR_LINES && at <= draft.line + NEAR_LINES;
 }
 
 /** The places to look that no draft is near: worth a second look before approving. */
@@ -370,7 +523,20 @@ export function composeReviewBody(body: string | undefined, drafts: ReviewDraft[
     .join("\n\n");
 }
 
-/** The request GitHub gets: exactly what you wrote, nothing added. */
+/** A review comment as GitHub's API takes it: on `line`, or from `start_line` to `line` on the same side. */
+export interface ReviewComment {
+  path: string;
+  start_line?: number;
+  start_side?: Side;
+  line: number;
+  side: Side;
+  body: string;
+}
+
+/**
+ * The request GitHub gets: exactly what you wrote, nothing added except a suggestion's ```suggestion block (see
+ * `commentBody`).
+ */
 export function reviewRequest(
   headSha: string,
   event: ReviewEvent,
@@ -380,18 +546,26 @@ export function reviewRequest(
   commit_id: string;
   event: ReviewEvent;
   body?: string;
-  comments: { path: string; line: number; side: Side; body: string }[];
+  comments: ReviewComment[];
 } {
   const text = composeReviewBody(body, drafts);
   return {
     commit_id: headSha,
     event,
     ...(text ? { body: text } : {}),
-    comments: drafts.flatMap((d) =>
-      d.path !== undefined && d.line !== undefined
-        ? [{ path: d.path, line: d.line, side: d.side ?? "RIGHT", body: d.body }]
-        : [],
-    ),
+    comments: drafts.flatMap((d): ReviewComment[] => {
+      if (d.path === undefined || d.line === undefined) return [];
+      const side = d.side ?? "RIGHT";
+      return [
+        {
+          path: d.path,
+          ...(d.startLine !== undefined ? { start_line: d.startLine, start_side: side } : {}),
+          line: d.line,
+          side,
+          body: commentBody(d),
+        },
+      ];
+    }),
   };
 }
 
@@ -428,7 +602,8 @@ export async function fetchPullRequestState(
   }
 }
 
-const where = (d: ReviewDraft) => (d.path === undefined ? "general note" : `${d.path}:${d.line}`);
+const where = (d: ReviewDraft) =>
+  d.path === undefined ? "general note" : `${d.path}:${d.startLine !== undefined ? `${d.startLine}-` : ""}${d.line}`;
 
 /** Checks everything GitHub would refuse before asking it, and says which drafts are the problem. */
 export function checkSendable(
@@ -448,8 +623,14 @@ export function checkSendable(
   }
   const problems = drafts.flatMap((d) => {
     if (d.path === undefined || d.line === undefined) return [];
-    const placed = placeOnDiff(files, d.path, d.line, d.side ?? "RIGHT");
-    return "problem" in placed ? [{ id: d.id, problem: placed.problem }] : [];
+    const placed = placeOnDiff(files, d.path, d.line, d.side ?? "RIGHT", d.startLine);
+    if ("problem" in placed) return [{ id: d.id, problem: placed.problem }];
+    // A suggestion is applied as-is: it must still replace exactly the code it was written against.
+    const same = !d.originalLines || JSON.stringify(d.originalLines) === JSON.stringify(placed.lines);
+    if (d.suggestion !== undefined && !same) {
+      return [{ id: d.id, problem: `The code its suggestion replaces (${where(d)}) changed: place it again.` }];
+    }
+    return [];
   });
   if (problems.length > 0) {
     throw new SendReviewError(
@@ -511,6 +692,8 @@ export interface SentCounts {
   fromYou: number;
   fromClaude: number;
   hasBody: boolean;
+  /** Line comments carrying a suggested change. */
+  suggestions: number;
   unaddressed: number;
   /** Places to look that the review's comments were near, and so taught Alden "useful". */
   learned: number;
@@ -569,6 +752,7 @@ export async function sendReview(
     fromYou: pending.filter((d) => d.source === "you").length,
     fromClaude: pending.filter((d) => d.source === "claude").length,
     hasBody: (input.body ?? "").trim() !== "",
+    suggestions: inline.filter((d) => d.suggestion !== undefined).length,
     unaddressed: briefed ? unaddressedPlaces(briefed.places, pending).length : 0,
     learned,
   };
@@ -586,7 +770,7 @@ export async function sendReview(
 // --- Learning ---------------------------------------------------------------------------------------------------
 
 /**
- * A comment you sent near a flagged place is the strongest "useful" there is: it's recorded as a verdict (`agree`,
+ * A comment (or a suggested change) you sent near a flagged place is the strongest "useful" there is: it's recorded as a verdict (`agree`,
  * marked `via: "comment"`) on that place, so it counts toward the check's lesson like a click on "useful". Once per
  * place per PR (the event's id is derived from the place), and never over a verdict you gave that place yourself.
  */

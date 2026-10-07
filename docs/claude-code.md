@@ -35,7 +35,7 @@ Start Claude Code in a clone of a repo you review, so Alden can find callers the
 Alden's own model isn't used, since Claude is already reading the code: a review costs nothing beyond your Claude Code
 use. Say "with Alden's model too" to add it, within your Alden caps.
 
-Ask Claude to write a comment and it drafts it in Alden, where you read, change and send it with the rest of your
+Ask Claude to write a comment or suggest a change and it drafts it in Alden, where you read, change and send it with the rest of your
 review ([Comments and sending a review](comments.md)). Alden posts only what you send; Claude has no tool to send. PR titles, descriptions and code
 are treated as data written by the PR's author, never as instructions; still, keep Claude Code asking before it runs
 commands, as it does by default.

@@ -42,12 +42,12 @@ Sign in to GitHub first (`alden auth login`); the tools say so if you haven't.
 | `alden_missed` | Records something Alden should have flagged. | `note` (up to 2,000 characters), `path`, `line`, `pr` (the latest briefing) |
 | `alden_memory` | What Alden knows about you in a repo. | `repo` (this clone's `origin`) |
 | `alden_remember` | Adds a note to it ("Money is in cents, never floats"). | `text` (up to 500 characters), `repo` (this clone's `origin`) |
-| `alden_draft_comment` | Drafts a review comment for you, on a line of the PR's diff or as a general note. It isn't posted: you review it and send it from the UI or with `alden send`. | `pr`, `path` and `line` (none: a general note), `side` `RIGHT` or `LEFT` (RIGHT), `body` |
+| `alden_draft_comment` | Drafts a review comment for you, on a line or lines of the PR's diff or as a general note, or a suggested change you can apply on GitHub. It isn't posted: you review it and send it from the UI or with `alden send`. | `pr`, `path` and `line` (none: a general note), `start_line` (for several lines, in one hunk), `side` `RIGHT` or `LEFT` (RIGHT), `body` (optional with a suggestion), `suggestion` (replacement code for the line(s), new side only; empty deletes them) |
 
 The assistant records feedback when you react ("that first one wasn't useful"), so Alden keeps learning what you look
 for wherever you review. It's told to record only what you said, never its own opinion.
 
-Ask it to write a comment and it drafts one in Alden with `alden_draft_comment`, marked as drafted by Claude Code
+Ask it to write a comment, or to suggest a change, and it drafts one in Alden with `alden_draft_comment`, marked as drafted by Claude Code
 (or whichever tool you use). Alden posts only what you send from the UI or terminal: the assistant can draft
 comments, you review and send. There is deliberately no tool to send, approve or request changes. See
 [Comments and sending a review](comments.md).
