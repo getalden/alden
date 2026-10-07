@@ -16,7 +16,7 @@
       "description": "the PR's head commit the draft's line refers to"
     },
     "path": {
-      "description": "the file; absent for a general note, which goes into the review's body",
+      "description": "the file of an inline comment; absent for a general note, which goes into the review's body",
       "type": "string"
     },
     "line": {
@@ -44,7 +44,7 @@
       "description": "the comment, in Markdown; may be empty when the draft has a suggestion"
     },
     "suggestion": {
-      "description": "replacement code for the commented line(s), posted as a ```suggestion block after the body; empty deletes them. Only on the new side (RIGHT)",
+      "description": "replacement code for the commented line(s), posted as a ```suggestion block after the body; empty deletes them. Only on the new side (RIGHT). On a linked note it can't be applied, so it posts as a code block headed \"Suggested change\"",
       "type": "string"
     },
     "originalLines": {
@@ -53,6 +53,33 @@
       "items": {
         "type": "string"
       }
+    },
+    "linkTo": {
+      "description": "on a general note: the line (or lines, or file) it's about, outside the PR's diff. It posts in the review body with a link to that code at `headSha`, the PR's head when it was written. Absent on an inline comment and a plain note",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the file, as in the repo at the draft's head commit"
+        },
+        "line": {
+          "description": "the line (a range's last line); absent for a whole file",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "startLine": {
+          "description": "a range's first line, less than `line`; absent for one line",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
     },
     "source": {
       "type": "string",

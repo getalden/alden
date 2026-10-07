@@ -129,8 +129,10 @@ export interface UiApi {
 
 /**
  * A new draft: on `path` at `line` (on `side`, default RIGHT), or from `startLine` to `line` (one hunk, one side), or
- * without them a general note for the review's body. `suggestion` is replacement code for those lines, on the RIGHT
- * side only; with one, `body` may be empty.
+ * without them a general note for the review's body. When GitHub won't take a comment there (a line outside the
+ * PR's diff, a file it doesn't change, or `path` alone for a whole file), it's a linked note instead: a general note
+ * with `linkTo`, posted in the body with a link to that code at the PR's head. `suggestion` is replacement code for
+ * those lines, on the RIGHT side only (on a linked note, code to copy); with one, `body` may be empty.
  */
 export interface DraftInput {
   pr: string;
@@ -144,7 +146,7 @@ export interface DraftInput {
 
 /**
  * A change to a draft: its text, its suggestion (`null` removes it), or (with `path` and `line`, and `startLine` for a
- * range) a new place, which brings an outdated draft back.
+ * range) a new place, which brings an outdated draft back: inline, or a linked note when it's outside the diff.
  */
 export interface DraftChange {
   body?: string;
@@ -259,7 +261,10 @@ async function briefingFrom(req: IncomingMessage): Promise<Briefing> {
   return parsed.data;
 }
 
-/** A draft's line from a request: `path` and `line` together (and optionally `side` and `startLine`), or nothing. */
+/**
+ * A draft's place from a request: `path` and `line` (and optionally `side` and `startLine`), `path` alone for a whole
+ * file (a linked note), or nothing.
+ */
 function placeFrom(
   body: Record<string, unknown>,
 ): Pick<DraftInput, "path" | "line" | "side" | "startLine"> | undefined {
@@ -270,26 +275,27 @@ function placeFrom(
   }
   const sides = ["RIGHT", "LEFT"] as const;
   const side = sides.find((s) => s === body.side);
+  const { line, startLine } = body;
   if (
     typeof body.path !== "string" ||
     !body.path ||
-    typeof body.line !== "number" ||
-    !Number.isInteger(body.line) ||
-    body.line < 1 ||
+    (line !== undefined && (typeof line !== "number" || !Number.isInteger(line) || line < 1)) ||
     (body.side !== undefined && !side)
   ) {
     throw new ApiError(
       400,
-      "A line comment needs { path, line } (line a positive whole number), and side RIGHT or LEFT.",
+      "A comment on code needs { path, line } (line a positive whole number; leave it out for a whole file), and side RIGHT or LEFT.",
     );
   }
-  const { startLine } = body;
   if (startLine !== undefined && (typeof startLine !== "number" || !Number.isInteger(startLine) || startLine < 1)) {
     throw new ApiError(400, "startLine is a range's first line: a positive whole number, less than line.");
   }
+  if (startLine !== undefined && line === undefined) {
+    throw new ApiError(400, "A startLine needs a line too: line is the range's last line.");
+  }
   return {
     path: body.path,
-    line: body.line,
+    ...(typeof line === "number" ? { line } : {}),
     ...(side ? { side } : {}),
     ...(startLine !== undefined ? { startLine } : {}),
   };
@@ -403,7 +409,7 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       ) {
         throw new ApiError(
           400,
-          "Send { body?, suggestion? }, or { path, line, side?, startLine? } to place it on a line again.",
+          "Send { body?, suggestion? }, or { path, line?, side?, startLine? } to place it on a line again.",
         );
       }
       send(
@@ -643,7 +649,7 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         ) {
           throw new ApiError(
             400,
-            "Send { pr, body }, and { path, line, side?, startLine?, suggestion? } for a comment on a line.",
+            "Send { pr, body }, and { path, line?, side?, startLine?, suggestion? } for a comment on code.",
           );
         }
         // Always yours: only Claude Code (through `alden mcp`) drafts as "claude".

@@ -13,7 +13,7 @@ export const INSTRUCTIONS = `Alden is the user's code review companion. It runs 
 - alden_review: a briefing on a PR, or on the uncommitted changes in this repo when no PR is given: what Alden's checks found (with evidence), callers of the changed code outside the diff, the few places that need a reviewer's eyes, and what this reviewer cares about. Use it before reviewing a PR or the user's own changes, then read the diff yourself and add your judgement. Alden's own model is off by default, because you are the model here.
 - alden_feedback and alden_missed: when the user says a flagged place was or wasn't useful, or that Alden missed something, record it. That's how Alden learns them.
 - alden_memory and alden_remember: what Alden knows about the reviewer in a repo, and adding a note to it ("money is in cents").
-- alden_draft_comment: when the user asks you to write a review comment or suggest a change, draft it in Alden, on a line (or lines) of the PR's diff or as a general note. Drafts stay on the user's machine.
+- alden_draft_comment: when the user asks you to write a review comment or suggest a change, draft it in Alden, on a line (or lines) of the PR's diff or as a general note. A comment on code outside the diff (a caller in an unchanged file, a whole file) becomes a general note linking to that code. Drafts stay on the user's machine.
 
 Alden posts only what the user sends from the UI or terminal; you can draft comments, the user reviews and sends. There is no tool to send, approve or request changes, and you shouldn't post reviews or comments any other way (gh, the API): point the user at \`alden send <pr>\` or Alden's UI instead.
 
@@ -190,11 +190,17 @@ export function aldenTools(options: { version: string; cwd: string }): McpTool[]
       name: "alden_draft_comment",
       title: "Draft a review comment",
       description:
-        "Draft a review comment on a PR for the user, in Alden: on a line of the PR's diff (path and line, on the new side unless side is LEFT), on lines start_line to line (one hunk, one side), or without them a general note for the review's body. With suggestion, it's a suggested change GitHub can apply: the replacement code for exactly those lines of the new file (RIGHT side only; empty deletes them), and body may be empty. Only when the user asks you to write a comment or suggest a change, in words or code they've seen or asked for. It isn't posted: Alden posts only what the user sends from the UI or terminal; you can draft comments, the user reviews and sends (`alden send <pr>`). The lines must be in the PR's diff, which GitHub requires.",
+        "Draft a review comment on a PR for the user, in Alden: on a line of the PR's diff (path and line, on the new side unless side is LEFT), on lines start_line to line (one hunk, one side), or without them a general note for the review's body. GitHub only takes inline comments on lines in the PR's diff: on a line outside it (or a file the PR doesn't change, or path alone for a whole file), the draft becomes a linked note, a general note in the review body that links to that code at the PR's head commit; the result says so. With suggestion, it's a suggested change GitHub can apply: the replacement code for exactly those lines of the new file (RIGHT side only; empty deletes them), and body may be empty; on a linked note it can't be applied and posts as a code block to copy. Only when the user asks you to write a comment or suggest a change, in words or code they've seen or asked for. It isn't posted: Alden posts only what the user sends from the UI or terminal; you can draft comments, the user reviews and sends (`alden send <pr>`).",
       input: z
         .object({
           pr: PR.describe("the PR: a URL, owner/repo#123, or its number in the last queue"),
-          path: z.string().min(1).optional().describe("the file, as in the diff; leave out for a general note"),
+          path: z
+            .string()
+            .min(1)
+            .optional()
+            .describe(
+              "the file, as in the repo; leave out for a general note, or leave out line to link the whole file",
+            ),
           line: z
             .number()
             .int()
@@ -239,10 +245,24 @@ export function aldenTools(options: { version: string; cwd: string }): McpTool[]
           },
           "claude",
         );
-        const lines = draft.startLine !== undefined ? `${draft.startLine}-${draft.line}` : `${draft.line}`;
-        const where = draft.path === undefined ? "as a general note" : `on ${draft.path}:${lines}`;
+        const lines = (d: { line?: number | undefined; startLine?: number | undefined }) =>
+          d.line === undefined ? "" : `:${d.startLine !== undefined ? `${d.startLine}-` : ""}${d.line}`;
+        const after = `Nothing is posted: the user reviews it and sends the review from Alden's UI or with \`alden send ${draft.pr} --comment | --approve | --request-changes\`.`;
+        if (draft.linkTo) {
+          const target = `${draft.linkTo.path}${lines(draft.linkTo)}`;
+          const suggested =
+            draft.suggestion !== undefined
+              ? " Its suggested change can't be applied from the body: it posts as a code block for the author to copy."
+              : "";
+          const why =
+            draft.linkTo.line === undefined
+              ? `GitHub's inline comments go on lines, not a whole file (${target}).`
+              : `${target} isn't in the PR's diff, so GitHub won't take an inline comment there.`;
+          return `${why} Drafted ${draft.id} as a linked note instead: it goes in the review body, starting with a link to ${target} at the PR's head (${draft.headSha.slice(0, 7)}).${suggested} ${after}`;
+        }
+        const where = draft.path === undefined ? "as a general note" : `on ${draft.path}${lines(draft)}`;
         const what = draft.suggestion !== undefined ? "a suggested change" : "";
-        return `Drafted ${draft.id}${what ? ` (${what})` : ""} ${where} for ${draft.pr}. Nothing is posted: the user reviews it and sends the review from Alden's UI or with \`alden send ${draft.pr} --comment | --approve | --request-changes\`.`;
+        return `Drafted ${draft.id}${what ? ` (${what})` : ""} ${where} for ${draft.pr}. ${after}`;
       },
     }),
 

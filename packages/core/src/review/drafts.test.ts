@@ -10,12 +10,14 @@ import type { GitHubClient } from "../github/client.js";
 import { loadLearning } from "../learn/learn.js";
 import { AldenStore } from "../store/db.js";
 import {
+  checkLinkTarget,
   checkSendable,
   commentBody,
   composeReviewBody,
   findAgain,
   type Placement,
   placeOnDiff,
+  placeOrLink,
   ReviewDrafts,
   reviewRequest,
   SendReviewError,
@@ -263,7 +265,7 @@ describe("drafts written before 0.6", () => {
     const { DatabaseSync } = await import("node:sqlite");
     const old = new DatabaseSync(path);
     old.exec("ALTER TABLE drafts DROP COLUMN start_line; ALTER TABLE drafts DROP COLUMN suggestion;");
-    old.exec("ALTER TABLE drafts DROP COLUMN lines; PRAGMA user_version = 3;");
+    old.exec("ALTER TABLE drafts DROP COLUMN lines; ALTER TABLE drafts DROP COLUMN link_to; PRAGMA user_version = 3;");
     const { anchor } = placed();
     old
       .prepare(
@@ -273,7 +275,7 @@ describe("drafts written before 0.6", () => {
       .run(PR, PR.toLowerCase(), JSON.stringify(anchor), "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z");
     old.close();
     store = AldenStore.open(path);
-    expect(store.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(4);
+    expect(store.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(5);
     const drafts = new ReviewDrafts(store);
     const [draft] = drafts.list(PR);
     expect(draft).toMatchObject({ id: "old1", line: 12, body: "Cents?" });
@@ -460,6 +462,7 @@ describe("sending a review", () => {
       fromClaude: 1,
       hasBody: true,
       suggestions: 0,
+      linked: 0,
       unaddressed: 2,
       learned: 1,
     });
@@ -592,5 +595,175 @@ describe("sending a review", () => {
     });
     await expect(send({ status: 500, message: "boom" })).rejects.toBeInstanceOf(SendReviewError);
     expect(drafts.list(PR)).toHaveLength(1);
+  });
+});
+
+describe("linked notes", () => {
+  const SHA = "0123456789abcdef0123456789abcdef01234567";
+
+  it("go inline when GitHub takes the line, and link to it when it won't", () => {
+    expect(placeOrLink([V1], "src/pay.ts", 12)).toEqual({ place: placed() });
+    expect(placeOrLink([V1], "py/orders/tasks.py", 5)).toEqual({ linkTo: { path: "py/orders/tasks.py", line: 5 } });
+    expect(placeOrLink([V1], "src/pay.ts", 40)).toEqual({ linkTo: { path: "src/pay.ts", line: 40 } });
+    expect(placeOrLink([V1], "src/pay.ts", 40, "RIGHT", 38)).toEqual({
+      linkTo: { path: "src/pay.ts", line: 40, startLine: 38 },
+    });
+    // A range that leaves the diff halfway, a whole file, and a file too big to show: all links.
+    expect(placeOrLink([V1], "src/pay.ts", 20, "RIGHT", 12)).toEqual({
+      linkTo: { path: "src/pay.ts", line: 20, startLine: 12 },
+    });
+    expect(placeOrLink([V1], "src/pay.ts", undefined)).toEqual({ linkTo: { path: "src/pay.ts" } });
+    const big = fromRestFile({ filename: "big.json", status: "modified", additions: 9000, deletions: 0 });
+    expect(placeOrLink([big], "big.json", 1)).toEqual({ linkTo: { path: "big.json", line: 1 } });
+    // What can't be linked stays a problem.
+    expect(placeOrLink([V1], "src/pay.ts", 15, "LEFT")).toEqual({ problem: expect.stringMatching(/old side/) });
+    expect(placeOrLink([V1], "src/pay.ts", 5, "RIGHT", 9)).toEqual({ problem: expect.stringMatching(/comes after/) });
+    expect(placeOrLink([V1], "src/pay.ts", undefined, "RIGHT", 3)).toEqual({ problem: expect.any(String) });
+  });
+
+  it("post in the review body with a link to the line at the head they were written against", () => {
+    const note = (linkTo: object | undefined, body: string, suggestion?: string) =>
+      ({ pr: PR, headSha: SHA, body, linkTo, ...(suggestion !== undefined ? { suggestion } : {}) }) as never;
+    const blob = `https://github.com/acme/shop/blob/${SHA}`;
+    expect(composeReviewBody("Overall fine.", [note({ path: "py/orders/tasks.py", line: 5 }, "Retry here too?")])).toBe(
+      `Overall fine.\n\n**[\`py/orders/tasks.py\` line 5](${blob}/py/orders/tasks.py#L5)**: Retry here too?`,
+    );
+    expect(composeReviewBody(undefined, [note({ path: "a b/c.py", line: 9, startLine: 4 }, "x")])).toBe(
+      `**[\`a b/c.py\` lines 4–9](${blob}/a%20b/c.py#L4-L9)**: x`,
+    );
+    expect(composeReviewBody(undefined, [note({ path: "README.md" }, "Update this.")])).toBe(
+      `**[\`README.md\`](${blob}/README.md)**: Update this.`,
+    );
+    // Text starting with a block goes on the next paragraph; the text itself is kept as written.
+    expect(composeReviewBody(undefined, [note({ path: "a.py", line: 1 }, "- one\n- two")])).toBe(
+      `**[\`a.py\` line 1](${blob}/a.py#L1)**\n\n- one\n- two`,
+    );
+    // A suggestion can't be applied from the body: it follows as code to copy.
+    expect(composeReviewBody(undefined, [note({ path: "a.py", line: 1 }, "Use cents.", "total = cents(a)")])).toBe(
+      `**[\`a.py\` line 1](${blob}/a.py#L1)**: Use cents.\n\nSuggested change:\n\n\`\`\`\ntotal = cents(a)\n\`\`\``,
+    );
+    expect(composeReviewBody(undefined, [note({ path: "a.py", line: 3, startLine: 1 }, "", "")])).toBe(
+      `**[\`a.py\` lines 1–3](${blob}/a.py#L1-L3)**\n\nSuggested change: delete these lines.`,
+    );
+  });
+
+  it("are stored with their link, stay at their head when the PR moves, and can be placed inline later", () => {
+    const drafts = new ReviewDrafts(store);
+    const d = drafts.add({
+      pr: PR,
+      headSha: "h1",
+      body: "Same bug here?",
+      source: "claude",
+      linkTo: { path: "py/orders/tasks.py", line: 5 },
+    });
+    expect(drafts.get(d.id)).toMatchObject({ headSha: "h1", linkTo: { path: "py/orders/tasks.py", line: 5 } });
+    expect(drafts.get(d.id)).not.toHaveProperty("path");
+    expect(drafts.follow(PR, "h2", [V2])).toEqual({ moved: [], outdated: [] });
+    expect(drafts.get(d.id)).toMatchObject({ headSha: "h1", state: "draft" });
+    // Editing the text keeps the link.
+    expect(drafts.edit(d.id, { body: "Same bug?" })).toMatchObject({ body: "Same bug?", linkTo: { line: 5 } });
+    // Placed on a line of the diff, it's an inline comment; linked again, a note.
+    const inline = drafts.edit(d.id, { place: { ...placed([V2], 14), headSha: "h2" } });
+    expect(inline).toMatchObject({ path: "src/pay.ts", line: 14, headSha: "h2" });
+    expect(inline).not.toHaveProperty("linkTo");
+    const linked = drafts.edit(d.id, { linkTo: { path: "src/pay.ts", line: 40, headSha: "h3" } });
+    expect(linked).toMatchObject({ headSha: "h3", linkTo: { path: "src/pay.ts", line: 40 } });
+    expect(linked).not.toHaveProperty("line");
+    expect(() =>
+      drafts.add({ pr: PR, headSha: "h1", body: "x", source: "you", place: placed(), linkTo: { path: "a" } }),
+    ).toThrow(/not both/);
+  });
+
+  it("keep a suggestion as code to copy, but only on lines", () => {
+    const drafts = new ReviewDrafts(store);
+    const d = drafts.add({
+      pr: PR,
+      headSha: "h1",
+      body: "",
+      source: "you",
+      linkTo: { path: "a.py", line: 2 },
+      suggestion: "x = 1",
+    });
+    expect(d).toMatchObject({ suggestion: "x = 1", linkTo: { line: 2 } });
+    expect(() =>
+      drafts.add({ pr: PR, headSha: "h1", body: "b", source: "you", linkTo: { path: "a.py" }, suggestion: "x" }),
+    ).toThrow(/not a whole file/);
+  });
+
+  it("count as covering the flagged place they link to, and send with the review", async () => {
+    const drafts = new ReviewDrafts(store);
+    drafts.rememberBriefing(briefing("2026-10-01T00:00:00.000Z"));
+    drafts.add({ pr: PR, headSha: "h1", body: "Same here?", source: "you", linkTo: { path: "src/other.ts", line: 4 } });
+    drafts.add({ pr: PR, headSha: "h1", body: "Tests?", source: "you", linkTo: { path: "src/pay.ts", line: 40 } });
+    expect(unaddressedPlaces(places, drafts.list(PR))).toEqual([
+      { checkId: "paths.sensitive", title: "Money maths changed", path: "src/pay.ts", line: 14 },
+      { checkId: "tests.missing", title: "No tests" },
+    ]);
+    // The PR moved on: the notes don't need placing again, and keep linking to the code you saw.
+    const gh = fakeGitHub({ head: "h2", patch: V2 });
+    const result = await sendReview(gh.client, store, { repo: REPO, number: 7, event: "COMMENT" });
+    expect(result.counts).toMatchObject({ inline: 0, notes: 2, linked: 2, learned: 1 });
+    expect(gh.posted[0]).toMatchObject({
+      commit_id: "h2",
+      body: [
+        "**[`src/other.ts` line 4](https://github.com/acme/shop/blob/h1/src/other.ts#L4)**: Same here?",
+        "**[`src/pay.ts` line 40](https://github.com/acme/shop/blob/h1/src/pay.ts#L40)**: Tests?",
+      ].join("\n\n"),
+      comments: [],
+    });
+  });
+
+  it("check the file and line are there at the head before linking", async () => {
+    const content = (text: string) => ({
+      type: "file",
+      encoding: "base64",
+      content: Buffer.from(text).toString("base64"),
+    });
+    const github = (answer: () => unknown) =>
+      ({
+        request: async (route: string, params: Record<string, unknown>) => {
+          expect(route).toBe("GET /repos/{owner}/{repo}/contents/{path}");
+          expect(params).toMatchObject({ owner: "acme", repo: "shop", ref: SHA });
+          return { data: answer() };
+        },
+      }) as unknown as GitHubClient;
+    const fail = (status: number) => () => {
+      throw Object.assign(new Error("no"), { status });
+    };
+    const check = (client: GitHubClient, link: { path: string; line?: number }) =>
+      checkLinkTarget(client, REPO, SHA, link);
+    expect(
+      await check(
+        github(() => content("a\nb\nc\n")),
+        { path: "a.py", line: 3 },
+      ),
+    ).toBeUndefined();
+    expect(
+      await check(
+        github(() => content("a\nb\nc\n")),
+        { path: "a.py", line: 4 },
+      ),
+    ).toMatch(/a\.py has 3 lines at the PR's head \(0123456\), so there's no line 4/);
+    expect(
+      await check(
+        github(() => content("a")),
+        { path: "a.py" },
+      ),
+    ).toBeUndefined();
+    expect(await check(github(fail(404)), { path: "nope.py", line: 1 })).toMatch(/nope\.py isn't in acme\/shop/);
+    expect(
+      await check(
+        github(() => [{ name: "x" }]),
+        { path: "py" },
+      ),
+    ).toMatch(/is a folder/);
+    // A file too large for its content to come back, or GitHub not answering: kept as written.
+    expect(
+      await check(
+        github(() => ({ type: "file", encoding: "none", content: "" })),
+        { path: "big", line: 9 },
+      ),
+    ).toBeUndefined();
+    expect(await check(github(fail(500)), { path: "a.py", line: 1 })).toBeUndefined();
   });
 });

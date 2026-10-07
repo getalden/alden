@@ -91,6 +91,7 @@ export {
   type OllamaStatus,
   OllamaStatusSchema,
 } from "./model-setup.js";
+export { codeFence, lineLink, linkLines, noteText, repoOfPr } from "./note-text.js";
 export {
   type CiState,
   CiStateSchema,
@@ -156,8 +157,9 @@ export {
   type ScoreLine,
   ScoreLineSchema,
 } from "./rank.js";
-
 export {
+  type DraftLink,
+  DraftLinkSchema,
   REVIEW_SCHEMA_VERSION,
   type ReviewDraft,
   ReviewDraftSchema,

@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./queue-nav": "./src/queue-nav.ts"
+    "./queue-nav": "./src/queue-nav.ts",
+    "./note-text": "./src/note-text.ts"
   },
   "scripts": {
     "typecheck": "tsc"

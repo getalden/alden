@@ -6,6 +6,7 @@ import {
   backgroundModelAllowed,
   cachedReviewQueue,
   checkFreshness,
+  checkLinkTarget,
   checkModelKey,
   checkProgress,
   cloneAt,
@@ -30,7 +31,7 @@ import {
   modelKeyStore,
   openStore,
   type Placement,
-  placeOnDiff,
+  placeOrLink,
   prName,
   publicDraft,
   pullRequestDiffView,
@@ -67,7 +68,7 @@ import {
   type WithModel,
   whyNoToken,
 } from "@alden/core";
-import type { Briefing, BriefingFreshness, BriefingTarget, RankedQueue, ReviewDraft } from "@alden/schema";
+import type { Briefing, BriefingFreshness, BriefingTarget, DraftLink, RankedQueue, ReviewDraft } from "@alden/schema";
 import { LAST_QUEUE_KEY, type LastQueue, openInBrowser } from "../commands/open.js";
 import { spendReport } from "../commands/spend.js";
 import { loadRepoStats } from "../commands/stats.js";
@@ -219,6 +220,30 @@ export function createUiApi(options: {
     }
   };
   const drafts = new ReviewDrafts();
+  /**
+   * Where a comment on `path` goes: inline when GitHub takes it on the diff, otherwise a note in the review body
+   * linking to the code at the PR's head, once GitHub confirms the file (and line) are there to link to.
+   */
+  const spotFor = async (
+    client: ReturnType<typeof createGitHubClient>,
+    ref: { repo: string },
+    headSha: string,
+    files: Parameters<typeof placeOrLink>[0],
+    at: {
+      path: string;
+      line?: number | undefined;
+      startLine?: number | undefined;
+      side?: "RIGHT" | "LEFT" | undefined;
+    },
+  ): Promise<{ place: Placement } | { linkTo: DraftLink }> => {
+    const spot = placeOrLink(files, at.path, at.line, at.side ?? "RIGHT", at.startLine);
+    if ("problem" in spot) throw new ApiError(422, spot.problem);
+    if ("linkTo" in spot) {
+      const missing = await checkLinkTarget(client, ref.repo, headSha, spot.linkTo);
+      if (missing) throw new ApiError(422, missing);
+    }
+    return spot;
+  };
   /** The Diff tab's diffs, per PR and head commit, for as long as `alden ui` runs. */
   const diffs = new DiffCache();
   const inline = (d: { path?: string | undefined }) => d.path !== undefined;
@@ -651,15 +676,11 @@ export function createUiApi(options: {
 
     async addDraft(input: DraftInput, source: ReviewDraft["source"] = "you") {
       const ref = await prOf(input.pr);
-      const { headSha, files } = await followPr(ref);
-      let place: Placement | undefined;
+      const { headSha, files, client } = await followPr(ref);
+      let spot: { place: Placement } | { linkTo: DraftLink } | undefined;
       if (input.path !== undefined || input.line !== undefined) {
-        if (input.path === undefined || input.line === undefined) {
-          throw new ApiError(400, "A comment on a line needs both the file and the line.");
-        }
-        const placed = placeOnDiff(files, input.path, input.line, input.side ?? "RIGHT", input.startLine);
-        if ("problem" in placed) throw new ApiError(422, placed.problem);
-        place = placed;
+        if (input.path === undefined) throw new ApiError(400, "A comment on a line needs the file too.");
+        spot = await spotFor(client, ref, headSha, files, { ...input, path: input.path });
       } else if (input.startLine !== undefined) {
         throw new ApiError(400, "A multi-line comment needs the file and its last line too.");
       }
@@ -669,7 +690,7 @@ export function createUiApi(options: {
           headSha,
           body: input.body,
           source,
-          ...(place ? { place } : {}),
+          ...spot,
           ...(input.suggestion !== undefined ? { suggestion: input.suggestion } : {}),
         });
         void track("draft_changed", { action: "add", source, inline: inline(draft) });
@@ -683,14 +704,14 @@ export function createUiApi(options: {
       const draft = drafts.get(id);
       if (!draft) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
       let place: (Placement & { headSha: string }) | undefined;
+      let linkTo: (DraftLink & { headSha: string }) | undefined;
       if (change.path !== undefined || change.line !== undefined) {
-        if (change.path === undefined || change.line === undefined) {
-          throw new ApiError(400, "Placing a comment on a line needs both the file and the line.");
-        }
-        const { headSha, files } = await followPr(await prOf(draft.pr));
-        const placed = placeOnDiff(files, change.path, change.line, change.side ?? "RIGHT", change.startLine);
-        if ("problem" in placed) throw new ApiError(422, placed.problem);
-        place = { ...placed, headSha };
+        if (change.path === undefined) throw new ApiError(400, "Placing a comment on a line needs the file too.");
+        const ref = await prOf(draft.pr);
+        const { headSha, files, client } = await followPr(ref);
+        const spot = await spotFor(client, ref, headSha, files, { ...change, path: change.path });
+        if ("place" in spot) place = { ...spot.place, headSha };
+        else linkTo = { ...spot.linkTo, headSha };
       } else if (change.startLine !== undefined) {
         throw new ApiError(400, "Placing a comment on lines needs the file and its last line too.");
       }
@@ -700,6 +721,7 @@ export function createUiApi(options: {
           ...(change.body !== undefined ? { body: change.body } : {}),
           ...(change.suggestion !== undefined ? { suggestion: change.suggestion } : {}),
           ...(place ? { place } : {}),
+          ...(linkTo ? { linkTo } : {}),
         });
       } catch (error) {
         throw new ApiError(400, (error as Error).message);

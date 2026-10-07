@@ -101,6 +101,13 @@ const MIGRATIONS: ((store: AldenStore) => void)[] = [
       ALTER TABLE drafts ADD COLUMN lines TEXT;
     `);
   },
+  (store) => {
+    store.exec(`
+      -- Linked notes: a general note about code outside the PR's diff. link_to is the file, line and range it links
+      -- to (JSON: { path, line?, startLine? }), at the draft's head_sha; path and line stay empty, as for any note.
+      ALTER TABLE drafts ADD COLUMN link_to TEXT;
+    `);
+  },
 ];
 
 /** The JSON files Alden kept before the database, read once into it. */

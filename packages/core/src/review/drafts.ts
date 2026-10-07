@@ -1,10 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   type Briefing,
+  codeFence,
+  type DraftLink,
+  DraftLinkSchema,
   FEEDBACK_SCHEMA_VERSION,
   FeedbackEventSchema,
   type FeedbackItem,
   type LookHere,
+  linkLines,
+  noteText,
   type ReviewDraft,
   ReviewDraftSchema,
   type ReviewEvent,
@@ -148,6 +153,80 @@ export function placeOnDiff(
 }
 
 /**
+ * Where a comment goes: inline on the diff when GitHub takes it there (see `placeOnDiff`), otherwise a linked note,
+ * a general note in the review body with a link to the code at the PR's head. A whole file (no `line`) is always a
+ * linked note. Only what can't be linked stays a problem: a range the wrong way round, or old-side (LEFT) lines
+ * outside the diff, which aren't in the file at the head.
+ */
+export function placeOrLink(
+  files: DiffFile[],
+  path: string,
+  line: number | undefined,
+  side: Side = "RIGHT",
+  startLine?: number,
+): { place: Placement } | { linkTo: DraftLink } | { problem: string } {
+  if (line === undefined) {
+    if (startLine !== undefined) return { problem: "A range needs its last line too." };
+    if (side === "LEFT") return { problem: "A link goes to the file as it is at the PR's head: leave out side LEFT." };
+    return { linkTo: { path } };
+  }
+  if (startLine !== undefined && startLine > line) {
+    return { problem: `A range goes from its first line to its last, and ${startLine} comes after ${line}.` };
+  }
+  const placed = placeOnDiff(files, path, line, side, startLine);
+  if (!("problem" in placed)) return { place: placed };
+  if (side === "LEFT") return placed;
+  return { linkTo: { path, line, ...(startLine !== undefined && startLine < line ? { startLine } : {}) } };
+}
+
+/** "py/orders/tasks.py, line 5", "…, lines 5–9", or the path alone for a whole file: what a linked note links to. */
+export const linkText = (link: DraftLink) => {
+  const lines = linkLines(link);
+  return lines ? `${link.path}, ${lines}` : link.path;
+};
+
+/**
+ * Checks a linked note's code is there to link to: the file at `sha` in `repo`, with that many lines. Says why not
+ * in a sentence; undefined when it's there, or when GitHub couldn't say (the link is then kept as written).
+ */
+export async function checkLinkTarget(
+  client: GitHubClient,
+  repo: string,
+  sha: string,
+  link: DraftLink,
+): Promise<string | undefined> {
+  const [owner, name] = repo.split("/") as [string, string];
+  const short = sha.slice(0, 7);
+  let data: unknown;
+  try {
+    ({ data } = await client.request("GET /repos/{owner}/{repo}/contents/{path}", {
+      owner,
+      repo: name,
+      path: link.path,
+      ref: sha,
+    }));
+  } catch (error) {
+    if ((error as { status?: number }).status === 404) {
+      return `${link.path} isn't in ${repo} at the PR's head (${short}), so there's nothing to link to. Check the path.`;
+    }
+    return undefined;
+  }
+  if (Array.isArray(data) || (data as { type?: string }).type !== "file") {
+    return `${link.path} is a folder at the PR's head (${short}), not a file: name a file to link to.`;
+  }
+  const { content, encoding } = data as { content?: string; encoding?: string };
+  if (link.line === undefined || typeof content !== "string" || encoding !== "base64" || content === "") {
+    return undefined;
+  }
+  const text = Buffer.from(content, "base64").toString("utf8");
+  const count = text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
+  if (link.line > count) {
+    return `${link.path} has ${count} line${count === 1 ? "" : "s"} at the PR's head (${short}), so there's no line ${link.line} to link to.`;
+  }
+  return undefined;
+}
+
+/**
  * Finds a draft's line (or range of lines) again in a newer diff: the same text, every line of it, contiguous within
  * one hunk on the same side of the same file (or the file it was renamed to), preferring the candidate whose
  * neighbours still match, then the one nearest the old place. Undefined when any of the lines changed, left the diff,
@@ -208,6 +287,7 @@ interface DraftRow {
   suggestion: string | null;
   source: string;
   state: string;
+  link_to: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -227,6 +307,8 @@ function json<T>(text: string | null): T | undefined {
 
 function fromRow(row: DraftRow): StoredDraft {
   const lines = json<string[]>(row.lines);
+  const parsedLink = DraftLinkSchema.safeParse(json(row.link_to));
+  const link = row.link_to !== null && parsedLink.success ? parsedLink.data : undefined;
   const inline = row.path !== null && row.line !== null;
   const draft = ReviewDraftSchema.parse({
     id: row.id,
@@ -237,6 +319,7 @@ function fromRow(row: DraftRow): StoredDraft {
     ...(inline && Array.isArray(lines) ? { originalLines: lines } : {}),
     body: row.body,
     ...(row.suggestion !== null ? { suggestion: row.suggestion } : {}),
+    ...(!inline && link ? { linkTo: link } : {}),
     source: row.source,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -265,9 +348,14 @@ const placementOf = (d: StoredDraft): Placement | undefined =>
  * Checks a comment's text: something to say (or a suggestion, which can stand alone), within GitHub's limit once
  * the suggestion block is added.
  */
-export function checkBody(body: string, suggestion?: string): string {
+export function checkBody(
+  body: string,
+  suggestion?: string,
+  note?: Pick<ReviewDraft, "pr" | "headSha" | "linkTo">,
+): string {
   if (body.trim() === "" && suggestion === undefined) throw new Error("A comment needs some text.");
-  const length = commentBody({ body, ...(suggestion !== undefined ? { suggestion } : {}) }).length;
+  const text = { body, ...(suggestion !== undefined ? { suggestion } : {}) };
+  const length = (note?.linkTo ? noteText({ ...note, ...text }) : commentBody(text)).length;
   if (length > MAX_COMMENT_CHARS) {
     throw new Error(
       `That comment is ${length} characters${suggestion !== undefined ? " with its suggestion" : ""}; GitHub takes at most ${MAX_COMMENT_CHARS}.`,
@@ -276,9 +364,22 @@ export function checkBody(body: string, suggestion?: string): string {
   return body;
 }
 
-/** Checks a suggestion goes where GitHub can apply one: on a line, or a range, of the new file. */
-export function checkSuggestion(suggestion: string | undefined, place: Pick<Placement, "side"> | undefined): void {
+/**
+ * Checks a suggestion goes where it means something: on a line, or a range, of the new file, where GitHub can apply
+ * it; or on a linked note's lines, where it posts as code to copy.
+ */
+export function checkSuggestion(
+  suggestion: string | undefined,
+  place: Pick<Placement, "side"> | undefined,
+  linkTo?: DraftLink,
+): void {
   if (suggestion === undefined) return;
+  if (linkTo) {
+    if (linkTo.line === undefined) {
+      throw new Error("A suggestion replaces lines: link the note to a line (or lines), not a whole file.");
+    }
+    return;
+  }
   if (!place) {
     throw new Error(
       "A suggestion replaces lines of a file: put it on a line (or lines) of the diff, not a general note.",
@@ -295,10 +396,7 @@ export function checkSuggestion(suggestion: string | undefined, place: Pick<Plac
  * The fence for a suggestion block: three backticks, or one more than the longest run of backticks in the code, so
  * nothing in it can close the block early.
  */
-export function suggestionFence(code: string): string {
-  const longest = Math.max(0, ...(code.match(/`+/g) ?? []).map((run) => run.length));
-  return "`".repeat(Math.max(3, longest + 1));
-}
+export const suggestionFence = (code: string): string => codeFence(code);
 
 /**
  * A line comment as it posts: what you wrote, then (for a suggestion) a blank line and a ```suggestion block with
@@ -332,8 +430,9 @@ export class ReviewDrafts {
   }
 
   /**
-   * Adds a draft: on a placed line or range, or (without one) a general note for the review's body. With
-   * `suggestion`, replacement code for the placed lines (on the new side only); its text may then be empty.
+   * Adds a draft: on a placed line or range, or (without one) a general note for the review's body, linked to code
+   * outside the diff with `linkTo`. With `suggestion`, replacement code for the placed (or linked) lines, on the new
+   * side only; its text may then be empty.
    */
   add(
     input: {
@@ -342,6 +441,7 @@ export class ReviewDrafts {
       body: string;
       source: ReviewDraft["source"];
       place?: Placement;
+      linkTo?: DraftLink;
       suggestion?: string;
     },
     now: Date = new Date(),
@@ -349,11 +449,13 @@ export class ReviewDrafts {
     const at = now.toISOString();
     const id = randomUUID().replaceAll("-", "").slice(0, 8);
     const { place, suggestion } = input;
-    checkSuggestion(suggestion, place);
+    if (place && input.linkTo) throw new Error("A draft goes on a line of the diff or links to one, not both.");
+    const linkTo = place ? undefined : input.linkTo && DraftLinkSchema.parse(input.linkTo);
+    checkSuggestion(suggestion, place, linkTo);
     this.store.run(
       `INSERT INTO drafts (id, pr, pr_key, head_sha, path, line, start_line, side, anchor, lines, body, suggestion, source,
-         state, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
+         state, link_to, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
       id,
       input.pr,
       keyOf(input.pr),
@@ -364,9 +466,10 @@ export class ReviewDrafts {
       place?.side ?? null,
       place ? JSON.stringify(place.anchor) : null,
       place?.lines ? JSON.stringify(place.lines) : null,
-      checkBody(input.body, suggestion),
+      checkBody(input.body, suggestion, { pr: input.pr, headSha: input.headSha, linkTo }),
       suggestion ?? null,
       input.source,
+      linkTo ? JSON.stringify(linkTo) : null,
       at,
       at,
     );
@@ -375,20 +478,36 @@ export class ReviewDrafts {
 
   /**
    * Changes a draft's text or suggestion (`null` removes it), or places it on a line or range again (which brings an
-   * outdated draft back, against the code now there).
+   * outdated draft back, against the code now there), or links it to code outside the diff instead (`linkTo`).
    */
   edit(
     id: string,
-    change: { body?: string; suggestion?: string | null; place?: Placement & { headSha: string } },
+    change: {
+      body?: string;
+      suggestion?: string | null;
+      place?: Placement & { headSha: string };
+      linkTo?: DraftLink & { headSha: string };
+    },
     now: Date = new Date(),
   ): StoredDraft | undefined {
     const draft = this.get(id);
     if (!draft) return undefined;
+    if (change.place && change.linkTo) throw new Error("A draft goes on a line of the diff or links to one, not both.");
     const body = change.body ?? draft.body;
     const suggestion = change.suggestion === null ? undefined : (change.suggestion ?? draft.suggestion);
-    const side = change.place?.side ?? (draft.path !== undefined ? (draft.side ?? "RIGHT") : undefined);
-    checkSuggestion(suggestion, side ? { side } : undefined);
-    checkBody(body, suggestion);
+    const linkTo = change.place
+      ? undefined
+      : change.linkTo
+        ? DraftLinkSchema.parse({
+            path: change.linkTo.path,
+            ...(change.linkTo.line !== undefined ? { line: change.linkTo.line } : {}),
+            ...(change.linkTo.startLine !== undefined ? { startLine: change.linkTo.startLine } : {}),
+          })
+        : draft.linkTo;
+    const side =
+      change.place?.side ?? (draft.path !== undefined && !change.linkTo ? (draft.side ?? "RIGHT") : undefined);
+    checkSuggestion(suggestion, side ? { side } : undefined, linkTo);
+    checkBody(body, suggestion, { pr: draft.pr, headSha: change.linkTo?.headSha ?? draft.headSha, linkTo });
     this.store.transaction(() => {
       if (change.body !== undefined || change.suggestion !== undefined) {
         this.store.run(
@@ -400,15 +519,30 @@ export class ReviewDrafts {
         );
       }
       if (change.place) this.move(id, change.place, now);
+      if (change.linkTo && linkTo) this.link(id, { ...linkTo, headSha: change.linkTo.headSha }, now);
     });
     return this.get(id);
+  }
+
+  /** Makes a draft a linked note on (new) code at a (new) head, as a draft again: off any line of the diff. */
+  link(id: string, link: DraftLink & { headSha: string }, now?: Date): void {
+    const { headSha, ...linkTo } = link;
+    this.store.run(
+      `UPDATE drafts SET path = NULL, line = NULL, start_line = NULL, side = NULL, anchor = NULL, lines = NULL,
+         link_to = ?, head_sha = ?, state = 'draft'${now ? ", updated_at = ?" : ""}
+       WHERE id = ?`,
+      JSON.stringify(linkTo),
+      headSha,
+      ...(now ? [now.toISOString()] : []),
+      id,
+    );
   }
 
   /** Puts a draft on a (new) line or range at a (new) head, as a draft again. */
   move(id: string, place: Placement & { headSha: string }, now?: Date): void {
     this.store.run(
       `UPDATE drafts SET path = ?, line = ?, start_line = ?, side = ?, anchor = ?, lines = ?, head_sha = ?,
-         state = 'draft'${now ? ", updated_at = ?" : ""}
+         link_to = NULL, state = 'draft'${now ? ", updated_at = ?" : ""}
        WHERE id = ?`,
       place.path,
       place.line,
@@ -436,15 +570,16 @@ export class ReviewDrafts {
 
   /**
    * Follows a PR to its current head: a general note simply moves along, a draft on a line moves with its line if
-   * it can be found again (see `findAgain`), and is marked outdated (keeping its old place and head) if not. Returns
-   * the drafts that moved or went out of date, by id.
+   * it can be found again (see `findAgain`), and is marked outdated (keeping its old place and head) if not. A linked
+   * note stays as it is: its link is to the code you saw when you wrote it, at the head it was written against.
+   * Returns the drafts that moved or went out of date, by id.
    */
   follow(pr: string, headSha: string, files: DiffFile[]): { moved: string[]; outdated: string[] } {
     const moved: string[] = [];
     const outdated: string[] = [];
     this.store.transaction(() => {
       for (const draft of this.list(pr)) {
-        if (draft.headSha === headSha) continue;
+        if (draft.headSha === headSha || draft.linkTo) continue;
         const placement = placementOf(draft);
         if (draft.path === undefined) {
           this.store.run("UPDATE drafts SET head_sha = ? WHERE id = ?", headSha, draft.id);
@@ -496,11 +631,15 @@ export class ReviewDrafts {
  * line or range (any line if the place has none).
  */
 export function isNear(draft: ReviewDraft, place: LookHere): boolean {
-  if (!place.anchor || draft.path !== place.anchor.path || draft.line === undefined) return false;
+  // A linked note is about its lines (or its whole file) as much as a comment on them.
+  const on = draft.linkTo ?? draft;
+  if (!place.anchor || on.path !== place.anchor.path) return false;
   const at = place.anchor.line;
+  if (draft.linkTo && on.line === undefined) return true;
+  if (on.line === undefined) return false;
   if (at === undefined) return true;
-  const first = draft.startLine ?? draft.line;
-  return (draft.side ?? "RIGHT") === "RIGHT" && at >= first - NEAR_LINES && at <= draft.line + NEAR_LINES;
+  const first = on.startLine ?? on.line;
+  return (draft.side ?? "RIGHT") === "RIGHT" && at >= first - NEAR_LINES && at <= on.line + NEAR_LINES;
 }
 
 /** The places to look that no draft is near: worth a second look before approving. */
@@ -515,9 +654,12 @@ export function unaddressedPlaces(places: LookHere[], drafts: ReviewDraft[]): Un
     }));
 }
 
-/** The review's body as it will post: what you wrote for it, then each general note, oldest first. */
+/**
+ * The review's body as it will post: what you wrote for it, then each general note, oldest first; a linked note with
+ * its link to the code it's about first (see `noteText`).
+ */
 export function composeReviewBody(body: string | undefined, drafts: ReviewDraft[]): string {
-  return [body ?? "", ...drafts.filter((d) => d.path === undefined).map((d) => d.body)]
+  return [body ?? "", ...drafts.filter((d) => d.path === undefined).map(noteText)]
     .map((part) => part.trim())
     .filter(Boolean)
     .join("\n\n");
@@ -603,7 +745,11 @@ export async function fetchPullRequestState(
 }
 
 const where = (d: ReviewDraft) =>
-  d.path === undefined ? "general note" : `${d.path}:${d.startLine !== undefined ? `${d.startLine}-` : ""}${d.line}`;
+  d.path === undefined
+    ? d.linkTo
+      ? `a note linking to ${linkText(d.linkTo)}`
+      : "general note"
+    : `${d.path}:${d.startLine !== undefined ? `${d.startLine}-` : ""}${d.line}`;
 
 /** Checks everything GitHub would refuse before asking it, and says which drafts are the problem. */
 export function checkSendable(
@@ -694,6 +840,8 @@ export interface SentCounts {
   hasBody: boolean;
   /** Line comments carrying a suggested change. */
   suggestions: number;
+  /** General notes linking to code outside the diff (counted in `notes` too). */
+  linked: number;
   unaddressed: number;
   /** Places to look that the review's comments were near, and so taught Alden "useful". */
   learned: number;
@@ -745,7 +893,8 @@ export async function sendReview(
 
   const inline = pending.filter((d) => d.path !== undefined);
   const briefed = drafts.briefed(pr);
-  const learned = briefed ? await learnFromComments(store, input, briefed, inline, now) : 0;
+  const about = pending.filter((d) => d.path !== undefined || d.linkTo !== undefined);
+  const learned = briefed ? await learnFromComments(store, input, briefed, about, now) : 0;
   const counts: SentCounts = {
     inline: inline.length,
     notes: pending.length - inline.length,
@@ -753,6 +902,7 @@ export async function sendReview(
     fromClaude: pending.filter((d) => d.source === "claude").length,
     hasBody: (input.body ?? "").trim() !== "",
     suggestions: inline.filter((d) => d.suggestion !== undefined).length,
+    linked: pending.filter((d) => d.linkTo !== undefined).length,
     unaddressed: briefed ? unaddressedPlaces(briefed.places, pending).length : 0,
     learned,
   };

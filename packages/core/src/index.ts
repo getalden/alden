@@ -196,6 +196,7 @@ export {
 } from "./review/dependencies.js";
 export {
   checkBody,
+  checkLinkTarget,
   checkSendable,
   checkSuggestion,
   commentableLines,
@@ -206,10 +207,12 @@ export {
   isNear,
   type LineAnchor,
   learnFromComments,
+  linkText,
   MAX_COMMENT_CHARS,
   NEAR_LINES,
   type Placement,
   placeOnDiff,
+  placeOrLink,
   prName,
   publicDraft,
   type ReviewComment,
