@@ -55,31 +55,46 @@ export class FeedbackLog {
     return event;
   }
 
-  /** Records review signals (see `ReviewSignalEventSchema`), after checking their shape. All or none. */
+  /**
+   * Records review signals (see `ReviewSignalEventSchema`), after checking their shape. All or none. A signal given an
+   * `id` (an outcome's, derived from what it's about) is recorded at most once: one whose id is already in the log is
+   * left out. Returns the signals newly recorded.
+   */
   addSignals(inputs: (ReviewSignalInput | unknown)[], now: Date = new Date()): ReviewSignalEvent[] {
     const events = inputs.map((input) => {
       const parsed = ReviewSignalInputSchema.parse(input);
       return ReviewSignalEventSchema.parse({
         ...parsed,
         schemaVersion: FEEDBACK_SCHEMA_VERSION,
-        id: randomUUID(),
+        id: parsed.id ?? randomUUID(),
         type: "review_signal",
         at: parsed.at ?? now.toISOString(),
       });
     });
     const store = storeFrom(this.source);
+    const recorded: ReviewSignalEvent[] = [];
     store.transaction(() => {
+      const ids = new Set<string>();
       for (const event of events) {
+        if (ids.has(event.id) || store.get("SELECT 1 AS found FROM events WHERE id = ?", event.id)) continue;
+        ids.add(event.id);
         store.addEvent({ id: event.id, at: event.at, type: "review_signal", repo: event.repo, body: event });
+        recorded.push(event);
       }
     });
-    return events;
+    return recorded;
   }
 
-  /** Every review signal, oldest first, optionally for one repo. Signals that fail the schema are skipped. */
-  signals(repo?: string): ReviewSignalEvent[] {
+  /**
+   * Every review signal, oldest first, optionally for one repo and since a time. Signals that fail the schema are
+   * skipped.
+   */
+  signals(repo?: string, since?: string): ReviewSignalEvent[] {
     return storeFrom(this.source)
-      .events<unknown>("review_signal", repo === undefined ? {} : { repo })
+      .events<unknown>("review_signal", {
+        ...(repo !== undefined ? { repo } : {}),
+        ...(since !== undefined ? { since } : {}),
+      })
       .flatMap((raw) => {
         const parsed = ReviewSignalEventSchema.safeParse(raw);
         return parsed.success ? [parsed.data] : [];
@@ -118,7 +133,8 @@ export class FeedbackLog {
 
 /**
  * Records what a review (or, with `source: "outcome"`, what the author did with it) taught Alden, unless
- * `learning.fromReviews` is off: `enabled` says so, or your user config is read. Returns what was recorded.
+ * `learning.fromReviews` is off: `enabled` says so, or your user config is read. A signal with an `id` is recorded at
+ * most once (see `FeedbackLog.addSignals`). Returns what was newly recorded.
  */
 export async function recordReviewSignals(
   signals: (ReviewSignalInput | unknown)[],

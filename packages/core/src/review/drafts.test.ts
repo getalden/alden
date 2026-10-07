@@ -7,6 +7,7 @@ import type { DiffFile } from "../diff/parse.js";
 import { fromRestFile } from "../diff/sources.js";
 import { FeedbackLog } from "../feedback/log.js";
 import type { GitHubClient } from "../github/client.js";
+import { sentComments } from "../github/outcomes.js";
 import { loadLearning } from "../learn/learn.js";
 import { AldenStore, MIGRATION_COUNT } from "../store/db.js";
 import {
@@ -266,9 +267,10 @@ describe("drafts written before 0.6", () => {
   it("are still read, sent and followed after the migration that adds ranges and suggestions", async () => {
     const path = join(home, "alden.db");
     store.close();
-    // The drafts table as 0.5 left it, with one comment on a line.
+    // The drafts table as 0.5 left it, with one comment on a line, and none of the tables added since.
     const { DatabaseSync } = await import("node:sqlite");
     const old = new DatabaseSync(path);
+    old.exec("DROP TABLE seen_places; DROP TABLE sent_comments; DROP TABLE outcome_checks;");
     old.exec("ALTER TABLE drafts DROP COLUMN start_line; ALTER TABLE drafts DROP COLUMN suggestion;");
     old.exec("ALTER TABLE drafts DROP COLUMN lines; ALTER TABLE drafts DROP COLUMN link_to; PRAGMA user_version = 3;");
     const { anchor } = placed();
@@ -430,7 +432,7 @@ function fakeGitHub(state: { head: string; patch: DiffFile; fail?: { status: num
       if (route === "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews") {
         if (state.fail) throw Object.assign(new Error(state.fail.message), { status: state.fail.status });
         posted.push(params);
-        return { data: { html_url: "https://github.com/acme/shop/pull/7#pullrequestreview-1" } };
+        return { data: { id: 501, html_url: "https://github.com/acme/shop/pull/7#pullrequestreview-1" } };
       }
       throw new Error(`unexpected ${route}`);
     },
@@ -496,6 +498,19 @@ describe("sending a review", () => {
     const sent = store.events<Record<string, unknown>>("review_sent");
     expect(sent).toHaveLength(1);
     expect(JSON.stringify(sent)).not.toMatch(/Cents|Claude\.|Fix fees/);
+    // Where the line comment went, to see later what came of it; the general note has no thread to watch.
+    expect(sentComments(store, REPO, 7)).toEqual([
+      expect.objectContaining({
+        reviewId: 501,
+        headSha: "h1",
+        path: "src/pay.ts",
+        line: 12,
+        side: "RIGHT",
+        checkId: "paths.sensitive",
+        applied: false,
+        resolved: false,
+      }),
+    ]);
 
     // The comment near the flagged place, in a review requesting changes, is the strongest signal there is.
     const signals = new FeedbackLog(store).signals(REPO);
@@ -569,6 +584,10 @@ describe("sending a review", () => {
         body: "```suggestion\n```",
       },
     ]);
+    expect(sentComments(store, REPO, 7)).toEqual([
+      expect.objectContaining({ reviewId: 501, startLine: 11, line: 13, suggestion: "", checkId: "paths.sensitive" }),
+    ]);
+    expect(sentComments(store, REPO, 7)[0]?.lines).toHaveLength(3);
   });
 
   it("never overrides a verdict you gave the place yourself", async () => {

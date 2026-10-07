@@ -109,13 +109,20 @@ export const ReviewSignalEventSchema = z.object({
   source: z.enum(["review", "outcome"]).describe("from a review you sent, or from what the author did afterwards"),
 });
 
-/** A new review signal: the log adds the id and version, and the time when `at` is absent. */
+/**
+ * A new review signal: the log adds the version, the time when `at` is absent, and an id when `id` is absent. Give an
+ * `id` derived from what the signal is about (as outcomes do) and it's recorded at most once.
+ */
 export const ReviewSignalInputSchema = ReviewSignalEventSchema.omit({
   schemaVersion: true,
   id: true,
   type: true,
   at: true,
-}).extend({ type: z.literal("review_signal").optional(), at: z.iso.datetime().optional() });
+}).extend({
+  id: z.string().min(1).optional(),
+  type: z.literal("review_signal").optional(),
+  at: z.iso.datetime().optional(),
+});
 
 const counts = z.object({ agree: z.number().int(), notNeeded: z.number().int() });
 

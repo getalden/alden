@@ -4,6 +4,7 @@ import {
   codeFence,
   type DraftLink,
   DraftLinkSchema,
+  type LookHere,
   linkLines,
   noteText,
   type ReviewDraft,
@@ -18,6 +19,7 @@ import type { DiffFile } from "../diff/parse.js";
 import { fetchPullRequestDiff } from "../diff/sources.js";
 import { signalCounts } from "../feedback/log.js";
 import type { GitHubClient } from "../github/client.js";
+import { rememberSentComments, type SentCommentInput } from "../github/outcomes.js";
 import { loadLearning, reviewProgress } from "../learn/learn.js";
 import type { AldenStore } from "../store/db.js";
 import { type StoreSource, storeFrom } from "../store/source.js";
@@ -843,7 +845,9 @@ export interface SendLearning {
  * Sends a PR's drafts as one review: brings them to the PR's current head, refuses if that moved or outdated any
  * inline comment (so what posts is what you last saw), checks every line against the diff, then makes one
  * POST /repos/{owner}/{repo}/pulls/{n}/reviews. Afterwards: a local `review_sent` event (counts only), what the review
- * taught (see `learnFromReview`; never stops the send, which has posted by then), and the PR's drafts are deleted.
+ * taught (see `learnFromReview` and `confirmNotes`; never stops the send, which has posted by then), where each line
+ * comment went (kept 30 days, to see later whether it was applied or resolved: see `checkOutcomes`), and the PR's
+ * drafts are deleted.
  */
 export async function sendReview(
   client: GitHubClient,
@@ -870,6 +874,7 @@ export async function sendReview(
 
   const [owner, name] = input.repo.split("/") as [string, string];
   let url: string;
+  let reviewId: number | undefined;
   try {
     const { data } = await client.request("POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews", {
       owner,
@@ -880,6 +885,8 @@ export async function sendReview(
       request: { retries: 0 },
     });
     url = (data as { html_url?: string }).html_url ?? `https://github.com/${input.repo}/pull/${input.number}`;
+    const id = (data as { id?: unknown }).id;
+    if (typeof id === "number") reviewId = id;
   } catch (error) {
     throw sendFailed(error, input.repo, pending);
   }
@@ -903,6 +910,18 @@ export async function sendReview(
     learned: signals.filter((s) => s.signal !== "silent_pass" && s.signal !== "miss").length + notes.length,
     signals: signalCounts(signals),
   };
+  if (reviewId !== undefined && learning.fromReviews !== false) {
+    // What came of these comments (applied, resolved) is checked later: see `checkOutcomes`. Never fails the send.
+    try {
+      rememberSentComments(
+        store,
+        { repo: input.repo, number: input.number, reviewId, headSha, sentAt: now.toISOString() },
+        inline.flatMap((d) => (d.line === undefined ? [] : [sentComment(d, briefed?.places ?? [])])),
+      );
+    } catch {
+      // the review is sent; only its outcomes go unlearned
+    }
+  }
   store.addEvent({
     id: randomUUID(),
     at: now.toISOString(),
@@ -917,6 +936,20 @@ export async function sendReview(
     review: input.event,
     ...(lines.length > 0 ? { learning: lines } : {}),
     counts,
+  };
+}
+
+/** A sent line comment as `rememberSentComments` keeps it, with the check of the first flagged place it was near. */
+function sentComment(draft: StoredDraft, places: LookHere[]): SentCommentInput {
+  const near = places.find((place) => place.checkId !== undefined && isNear(draft, place));
+  return {
+    path: draft.path as string,
+    line: draft.line as number,
+    ...(draft.startLine !== undefined ? { startLine: draft.startLine } : {}),
+    side: draft.side ?? "RIGHT",
+    ...(draft.suggestion !== undefined ? { suggestion: draft.suggestion } : {}),
+    ...(draft.originalLines ? { lines: draft.originalLines } : {}),
+    ...(near?.checkId !== undefined ? { checkId: near.checkId } : {}),
   };
 }
 

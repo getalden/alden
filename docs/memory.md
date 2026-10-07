@@ -16,6 +16,7 @@ Nothing here leaves your machine, except your notes: the model gets those with e
 | Useful on a check's flags, and comments in the reviews you send | 3 or more in weight, at least 3 to 1 | That check goes first among places to look, marked "↑ You usually mark … useful". The model is told you care about it. |
 | Not useful on a check's flags, and flags you approved past without a word | 3 or more in weight, at least 3 to 1, with at least one Not useful | That check is quietened: its flags are left out of places to look, unless high or critical severity, and listed as hidden with the reason. Its row in the checks says "quietened by your feedback" (terminal, `alden ui`, `alden_review`), and the model is told to raise those concerns only when they're serious. |
 | A review you send | Once per place per PR | Comments near a place count toward its check's lesson (2 for requested changes or a suggestion, 1 for a comment); approving past a place you saw counts 0.2 against it; comments in a code area count like opening a PR there first. See [Reviews you send](#reviews-you-send). |
+| What the author did with your comments | Once per comment, then once per PR per topic | A suggestion applied counts 2 toward Useful on the check it was near, a comment resolved 1. See [What comes of them](#what-comes-of-them). |
 | Useful on a model finding from one of your notes, or a comment you send near one | Once per review | The note is confirmed ("confirmed 3×" in Memory). No check lesson. See [Findings from your notes](#findings-from-your-notes). |
 | Not useful on a model finding from one of your notes | | Recorded, and changes nothing unless you stop applying the note there or edit it. No check lesson. |
 | Dismiss on one place in a PR | Once | A re-review of that PR leaves that place out, and says so. Other PRs are unaffected, and nothing is learned from it. |
@@ -106,7 +107,8 @@ The rules that keep it honest:
   ahead of its rank, once per review per area, toward "PRs like that" ranking higher: "ranked higher: you often
   comment on PRs touching app/api in your reviews". Lockfiles don't count.
 - **Outcomes count too.** When a PR's author applies a suggestion of yours or resolves your comment, that's recorded as
-  its own signal (`applied`, `resolved`, from `source: "outcome"`), once per PR per topic, on top of the review's.
+  its own signal (`applied`, `resolved`, from `source: "outcome"`), once per PR per topic, on top of the review's. See
+  [What comes of them](#what-comes-of-them).
 
 Turn it off with `alden config set learning.fromReviews false` (your user config only): nothing from your reviews is
 recorded after that, Useful and Not useful still count, and what was already learned stays until you forget it.
@@ -137,6 +139,21 @@ Learned items in the Memory view say where they came from, newest first: "from y
 send a review, the Comments drawer (and `alden send`) says in one line what Alden learned from it, if anything ("Alden
 learned: 2 of 3 (2 from your review of acme/shop#412): one more useful on untested-change flags and Alden will put
 them first among the places to look").
+
+## What comes of them
+
+After you send, Alden watches the review threads your line comments started for 14 days, asking GitHub at most once a
+day per PR (in the background after a queue refresh, and before `alden feedback` answers). A suggestion the author
+applies (`applied`) counts 2 toward Useful; a comment whose thread is resolved, or goes outdated after a push changed
+its lines (`resolved`), counts 1. Each is recorded once, as a review signal with `source: "outcome"` and the check of
+the flagged place the comment was near, so it counts toward that check's lesson like the review's own signals: once
+per PR per topic, at its strongest, on top of what the review itself counted. An outcome on a comment that was near no
+flagged place (or only near a finding from one of your notes) teaches no check. Memory shows it as "from how it went
+with acme/shop#409".
+
+`alden feedback` and `alden_feedback` total them: "Outcomes: 3 suggestions applied, 2 comments resolved (last 14
+days)". `learning.fromReviews = false` in your user config turns it off, along with the rest of learning from your
+reviews. Details and the request count: [After you send](comments.md#after-you-send).
 
 ## Seeing it build
 
@@ -227,8 +244,9 @@ To take back a reaction, press the same button again in `alden ui` (it toggles o
 
 In `~/.alden/alden.db`, a SQLite database (WAL mode, so the CLI and the UI can write at once). Feedback, opens and
 notes (with where you stopped each one) are stored as append-only events with unique ids, so a future sync can upload just what it hasn't sent. The same
-file holds spending, when you first used Alden on each repo, and the comments you're drafting (until you send or delete
-them), and the [places you saw](#places-you-saw) in the last 90 days.
+file holds spending, when you first used Alden on each repo, the comments you're drafting (until you send or delete
+them), the [places you saw](#places-you-saw) in the last 90 days, and where your sent line comments went (30 days,
+without their text).
 
 Alden needs Node 22.13 or later for the database (the standalone binary has it built in). The first run on an older
 `~/.alden` imports the old JSON files (`feedback/`, `spend/`, `usage.json`) once and moves them to `~/.alden/legacy/`.

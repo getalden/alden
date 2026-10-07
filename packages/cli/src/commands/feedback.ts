@@ -1,5 +1,16 @@
 import { writeFile } from "node:fs/promises";
-import { checkProgress, FeedbackLog, type Learning, loadLearning, openStore } from "@alden/core";
+import {
+  checkOutcomes,
+  checkProgress,
+  createGitHubClient,
+  FeedbackLog,
+  type Learning,
+  loadLearning,
+  openStore,
+  outcomeLine,
+  outcomeSummary,
+  resolveToken,
+} from "@alden/core";
 import type { FeedbackSummary } from "@alden/schema";
 import type { Command } from "commander";
 import { paint, shouldColor } from "../render/style.js";
@@ -26,7 +37,8 @@ export function learningLines(learning: Learning): string[] {
 
 /**
  * What your sent reviews said without a click: "From 4 reviews you sent: 3 comments, 1 suggestion near flags, 2
- * approved past without a word, 1 comment where Alden flagged nothing". Nothing when there are none.
+ * approved past without a word, 1 comment where Alden flagged nothing". Nothing when there are none. What authors did
+ * with your comments afterwards has its own line (see `outcomesLine`).
  */
 function reviewLine(summary: FeedbackSummary): string[] {
   const s = summary.reviewSignals;
@@ -40,8 +52,6 @@ function reviewLine(summary: FeedbackSummary): string[] {
     near.length > 0 && `${near.join(", ")} near flags`,
     s.silent_pass > 0 && `${plural(s.silent_pass, "flag")} you saw and approved past`,
     s.miss > 0 && `${plural(s.miss, "comment")} where Alden flagged nothing`,
-    s.applied + s.resolved > 0 &&
-      `${plural(s.applied, "suggestion")} applied and ${plural(s.resolved, "comment")} resolved by authors`,
   ].filter(Boolean);
   if (summary.reviews === 0 && parts.length === 0) return [];
   return [`From ${plural(summary.reviews, "review")} you sent: ${parts.join("; ") || "nothing near a flag yet"}`];
@@ -51,10 +61,11 @@ export function renderFeedback(
   summary: FeedbackSummary,
   color: boolean,
   progress: { repo: string; lines: string[] }[] = [],
+  outcomes?: string,
 ): string {
   const signals = summary.reviewSignals;
   if (summary.briefings === 0 && summary.reviews === 0) {
-    return "No feedback yet. Mark flags useful or not useful in `alden ui` (or through `alden mcp`), report what Alden missed, or send a review from Alden.\n";
+    return `No feedback yet. Mark flags useful or not useful in \`alden ui\` (or through \`alden mcp\`), report what Alden missed, or send a review from Alden.\n${outcomes ? `${outcomes}\n` : ""}`;
   }
   const eyes = summary.eyes.agree + summary.eyes.notNeeded;
   const out = [
@@ -62,6 +73,7 @@ export function renderFeedback(
     `Model findings: ${summary.modelFindings.agree} useful, ${summary.modelFindings.notNeeded} not useful`,
     `Missed: ${summary.missed}${signals.miss > 0 ? ` (and ${signals.miss} from comments in your reviews)` : ""} · Briefings with feedback: ${summary.briefings}${summary.since ? ` · since ${summary.since.slice(0, 10)}` : ""}`,
     ...reviewLine(summary),
+    ...(outcomes ? [outcomes] : []),
     "",
     paint("By check", "bold", color),
   ];
@@ -114,20 +126,40 @@ export function registerFeedbackCommand(program: Command): void {
         );
         return;
       }
+      // Outcomes first, so the summary counts any just found.
+      const outcomes = await outcomesLine();
       const summary = await log.summary();
       if (options.json) {
         console.log(JSON.stringify(summary, null, 2));
         return;
       }
-      process.stdout.write(renderFeedback(summary, shouldColor(process.stdout), await progressByRepo(log)));
+      process.stdout.write(renderFeedback(summary, shouldColor(process.stdout), await progressByRepo(log), outcomes));
     });
+}
+
+/**
+ * "Outcomes: 3 suggestions applied, 2 comments resolved (last 14 days)", after asking GitHub about the PRs due a check
+ * (at most once a day each). Signed out or offline, it shows what's already known. Never stops the command.
+ */
+async function outcomesLine(): Promise<string | undefined> {
+  try {
+    const store = openStore();
+    const resolved = await resolveToken().catch(() => undefined);
+    if (resolved) await checkOutcomes(createGitHubClient(resolved.token), store).catch(() => undefined);
+    return outcomeLine(outcomeSummary(store));
+  } catch {
+    return undefined;
+  }
 }
 
 /** Where lessons stand in each repo you've given feedback in. Never stops the command. */
 async function progressByRepo(log: FeedbackLog): Promise<{ repo: string; lines: string[] }[]> {
   try {
     const repos = [
-      ...new Set((await log.events()).flatMap((e) => (e.target.repo ? [e.target.repo.toLowerCase()] : []))),
+      ...new Set([
+        ...(await log.events()).flatMap((e) => (e.target.repo ? [e.target.repo.toLowerCase()] : [])),
+        ...log.signals().map((s) => s.repo.toLowerCase()),
+      ]),
     ].sort();
     const store = openStore();
     const out = [];

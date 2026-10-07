@@ -225,6 +225,7 @@ describe("the store, memory and opens", () => {
   });
 
   it("migrates once and survives reopening", () => {
+    expect(store.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(MIGRATION_COUNT);
     store.close();
     const again = AldenStore.open(join(dir, "alden.db"));
     expect(again.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(MIGRATION_COUNT);
