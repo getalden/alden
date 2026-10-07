@@ -81,8 +81,8 @@ describe("setConfigValue", () => {
   it("takes lists comma-separated or as JSON", async () => {
     await setConfigValue("queue.orgs", "acme, getalden");
     expect((await loadConfig(repo)).queue.orgs).toEqual(["acme", "getalden"]);
-    await setConfigValue("queue.repos", '["acme/x"]');
-    expect((await loadConfig(repo)).queue.repos).toEqual(["acme/x"]);
+    await setConfigValue("queue.repos", '["acme/shop"]');
+    expect((await loadConfig(repo)).queue.repos).toEqual(["acme/shop"]);
     await expect(setConfigValue("queue.repos", "not-a-repo")).rejects.toThrow(/owner\/name/);
   });
 
