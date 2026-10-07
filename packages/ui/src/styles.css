@@ -2174,6 +2174,21 @@ details > summary {
   flex: 1;
   min-height: 0;
   display: flex;
+  position: relative;
+  container-type: inline-size;
+}
+/* Too narrow for the briefing (or its diff) and the drawer side by side: the drawer slides over the briefing instead
+   of squeezing the code into a sliver; ×, s or Esc puts it away. */
+@container (max-width: 900px) {
+  .comments-drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    width: min(380px, 92%);
+    box-shadow: -16px 0 40px rgb(0 0 0 / 0.18);
+  }
 }
 .review-main {
   flex: 1;
