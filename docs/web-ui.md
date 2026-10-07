@@ -64,20 +64,34 @@ Stop it with Ctrl+C.
   light colours: no queue, toolbar or buttons, and places and checks don't split across pages. The Markdown leaves out
   your memory notes and what your feedback changed, keeps secrets masked as the briefing shows them, and ends with the
   model, its cost and when it was briefed. A line beside the button says what happened ("Copied as Markdown.").
-- **Comment from Alden.** Write your review in the briefing and send it to GitHub as one review. **Comment** on a place
-  in "Needs your eyes" or on a flagged check's evidence line opens an editor there; **Comment on a line…** takes any
-  line of a changed file (pick the file, give the line; a removed file's line is on the old side), and **Add a general
-  note** writes one that goes into the review's body. Comments are drafts, kept on this machine, until you send them.
-  The **Review** panel at the bottom of the briefing lists them by file, with Edit and Delete. Drafts that Claude Code
-  added are marked "from Claude", so you read them before they go out under your name; Claude can add drafts but never
-  send them. A draft written before the PR's latest commits is marked **Outdated**: **Rewrite** puts it in a new
-  comment on the current code (check the line), or delete it; the review won't send until you've done one or the
-  other. Then the review body, the verdict (**Comment**, **Approve** or **Request changes**, which needs a body) and
-  **Send review · 3 comments**. Nothing posts yet: a summary shows exactly what will, the PR, the verdict, the body
-  (yours, then your general notes) and each comment with its file and line. Before **Approve** it also lists the places
-  Alden flagged that you didn't comment on. Only the button there sends it. Afterwards the panel says "Sent to GitHub"
-  with a link to the review; if GitHub refuses, it shows why and keeps your drafts. A PR you've opened in this window
-  shows "2 drafts" in the queue while it has some.
+- **Comment from Alden.** Write your review beside the briefing and send it to GitHub as one review. **Comments · 3**
+  (or `s`) in a PR's toolbar opens the **Comments** drawer on the right; it collects everything you've written for that
+  PR and says where it goes: "Kept on this machine until you send them to acme/shop#412 on GitHub, as one review." It
+  stays open or closed as you left it for this window (a tab, or the desktop app's window), and starts open when the
+  window is wide enough for it beside the queue. At 700px wide and narrower it's a full-width sheet over the briefing;
+  ×, `s` or `Esc` puts it away.
+
+  **Comment** on a place in "Needs your eyes" or on a flagged check's evidence line opens the editor in the drawer,
+  saying exactly where the comment goes ("Comment on py/orders/pricing.py, line 4", or "lines 4–9" for a range). There's
+  one editor, always in the drawer; the place keeps a short list of your drafts on it. **Suggest a change** (lines on the
+  new side only) adds a code box, started from the line's text when Alden has it, that posts as a suggested change the
+  author can accept on GitHub; left empty, it suggests deleting the line. A suggestion needs no words of its own.
+  **Comment on a line…** takes any line or range of a changed file (pick the file, give `12` or `4–9`; a removed file's
+  line is on the old side), and **Add a general note** writes one that goes into the review's body. `⌘↵` saves, `Esc`
+  cancels and puts focus back where you were. Comments are drafts, kept on this machine, until you send them.
+
+  The drawer lists them by where they'll post: **On lines** (each with its file and line or range, the start of its
+  text, its suggested change, Edit and Delete) and **In the review body** (your general notes, which follow what you
+  write in the body). Drafts that Claude Code added are marked "from Claude", so you read them before they go out under
+  your name; Claude can add drafts but never send them. A draft written before the PR's latest commits is marked
+  **Outdated**: **Rewrite** puts it in a new comment on the current code (check the line), or delete it; the review
+  won't send until you've done one or the other. Below them, the review body, and at the bottom, always in view, the
+  verdict (**Comment**, **Approve** or **Request changes**, which needs a body) and **Send review · 3 comments**.
+  Nothing posts yet: a summary shows exactly what will, the PR, the verdict, the body (yours, then your general notes)
+  and each comment with its file, line and suggestion. Before **Approve** it also lists the places Alden flagged that
+  you didn't comment on. Only the button there sends it. Afterwards the drawer says "Sent to GitHub" with a link to the
+  review; if GitHub refuses, it shows why and keeps your drafts. A PR you've opened in this window shows "2 drafts" in
+  the queue while it has some.
 - **My changes.** Your uncommitted changes in the repo `alden ui` started in, before you open a PR.
 - **Stats.** Time to first review and cycle time for a repo, before and after you started using Alden.
 - **Memory.** Each repo Alden knows about, then what you look for and what you skip there: where each item came from,
@@ -123,14 +137,14 @@ tab; Settings changes the defaults.
 | `b` | Brief me on this PR |
 | `o` | Open this PR on GitHub |
 | `+` `−` `x` | Useful, Not useful, Dismiss on this PR |
-| `c` | Comment on the place you're on in the briefing (a place in "Needs your eyes" or an evidence line), or else open "Comment on a line…" |
-| `s` | Go to the Review panel |
+| `c` | Comment on the place you're on (a place in "Needs your eyes", an evidence line), in the Comments drawer; elsewhere, open "Comment on a line…" there |
+| `s` | Open or close the Comments drawer |
 | `e` | Open the Export menu (`↑` `↓` move, `↵` picks, `Esc` closes) |
 | `⌘↵` / `Ctrl+↵` | Save the comment you're writing |
 | `r` | Refresh the queue |
 | `/` | Search the queue (opens it first if it's collapsed); `Esc` clears the search, `Enter` opens the first match |
 | `[` | Collapse the queue to a rail, or bring it back (windows 960px and wider) |
-| `Esc` | Cancel the comment you're writing, or leave the send summary; stop a running briefing; in a narrow window, back to the list |
+| `Esc` | Cancel the comment you're writing, or leave the send summary; in the Comments drawer otherwise, close it; stop a running briefing; in a narrow window, back to the list |
 
 Keys never fire while you're typing in a text box.
 

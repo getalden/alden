@@ -9,7 +9,10 @@ terminal: never in the background, never from a model, never from Claude Code.
 
 ## Writing comments
 
-In [the web UI](web-ui.md) and the desktop app, write a comment on a place to look or on a line of the diff. In a
+In [the web UI](web-ui.md) and the desktop app, your comments collect in the **Comments** drawer beside the briefing
+(the toolbar's **Comments · 3**, or `s`). **Comment** on a place to look, or `c` on it, opens the drawer's editor on that
+place, saying where it goes ("Comment on py/orders/pricing.py, line 4"). The drawer lists your drafts by where they'll
+post, **On lines** or **In the review body**, and ends with the review body, the verdict and **Send review**. In a
 terminal:
 
 ```sh
@@ -25,6 +28,11 @@ alden comment acme/shop#7 --delete a1b2c3d4
 - **A comment on a line** becomes an inline comment on that line. GitHub only takes comments on lines in the PR's diff
   (changed lines and the few shown around them), so Alden checks the line when you write the comment and says if it
   isn't one.
+- **A comment on lines** (a range, "lines 4–9") becomes one inline comment on those lines. In the UI, give the line
+  as `4–9`.
+- **A suggested change** on a comment ("Suggest a change" in the UI, on the new side only) posts after the comment's
+  text as a `suggestion` block, which the author can accept on GitHub. The UI starts it from the line's text when it
+  has it; left empty, it suggests deleting the line(s). A comment with a suggestion needs no other text.
 - **A comment without a line** is a general note. Notes go into the review's body, after anything you write for the
   body itself, oldest first.
 
