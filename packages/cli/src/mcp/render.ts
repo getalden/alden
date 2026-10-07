@@ -61,6 +61,7 @@ export function briefingPlaces(briefing: Briefing): Map<string, FeedbackItem> {
       ...(severity ? { severity } : {}),
       ...(item.anchor ? { anchor: item.anchor } : {}),
       placement: "eyes",
+      ...(item.fromNote ? { note: item.fromNote.id } : {}),
     });
   });
   otherFindings(briefing).forEach((finding, i) => {
@@ -71,6 +72,7 @@ export function briefingPlaces(briefing: Briefing): Map<string, FeedbackItem> {
       severity: finding.severity,
       ...(finding.anchors[0] ? { anchor: finding.anchors[0] } : {}),
       placement: "finding",
+      ...(finding.fromNote ? { note: finding.fromNote.id } : {}),
     });
   });
   for (const check of briefing.checks.filter((c) => c.status === "flagged")) {
@@ -111,6 +113,7 @@ export function memoryMarkdown(repo: string, untrusted: MemoryItem[], paused: bo
       const effect = item.effect?.replace(/\.$/, "");
       const detail = [
         item.source === "you" ? "they said" : item.evidence,
+        item.confirmed && `confirmed ${item.confirmed}×`,
         effect && effect.charAt(0).toLowerCase() + effect.slice(1),
       ].filter(Boolean);
       out.push(`- ${quote(item.text)} (${detail.join("; ")}; since ${item.since.slice(0, 10)})`);

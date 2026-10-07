@@ -52,6 +52,7 @@ import {
   reviewPullRequest,
   SendReviewError,
   SpendLedger,
+  scopeNote,
   selectProvider,
   sendReview,
   setConfigValue,
@@ -569,6 +570,17 @@ export function createUiApi(options: {
         }
         if (change.action === "restore" && !restore(store, target, change.id)) {
           throw new ApiError(404, `Nothing called ${change.id} was forgotten in ${target}.`);
+        }
+        if (
+          (change.action === "exclude" || change.action === "include") &&
+          !(await scopeNote(store, target, change.id, change.path, change.action))
+        ) {
+          throw new ApiError(
+            404,
+            change.action === "exclude"
+              ? `No note called ${change.id} in ${target}.`
+              : `That note isn't stopped under ${change.path}.`,
+          );
         }
         if (change.action === "learning") setLearning(store, target, change.on);
         if (change.action === "forget-all") await forgetAll(store, target);

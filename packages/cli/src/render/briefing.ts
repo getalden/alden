@@ -111,6 +111,13 @@ function alsoNoted(briefing: Briefing, options: RenderOptions): string[] {
     const more = finding.anchors.length > 1 ? ` +${finding.anchors.length - 1}` : "";
     out.push(`  ${severityLabel(finding.severity, color)} ${finding.title}${paint(`${where}${more}`, "dim", color)}`);
     out.push(...wrap(finding.detail, width, "           ").map((l) => paint(l, "dim", color)));
+    if (finding.fromNote) {
+      out.push(
+        ...wrap(`Because of your note: ${finding.fromNote.text}`, width, "           ").map((l) =>
+          paint(l, "cyan", color),
+        ),
+      );
+    }
   }
   return [...out, ""];
 }
@@ -286,6 +293,11 @@ export function renderBriefing(untrusted: Briefing, options: RenderOptions): str
     }
     out.push(...wrap(item.reason, width, "     ").map((l) => paint(l, "dim", color)));
     if (item.learned) out.push(...wrap(`↑ ${item.learned}`, width, "     ").map((l) => paint(l, "cyan", color)));
+    if (item.fromNote) {
+      out.push(
+        ...wrap(`Because of your note: ${item.fromNote.text}`, width, "     ").map((l) => paint(l, "cyan", color)),
+      );
+    }
     if (item.related?.length) out.push(...wrap(lookAtTheseToo(item.related), width, "     "));
   });
   out.push(...learnedNote(briefing, options));

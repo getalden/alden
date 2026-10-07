@@ -47,6 +47,7 @@ import {
   redactFeedback,
   restore,
   type StatsPullRequest,
+  scopeNote,
   setLearning,
   summarizeStats,
   toDiffView,
@@ -464,6 +465,9 @@ const api: UiApi = {
     const repo = change.repo ?? DEMO_REPO;
     if (change.action === "edit") await editNote(store, repo, change.id, change.text);
     if (change.action === "restore") restore(store, repo, change.id);
+    if (change.action === "exclude" || change.action === "include") {
+      await scopeNote(store, repo, change.id, change.path, change.action);
+    }
     if (change.action === "learning") setLearning(store, repo, change.on);
     if (change.action === "forget-all") await forgetAll(store, repo);
     return memoryOf(repo);

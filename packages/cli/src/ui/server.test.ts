@@ -593,14 +593,19 @@ describe("alden ui server", () => {
     await post("/api/memory/change", { action: "edit", id: "note:1", text: "x" });
     await post("/api/memory/change", { repo: "a/b", action: "learning", on: false });
     await post("/api/memory/change", { action: "forget-all" });
+    await post("/api/memory/change", { repo: "a/b", action: "exclude", id: "note:1", path: "app/api" });
+    await post("/api/memory/change", { action: "include", id: "note:1", path: "app/api" });
     await post("/api/reaction", { pr: "a/b#1", reaction: "dismiss" });
     expect(calls).toEqual([
       { method: "changeMemory", args: { action: "edit", id: "note:1", text: "x" } },
       { method: "changeMemory", args: { repo: "a/b", action: "learning", on: false } },
       { method: "changeMemory", args: { action: "forget-all" } },
+      { method: "changeMemory", args: { repo: "a/b", action: "exclude", id: "note:1", path: "app/api" } },
+      { method: "changeMemory", args: { action: "include", id: "note:1", path: "app/api" } },
       { method: "react", args: { pr: "a/b#1", reaction: "dismiss" } },
     ]);
     expect((await post("/api/memory/change", { action: "edit", id: "note:1" })).status).toBe(400);
+    expect((await post("/api/memory/change", { action: "exclude", id: "note:1" })).status).toBe(400);
     expect((await post("/api/reaction", { pr: "a/b#1", reaction: "love" })).status).toBe(400);
     expect(JSON.parse((await call("/api/memory/repos", { headers: authed })).text)).toEqual([
       { repo: "acme/shop", items: 2 },

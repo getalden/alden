@@ -160,6 +160,7 @@ export interface DraftChange {
 export type MemoryChange =
   | { repo?: string; action: "edit"; id: string; text: string }
   | { repo?: string; action: "restore"; id: string }
+  | { repo?: string; action: "exclude" | "include"; id: string; path: string }
   | { repo?: string; action: "learning"; on: boolean }
   | { repo?: string; action: "forget-all" };
 
@@ -519,12 +520,17 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
             ? { ...repo, action: "edit", id: body.id, text: body.text }
             : body.action === "restore" && typeof body.id === "string"
               ? { ...repo, action: "restore", id: body.id }
-              : body.action === "learning" && typeof body.on === "boolean"
-                ? { ...repo, action: "learning", on: body.on }
-                : body.action === "forget-all"
-                  ? { ...repo, action: "forget-all" }
-                  : undefined;
-        if (!change) throw new ApiError(400, "Send { action: edit | restore | learning | forget-all, … }.");
+              : (body.action === "exclude" || body.action === "include") &&
+                  typeof body.id === "string" &&
+                  typeof body.path === "string"
+                ? { ...repo, action: body.action, id: body.id, path: body.path }
+                : body.action === "learning" && typeof body.on === "boolean"
+                  ? { ...repo, action: "learning", on: body.on }
+                  : body.action === "forget-all"
+                    ? { ...repo, action: "forget-all" }
+                    : undefined;
+        if (!change)
+          throw new ApiError(400, "Send { action: edit | restore | exclude | include | learning | forget-all, … }.");
         send(res, 200, await api.changeMemory(change));
         return;
       }

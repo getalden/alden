@@ -30,6 +30,9 @@ export const quote = (text: string) => text.replace(/`/g, "'").replace(/\s+/g, "
 /** In a shared document, text from the PR can't open an HTML tag either. */
 const prose = (text: string) => quote(text).replace(/</g, "\\<");
 
+/** A model finding that came from one of the reviewer's notes says so, in one line. */
+export const becauseOfNote = (note: string) => `Because of your note: ${quote(note)}`;
+
 /** Model findings that didn't make "needs your eyes", most severe first: the F ids. */
 export function otherFindings(briefing: Briefing): LlmFinding[] {
   if (briefing.llm?.status !== "ok") return [];
@@ -162,8 +165,9 @@ export function briefingMarkdown(untrusted: Briefing, options: BriefingMarkdownO
     out.push(`${i + 1}.${id} **${text(item.title)}**${critical}${by} ${place(item.anchor)}`.trimEnd());
     out.push(`   ${text(item.reason)}`);
     if (item.related?.length) out.push(`   ${lookAtTheseToo(item.related, (where) => `\`${quote(where)}\``)}`);
-    // Shared, what the reviewer's own feedback did stays with them.
+    // Shared, what the reviewer's own feedback and notes did stays with them.
     if (forModel && item.learned) out.push(`   ↑ ${quote(item.learned)}`);
+    if (forModel && item.fromNote) out.push(`   ${becauseOfNote(item.fromNote.text)}`);
   });
   if (forModel) {
     for (const hidden of briefing.learning?.hidden ?? []) {
@@ -179,6 +183,7 @@ export function briefingMarkdown(untrusted: Briefing, options: BriefingMarkdownO
       const id = forModel ? ` [F${i + 1}]` : "";
       out.push(`-${id} ${f.severity}: **${text(f.title)}** ${f.anchors.map(place).join(", ")}`.trimEnd());
       out.push(`  ${text(f.detail)}`);
+      if (forModel && f.fromNote) out.push(`  ${becauseOfNote(f.fromNote.text)}`);
     });
     out.push("");
   }
