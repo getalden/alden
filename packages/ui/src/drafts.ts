@@ -18,10 +18,10 @@ import type { Api } from "./api";
 export type ReviewDraft = BaseDraft;
 export type { ReviewEvent };
 /**
- * What sending a review answers, and (from engines that learn from reviews) what Alden learned from it, e.g. "you care
- * about callers flags (2 of 3)". Mirrors the engine's optional `learned`.
+ * What sending a review answers, with `learning`: what Alden learned from it, one line per lesson it moved (absent
+ * when it learned nothing, or from an engine that doesn't learn from reviews).
  */
-export type SendReviewResult = BaseSendResult & { learned?: string[] | undefined };
+export type SendReviewResult = BaseSendResult;
 export type Unaddressed = UnaddressedPlace;
 export type DraftsResponse = BaseDrafts;
 

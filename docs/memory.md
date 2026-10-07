@@ -132,8 +132,11 @@ Turn it off with **Learn from my reviews** in Settings, or `alden config set lea
 notes nothing and learns from your reviews no more; Useful and Not useful still teach it.
 
 Learned items in the Memory view say where they came from, newest first: "from your review of acme/shop#412, Oct 8",
-"from your reaction to acme/shop#400, Oct 1", then "and 3 more". After you send a review, the Comments drawer says in
-one line what Alden learned from it, if anything ("Alden learned: you care about callers flags (2 of 3)").
+"from how it went with acme/shop#409, Oct 6" (an outcome), "from your reactions, Oct 1", "from the PRs you opened, Sep
+28", then "and 3 more". `alden memory` and `alden_memory` name the reviews and outcomes a lesson came from. After you
+send a review, the Comments drawer (and `alden send`) says in one line what Alden learned from it, if anything ("Alden
+learned: 2 of 3 (2 from your review of acme/shop#412): one more useful on untested-change flags and Alden will put
+them first among the places to look").
 
 ## Seeing it build
 

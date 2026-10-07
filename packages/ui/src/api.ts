@@ -7,6 +7,7 @@ import type {
   KeyTestResult,
   LocalSetupEvent,
   MemoryItem,
+  MemorySource,
   ModelSetupState,
   PrDiff,
   RankedQueue,
@@ -26,18 +27,10 @@ import type {
 } from "./drafts";
 import type { SeenBatch } from "./seen";
 
-/**
- * Where a learned item came from: a review you sent, a reaction in the queue, how a PR turned out, a PR you opened.
- * Mirrors the engine's optional `sources` on memory items; older engines leave it out.
- */
-export interface MemorySource {
-  kind: "reaction" | "review" | "outcome" | "open";
-  /** "owner/repo#12" */
-  pr?: string;
-  at: string;
-}
-
-export type MemoryEntry = MemoryItem & { sources?: MemorySource[] | undefined };
+/** A memory item as the API lists it, with where a learned item came from (`sources`, from the schema). */
+export type MemoryEntry = MemoryItem;
+/** Where a learned item came from: your reactions, PRs you opened, a review you sent, or how a PR turned out. */
+export type { MemorySource };
 
 export interface Memory {
   repo: string;

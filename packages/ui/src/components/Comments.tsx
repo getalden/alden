@@ -871,8 +871,8 @@ export function CommentsDrawer(props: {
             </a>
           </p>
         )}
-        {sent?.learned && sent.learned.length > 0 && (
-          <p className="sent-learned faint small">Alden learned: {sent.learned.join("; ")}</p>
+        {sent?.learning && sent.learning.length > 0 && (
+          <p className="sent-learned faint small">Alden learned: {sent.learning.join("; ")}</p>
         )}
         {comments.error && <p className="banner error">{comments.error}</p>}
 

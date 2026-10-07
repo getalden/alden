@@ -22,11 +22,12 @@ const since = (iso: string) => {
 /** How many of a learned item's sources to list before "and N more". */
 const SOURCES_SHOWN = 3;
 
-const FROM: Record<MemorySource["kind"], [withPr: string, without: string]> = {
+/** How each kind of source reads: with the PR it's about, and without one. */
+const FROM: Record<MemorySource["from"], [withPr: string, without: string]> = {
   review: ["from your review of", "from a review you sent"],
-  reaction: ["from your reaction to", "from a reaction in your queue"],
+  reactions: ["from your reactions on", "from your reactions"],
   outcome: ["from how it went with", "from how a PR turned out"],
-  open: ["from opening", "from a PR you opened"],
+  opens: ["from opening", "from the PRs you opened"],
 };
 
 /** Where a learned item came from, newest first: "from your review of acme/shop#412, Oct 8", then "and 4 more". */
@@ -37,7 +38,7 @@ export function MemorySources({ sources }: { sources: MemorySource[] | undefined
   return (
     <ul className="mem-sources visually-plain" aria-label="Where it came from">
       {newest.slice(0, SOURCES_SHOWN).map((source, i) => {
-        const [withPr, without] = FROM[source.kind] ?? FROM.review;
+        const [withPr, without] = FROM[source.from] ?? FROM.review;
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: two sources can share a PR, kind and time.
           <li key={i}>

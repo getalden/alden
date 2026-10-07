@@ -482,11 +482,11 @@ describe("MemoryView", () => {
 describe("where a learned item came from", () => {
   it("lists the newest few sources, then how many more", async () => {
     const sources = [
-      { kind: "reaction" as const, pr: "acme/api#400", at: "2026-10-01T12:00:00.000Z" },
-      { kind: "review" as const, pr: "acme/api#412", at: "2026-10-08T12:00:00.000Z" },
-      { kind: "outcome" as const, pr: "acme/api#390", at: "2026-10-05T12:00:00.000Z" },
-      { kind: "open" as const, at: "2026-09-02T12:00:00.000Z" },
-      { kind: "review" as const, at: "2026-09-01T12:00:00.000Z" },
+      { from: "reactions" as const, weight: 3, at: "2026-10-01T12:00:00.000Z" },
+      { from: "review" as const, pr: "acme/api#412", weight: 2, at: "2026-10-08T12:00:00.000Z" },
+      { from: "outcome" as const, pr: "acme/api#390", weight: 1, at: "2026-10-05T12:00:00.000Z" },
+      { from: "opens" as const, weight: 1, at: "2026-09-02T12:00:00.000Z" },
+      { from: "review" as const, pr: "acme/api#380", weight: 1, at: "2026-09-01T12:00:00.000Z" },
     ];
     const item = (id: string, text: string, extra = {}) => ({
       id,
@@ -518,7 +518,7 @@ describe("where a learned item came from", () => {
     ).toEqual([
       "from your review of acme/api#412, Oct 8",
       "from how it went with acme/api#390, Oct 5",
-      "from your reaction to acme/api#400, Oct 1",
+      "from your reactions, Oct 1",
       "and 2 more",
     ]);
     // An item without sources (from an engine that doesn't say) shows none.
