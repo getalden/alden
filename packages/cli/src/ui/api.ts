@@ -8,6 +8,7 @@ import {
   checkFreshness,
   checkLinkTarget,
   checkModelKey,
+  checkOutcomes,
   checkProgress,
   cloneAt,
   createGitHubClient,
@@ -349,6 +350,12 @@ export function createUiApi(options: {
           ));
         const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
         void track("queue_ranked", queueEvent(ranked));
+        // What came of the comments you sent lately, after the queue is in: at most a request per PR per day.
+        if (!cached) {
+          void Promise.resolve()
+            .then(() => checkOutcomes(client, openStore()))
+            .catch(() => {});
+        }
         // Shared with the CLI, so `alden review 3` means the same PR in both.
         const last: LastQueue = {
           urls: [...ranked.needsYou, ...ranked.fastTrack].map((r) => r.pr.url),

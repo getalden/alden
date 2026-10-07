@@ -1,8 +1,10 @@
 import {
+  checkOutcomes,
   createGitHubClient,
   fetchReviewQueue,
   JsonCache,
   loadConfig,
+  openStore,
   queueEvent,
   queueRows,
   queueScope,
@@ -114,9 +116,10 @@ export function registerQueueCommand(program: Command): void {
       const cache = new JsonCache();
       // On stderr, and only on a terminal: scripts read stdout.
       const progress = startProgress("Asking GitHub who you are…");
+      const client = createGitHubClient(resolved.token);
       let queue: Awaited<ReturnType<typeof fetchReviewQueue>>;
       try {
-        queue = await fetchReviewQueue(createGitHubClient(resolved.token), {
+        queue = await fetchReviewQueue(client, {
           includeDrafts: options.includeDrafts ?? config.queue.includeDrafts,
           limit,
           cache,
@@ -128,6 +131,11 @@ export function registerQueueCommand(program: Command): void {
         progress.stop();
         program.error(describeGitHubError(error, resolved.source));
       }
+      // Once the queue is in: what came of the comments you sent lately (at most a request per PR per day), in the
+      // background. Its errors are its own.
+      void Promise.resolve()
+        .then(() => checkOutcomes(client, openStore()))
+        .catch(() => {});
       progress.update("Seeing what needs your eyes…");
       let ranked: ReturnType<typeof rankQueue>;
       try {

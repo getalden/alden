@@ -1,5 +1,16 @@
 import { writeFile } from "node:fs/promises";
-import { checkProgress, FeedbackLog, type Learning, loadLearning, openStore } from "@alden/core";
+import {
+  checkOutcomes,
+  checkProgress,
+  createGitHubClient,
+  FeedbackLog,
+  type Learning,
+  loadLearning,
+  openStore,
+  outcomeLine,
+  outcomeSummary,
+  resolveToken,
+} from "@alden/core";
 import type { FeedbackSummary } from "@alden/schema";
 import type { Command } from "commander";
 import { paint, shouldColor } from "../render/style.js";
@@ -28,15 +39,17 @@ export function renderFeedback(
   summary: FeedbackSummary,
   color: boolean,
   progress: { repo: string; lines: string[] }[] = [],
+  outcomes?: string,
 ): string {
   if (summary.briefings === 0) {
-    return "No feedback yet. Mark flags useful or not useful in `alden ui` (or through `alden mcp`), and report what Alden missed.\n";
+    return `No feedback yet. Mark flags useful or not useful in \`alden ui\` (or through \`alden mcp\`), and report what Alden missed.\n${outcomes ? `${outcomes}\n` : ""}`;
   }
   const eyes = summary.eyes.agree + summary.eyes.notNeeded;
   const out = [
     `${paint('Useful rate on "needs your eyes"', "bold", color)}: ${percent(summary.eyesAgreeRate)} (${summary.eyes.agree} of ${eyes})`,
     `Model findings: ${summary.modelFindings.agree} useful, ${summary.modelFindings.notNeeded} not useful`,
     `Missed: ${summary.missed} · Briefings with feedback: ${summary.briefings}${summary.since ? ` · since ${summary.since.slice(0, 10)}` : ""}`,
+    ...(outcomes ? [outcomes] : []),
     "",
     paint("By check", "bold", color),
   ];
@@ -93,8 +106,24 @@ export function registerFeedbackCommand(program: Command): void {
         console.log(JSON.stringify(summary, null, 2));
         return;
       }
-      process.stdout.write(renderFeedback(summary, shouldColor(process.stdout), await progressByRepo(log)));
+      const outcomes = await outcomesLine();
+      process.stdout.write(renderFeedback(summary, shouldColor(process.stdout), await progressByRepo(log), outcomes));
     });
+}
+
+/**
+ * "Outcomes: 3 suggestions applied, 2 comments resolved (last 14 days)", after asking GitHub about the PRs due a check
+ * (at most once a day each). Signed out or offline, it shows what's already known. Never stops the command.
+ */
+async function outcomesLine(): Promise<string | undefined> {
+  try {
+    const store = openStore();
+    const resolved = await resolveToken().catch(() => undefined);
+    if (resolved) await checkOutcomes(createGitHubClient(resolved.token), store).catch(() => undefined);
+    return outcomeLine(outcomeSummary(store));
+  } catch {
+    return undefined;
+  }
 }
 
 /** Where lessons stand in each repo you've given feedback in. Never stops the command. */

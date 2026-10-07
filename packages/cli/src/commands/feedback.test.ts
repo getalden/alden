@@ -58,4 +58,21 @@ describe("renderFeedback", () => {
   it("says how to give feedback when there's none", () => {
     expect(renderFeedback(summarizeFeedback([]), false)).toContain("No feedback yet");
   });
+
+  it("shows what came of the comments you sent, with or without verdicts", () => {
+    const line = "Outcomes: 3 suggestions applied, 2 comments resolved (last 14 days)";
+    expect(renderFeedback(summarizeFeedback([]), false, [], line)).toContain(`missed.\n${line}\n`);
+    const one = summarizeFeedback([
+      {
+        schemaVersion: 1,
+        id: "1",
+        at: "2026-09-30T10:00:00.000Z",
+        target: { kind: "pr", repo: "acme/api", number: 1 },
+        briefingAt: "2026-09-30T09:00:00.000Z",
+        kind: "missed",
+        note: "n",
+      },
+    ]);
+    expect(renderFeedback(one, false, [], line)).toMatch(/Missed: 1 .*\nOutcomes: 3 suggestions applied/);
+  });
 });
