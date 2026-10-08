@@ -6,6 +6,8 @@
   "author": { "name": "Alden", "url": "https://getalden.dev" },
   "homepage": "https://getalden.dev/docs/claude-code/",
   "repository": "https://github.com/getalden/claude-plugin",
+  "privacyPolicyUrl": "https://getalden.dev/docs/privacy/",
+  "supportUrl": "https://discord.gg/ZtXFX7sxTu",
   "license": "Apache-2.0",
   "keywords": ["code-review", "pull-requests", "github", "review-queue"]
 }
