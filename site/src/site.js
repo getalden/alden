@@ -90,9 +90,10 @@ for (const box of document.querySelectorAll("[data-copy], .prose pre")) {
 
 // --- The landing page's moving parts ------------------------------------------------------------------------------
 // Each one starts in a sensible still state, so with reduced motion (or without JavaScript) the page reads the same,
-// just without the motion. Other pages don't have them.
+// just without the motion. Other pages don't have them, and a doc's heading can share one of their ids (the
+// Configuration page's "queue" heading is #queue), so this checks for the landing page itself.
 (() => {
-  if (!document.getElementById("queue")) return;
+  if (!document.querySelector(".hero-wrap")) return;
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => {
