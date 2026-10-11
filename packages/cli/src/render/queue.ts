@@ -1,5 +1,5 @@
-import { formatAge, type RankedPullRequest, type RankedQueue } from "@alden/core";
-import type { ScoreLine } from "@alden/schema";
+import { formatAge, type RankedPullRequest, type RankedQueue, REREVIEW_REASON } from "@alden/core";
+import type { FollowUpSummary, ScoreLine } from "@alden/schema";
 import { fit, paint, type RenderOptions, type Style, stripControlDeep } from "./style.js";
 
 export { type RenderOptions, shouldColor } from "./style.js";
@@ -23,6 +23,8 @@ const CI_STYLE: Record<keyof typeof CI_LABEL, Style | undefined> = {
 /** `alden queue --explain`: the score line under each row. */
 export interface QueueRenderOptions extends RenderOptions {
   explain?: boolean;
+  /** For tests: the time "reviewed 2d ago" counts back from. */
+  now?: number;
 }
 
 /** A number as the explain line shows it: no trailing zeros, at most two decimals. */
@@ -43,6 +45,22 @@ export function explainLine(item: RankedPullRequest): string {
   const lines = item.breakdown ?? [];
   const failing = item.waitingOnAuthor ? " · after the others: CI failing" : "";
   return `score ${num(item.score.total)}${lines.length > 0 ? `: ${lines.map(part).join(" · ")}` : ""}${failing}`;
+}
+
+/**
+ * "reviewed 2d ago · 3 of your 5 comments resolved": what's happened since you reviewed, for the reason line. The
+ * counts only show once something has happened to your comments.
+ */
+export function followUpText(followUp: FollowUpSummary, now: number = Date.now()): string {
+  const hours = Math.max(0, (now - Date.parse(followUp.lastReviewedAt)) / 3_600_000);
+  const parts = [`reviewed ${formatAge(hours)} ago`];
+  if (followUp.yourThreads > 0 && followUp.resolved > 0) {
+    parts.push(
+      `${followUp.resolved} of your ${followUp.yourThreads} comment${followUp.yourThreads === 1 ? "" : "s"} resolved`,
+    );
+  }
+  if (followUp.replied > 0) parts.push(`${followUp.replied} repl${followUp.replied === 1 ? "y" : "ies"} to you`);
+  return parts.join(" · ");
 }
 
 interface Row {
@@ -91,11 +109,12 @@ export function renderQueue(untrusted: RankedQueue, options: QueueRenderOptions)
     const { pr } = item;
     const ciStyle = CI_STYLE[pr.ci];
     const ci = ciStyle ? paint(CI_LABEL[pr.ci], ciStyle, color) : CI_LABEL[pr.ci];
-    // A draft says so before its title and is dimmed, like the web UI's chip.
+    // A draft says so before its title and is dimmed, like the web UI's chip; a re-review says so too.
+    const rereview = item.followUp?.rereviewRequestedAt !== undefined;
     const main = [
       fit(`${rank}.`, cols.rank),
       fitPr(pr.repo, pr.number, cols.pr),
-      fit(`${pr.isDraft ? "[Draft] " : ""}${pr.title}`, titleWidth),
+      fit(`${pr.isDraft ? "[Draft] " : ""}${rereview ? "[Re-review] " : ""}${pr.title}`, titleWidth),
       fit(`@${pr.author ?? "ghost"}`, cols.author),
       fit(formatAge(item.waitingHours), cols.waiting),
       fit(`+${pr.additions}/-${pr.deletions}`, cols.size),
@@ -105,6 +124,9 @@ export function renderQueue(untrusted: RankedQueue, options: QueueRenderOptions)
     const reasons = item.reasons.filter((r) => !r.startsWith("waiting "));
     // Likewise the tag already says it's a draft.
     if (pr.isDraft && reasons.includes("draft")) reasons.splice(reasons.indexOf("draft"), 1);
+    // And the re-review tag: the line says when you reviewed instead.
+    if (reasons.includes(REREVIEW_REASON)) reasons.splice(reasons.indexOf(REREVIEW_REASON), 1);
+    if (item.followUp) reasons.unshift(followUpText(item.followUp, options.now));
     const why = item.fastTrack ? item.fastTrack : reasons.join(" · ") || "nothing stands out";
     const indent = " ".repeat(cols.rank + 2);
     // The explain line isn't cut to the width: it's there to be read in full.

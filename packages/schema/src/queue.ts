@@ -41,7 +41,17 @@ export const PullRequestFactsSchema = z.object({
   ci: CiStateSchema,
   mergeable: z.enum(["mergeable", "conflicting", "unknown"]),
   reviews: z.array(
-    z.object({ author: z.string().nullable(), state: z.string(), submittedAt: z.iso.datetime().nullable() }),
+    z.object({
+      author: z.string().nullable(),
+      state: z.string(),
+      submittedAt: z.iso.datetime().nullable(),
+      commit: z
+        .string()
+        .optional()
+        .describe(
+          "the head commit the review was submitted on; absent in queues fetched before Alden read it, and when GitHub no longer has it",
+        ),
+    }),
   ),
   request: z.object({
     direct: z.boolean().describe("the viewer was asked by name"),

@@ -65,6 +65,28 @@ const api: UiApi = {
       return { opened: page };
     },
   },
+  followUps: {
+    check: async () => {
+      calls.push({ method: "followUps.check", args: undefined });
+      return {
+        notifications: [{ pr: "a/b#1", title: "Fix \u001b[31mit", url: "u", text: "2 replies", events: ["e1", "e2"] }],
+        sound: true,
+      };
+    },
+    ack: async (ids) => {
+      calls.push({ method: "followUps.ack", args: ids });
+      return { acked: ids.length };
+    },
+    watch: async (pr) => {
+      calls.push({ method: "followUps.watch", args: pr });
+      return { pr, level: "your-turn" };
+    },
+    setWatch: async (pr, level) => {
+      calls.push({ method: "followUps.setWatch", args: { pr, level } });
+      return { pr, ...(level ? { override: level } : {}), level: level ?? "your-turn" };
+    },
+    noteQueue: (queue) => queue,
+  },
   // Settings → Ranking has its own tests, in rank.test.ts.
   ranking: {
     state: async () => ({}) as never,
@@ -153,8 +175,12 @@ const api: UiApi = {
     if (id === "gone") throw new ApiError(404, "No draft gone.");
     return { ok: true };
   },
-  diff: async (pr) => {
-    calls.push({ method: "diff", args: pr });
+  keepDrafts: async (input) => {
+    calls.push({ method: "keepDrafts", args: input });
+    return { kept: [] };
+  },
+  diff: async (pr, since) => {
+    calls.push({ method: "diff", args: since === undefined ? pr : { pr, since } });
     if (pr === "a/b#404") throw new ApiError(502, "GitHub couldn't find a/b#404.");
     return {
       headSha: "h1",
@@ -405,6 +431,45 @@ describe("alden ui server", () => {
     expect(JSON.parse(res.text.trim())).toEqual({ type: "error", message: "Not a PR." });
   });
 
+  it("checks follow-ups, acknowledges what was shown, and reads and sets a PR's level", async () => {
+    const checked = await call("/api/follow-ups", { headers: authed });
+    expect(JSON.parse(checked.text)).toEqual({
+      notifications: [{ pr: "a/b#1", title: "Fix it", url: "u", text: "2 replies", events: ["e1", "e2"] }],
+      sound: true,
+    });
+    const ack = await call("/api/follow-ups/ack", { method: "POST", headers: authed, body: { events: ["e1", "e2"] } });
+    expect(JSON.parse(ack.text)).toEqual({ acked: 2 });
+    for (const body of [{}, { events: "e1" }, { events: [1] }]) {
+      expect((await call("/api/follow-ups/ack", { method: "POST", headers: authed, body })).status).toBe(400);
+    }
+
+    expect((await call("/api/watch", { headers: authed })).status).toBe(400);
+    const watch = await call(`/api/watch?pr=${encodeURIComponent("a/b#1")}`, { headers: authed });
+    expect(JSON.parse(watch.text)).toEqual({ pr: "a/b#1", level: "your-turn" });
+    const set = await call(`/api/watch?pr=${encodeURIComponent("a/b#1")}`, {
+      method: "PUT",
+      headers: authed,
+      body: { level: "every-reply" },
+    });
+    expect(JSON.parse(set.text)).toEqual({ pr: "a/b#1", override: "every-reply", level: "every-reply" });
+    await call(`/api/watch?pr=${encodeURIComponent("a/b#1")}`, {
+      method: "PUT",
+      headers: authed,
+      body: { level: null },
+    });
+    for (const body of [{}, { level: "loud" }]) {
+      const bad = await call(`/api/watch?pr=${encodeURIComponent("a/b#1")}`, { method: "PUT", headers: authed, body });
+      expect(bad.status).toBe(400);
+    }
+    expect(calls).toEqual([
+      { method: "followUps.check", args: undefined },
+      { method: "followUps.ack", args: ["e1", "e2"] },
+      { method: "followUps.watch", args: "a/b#1" },
+      { method: "followUps.setWatch", args: { pr: "a/b#1", level: "every-reply" } },
+      { method: "followUps.setWatch", args: { pr: "a/b#1", level: null } },
+    ]);
+  });
+
   it("validates config changes and reports the engine's errors", async () => {
     expect((await call("/api/config", { method: "PUT", headers: authed, body: { key: "a" } })).status).toBe(400);
     const bad = await call("/api/config", { method: "PUT", headers: authed, body: { key: "nope", value: "1" } });
@@ -523,6 +588,15 @@ describe("alden ui server", () => {
     expect((await call("/api/diff", { headers: { ...authed, Host: "evil.example:80" } })).status).toBe(403);
   });
 
+  it("narrows a PR's diff to the changes since a commit, and only takes a commit for it", async () => {
+    expect((await call("/api/diff?pr=a%2Fb%231&since=abc1234", { headers: authed })).status).toBe(200);
+    expect(calls).toEqual([{ method: "diff", args: { pr: "a/b#1", since: "abc1234" } }]);
+    for (const query of ["pr=a%2Fb%231&since=main", "pr=a%2Fb%231&since=abc..def", "since=abc1234"]) {
+      expect((await call(`/api/diff?${query}`, { headers: authed })).status).toBe(400);
+    }
+    expect(calls).toHaveLength(1);
+  });
+
   it("passes drafts and sending through, always as yours, and checks their bodies", async () => {
     const send = (method: string, path: string, body?: unknown) =>
       call(path, { method, headers: authed, ...(body === undefined ? {} : { body }) });
@@ -620,6 +694,21 @@ describe("alden ui server", () => {
     expect((await send("POST", "/api/drafts", { pr: "a/b#1", inReplyTo: "T", resolve: "yes" })).status).toBe(400);
     // Only a reply resolves.
     expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", resolve: true })).status).toBe(400);
+  });
+
+  it("keeps Alden's drafts by id or for a whole PR, and checks the body", async () => {
+    const post = (body: unknown) => call("/api/drafts/keep", { method: "POST", headers: authed, body });
+    expect((await post({ ids: ["d1", "d2"] })).status).toBe(200);
+    expect((await post({ pr: "a/b#1" })).status).toBe(200);
+    expect(calls).toEqual([
+      { method: "keepDrafts", args: { ids: ["d1", "d2"] } },
+      { method: "keepDrafts", args: { pr: "a/b#1" } },
+    ]);
+    expect((await post({})).status).toBe(400);
+    expect((await post({ ids: "d1" })).status).toBe(400);
+    expect((await post({ ids: ["../x"] })).status).toBe(400);
+    expect((await post({ pr: 7 })).status).toBe(400);
+    expect((await call("/api/drafts/keep", { method: "POST", body: { pr: "a/b#1" } })).status).toBe(401);
   });
 
   it("passes memory changes and reactions through, and checks their bodies", async () => {

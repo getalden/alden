@@ -800,6 +800,18 @@ textarea.input {
 .learned-line.down {
   color: var(--ink2);
 }
+/* A PR you reviewed before: "Re-review" and when you last reviewed. */
+.followup-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font: 500 12px / 1.4 var(--font-ui);
+  color: var(--ink2);
+}
+.chip.rereview {
+  color: var(--warn);
+  background: var(--warn-soft);
+}
 .reactions {
   position: relative;
   z-index: 1;
@@ -944,6 +956,19 @@ textarea.input {
   font: 500 12px var(--font-mono);
   color: var(--ink3);
   overflow-wrap: anywhere;
+}
+/* The bell on a PR: its notification level, at the end of the line above the title. */
+.watch-bell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--ink3);
+}
+@media print {
+  .watch-bell {
+    display: none;
+  }
 }
 .brief-title {
   font: 500 28px / 1.2 var(--font-ui);
@@ -2204,6 +2229,19 @@ details > summary {
   color: var(--acc);
   background: var(--acc-soft);
 }
+/* Alden's drafts: suggestions until you keep or edit them, so they read apart from your own. */
+.chip.from-alden {
+  color: var(--warn);
+  background: var(--warn-soft);
+  flex: none;
+}
+.alden-drafts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--warn-soft);
+}
 /* The PR pane: the briefing (it scrolls) and, beside it, the Comments drawer. */
 .review-pane {
   flex: 1;
@@ -2484,6 +2522,9 @@ details > summary {
 }
 .pr-row.selected .chip.ready {
   background: var(--ok-soft);
+}
+.pr-row.selected .chip.rereview {
+  background: var(--warn-soft);
 }
 .mem-item.gone .text {
   text-decoration: line-through;
@@ -3021,6 +3062,12 @@ details > summary {
 }
 .banner.diff-newer {
   margin: 0;
+}
+.diff-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
 }
 .diff-scroll {
   overflow-x: auto;

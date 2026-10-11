@@ -92,7 +92,7 @@ export function renderDrafts(
     "",
   ];
   for (const d of drafts) {
-    const who = d.source === "claude" ? " · drafted by Claude Code" : "";
+    const who = whoDrafted(d);
     out.push(`  ${paint(d.id, "dim", color)}  ${placeOf(d, threads)}${paint(who, "dim", color)}`);
     if (d.state === "outdated") {
       out.push(
@@ -110,9 +110,19 @@ export function renderDrafts(
       `Delete an outdated comment (alden comment ${pr} --delete <id>) and write it again where it belongs, or place it again in alden ui.`,
     );
   }
+  const alden = drafts.filter((d) => d.source === "alden").length;
+  if (alden > 0) out.push(aldenNotKept(alden, pr));
   out.push(`Send them as one review: alden send ${pr} --comment | --approve | --request-changes`);
   return `${out.join("\n")}\n`;
 }
+
+/** Who drafted a comment, when it wasn't you: Claude Code, or Alden from its model's finding (until you keep it). */
+const whoDrafted = (d: ReviewDraft) =>
+  d.source === "claude" ? " · drafted by Claude Code" : d.source === "alden" ? " · drafted by Alden, not kept" : "";
+
+/** What to do with Alden's drafts, which are never sent until you keep them. */
+export const aldenNotKept = (n: number, pr: string) =>
+  `${n === 1 ? "1 draft" : `${n} drafts`} by Alden not kept won't be sent: keep ${n === 1 ? "it" : "them"} (alden comment ${pr} --keep <id> or --keep all), or drop ${n === 1 ? "it" : "them"} with --delete <id>.`;
 
 /** What `alden comment` says once a comment is drafted: where it went (a linked note says why), and how to send. */
 export function draftedLines(untrusted: ReviewDraft, pr: string): string[] {
@@ -298,6 +308,7 @@ interface CommentOptions {
   suggest?: string;
   suggestFile?: string;
   delete?: string;
+  keep?: string;
   json?: boolean;
   threads?: boolean;
   reply?: string;
@@ -359,6 +370,7 @@ export function registerCommentCommands(program: Command, version: string): void
     .option("--suggest <code>", "suggest replacement code for the line(s), - to read it from stdin; empty deletes them")
     .option("--suggest-file <path>", "suggest the replacement code in this file")
     .option("--delete <id>", "delete a comment instead")
+    .option("--keep <id>", "keep a comment Alden drafted (or all of them), so it's sent with your review")
     .option("--threads", "list the PR's review threads, with ids to reply by")
     .option("--reply <thread>", "reply in a review thread (its id from --threads, or file:line) instead")
     .option(
@@ -386,6 +398,16 @@ export function registerCommentCommands(program: Command, version: string): void
       }
       if (options.resolve === true) {
         program.error(`Say which thread to resolve: alden comment ${pr} --resolve <id or file:line> (see --threads).`);
+      }
+      if (options.keep) {
+        const which = options.keep === "all" ? { pr } : { ids: [options.keep] };
+        const { kept } = await api().keepDrafts(which).catch(fail);
+        console.log(
+          kept.length === 0
+            ? "Nothing to keep: no draft of Alden's matches (one you kept or edited is already yours)."
+            : `Kept ${kept.map((d) => d.id).join(", ")}: ${kept.length === 1 ? "it's" : "they're"} yours now, and sent with your review.`,
+        );
+        return;
       }
       if (words.length === 0) {
         const engine = api();
@@ -501,7 +523,12 @@ export function registerCommentCommands(program: Command, version: string): void
         const pr = await prFrom(program, prArg, "alden send");
         const color = shouldColor(process.stdout);
         const engine = api();
-        const { drafts, unaddressed } = await engine.drafts(pr).catch(fail);
+        const listed = await engine.drafts(pr).catch(fail);
+        const { unaddressed } = listed;
+        // Alden's drafts you haven't kept stay behind: the review is only what's yours.
+        const drafts = listed.drafts.filter((d) => d.source !== "alden");
+        const unkept = listed.drafts.length - drafts.length;
+        if (unkept > 0) console.log(paint(aldenNotKept(unkept, pr), "yellow", color));
         const threads = drafts.some((d) => d.inReplyTo !== undefined)
           ? ((await engine.threads(pr).catch(() => undefined))?.threads ?? [])
           : [];

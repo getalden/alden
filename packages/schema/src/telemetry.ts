@@ -110,7 +110,9 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
   z.object({
     event: z.literal("draft_changed"),
     properties: z.object({
-      action: z.enum(["add", "edit", "discard"]),
+      action: z
+        .enum(["add", "edit", "discard", "keep"])
+        .describe("keep: you kept one of Alden's drafts as it was, making it yours (editing one makes it yours too)"),
       source: z
         .enum(["you", "claude", "alden"])
         .describe("who wrote the draft: you, Claude Code drafting for you, or Alden drafting from a finding"),

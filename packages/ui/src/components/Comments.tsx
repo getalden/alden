@@ -23,9 +23,12 @@ import {
   type ReviewEvent,
   reviewBody,
   type SendReviewResult,
+  toSend,
+  unkept,
   whereText,
 } from "../drafts";
 import { plural } from "../format";
+import { AldenDraftActs, AldenDraftsBar, AldenLabel } from "./AldenDrafts";
 import { Conversation, type ReplyFocus, ReplySummary } from "./Conversation";
 import { Segmented } from "./Segmented";
 
@@ -330,6 +333,7 @@ export function CommentEditor(props: {
 
 /** "from Claude" on drafts Claude Code added, so you read them before they go out under your name. */
 function Source({ draft }: { draft: ReviewDraft }) {
+  if (draft.source === "alden") return <AldenLabel draft={draft} />;
   return draft.source === "claude" ? <span className="chip from-claude">from Claude</span> : null;
 }
 
@@ -591,6 +595,15 @@ function DraftRow(props: {
                 Keep
               </button>
             </>
+          ) : draft.source === "alden" && !outdated ? (
+            <AldenDraftActs
+              draft={draft}
+              what={what}
+              comments={comments}
+              editButton={editButton}
+              onEdit={() => setEditing(true)}
+              onDropped={props.onDeleted}
+            />
           ) : (
             <>
               {outdated ? (
@@ -636,10 +649,12 @@ function Confirm(props: {
   const [error, setError] = useState<string>();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus(), []);
-  const body = reviewBody(comments.body, comments.drafts);
-  const inline = comments.drafts.filter((d) => d.path);
-  const replies = comments.drafts.filter((d) => d.inReplyTo && d.body.trim()).length;
-  const blocked = cannotSend(comments.event, comments.body, comments.drafts);
+  const toPost = toSend(comments.drafts);
+  const body = reviewBody(comments.body, toPost);
+  const inline = toPost.filter((d) => d.path);
+  const replies = toPost.filter((d) => d.inReplyTo && d.body.trim()).length;
+  const blocked = cannotSend(comments.event, comments.body, toPost);
+  const left = unkept(comments.drafts).length;
   const verdict = verdictOf(comments.event);
 
   async function send() {
@@ -675,6 +690,7 @@ function Confirm(props: {
           : ""}
         .
       </p>
+      {left > 0 && <p className="muted small">{plural(left, "draft")} by Alden not kept won't be sent.</p>}
       {comments.event === "APPROVE" && comments.unaddressed.length > 0 && (
         <div className="banner">
           <strong>Alden flagged {plural(comments.unaddressed.length, "place")} you didn't comment on.</strong> Approve
@@ -711,7 +727,7 @@ function Confirm(props: {
           </ul>
         </div>
       )}
-      <ReplySummary drafts={comments.drafts} threads={comments.threads?.threads} heading="Replies in threads" />
+      <ReplySummary drafts={toPost} threads={comments.threads?.threads} heading="Replies in threads" />
       {(error ?? blocked) && (
         <p className="banner error" role="alert">
           {error ?? blocked}
@@ -814,7 +830,9 @@ export function CommentsDrawer(props: {
   ).flatMap((g) => g.drafts);
   const notes = comments.drafts.filter((d) => !d.path && !d.inReplyTo);
   const count = comments.drafts.length;
-  const blocked = cannotSend(comments.event, comments.body, comments.drafts);
+  // Alden's drafts you haven't kept stay behind when you send.
+  const sendCount = toSend(comments.drafts).length;
+  const blocked = cannotSend(comments.event, comments.body, toSend(comments.drafts));
   const closeForm = (back: RefObject<HTMLElement | null>) => {
     restore.current = back;
     onEditing(undefined);
@@ -981,6 +999,7 @@ export function CommentsDrawer(props: {
               </p>
             ) : (
               <>
+                <AldenDraftsBar comments={comments} />
                 {onLines.length > 0 && (
                   <section className="drawer-group" aria-labelledby="drafts-on-lines">
                     <h3 className="label" id="drafts-on-lines">
@@ -1083,12 +1102,12 @@ export function CommentsDrawer(props: {
               setConfirming(true);
             }}
           >
-            {count > 0 ? `Send review · ${plural(count, "comment")}` : "Send review"}
+            {sendCount > 0 ? `Send review · ${plural(sendCount, "comment")}` : "Send review"}
           </button>
           {formOpen ? (
             <p className="faint small">Save or cancel the comment you're writing first.</p>
           ) : (
-            blocked && count + comments.body.trim().length > 0 && <p className="faint small">{blocked}</p>
+            blocked && sendCount + comments.body.trim().length > 0 && <p className="faint small">{blocked}</p>
           )}
         </div>
       )}

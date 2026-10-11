@@ -14,12 +14,19 @@ type RestFile = Parameters<typeof fromRestFile>[0];
 const recorded = (name: string) => JSON.parse(readFileSync(join(DIFFS, name), "utf8")) as RestFile[];
 
 /** A GitHub client that answers the PR and files endpoints from a recorded diff, and counts what it was asked. */
-function fakeClient(files: RestFile[], heads: string[]) {
+function fakeClient(
+  files: RestFile[],
+  heads: string[],
+  compare?: (basehead: string) => { status: string; files: RestFile[] },
+) {
   const calls: string[] = [];
   let headIndex = 0;
   const client = {
-    async request(route: string, params: { page?: number }) {
+    async request(route: string, params: { page?: number; basehead?: string }) {
       calls.push(route);
+      if (route === "GET /repos/{owner}/{repo}/compare/{basehead}" && compare) {
+        return { data: compare(params.basehead ?? "") };
+      }
       if (route === "GET /repos/{owner}/{repo}/pulls/{pull_number}") {
         const sha = heads[Math.min(headIndex++, heads.length - 1)];
         return { data: { head: { sha } } };
@@ -121,6 +128,65 @@ describe("pullRequestDiffView", () => {
     }));
     const diff = await pullRequestDiffView(fakeClient(files, ["s"]).client, "o/r", 1, new DiffCache());
     expect(diff.files).toHaveLength(150);
+  });
+});
+
+describe("pullRequestDiffView since a commit", () => {
+  const files = recorded("django-22038.json");
+  const later = files.slice(0, 1);
+  const REVIEWED = "aaaaaaa1";
+  const HEAD = "bbbbbbb2";
+
+  it("shows only what changed since the head you reviewed, and keeps it apart from the whole PR", async () => {
+    const cache = new DiffCache();
+    const asked: string[] = [];
+    const fake = fakeClient(files, [HEAD], (basehead) => {
+      asked.push(basehead);
+      return { status: "ahead", files: later };
+    });
+    const since = await pullRequestDiffView(fake.client, "django/django", 22038, cache, REVIEWED);
+    expect(asked).toEqual([`${REVIEWED}...${HEAD}`]);
+    expect(since).toMatchObject({ headSha: HEAD, since: { base: REVIEWED, applied: true } });
+    expect(since.files.map((f) => f.path)).toEqual(later.map((f) => f.filename));
+    expect(PrDiffSchema.safeParse(since).success).toBe(true);
+    expect(fake.calls.filter((c) => c.endsWith("/files"))).toHaveLength(0);
+
+    // The same head and commit again: from the cache. The whole PR is its own entry.
+    const again = fakeClient(files, [HEAD], () => {
+      throw new Error("asked again");
+    });
+    expect(await pullRequestDiffView(again.client, "django/django", 22038, cache, REVIEWED)).toBe(since);
+    const whole = await pullRequestDiffView(again.client, "django/django", 22038, cache);
+    expect(whole.since).toBeUndefined();
+    expect(whole.files).toHaveLength(files.length);
+  });
+
+  it("is empty when nothing was pushed since", async () => {
+    const fake = fakeClient(files, [HEAD], () => ({ status: "identical", files: [] }));
+    const diff = await pullRequestDiffView(fake.client, "o/r", 1, new DiffCache(), HEAD);
+    expect(diff).toMatchObject({ files: [], since: { base: HEAD, applied: true } });
+  });
+
+  it.each([
+    ["a force-push left it off the branch", () => ({ status: "diverged", files: later })],
+    [
+      "GitHub no longer has it",
+      () => {
+        throw Object.assign(new Error("Not Found"), { status: 404 });
+      },
+    ],
+  ])("falls back to the whole PR, and says so, when %s", async (_label, compare) => {
+    const fake = fakeClient(files, [HEAD], compare);
+    const diff = await pullRequestDiffView(fake.client, "o/r", 1, new DiffCache(), REVIEWED);
+    expect(diff.since).toEqual({ base: REVIEWED, applied: false });
+    expect(diff.files).toHaveLength(files.length);
+  });
+
+  it("lets other GitHub errors through", async () => {
+    const fake = fakeClient(files, [HEAD], () => {
+      throw Object.assign(new Error("Server Error"), { status: 502 });
+    });
+    await expect(pullRequestDiffView(fake.client, "o/r", 1, new DiffCache(), REVIEWED)).rejects.toThrow("Server Error");
   });
 });
 

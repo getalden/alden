@@ -87,7 +87,8 @@ describe("Api.diff", () => {
     });
     await expect(api.diff("acme/shop#7")).resolves.toEqual({ headSha: "h", files: [] });
     await api.diff();
-    expect(urls).toEqual(["/api/diff?pr=acme%2Fshop%237", "/api/diff"]);
+    await api.diff("acme/shop#7", "abc1234");
+    expect(urls).toEqual(["/api/diff?pr=acme%2Fshop%237", "/api/diff", "/api/diff?pr=acme%2Fshop%237&since=abc1234"]);
   });
 });
 

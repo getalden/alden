@@ -161,6 +161,72 @@ describe("drafts through the UI's API", () => {
   });
 });
 
+describe("Alden's drafts through the UI's API", () => {
+  /** One of Alden's drafts on src/pay.ts line 2, as a model briefing makes it. */
+  async function aldenDraft() {
+    const core = await import("@alden/core");
+    const { files } = await core.fetchPullRequestState(core.createGitHubClient("t"), "acme/shop", 7);
+    const briefing = {
+      target: { kind: "pr", repo: "acme/shop", number: 7, headSha: "h1" },
+      checks: [],
+      llm: {
+        status: "ok",
+        findings: [
+          {
+            title: "Fee untested",
+            checkId: "tests.missing",
+            detail: "d",
+            severity: "medium",
+            anchors: [{ path: "src/pay.ts", line: 2 }],
+            draft: { body: "Add a test for the fee." },
+          },
+        ],
+      },
+    } as unknown as Briefing;
+    const [made] = core.makeAldenDrafts(briefing, files, { enabled: true }).made;
+    if (!made) throw new Error("no draft made");
+    return made;
+  }
+
+  it("keeps one, making it yours and sent with the review; an untouched one stays behind", async () => {
+    const api = createUiApi({ version: "test", cwd: home });
+    const draft = await aldenDraft();
+    expect((await api.drafts("acme/shop#7")).drafts).toEqual([
+      expect.objectContaining({
+        id: draft.id,
+        source: "alden",
+        drafted: { checkId: "tests.missing", title: "Fee untested" },
+      }),
+    ]);
+    // Sent untouched: it doesn't post.
+    await api.sendReview({ pr: "acme/shop#7", event: "COMMENT", body: "Looks fine." });
+    expect(github.posted[0]?.comments).toEqual([]);
+
+    const again = await aldenDraft();
+    expect(await api.keepDrafts({ pr: "acme/shop#7" })).toEqual({
+      kept: [expect.objectContaining({ id: again.id, source: "you", drafted: again.drafted })],
+    });
+    await api.sendReview({ pr: "acme/shop#7", event: "COMMENT" });
+    expect(github.posted[1]?.comments).toEqual([
+      { path: "src/pay.ts", line: 2, side: "RIGHT", body: "Add a test for the fee." },
+    ]);
+  });
+
+  it("makes an edited one yours, and drops one with the ordinary delete", async () => {
+    const api = createUiApi({ version: "test", cwd: home });
+    const edited = await api.editDraft((await aldenDraft()).id, { body: "Please add a test for the fee." });
+    expect(edited).toMatchObject({
+      source: "you",
+      body: "Please add a test for the fee.",
+      drafted: { title: "Fee untested" },
+    });
+    new ReviewDrafts().delete(edited.id);
+    const dropped = await aldenDraft();
+    expect(await api.deleteDraft(dropped.id)).toEqual({ ok: true });
+    expect((await api.drafts("acme/shop#7")).drafts).toEqual([]);
+  });
+});
+
 describe("suggested changes through the UI's API", () => {
   it("drafts a suggestion on a range, shows the code it replaces, and posts it as one", async () => {
     const api = createUiApi({ version: "test", cwd: home });

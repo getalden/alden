@@ -13,6 +13,8 @@ import {
   cloneAt,
   createGitHubClient,
   DiffCache,
+  type DiffFile,
+  dropAldenDrafts,
   type Effort,
   editNote,
   FeedbackLog,
@@ -24,10 +26,12 @@ import {
   forget,
   forgetAll,
   JsonCache,
+  keepAldenDrafts,
   loadConfig,
   loadLearning,
   localDiffView,
   MODEL_ALIASES,
+  makeAldenDrafts,
   memoryItems,
   memoryRepos,
   modelKeyStore,
@@ -90,6 +94,7 @@ import { learningFor, learningForQueue, noteOpened } from "../learning.js";
 import { checkSentOutcomes } from "../outcomes.js";
 import { parsePrRef } from "../pr-ref.js";
 import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
+import { createFollowUpsApi } from "./follow-ups.js";
 import { createModelSetupApi } from "./model-setup.js";
 import { createRankingApi } from "./rank.js";
 import { ApiError, type DraftInput, type ReviewRequest, type UiApi } from "./server.js";
@@ -275,6 +280,7 @@ export function createUiApi(options: {
     }
     return threads;
   };
+  const followUps = createFollowUpsApi({ cwd: options.cwd, signedIn, prRef: prOf });
   /**
    * Where a comment on `path` goes: inline when GitHub takes it on the diff, otherwise a note in the review body
    * linking to the code at the PR's head, once GitHub confirms the file (and line) are there to link to.
@@ -361,8 +367,9 @@ export function createUiApi(options: {
         eyes: config.review.eyes,
         ...(options.desktop ? { cli: cliStatus() } : {}),
         background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
-        notifications: { sound: config.notifications.sound },
+        notifications: { sound: config.notifications.sound, followUps: config.notifications.followUps },
         learning: { fromReviews: config.learning.fromReviews },
+        drafts: { auto: config.drafts.auto },
         repo: (await repoOf(options.cwd)) ?? null,
         user,
         model: {
@@ -403,7 +410,8 @@ export function createUiApi(options: {
           (await shared(JSON.stringify([scope.repos, scope.orgs, scope.ignore, refresh]), () =>
             fetchReviewQueue(client, { ...scope, refresh }),
           ));
-        const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
+        // Rows you reviewed before get their thread counts from the last follow-up check.
+        const ranked = followUps.noteQueue(rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue)));
         void track("queue_ranked", queueEvent(ranked));
         // What came of the comments you sent lately, after the queue is in: at most a request per PR per day.
         if (!cached) {
@@ -456,6 +464,8 @@ export function createUiApi(options: {
     },
 
     modelSetup: createModelSetupApi({ cwd: options.cwd }),
+
+    followUps,
 
     ranking: createRankingApi({
       cwd: options.cwd,
@@ -805,14 +815,37 @@ export function createUiApi(options: {
       }
       if (!edited) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
       void track("draft_changed", { action: "edit", source: edited.source, inline: inline(edited) });
+      // Editing one of Alden's drafts makes it yours, as keeping it does.
+      if (edited.source === "alden" && (change.body !== undefined || change.suggestion !== undefined)) {
+        const learn = (await loadConfig(options.cwd)).learning.fromReviews;
+        const { kept } = await keepAldenDrafts({ ids: [id] }, { learn });
+        return publicDraft(kept[0] ?? edited);
+      }
       return publicDraft(edited);
     },
 
     async deleteDraft(id) {
+      // Dropping one of Alden's drafts teaches a little (see `dropAldenDrafts`); anything else is just deleted.
+      if (drafts.get(id)?.source === "alden") {
+        const learn = (await loadConfig(options.cwd)).learning.fromReviews;
+        const [dropped] = (await dropAldenDrafts([id], { learn })).dropped;
+        if (dropped) {
+          void track("draft_changed", { action: "discard", source: "alden", inline: inline(dropped) });
+          return { ok: true };
+        }
+      }
       const deleted = drafts.delete(id);
       if (!deleted) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
       void track("draft_changed", { action: "discard", source: deleted.source, inline: inline(deleted) });
       return { ok: true };
+    },
+
+    async keepDrafts({ ids, pr }) {
+      const which = { ...(ids ? { ids } : {}), ...(pr ? { pr: (await prOf(pr)).name } : {}) };
+      const learn = (await loadConfig(options.cwd)).learning.fromReviews;
+      const { kept } = await keepAldenDrafts(which, { learn });
+      for (const draft of kept) void track("draft_changed", { action: "keep", source: "alden", inline: inline(draft) });
+      return { kept: kept.map(publicDraft) };
     },
 
     async sendReview({ pr, event, body }) {
@@ -865,7 +898,7 @@ export function createUiApi(options: {
       return threadsOf(await prOf(pr), refresh);
     },
 
-    async diff(pr) {
+    async diff(pr, since) {
       if (pr === undefined) {
         try {
           return await localDiffView(options.cwd);
@@ -876,7 +909,7 @@ export function createUiApi(options: {
       const ref = await prOf(pr);
       const resolved = await signedIn();
       try {
-        return await pullRequestDiffView(createGitHubClient(resolved.token), ref.repo, ref.number, diffs);
+        return await pullRequestDiffView(createGitHubClient(resolved.token), ref.repo, ref.number, diffs, since);
       } catch (error) {
         throw new ApiError(502, describeGitHubError(error, resolved.source));
       }
@@ -995,6 +1028,7 @@ export function createUiApi(options: {
     const graph = { enabled: request.graph !== false, cwd: options.cwd, onStage };
 
     let briefing: Briefing;
+    let diff: DiffFile[] | undefined;
     if (request.pr === undefined) {
       const learning = await learningFor((await repoOf(options.cwd))?.repos[0]);
       briefing = await reviewLocalChanges(config, options.cwd, model, {
@@ -1015,6 +1049,9 @@ export function createUiApi(options: {
         briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model, {
           ...graph,
           ...(learning ? { learning } : {}),
+          onDiff: (files) => {
+            diff = files;
+          },
         });
       } catch (error) {
         throw new ApiError(502, describeGitHubError(error, resolved.source));
@@ -1026,6 +1063,13 @@ export function createUiApi(options: {
       drafts.rememberBriefing(briefing);
     } catch {
       // the database is locked or damaged: the review still stands
+    }
+    // Comments drafted from the model's findings, for you to keep, edit or drop: never sent on their own.
+    try {
+      const { made } = makeAldenDrafts(briefing, diff, { enabled: config.drafts.auto });
+      for (const draft of made) void track("draft_changed", { action: "add", source: "alden", inline: inline(draft) });
+    } catch {
+      // the review stands without drafts
     }
     // `alden stats` splits before and after at the first use on each repo (a background briefing counts when read).
     const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : (await repoOf(options.cwd))?.repos[0];

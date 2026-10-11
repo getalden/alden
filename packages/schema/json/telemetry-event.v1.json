@@ -518,8 +518,10 @@
                   "enum": [
                     "add",
                     "edit",
-                    "discard"
-                  ]
+                    "discard",
+                    "keep"
+                  ],
+                  "description": "keep: you kept one of Alden's drafts as it was, making it yours (editing one makes it yours too)"
                 },
                 "source": {
                   "type": "string",

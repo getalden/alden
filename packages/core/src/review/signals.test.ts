@@ -122,6 +122,11 @@ describe("the signals a review gives", () => {
     ]);
   });
 
+  it("never counts a comment Alden drafted from a finding as a miss, even off the places to look", () => {
+    const kept = draft("src/cart.ts", 5, { drafted: { checkId: "tests.missing", title: "Cart untested" } });
+    expect(reviewSignals({ ...base, event: "COMMENT", places: [sensitive], drafts: [kept] })).toEqual([]);
+  });
+
   it("counts a silent pass only when you saw the place and approved, and never on what mustn't be quietened", () => {
     const places = [sensitive, untested, secret, severe, old];
     const seen = seenAll(places);

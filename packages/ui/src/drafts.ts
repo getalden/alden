@@ -117,6 +117,15 @@ export function reviewBody(body: string, drafts: ReviewDraft[]): string {
   return [body.trim(), ...drafts.filter((d) => !d.path && !d.inReplyTo).map(noteText)].filter(Boolean).join("\n\n");
 }
 
+/**
+ * The drafts that post when you send: yours and Claude Code's. A comment Alden drafted posts only once you keep or
+ * edit it (it's yours then); untouched, it stays behind.
+ */
+export const toSend = (drafts: ReviewDraft[]) => drafts.filter((d) => d.source !== "alden");
+
+/** Alden's drafts you haven't kept or edited yet. */
+export const unkept = (drafts: ReviewDraft[]) => drafts.filter((d) => d.source === "alden");
+
 /** What GitHub needs before it takes a review, or undefined when it's ready to send. */
 export function cannotSend(event: ReviewEvent, body: string, drafts: ReviewDraft[]): string | undefined {
   const outdated = drafts.filter((d) => d.state === "outdated").length;
@@ -147,6 +156,10 @@ export interface BriefingComments {
   remove(id: string): Promise<void>;
   /** Reads the drafts again: Claude Code may have added some. */
   reload(): Promise<void>;
+  /** Keeps Alden's drafts, by id or (without ids) every one on the PR: each becomes yours, sent with the review. */
+  keep?(ids?: string[]): Promise<void>;
+  /** Drops every one of Alden's drafts on the PR you haven't kept. */
+  dropAlden?(): Promise<void>;
   /** Sends every draft as one review. Throws with the server's message, keeping the drafts. */
   send(): Promise<SendReviewResult>;
   /** The conversation already on the PR, where the API can read it: what replies (`inReplyTo`) answer. */
@@ -154,7 +167,7 @@ export interface BriefingComments {
 }
 
 type DraftsApi = Pick<Api, "drafts" | "addDraft" | "editDraft" | "deleteDraft" | "sendReview"> &
-  Partial<Pick<Api, "threads">>;
+  Partial<Pick<Api, "keepDrafts" | "threads">>;
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : "Something went wrong.");
 
@@ -195,6 +208,7 @@ export function useDrafts(api: DraftsApi | undefined, pr: string | undefined): B
   }, [api, pr, reload]);
 
   if (!api || !pr) return undefined;
+  const { keepDrafts } = api;
   return {
     pr,
     drafts: data.drafts,
@@ -226,6 +240,32 @@ export function useDrafts(api: DraftsApi | undefined, pr: string | undefined): B
       void reload();
     },
     reload,
+    ...(keepDrafts
+      ? {
+          async keep(ids?: string[]) {
+            try {
+              const { kept } = await keepDrafts(ids ? { ids } : { pr });
+              const byId = new Map(kept.map((d) => [d.id, d]));
+              setData((d) => ({ ...d, drafts: d.drafts.map((x) => byId.get(x.id) ?? x) }));
+            } catch (e) {
+              setError(`Couldn't keep ${ids?.length === 1 ? "that draft" : "Alden's drafts"}: ${messageOf(e)}`);
+              throw e;
+            }
+          },
+        }
+      : {}),
+    async dropAlden() {
+      const ids = unkept(data.drafts).map((d) => d.id);
+      try {
+        for (const id of ids) await api.deleteDraft(id);
+      } catch (e) {
+        setError(`Couldn't drop Alden's drafts: ${messageOf(e)}`);
+        throw e;
+      } finally {
+        void reload();
+      }
+      setData((d) => ({ ...d, drafts: d.drafts.filter((x) => !ids.includes(x.id)) }));
+    },
     async send() {
       const body = bodies[pr]?.trim();
       const result = await api.sendReview({ pr, event: events[pr] ?? "COMMENT", ...(body ? { body } : {}) });

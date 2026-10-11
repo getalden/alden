@@ -22,7 +22,14 @@ export {
   parseHunks,
   parseUnifiedDiff,
 } from "./diff/parse.js";
-export { fetchPullRequestDiff, fromRestFile, type LocalDiff, readLocalDiff } from "./diff/sources.js";
+export {
+  COMMIT_SHA,
+  fetchCompareDiff,
+  fetchPullRequestDiff,
+  fromRestFile,
+  type LocalDiff,
+  readLocalDiff,
+} from "./diff/sources.js";
 export { DiffCache, localDiffView, pullRequestDiffView, toDiffView, toDiffViewFile } from "./diff/view.js";
 export { embeddedFile, embeddedFilesUnder, isStandaloneBinary, registerEmbeddedFiles } from "./embedded.js";
 export {
@@ -33,6 +40,7 @@ export {
   signalCounts,
   summarizeFeedback,
 } from "./feedback/log.js";
+export * from "./follow-ups/index.js";
 export * from "./github/index.js";
 export {
   type ChangedSymbol,
@@ -190,7 +198,18 @@ export {
   reviewableSize,
   type Score,
 } from "./queue/rank.js";
+export { followUpOf, isRereview, REREVIEW_REASON } from "./queue/rereview.js";
 export { applyRules, describeWhen, pathGlobs, ruleMatches, ruleReason } from "./queue/rules.js";
+export {
+  type AldenDraftsMade,
+  aldenDraftsLine,
+  dropAldenDrafts,
+  injectionFlagged,
+  keepAldenDrafts,
+  MAX_ALDEN_DRAFTS,
+  MODEL_CHECK,
+  makeAldenDrafts,
+} from "./review/auto-drafts.js";
 export { buildBriefing, NOT_CHECKED, runChecks } from "./review/briefing.js";
 export {
   CHECKS,
@@ -263,14 +282,17 @@ export { mergeLookHere } from "./review/llm/merge.js";
 export {
   type BuiltPrompt,
   buildPrompt,
+  DRAFTS_PROMPT,
   type LlmOutput,
   LlmOutputSchema,
+  LlmOutputWithDraftsSchema,
   type PromptInput,
   renderFileDiff,
   SYSTEM_PROMPT,
+  systemPrompt,
 } from "./review/llm/prompt.js";
 export { addModelReview, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS, type ModelReviewOptions } from "./review/llm/run.js";
-export { type ValidatedFindings, validateFindings } from "./review/llm/validate.js";
+export { checkDraft, type ValidatedFindings, validateFindings } from "./review/llm/validate.js";
 export { loadLocalManifests, loadPullRequestManifests, reverseApply } from "./review/manifests.js";
 export { MAX_LOOK_HERE, pickLookHere, pickWithLearning } from "./review/pick.js";
 export { RELATED_CALLERS, RELATED_IMPORTERS, RELATED_TESTS, relatedFiles, withRelated } from "./review/related.js";

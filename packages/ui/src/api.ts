@@ -4,12 +4,15 @@ import type {
   BriefingTarget,
   FeedbackInput,
   FeedbackSummary,
+  FollowUpLevel,
+  FollowUpNotifications,
   KeyTestResult,
   LocalSetupEvent,
   MemoryItem,
   MemorySource,
   ModelSetupState,
   PrDiff,
+  PrWatch,
   RankedQueue,
   RankingState,
   RankPreview,
@@ -124,10 +127,15 @@ export interface Session {
   /** What this machine's queue covers (queue.orgs, queue.repos, queue.ignore); empty lists mean everywhere. */
   queueScope?: { orgs: string[]; repos: string[]; ignore: string[] };
   background?: { enabled: boolean; model: boolean };
-  /** Whether the desktop app's "Briefing ready" notification plays a sound (`notifications.sound`). */
-  notifications?: { sound: boolean };
+  /**
+   * Whether the desktop app's "Briefing ready" notification plays a sound (`notifications.sound`), and how much it
+   * tells you about PRs you reviewed (`notifications.followUps`).
+   */
+  notifications?: { sound: boolean; followUps?: FollowUpLevel };
   /** Whether Alden learns from the reviews you send (`learning.fromReviews`, on unless you turn it off). */
   learning?: { fromReviews: boolean };
+  /** Whether a model briefing drafts comments for you to keep, edit or drop (`drafts.auto`, on unless turned off). */
+  drafts?: { auto: boolean };
 }
 
 /** Why there's no GitHub sign-in: the keychain refused (an unsigned build of the app), or there's none anywhere. */
@@ -355,6 +363,19 @@ export class Api {
   setConfig = (key: string, value: string | null) =>
     this.request<unknown>("/api/config", { method: "PUT", body: JSON.stringify({ key, value }) });
 
+  /** A PR's notification level ("owner/repo#12"): its own, or the global `notifications.followUps`. */
+  watch = (pr: string) => this.request<PrWatch>(`/api/watch?pr=${encodeURIComponent(pr)}`);
+
+  /** Sets a PR's own level; null puts it back on the global one. */
+  setWatch = (pr: string, level: FollowUpLevel | null) =>
+    this.request<PrWatch>(`/api/watch?pr=${encodeURIComponent(pr)}`, {
+      method: "PUT",
+      body: JSON.stringify({ level }),
+    });
+
+  /** The desktop app's follow-up check: what to tell you about PRs you reviewed, one notification per PR. */
+  followUps = () => this.request<FollowUpNotifications>("/api/follow-ups");
+
   /** A PR's drafts ("owner/repo#12"), and the places Alden flagged that have no comment near them. */
   drafts = (pr: string) => this.request<DraftsResponse>(`/api/drafts?pr=${encodeURIComponent(pr)}`);
 
@@ -373,11 +394,19 @@ export class Api {
   deleteDraft = (id: string) =>
     this.request<{ ok: true }>(`/api/drafts/${encodeURIComponent(id)}`, { method: "DELETE" });
 
+  /** Keeps Alden's drafts (by id, or all of them on `pr`): they become yours, and are sent with the review. */
+  keepDrafts = (which: { ids: string[] } | { pr: string }) =>
+    this.request<{ kept: ReviewDraft[] }>("/api/drafts/keep", { method: "POST", body: JSON.stringify(which) });
+
   /**
    * The Diff tab: a PR's diff at its current head ("owner/repo#12"), or without one the local changes. The server keeps
-   * a PR's diff per head commit, so asking again costs it one GitHub request.
+   * a PR's diff per head commit, so asking again costs it one GitHub request. `since`, a commit you reviewed, asks for
+   * only what changed from it to the head.
    */
-  diff = (pr?: string) => this.request<PrDiff>(`/api/diff${pr ? `?pr=${encodeURIComponent(pr)}` : ""}`);
+  diff = (pr?: string, since?: string) =>
+    this.request<PrDiff>(
+      `/api/diff${pr ? `?pr=${encodeURIComponent(pr)}${since ? `&since=${encodeURIComponent(since)}` : ""}` : ""}`,
+    );
 
   /** A PR's review threads ("owner/repo#12"): the conversation already on it. `refresh` skips the server's short cache. */
   threads = (pr: string, refresh = false) =>

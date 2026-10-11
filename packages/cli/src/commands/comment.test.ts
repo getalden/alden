@@ -28,6 +28,22 @@ describe("alden comment", () => {
     expect(parseWhere("src/pay.ts:12-")).toBeUndefined();
   });
 
+  it("marks Alden's drafts you haven't kept, and says they won't be sent until you keep them", () => {
+    const out = renderDrafts(
+      "acme/shop#7",
+      [
+        draft({ id: "aa", path: "src/pay.ts", line: 2, source: "alden", drafted: { checkId: "model", title: "t" } }),
+        draft({ id: "bb", path: "src/pay.ts", line: 9, source: "you", drafted: { checkId: "model", title: "u" } }),
+      ],
+      false,
+    );
+    expect(out).toContain("aa  src/pay.ts:2 · drafted by Alden, not kept");
+    expect(out).toContain("bb  src/pay.ts:9\n");
+    expect(out).toContain(
+      "1 draft by Alden not kept won't be sent: keep it (alden comment acme/shop#7 --keep <id> or --keep all), or drop it with --delete <id>.",
+    );
+  });
+
   it("takes a suggestion as typed, from a file or from stdin, without the final newline of either", async () => {
     const read = { stdin: async () => "a();\nb();\n", file: async (path: string) => `// ${path}\r\n` };
     expect(await suggestionFrom({}, read)).toBeUndefined();

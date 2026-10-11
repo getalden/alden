@@ -306,6 +306,86 @@ describe("DiffPane", () => {
   });
 });
 
+describe("DiffPane since your review", () => {
+  const narrow: PrDiff = {
+    ...diff,
+    files: diff.files.slice(0, 1),
+    since: { base: "abc1234def", applied: true },
+  };
+  const loader = (since: PrDiff) =>
+    vi.fn(async (_pr?: string, base?: string): Promise<PrDiff> => (base ? since : diff));
+
+  it("starts on the changes since the commit you reviewed, and switches to the whole PR", async () => {
+    const load = loader(narrow);
+    render(<DiffPane load={load} pr="acme/api#1" headSha="h1" since="abc1234def" />);
+    await screen.findByText(/^1 file/);
+    expect(load).toHaveBeenLastCalledWith("acme/api#1", "abc1234def");
+    expect(screen.getByRole("button", { name: "Since your review" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("abc1234")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Whole PR" }));
+    await screen.findByText(/^4 files/);
+    expect(load).toHaveBeenLastCalledWith("acme/api#1");
+    // Back again: from the cache.
+    fireEvent.click(screen.getByRole("button", { name: "Since your review" }));
+    await screen.findByText(/^1 file/);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("offers nothing on a PR you haven't reviewed, or on local changes", async () => {
+    render(<DiffPane load={loader(narrow)} pr="acme/api#1" headSha="h1" />);
+    await screen.findByText(/^4 files/);
+    expect(screen.queryByRole("button", { name: "Whole PR" })).toBeNull();
+    cleanup();
+    render(<DiffPane load={loader(narrow)} since="abc1234def" />);
+    await screen.findByText(/^4 files/);
+    expect(screen.queryByRole("button", { name: "Whole PR" })).toBeNull();
+  });
+
+  it("says when the commit you reviewed is gone and it's the whole PR, or when nothing is new", async () => {
+    render(
+      <DiffPane
+        load={loader({ ...diff, since: { base: "abc1234def", applied: false } })}
+        pr="acme/api#1"
+        headSha="h1"
+        since="abc1234def"
+      />,
+    );
+    await screen.findByText(/isn't in this PR's history any more/);
+    expect(screen.getByText(/^4 files/)).toBeTruthy();
+    cleanup();
+    clearDiffCache();
+    render(<DiffPane load={loader({ ...narrow, files: [] })} pr="acme/api#1" headSha="h1" since="abc1234def" />);
+    await screen.findByText("Nothing new since your review");
+    expect(screen.getByRole("button", { name: "Whole PR" })).toBeTruthy();
+  });
+
+  it("marks only the new side's comments, and keeps removed lines for the whole PR", async () => {
+    const onComment = vi.fn();
+    const drafts = [
+      { path: "src/charge.ts", line: 3, side: "RIGHT", body: "Log the currency too", source: "you", state: "draft" },
+      { path: "src/charge.ts", line: 2, side: "LEFT", body: "Why was this removed?", source: "you", state: "draft" },
+    ];
+    render(
+      <DiffPane
+        load={loader(narrow)}
+        pr="acme/api#1"
+        headSha="h1"
+        since="abc1234def"
+        drafts={drafts}
+        onComment={onComment}
+      />,
+    );
+    await screen.findByText(/^1 file/);
+    expect(screen.getAllByRole("button", { name: "1 comment on this line" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Comment on removed line 2" }));
+    expect(onComment).not.toHaveBeenCalled();
+    expect(screen.getByText("To comment on a removed line, switch to Whole PR.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Comment on line 3" }));
+    expect(onComment).toHaveBeenCalledWith({ path: "src/charge.ts", line: 3, side: "RIGHT" });
+  });
+});
+
 const briefing = {
   schemaVersion: 1,
   target: {

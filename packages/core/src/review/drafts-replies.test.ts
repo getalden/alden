@@ -292,6 +292,17 @@ describe("sending replies", () => {
     expect(sent).toMatchObject({ posted: 1, replies: 1, resolved: 0 });
   });
 
+  it("leaves out Alden's drafts you haven't kept when replies send", async () => {
+    const drafts = new ReviewDrafts(store);
+    drafts.add({ pr: PR, headSha: "h1", body: "Alden's guess", source: "alden", place: placed() });
+    drafts.addReply({ pr: PR, headSha: "h1", threadId: "PRRT_1", body: "Done.", source: "you" });
+    const gh = fakeGitHub({ threads: [raw("PRRT_1")] });
+    const sent = await sendReview(gh.client, store, { repo: REPO, number: 7, event: "COMMENT" });
+    expect(gh.order()).toEqual([POST, "reply", "submit"]);
+    expect(gh.calls[0]?.params).toMatchObject({ comments: [] });
+    expect(sent).toMatchObject({ posted: 1, replies: 1 });
+  });
+
   it("only resolves when there's nothing to post, and skips threads already resolved", async () => {
     const drafts = new ReviewDrafts(store);
     drafts.addReply({ pr: PR, headSha: "h1", threadId: "PRRT_1", body: "", resolve: true, source: "you" });

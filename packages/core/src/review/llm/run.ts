@@ -1,4 +1,5 @@
 import type { AldenConfig, Briefing, LlmSection } from "@alden/schema";
+import type { z } from "zod";
 import type { DiffFile } from "../../diff/parse.js";
 import { checkLesson, checkReason, dismissKey, type Learning, noteStoppedAt, promptNotes } from "../../learn/learn.js";
 import { supportsEffort } from "../../llm/anthropic.js";
@@ -9,7 +10,7 @@ import { type Effort, LlmError, type LlmErrorKind, type LlmProvider } from "../.
 import { isLockfile } from "../../queue/files.js";
 import { learningTarget, NOT_CHECKED } from "../briefing.js";
 import { mergeLookHere } from "./merge.js";
-import { buildPrompt, type LlmOutput, LlmOutputSchema } from "./prompt.js";
+import { buildPrompt, type LlmOutput, LlmOutputSchema, LlmOutputWithDraftsSchema } from "./prompt.js";
 import { validateFindings } from "./validate.js";
 
 /** Room for adaptive thinking plus the answer. Thinking tokens count toward the cap. */
@@ -23,6 +24,10 @@ export const RETRY_OUTPUT_TOKENS = 8_000;
 export const MAX_INPUT_TOKENS = 150_000;
 
 const TITLE_CHECK = NOT_CHECKED[0] as string;
+
+/** Why a briefing has no drafted comments though `drafts.auto` is on: the PR talks to AI reviewers. */
+export const INJECTED_DRAFTS_NOTE =
+  "Alden drafted no comments for this PR: it has text aimed at AI reviewers (see the check), so nothing the model wrote is offered to send under your name.";
 
 const ERROR_NOTES: Record<LlmErrorKind, string> = {
   auth: "The model provider rejected the credentials. `alden auth status` says where the key comes from; set a new one with `alden auth model` (or check your provider's login).",
@@ -73,6 +78,11 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   const { provider, config, ledger } = options;
   if (options.files.length === 0) return briefing;
   const effort = options.effort ?? config.model.effort;
+  // Drafted comments are for a PR's review, so local changes never ask for them. A PR with text aimed at AI reviewers
+  // gets none either: the model may have been steered, and a draft is text you'd send under your name.
+  const injected = briefing.checks.some((c) => c.id === "injection.ai" && c.status === "flagged");
+  const wantDrafts = config.drafts.auto && briefing.target.kind === "pr";
+  const drafts = wantDrafts && !injected;
 
   const dailyLeft = config.budget.dailyUsd - (await ledger.spentOn());
   const budgetUsd = Math.min(config.budget.perReviewUsd, dailyLeft);
@@ -91,6 +101,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
         options.learning,
         options.files.map((f) => f.path).filter((p) => !isLockfile(p)),
       ),
+      drafts,
     });
   let prompt = promptFor(maxInputTokens);
   if (prompt.includedFiles.length === 0) {
@@ -108,7 +119,8 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
       {
         system: prompt.system,
         user: prompt.user,
-        schema: LlmOutputSchema,
+        // Without drafts, exactly the shape (and prompt) a review had before drafts existed.
+        schema: (drafts ? LlmOutputWithDraftsSchema : LlmOutputSchema) as z.ZodType<LlmOutput>,
         maxOutputTokens: attempt.maxOutputTokens,
         ...(attempt.effort ? { effort: attempt.effort } : {}),
       },
@@ -201,7 +213,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   }
 
   const shown = options.files.filter((f) => prompt.includedFiles.includes(f.path));
-  const validated = validateFindings(result.output, shown, prompt.notes);
+  const validated = validateFindings(result.output, shown, prompt.notes, { drafts });
   const { dropped } = validated;
   // A finding you dismissed on this PR stays down when a re-review raises it again.
   const target = learningTarget(briefing.target);
@@ -223,7 +235,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
           f.anchors.map((a) => a.path),
         )
       : undefined;
-  const findings = validated.findings.filter((f) => !dismissedOn(f) && !stoppedAt(f));
+  const kept = validated.findings.filter((f) => !dismissedOn(f) && !stoppedAt(f));
   const hiddenFindings = validated.findings.flatMap((f) => {
     const at = dismissedOn(f);
     const stopped = at ? undefined : stoppedAt(f);
@@ -236,10 +248,16 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   });
   // A finding on a topic your feedback quietened stays in the model's list but takes no place to look, unless it's
   // high severity: the same rule as the check's own flags.
-  const quietLesson = (f: (typeof findings)[number]) => {
+  const quietLesson = (f: (typeof kept)[number]) => {
     const lesson = f.checkId && f.severity !== "high" ? checkLesson(options.learning, f.checkId) : undefined;
     return lesson?.direction === "down" ? lesson : undefined;
   };
+  // Nor does Alden draft a comment on it.
+  const findings = kept.map((f) => {
+    if (!f.draft || !quietLesson(f)) return f;
+    const { draft: _draft, ...rest } = f;
+    return rest;
+  });
   const quietFindings = findings.flatMap((f) => {
     const lesson = quietLesson(f);
     return lesson
@@ -272,6 +290,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
       matchesTitle: result.output.matchesTitle,
       findings,
       droppedFindings: dropped,
+      ...(wantDrafts && injected ? { draftsNote: INJECTED_DRAFTS_NOTE } : {}),
     },
   };
 }

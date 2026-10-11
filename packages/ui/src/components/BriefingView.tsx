@@ -14,6 +14,7 @@ import type { BriefingComments, CommentPlace } from "../drafts";
 import { type BriefingFeedback, noteArea, type Verdict } from "../feedback";
 import { formatUsd, plural, prFileUrl } from "../format";
 import { onLinkClick, routePath } from "../router";
+import { DraftReady } from "./AldenDrafts";
 import { CommentSlot, placeAttrs, useReviewActions } from "./Comments";
 import { ShowInDiffContext } from "./DiffView";
 import { GuidedReview, type GuidedReviewProps } from "./GuidedReview";
@@ -559,6 +560,7 @@ export function BriefingView({
                             model
                           </span>
                         )}
+                        {item.source === "llm" && <DraftReady title={item.title} comments={comments} />}
                       </p>
                       {guess && (
                         <span className="guess-line">
@@ -600,6 +602,7 @@ export function BriefingView({
                   <div className="what">
                     <span>
                       <strong>{f.title}.</strong> <span className="muted">{f.detail}</span>
+                      <DraftReady title={f.title} comments={comments} />
                     </span>
                     {f.fromNote && <FromNoteLine note={f.fromNote} />}
                     {feedback && f.fromNote && (
@@ -823,6 +826,7 @@ function Footer({ briefing, perReviewUsd }: { briefing: Briefing; perReviewUsd?:
     if (llm.redactedSecrets) parts.push(`${plural(llm.redactedSecrets, "secret")} hidden before sending`);
     if (llm.omittedFiles.length > 0)
       parts.push(`${plural(llm.omittedFiles.length, "file")} left out to fit the budget`);
+    if (llm.draftsNote) parts.push(llm.draftsNote);
   } else {
     parts.push("checks only, no model");
   }

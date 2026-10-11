@@ -32,6 +32,7 @@ import {
 import { plural, prFileUrl } from "../format";
 import { onScreen, SEEN_AFTER_MS, useRecordSeen } from "../seen";
 import { ThreadsAtLine } from "./DiffThreads";
+import { Segmented } from "./Segmented";
 import { StateCard } from "./StateCard";
 
 export type { CommentPlace, DiffDraft, DiffPlace };
@@ -802,16 +803,24 @@ export function DiffView(props: DiffViewProps) {
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : "Something went wrong.");
 
 export interface DiffPaneProps extends Omit<DiffViewProps, "diff"> {
-  /** Fetches a diff: a PR's ("owner/repo#12"), or without one the local changes. */
-  load: (pr?: string) => Promise<PrDiff>;
+  /** Fetches a diff: a PR's ("owner/repo#12"), or without one the local changes; `since` narrows a PR's to a commit. */
+  load: (pr?: string, since?: string) => Promise<PrDiff>;
   /** The PR, "owner/repo#12"; absent for local changes. */
   pr?: string | undefined;
   /** The head commit the briefing was of: the diff is cached under it, and a newer head is pointed out. */
   headSha?: string | undefined;
+  /**
+   * The head commit you last reviewed, on a PR you reviewed before: the pane offers Since your review (what changed
+   * from it to the head, the default) and Whole PR.
+   */
+  since?: string | undefined;
 }
 
+/** Since your review, or the whole PR. */
+type DiffScope = "since" | "whole";
+
 /** The Diff tab: loads the diff (at once, if this PR's was loaded before) and shows it. */
-export function DiffPane({ load, pr, headSha, ...view }: DiffPaneProps) {
+export function DiffPane({ load, pr, headSha, since: reviewed, ...view }: DiffPaneProps) {
   const [state, setState] = useState<{ diff?: PrDiff; error?: string }>({});
   // A PR's places you saw, at the head commit the briefing (and so its places) is of. Never for local changes.
   const record = useRecordSeen();
@@ -828,48 +837,139 @@ export function DiffPane({ load, pr, headSha, ...view }: DiffPaneProps) {
         : undefined,
     [record, pr, headSha],
   );
+  const offered = pr !== undefined && reviewed !== undefined;
+  const [scope, setScope] = useState<DiffScope>("since");
+  // Another PR (or another commit you reviewed) starts on what's new again.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: resets when the PR or the reviewed commit changes.
+  useEffect(() => setScope("since"), [pr, reviewed]);
+  const since = offered && scope === "since" ? reviewed : undefined;
   const [attempt, setAttempt] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` asks again after an error.
   useEffect(() => {
     let live = true;
     setState({});
-    cachedDiff(load, pr, headSha).then(
+    cachedDiff(load, pr, headSha, since).then(
       (diff) => live && setState({ diff }),
       (error) => live && setState({ error: messageOf(error) }),
     );
     return () => {
       live = false;
     };
-  }, [load, pr, headSha, attempt]);
+  }, [load, pr, headSha, since, attempt]);
+
+  // On the changes since your review, the old side is the commit you reviewed, not the PR's base: a comment there
+  // would land on the wrong line, so the old side's drafts aren't marked and its lines don't take new ones.
+  const narrowed = state.diff?.since?.applied === true;
+  const [said, setSaid] = useState("");
+  const drafts = useMemo(
+    () => (narrowed ? view.drafts?.filter((d) => d.side !== "LEFT") : view.drafts),
+    [narrowed, view.drafts],
+  );
+  const { onComment } = view;
+  const comment = useMemo(
+    () =>
+      onComment && narrowed
+        ? (place: CommentPlace) => {
+            if (place.side === "LEFT") {
+              setSaid("To comment on a removed line, switch to Whole PR.");
+              return;
+            }
+            setSaid("");
+            onComment(place);
+          }
+        : onComment,
+    [onComment, narrowed],
+  );
+
+  const scopes = offered && (
+    <div className="diff-scope">
+      <Segmented label="Which changes to show">
+        <button type="button" aria-pressed={scope === "since"} onClick={() => setScope("since")}>
+          Since your review
+        </button>
+        <button type="button" aria-pressed={scope === "whole"} onClick={() => setScope("whole")}>
+          Whole PR
+        </button>
+      </Segmented>
+      {narrowed && state.diff?.since && (
+        <span className="faint small">
+          From <span className="mono">{state.diff.since.base.slice(0, 7)}</span>, the commit you reviewed, to the head
+        </span>
+      )}
+    </div>
+  );
 
   if (state.error) {
     return (
-      <StateCard
-        tone="warn"
-        glyph="!"
-        title="The diff didn't load"
-        body={state.error}
-        action={
-          <button type="button" className="btn primary" onClick={() => setAttempt((n) => n + 1)}>
-            Try again
-          </button>
-        }
-      />
+      <>
+        {scopes}
+        <StateCard
+          tone="warn"
+          glyph="!"
+          title="The diff didn't load"
+          body={state.error}
+          action={
+            <button type="button" className="btn primary" onClick={() => setAttempt((n) => n + 1)}>
+              Try again
+            </button>
+          }
+        />
+      </>
     );
   }
-  if (!state.diff) return <StateCard tone="spin" title="Loading the diff…" live />;
+  if (!state.diff) {
+    return (
+      <>
+        {scopes}
+        <StateCard tone="spin" title="Loading the diff…" live />
+      </>
+    );
+  }
   if (state.diff.files.length === 0) {
-    return <StateCard tone="dashed" glyph="–" title="Nothing has changed" body="There's no diff to show." />;
+    return (
+      <>
+        {scopes}
+        {narrowed ? (
+          <StateCard
+            tone="dashed"
+            glyph="–"
+            title="Nothing new since your review"
+            body="Nothing has changed since the commit you reviewed. Whole PR shows everything."
+          />
+        ) : (
+          <StateCard tone="dashed" glyph="–" title="Nothing has changed" body="There's no diff to show." />
+        )}
+      </>
+    );
   }
   return (
     <>
+      {scopes}
+      {state.diff.since?.applied === false && (
+        <p className="banner diff-newer" role="status">
+          The commit you reviewed isn't in this PR's history any more (it was force-pushed or rebased), so this is the
+          whole PR.
+        </p>
+      )}
       {pr && headSha && state.diff.headSha !== headSha && (
         <p className="banner diff-newer" role="status">
           The PR has new commits since this briefing. This is its latest diff, so places may have moved. Brief again to
           catch up.
         </p>
       )}
-      <DiffView key={state.diff.headSha} diff={state.diff} onSeen={onSeen} {...view} />
+      {said && (
+        <p className="diff-said faint small" role="status">
+          {said}
+        </p>
+      )}
+      <DiffView
+        key={`${state.diff.headSha}${narrowed ? `~${state.diff.since?.base}` : ""}`}
+        diff={state.diff}
+        onSeen={onSeen}
+        {...view}
+        drafts={drafts}
+        onComment={comment}
+      />
     </>
   );
 }

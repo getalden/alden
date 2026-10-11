@@ -295,6 +295,8 @@ interface DraftRow {
   link_to: string | null;
   in_reply_to: string | null;
   resolve: number | null;
+  /** JSON `{ checkId, title, severity? }` on a comment Alden drafted (see `auto-drafts.ts`). */
+  drafted?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -310,6 +312,14 @@ function json<T>(text: string | null): T | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** The finding a draft Alden made came from, as `drafted` (its stored severity stays in the row). */
+function draftedOf(text: string | null | undefined): Pick<ReviewDraft, "drafted"> {
+  const drafted = json<{ checkId?: unknown; title?: unknown }>(text ?? null);
+  return typeof drafted?.checkId === "string" && typeof drafted.title === "string"
+    ? { drafted: { checkId: drafted.checkId, title: drafted.title } }
+    : {};
 }
 
 function fromRow(row: DraftRow): StoredDraft {
@@ -329,6 +339,7 @@ function fromRow(row: DraftRow): StoredDraft {
     ...(!inline && link ? { linkTo: link } : {}),
     ...(row.in_reply_to ? { inReplyTo: row.in_reply_to, resolve: row.resolve === 1 } : {}),
     source: row.source,
+    ...draftedOf(row.drafted),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     state: row.state,
@@ -1186,8 +1197,15 @@ export async function sendReview(
   const pr = prName(input.repo, input.number);
   const drafts = new ReviewDrafts(store);
   const { headSha, files } = await fetchPullRequestState(client, input.repo, input.number);
+  // Alden's drafts you haven't kept don't post, so their moving doesn't stop the review.
+  const unkept = new Set(
+    drafts
+      .list(pr)
+      .filter((d) => d.source === "alden")
+      .map((d) => d.id),
+  );
   const followed = drafts.follow(pr, headSha, files);
-  const changed = [...followed.moved, ...followed.outdated];
+  const changed = [...followed.moved, ...followed.outdated].filter((id) => !unkept.has(id));
   if (changed.length > 0) {
     throw new SendReviewError(
       409,
@@ -1196,7 +1214,8 @@ export async function sendReview(
       changed,
     );
   }
-  const all = drafts.list(pr);
+  // Only what's yours posts: a comment Alden drafted goes out once you keep or edit it, never on its own.
+  const all = drafts.list(pr).filter((d) => d.source !== "alden");
   checkSendable(all, files, input.event, input.body);
   // Replies post in their threads: they're not the review's own comments, to count or learn from.
   const replies = all.filter(isReply);
