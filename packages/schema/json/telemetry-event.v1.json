@@ -525,9 +525,10 @@
                   "type": "string",
                   "enum": [
                     "you",
-                    "claude"
+                    "claude",
+                    "alden"
                   ],
-                  "description": "who wrote the draft: you, or Claude Code drafting for you"
+                  "description": "who wrote the draft: you, Claude Code drafting for you, or Alden drafting from a finding"
                 },
                 "inline": {
                   "type": "boolean",

@@ -402,6 +402,64 @@
           "waitingOnAuthor": {
             "type": "boolean",
             "description": "CI is failing, so the author has to act before a review is worth it"
+          },
+          "followUp": {
+            "description": "you reviewed this PR before: what's happened since, and whether a re-review was requested",
+            "type": "object",
+            "properties": {
+              "pr": {
+                "type": "string",
+                "description": "\"owner/repo#123\""
+              },
+              "lastReviewedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "description": "when you last submitted a review"
+              },
+              "lastReviewedHead": {
+                "description": "the head commit you last reviewed, when known",
+                "type": "string"
+              },
+              "commitsSince": {
+                "description": "commits pushed since your last review",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "rereviewRequestedAt": {
+                "description": "a review was requested from you after your last one",
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "yourThreads": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "threads you started"
+              },
+              "resolved": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "of yours, resolved"
+              },
+              "replied": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "of yours, unresolved but with a reply from someone else after your last word"
+              }
+            },
+            "required": [
+              "pr",
+              "lastReviewedAt",
+              "yourThreads",
+              "resolved",
+              "replied"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -801,6 +859,64 @@
           "waitingOnAuthor": {
             "type": "boolean",
             "description": "CI is failing, so the author has to act before a review is worth it"
+          },
+          "followUp": {
+            "description": "you reviewed this PR before: what's happened since, and whether a re-review was requested",
+            "type": "object",
+            "properties": {
+              "pr": {
+                "type": "string",
+                "description": "\"owner/repo#123\""
+              },
+              "lastReviewedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "description": "when you last submitted a review"
+              },
+              "lastReviewedHead": {
+                "description": "the head commit you last reviewed, when known",
+                "type": "string"
+              },
+              "commitsSince": {
+                "description": "commits pushed since your last review",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "rereviewRequestedAt": {
+                "description": "a review was requested from you after your last one",
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "yourThreads": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "threads you started"
+              },
+              "resolved": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "of yours, resolved"
+              },
+              "replied": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "of yours, unresolved but with a reply from someone else after your last word"
+              }
+            },
+            "required": [
+              "pr",
+              "lastReviewedAt",
+              "yourThreads",
+              "resolved",
+              "replied"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -1201,6 +1317,64 @@
           "waitingOnAuthor": {
             "type": "boolean",
             "description": "CI is failing, so the author has to act before a review is worth it"
+          },
+          "followUp": {
+            "description": "you reviewed this PR before: what's happened since, and whether a re-review was requested",
+            "type": "object",
+            "properties": {
+              "pr": {
+                "type": "string",
+                "description": "\"owner/repo#123\""
+              },
+              "lastReviewedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "description": "when you last submitted a review"
+              },
+              "lastReviewedHead": {
+                "description": "the head commit you last reviewed, when known",
+                "type": "string"
+              },
+              "commitsSince": {
+                "description": "commits pushed since your last review",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "rereviewRequestedAt": {
+                "description": "a review was requested from you after your last one",
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "yourThreads": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "threads you started"
+              },
+              "resolved": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "of yours, resolved"
+              },
+              "replied": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "of yours, unresolved but with a reply from someone else after your last word"
+              }
+            },
+            "required": [
+              "pr",
+              "lastReviewedAt",
+              "yourThreads",
+              "resolved",
+              "replied"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

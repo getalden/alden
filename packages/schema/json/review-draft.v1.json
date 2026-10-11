@@ -85,9 +85,37 @@
       "type": "string",
       "enum": [
         "you",
-        "claude"
+        "claude",
+        "alden"
       ],
-      "description": "who wrote it: you, or Claude Code drafting for you"
+      "description": "who wrote it: you, Claude Code drafting for you, or Alden drafting from its model's finding (until you keep or edit it, when it becomes yours)"
+    },
+    "drafted": {
+      "description": "on a comment Alden drafted: the finding it came from. Kept after you keep or edit it, for learning",
+      "type": "object",
+      "properties": {
+        "checkId": {
+          "type": "string",
+          "description": "the check of the finding it was drafted from: \"model\" for the model's own"
+        },
+        "title": {
+          "type": "string",
+          "description": "the finding's title"
+        }
+      },
+      "required": [
+        "checkId",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "inReplyTo": {
+      "description": "a reply: the review thread's GraphQL node id. A reply has no path or line of its own; it posts in that thread with the review",
+      "type": "string"
+    },
+    "resolve": {
+      "description": "on a reply: resolve the thread once the review is sent",
+      "type": "boolean"
     },
     "createdAt": {
       "type": "string",

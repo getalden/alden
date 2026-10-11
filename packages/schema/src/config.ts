@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FollowUpLevelSchema } from "./follow-ups.js";
 import { RankSettingsSchema } from "./rank.js";
 
 /** Paths that raise a PR's risk score unless the user overrides them. */
@@ -75,6 +76,20 @@ export const AldenConfigSchema = z.object({
     .object({
       /** Whether the desktop app's "Briefing ready" notification plays the system's notification sound. User config only. */
       sound: z.boolean().default(true),
+      /**
+       * How much the desktop app pings you about PRs you reviewed: off, rereview, your-turn (a re-review, or every
+       * comment you left resolved or replied to) or every-reply. Any PR can override it (`alden watch`). User config only.
+       */
+      followUps: FollowUpLevelSchema.default("your-turn"),
+    })
+    .prefault({}),
+  drafts: z
+    .object({
+      /**
+       * Whether a model briefing also drafts comments for its findings, for you to keep, edit or drop before sending.
+       * Never sent on their own. Adds a little output to the model call Alden already makes. User config only.
+       */
+      auto: z.boolean().default(true),
     })
     .prefault({}),
   learning: z

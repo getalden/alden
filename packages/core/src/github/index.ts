@@ -79,6 +79,15 @@ export {
   searchPullRequests,
 } from "./queue.js";
 export {
+  fetchReviewThreads,
+  type RawThread,
+  type RawThreadsPullRequest,
+  repliedToYou,
+  THREADS_QUERY,
+  toReviewThreads,
+  yourThreads,
+} from "./threads.js";
+export {
   ghCliToken,
   type ResolvedToken,
   resolveToken,

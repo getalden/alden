@@ -71,6 +71,29 @@ export {
   type ReviewSignalKind,
   ReviewSignalKindSchema,
 } from "./feedback.js";
+export {
+  FOLLOW_UPS_SCHEMA_VERSION,
+  type FollowUpEvent,
+  type FollowUpEventKind,
+  FollowUpEventKindSchema,
+  FollowUpEventSchema,
+  type FollowUpLevel,
+  FollowUpLevelSchema,
+  type FollowUpNotification,
+  FollowUpNotificationSchema,
+  type FollowUpNotifications,
+  FollowUpNotificationsSchema,
+  type FollowUpSummary,
+  FollowUpSummarySchema,
+  type PrWatch,
+  PrWatchSchema,
+  type ReviewThread,
+  type ReviewThreadComment,
+  ReviewThreadCommentSchema,
+  ReviewThreadSchema,
+  type ReviewThreads,
+  ReviewThreadsSchema,
+} from "./follow-ups.js";
 export { jsonSchemas } from "./json-schema.js";
 export {
   MEMORY_SCHEMA_VERSION,

@@ -62,7 +62,25 @@ export const ReviewDraftSchema = z
     linkTo: DraftLinkSchema.optional().describe(
       "on a general note: the line (or lines, or file) it's about, outside the PR's diff. It posts in the review body with a link to that code at `headSha`, the PR's head when it was written. Absent on an inline comment and a plain note",
     ),
-    source: z.enum(["you", "claude"]).describe("who wrote it: you, or Claude Code drafting for you"),
+    source: z
+      .enum(["you", "claude", "alden"])
+      .describe(
+        "who wrote it: you, Claude Code drafting for you, or Alden drafting from its model's finding (until you keep or edit it, when it becomes yours)",
+      ),
+    drafted: z
+      .object({
+        checkId: z.string().describe('the check of the finding it was drafted from: "model" for the model\'s own'),
+        title: z.string().describe("the finding's title"),
+      })
+      .optional()
+      .describe("on a comment Alden drafted: the finding it came from. Kept after you keep or edit it, for learning"),
+    inReplyTo: z
+      .string()
+      .optional()
+      .describe(
+        "a reply: the review thread's GraphQL node id. A reply has no path or line of its own; it posts in that thread with the review",
+      ),
+    resolve: z.boolean().optional().describe("on a reply: resolve the thread once the review is sent"),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
     state: z

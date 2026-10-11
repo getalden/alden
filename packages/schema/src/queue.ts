@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FollowUpSummarySchema } from "./follow-ups.js";
 import { ScoreLineSchema } from "./rank.js";
 
 /**
@@ -81,6 +82,9 @@ export const RankedPullRequestSchema = z.object({
   reasons: z.array(z.string()).describe("short human reasons, heaviest first"),
   waitingHours: z.number().describe("hours since the viewer was asked, or since the PR opened"),
   waitingOnAuthor: z.boolean().describe("CI is failing, so the author has to act before a review is worth it"),
+  followUp: FollowUpSummarySchema.optional().describe(
+    "you reviewed this PR before: what's happened since, and whether a re-review was requested",
+  ),
 });
 
 export const RankedQueueSchema = z.object({
