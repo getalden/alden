@@ -12,6 +12,7 @@ import { StateCard } from "./components/StateCard";
 import { StatsView } from "./components/StatsView";
 import { TelemetryCard } from "./components/TelemetryCard";
 import { TopBar } from "./components/TopBar";
+import { WatchBell } from "./components/WatchBell";
 import { useDrafts } from "./drafts";
 import { useFeedback } from "./feedback";
 import { fetchedAgo, waitingSince } from "./format";
@@ -522,6 +523,7 @@ function PrPane(props: {
               {pr.author ?? "ghost"}:{pr.headRef} → {pr.baseRef}
             </span>
           )}
+          {props.draftsApi && <WatchBell api={props.draftsApi} pr={key} global={session?.notifications?.followUps} />}
         </>
       }
       title={pr?.title ?? key}

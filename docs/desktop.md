@@ -129,6 +129,37 @@ settings for Alden still apply.
 **Long waits.** When someone has waited three days on a PR in Needs you that isn't waiting on its author, you get one
 silent notification for it ("@sam has waited 3 days"), once per PR each time the app runs.
 
+## Follow-ups on PRs you reviewed
+
+After you review a PR, Alden keeps an eye on it for you: replies to your comments, threads resolved, a push that
+changes the code under one of your comments (the thread goes outdated), and a second review request. When there's
+news, you get one notification per PR, titled with the PR and saying what happened: "2 replies, 1 resolved", or
+"Ana asked you to review again". Each piece of news is told once, and a click brings Alden forward.
+
+**Which PRs.** The open PRs you reviewed in the last 14 days: those GitHub finds with `reviewed-by:@me`, the ones you
+sent comments on from Alden, and any PR you gave its own level. A PR stops being followed when it's merged or closed,
+and after 14 days without a change on GitHub.
+
+**How much it tells you.** Choose in Settings → Notifications, or with `alden config set notifications.followUps
+<level>`:
+
+| Level | You hear about |
+| --- | --- |
+| Off (`off`) | Nothing. |
+| Re-review only (`rereview`) | A second review request. |
+| When it's your turn (`your-turn`, the default) | A re-review, or the moment every comment you left is resolved or has a reply after yours. Once per round: you hear it again only after you've said something new. |
+| Every reply (`every-reply`) | Each reply, resolve and re-review, and a push that makes one of your comments outdated. |
+
+**One PR differently.** The bell beside a PR's name, above its title, sets that PR's own level (**Default** follows
+Settings), and so does `alden watch <pr> --every-reply` (see [`alden watch`](commands.md#alden-watch)). A PR's own level
+lasts until it's merged or closed. News below a PR's level isn't saved for later: raising the level doesn't bring it
+back.
+
+**What it costs.** With each menu-bar refresh (every five minutes), one GitHub request finds the PRs you reviewed and
+when each last changed; only a PR that changed since the last look has its review threads read, one request each. All
+of it is read only. Follow-up notifications play your system's sound like "Briefing ready" does, unless you turned it
+off.
+
 ## Settings only in the app
 
 ![Settings in the desktop app: Command line tool, While you're away, and Notifications](../site/src/assets/screens/desktop-settings-dark.png)
@@ -139,7 +170,8 @@ Settings has everything described in [Alden in your browser](web-ui.md#settings)
 - **While you're away**: **Prepare briefings in the background** and **Ask the model too** (see
   [While you're away](#while-youre-away)). Ask the model too is read from your user config only, so a repo's
   `.alden.toml` can't turn it on.
-- **Notifications**: **Play a sound when a briefing is ready**.
+- **Notifications**: **Play a sound when a briefing is ready**, and how much you hear about PRs you reviewed (see
+  [Follow-ups](#follow-ups-on-prs-you-reviewed)).
 
 Settings → Ranking also has **Keep the top PRs briefed in the background**.
 

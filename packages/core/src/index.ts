@@ -33,6 +33,7 @@ export {
   signalCounts,
   summarizeFeedback,
 } from "./feedback/log.js";
+export * from "./follow-ups/index.js";
 export * from "./github/index.js";
 export {
   type ChangedSymbol,

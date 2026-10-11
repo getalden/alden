@@ -4,12 +4,15 @@ import type {
   BriefingTarget,
   FeedbackInput,
   FeedbackSummary,
+  FollowUpLevel,
+  FollowUpNotifications,
   KeyTestResult,
   LocalSetupEvent,
   MemoryItem,
   MemorySource,
   ModelSetupState,
   PrDiff,
+  PrWatch,
   RankedQueue,
   RankingState,
   RankPreview,
@@ -123,8 +126,11 @@ export interface Session {
   /** What this machine's queue covers (queue.orgs, queue.repos, queue.ignore); empty lists mean everywhere. */
   queueScope?: { orgs: string[]; repos: string[]; ignore: string[] };
   background?: { enabled: boolean; model: boolean };
-  /** Whether the desktop app's "Briefing ready" notification plays a sound (`notifications.sound`). */
-  notifications?: { sound: boolean };
+  /**
+   * Whether the desktop app's "Briefing ready" notification plays a sound (`notifications.sound`), and how much it
+   * tells you about PRs you reviewed (`notifications.followUps`).
+   */
+  notifications?: { sound: boolean; followUps?: FollowUpLevel };
   /** Whether Alden learns from the reviews you send (`learning.fromReviews`, on unless you turn it off). */
   learning?: { fromReviews: boolean };
 }
@@ -353,6 +359,19 @@ export class Api {
   /** `null` removes the setting, so its default applies again. */
   setConfig = (key: string, value: string | null) =>
     this.request<unknown>("/api/config", { method: "PUT", body: JSON.stringify({ key, value }) });
+
+  /** A PR's notification level ("owner/repo#12"): its own, or the global `notifications.followUps`. */
+  watch = (pr: string) => this.request<PrWatch>(`/api/watch?pr=${encodeURIComponent(pr)}`);
+
+  /** Sets a PR's own level; null puts it back on the global one. */
+  setWatch = (pr: string, level: FollowUpLevel | null) =>
+    this.request<PrWatch>(`/api/watch?pr=${encodeURIComponent(pr)}`, {
+      method: "PUT",
+      body: JSON.stringify({ level }),
+    });
+
+  /** The desktop app's follow-up check: what to tell you about PRs you reviewed, one notification per PR. */
+  followUps = () => this.request<FollowUpNotifications>("/api/follow-ups");
 
   /** A PR's drafts ("owner/repo#12"), and the places Alden flagged that have no comment near them. */
   drafts = (pr: string) => this.request<DraftsResponse>(`/api/drafts?pr=${encodeURIComponent(pr)}`);

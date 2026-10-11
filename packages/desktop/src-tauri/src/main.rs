@@ -5,7 +5,8 @@
 //! PR callers come from any clone Alden knows), shows its UI in the window, and polls the local API for the
 //! menu bar: how many PRs wait on you, the top three, and a notification when someone has waited three days. While
 //! you're away from the Mac, it asks the server to brief the top PRs ahead of time and says when one is ready (with the
-//! system's notification sound unless `notifications.sound` is off). Closing
+//! system's notification sound unless `notifications.sound` is off). After you review a PR, it tells you about replies,
+//! resolves and re-review requests at the level you chose (`notifications.followUps`, or the PR's own). Closing
 //! the window keeps Alden in the menu bar; Quit stops it and the server with it (the server also exits on its own when
 //! this app's end of its stdin closes, so a crash can't leave it running).
 
@@ -76,6 +77,26 @@ struct PreparedPr {
     pr: String,
     title: String,
     places: u32,
+}
+
+/// `GET /api/follow-ups`: one notification per PR you reviewed with news, already filtered by its level.
+#[derive(Deserialize)]
+struct FollowUps {
+    notifications: Vec<FollowUp>,
+    /// `notifications.sound`, as for "Briefing ready". An older server doesn't say: it plays.
+    #[serde(default = "yes")]
+    sound: bool,
+}
+
+#[derive(Deserialize)]
+struct FollowUp {
+    /// "owner/repo#123".
+    pr: String,
+    title: String,
+    /// e.g. "2 replies, 1 resolved" or "Ana asked you to review again".
+    text: String,
+    /// The event ids it covers, acknowledged once shown so they're never shown again.
+    events: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -384,6 +405,62 @@ async fn poll(app: &AppHandle) {
             .title(format!("{who} has waited {}", wait(row.waiting_hours)))
             .body(format!("{} · {} #{}", row.pr.title, row.pr.repo, row.pr.number))
             .show();
+    }
+
+    // After the queue, which tells the server about re-review requests.
+    follow_ups(app, &base, &token).await;
+}
+
+/// Asks the server what happened on the PRs you reviewed (it reads GitHub only for PRs that changed, at most once a
+/// minute), shows one notification per PR, then acknowledges them so they're never shown twice. Tauri's notifications
+/// can't act on a click on every platform, so a click brings Alden forward rather than opening the PR; the
+/// notification names it.
+async fn follow_ups(app: &AppHandle, base: &str, token: &str) {
+    let response = reqwest::Client::new()
+        .get(format!("{base}/api/follow-ups"))
+        .header("X-Alden-Token", token)
+        // A check reads the threads of each PR that changed, a few at a time.
+        .timeout(Duration::from_secs(120))
+        .send()
+        .await;
+    let found = match response {
+        Ok(res) if res.status().is_success() => res.json::<FollowUps>().await.ok(),
+        _ => None,
+    };
+    let Some(found) = found else { return };
+    let mut shown: Vec<String> = Vec::new();
+    for note in found.notifications {
+        // Shown already this run (acknowledging them failed): never twice.
+        let key = format!("follow-up:{}", note.events.join(","));
+        if note.events.is_empty() || !app.state::<AppState>().notified.lock().unwrap().insert(key) {
+            continue;
+        }
+        let mut builder = app.notification().builder().title(follow_up_title(&note)).body(clip(&note.text, 120));
+        if found.sound {
+            builder = builder.sound(DEFAULT_SOUND);
+        }
+        let _ = builder.show();
+        shown.extend(note.events);
+    }
+    if shown.is_empty() {
+        return;
+    }
+    let _ = reqwest::Client::new()
+        .post(format!("{base}/api/follow-ups/ack"))
+        .header("X-Alden-Token", token)
+        .json(&serde_json::json!({ "events": shown }))
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await;
+}
+
+/// The PR's title, or "owner/repo#123" when it has none.
+fn follow_up_title(note: &FollowUp) -> String {
+    let title = note.title.trim();
+    if title.is_empty() {
+        note.pr.clone()
+    } else {
+        clip(title, 80)
     }
 }
 
@@ -704,6 +781,21 @@ mod tests {
         assert_eq!((pr.pr.as_str(), pr.places), ("a/b#1", 2));
         let none: PrepareResult = serde_json::from_str(r#"{"prepared":null,"reason":"off"}"#).unwrap();
         assert!(none.prepared.is_none());
+    }
+
+    #[test]
+    fn reads_follow_ups_and_names_each_by_its_pr() {
+        let found: FollowUps = serde_json::from_str(
+            r#"{"notifications":[{"pr":"a/b#1","title":"Fix it","url":"u","text":"2 replies","events":["e1","e2"]},
+            {"pr":"a/b#2","title":" ","url":"u","text":"Ana asked you to review again","events":["e3"]}],"sound":false}"#,
+        )
+        .unwrap();
+        assert!(!found.sound);
+        assert_eq!(follow_up_title(&found.notifications[0]), "Fix it");
+        assert_eq!(follow_up_title(&found.notifications[1]), "a/b#2");
+        assert_eq!(found.notifications[0].events, vec!["e1", "e2"]);
+        let older: FollowUps = serde_json::from_str(r#"{"notifications":[]}"#).unwrap();
+        assert!(older.sound);
     }
 
     #[test]

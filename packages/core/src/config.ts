@@ -47,6 +47,7 @@ const USER_ONLY = [
   ["queue", "rank"],
   ["clones", "folders"],
   ["notifications", "sound"],
+  ["notifications", "followUps"],
   ["learning", "fromReviews"],
 ] as const;
 
