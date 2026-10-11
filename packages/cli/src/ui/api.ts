@@ -754,7 +754,11 @@ export function createUiApi(options: {
       const list = drafts.list(ref.name);
       return {
         drafts: list.map(publicDraft),
-        unaddressed: unaddressedPlaces(drafts.briefed(ref.name)?.places ?? [], list),
+        // Alden's drafts you haven't kept won't be sent, so they don't count as a word on the place they're on.
+        unaddressed: unaddressedPlaces(
+          drafts.briefed(ref.name)?.places ?? [],
+          list.filter((d) => d.source !== "alden"),
+        ),
       };
     },
 

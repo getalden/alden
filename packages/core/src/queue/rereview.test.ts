@@ -144,7 +144,7 @@ describe("ranking a re-review", () => {
     expect(doubled.breakdown).toContainEqual({ signal: "rereview", points: 4, weight: 2, text: REREVIEW_REASON });
 
     const off = rankPullRequest(pr, { ...config, rank: { ...config.rank, rereview: 0 } }, context);
-    expect(off.score.total).toBe(rankPullRequest(facts(), config, context).score.total);
+    expect(off.score).toEqual(rankPullRequest(facts(), config, context).score);
     expect(off.reasons).not.toContain(REREVIEW_REASON);
     expect(off.followUp?.rereviewRequestedAt).toBe(hoursAgo(2));
   });

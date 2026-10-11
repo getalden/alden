@@ -149,7 +149,7 @@ const STATUS: Record<PrDiffFile["status"], string | undefined> = {
 const SIGN: Record<PrDiffLine["kind"], string> = { add: "+", del: "−", ctx: " " };
 const SPOKEN: Record<PrDiffLine["kind"], string> = { add: "Added: ", del: "Removed: ", ctx: "" };
 
-const who = (source: string) => (source === "claude" ? "Claude" : "You");
+const who = (source: string) => (source === "claude" ? "Claude" : source === "alden" ? "Alden (not kept)" : "You");
 
 /** What a row knows about its line and its markers; primitives and stable lists, so unchanged rows don't render. */
 interface RowProps {

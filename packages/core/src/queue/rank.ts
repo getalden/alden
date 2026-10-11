@@ -165,8 +165,10 @@ export function rankPullRequest(
   // said, so it sits a little above a first look of the same risk. Needs the viewer: without one there's no "you".
   const followUp = context.viewer === undefined ? undefined : followUpOf(pr, context.viewer);
   if (followUp?.rereviewRequestedAt !== undefined) {
-    blocking += 1;
-    blockingPoints += signal("rereview", WEIGHTS.blocking, REREVIEW_REASON);
+    const points = signal("rereview", WEIGHTS.blocking, REREVIEW_REASON);
+    // A weight of 0 switches it off entirely: no points, and not counted as blocking either.
+    if (points > 0) blocking += 1;
+    blockingPoints += points;
   }
 
   // Facts worth showing that don't change the score.
