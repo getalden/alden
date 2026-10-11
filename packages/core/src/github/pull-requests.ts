@@ -29,7 +29,7 @@ export const PULL_REQUEST_FIELDS = `
   reviewRequests(first: 20) {
     nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug organization { login } } } }
   }
-  reviews(last: 20) { nodes { author { login } state submittedAt } }
+  reviews(last: 20) { nodes { author { login } state submittedAt commit { oid } } }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
   timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 20) {
     nodes {
@@ -68,7 +68,15 @@ export interface RawPullRequest {
   assignees?: { nodes: { login: string }[] };
   files: { nodes: { path: string; additions: number; deletions: number }[]; pageInfo: { hasNextPage: boolean } } | null;
   reviewRequests: { nodes: { requestedReviewer: Reviewer | null }[] };
-  reviews: { nodes: { author: { login: string } | null; state: string; submittedAt: string | null }[] };
+  reviews: {
+    nodes: {
+      author: { login: string } | null;
+      state: string;
+      submittedAt: string | null;
+      /** Absent in fixtures recorded before Alden read it; null when GitHub no longer has the commit. */
+      commit?: { oid: string } | null;
+    }[];
+  };
   commits: { nodes: { commit: { statusCheckRollup: { state: string } | null } }[] };
   timelineItems: { nodes: ({ createdAt: string; requestedReviewer: Reviewer | null } | Record<string, never>)[] };
 }
@@ -147,6 +155,7 @@ export function toFacts(raw: RawPullRequest, viewer: Viewer, codeowners: Codeown
       author: r.author?.login ?? null,
       state: r.state,
       submittedAt: r.submittedAt,
+      ...(r.commit?.oid ? { commit: r.commit.oid } : {}),
     })),
     request: { direct, teams, requestedAt },
     codeownedFiles: files

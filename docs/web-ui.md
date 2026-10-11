@@ -59,6 +59,10 @@ shows the PR's title, repo and author, how long it has waited on you, its size a
 it does. A reason marked ↑ or ↓ comes from your own feedback, and "↑ your rule: payments/ first" from a rule you set
 (see [Ranking](#ranking)). See [The review queue](queue.md) for how ranking works.
 
+A PR you reviewed before says so under its title: **Re-review** when you've been asked again since, then when you last
+reviewed ("Re-review · reviewed 2 days ago"). Once something has happened to your comments the line counts it too
+("3 of your 5 comments resolved"). See [Re-reviews](queue.md#re-reviews).
+
 When you open the page, the last queue shows at once (up to a day old), marked "As of 3 min ago, refreshing…" until
 the current one arrives. `r`, or the refresh button, fetches it again. A PR you've opened shows "2 drafts" while it has
 comments waiting to be sent.
@@ -189,6 +193,19 @@ review: see [Places you saw](memory.md#places-you-saw).
 
 For a PR, the diff is the PR's latest push. If that's newer than the briefing, a line above the diff says so, since
 places may have moved. For **My changes**, it's your uncommitted changes, as the briefing read them.
+
+### Since your review
+
+On a PR you reviewed before, the Diff tab opens on **Since your review**: only what changed from the commit you last
+reviewed to the PR's head, so a second look starts where your first one stopped. **Whole PR** shows everything.
+
+- Places to look and your comments still show at their lines when the narrower diff has them. The old side is the
+  commit you reviewed rather than the PR's base, so comments on removed lines show, and are written, in **Whole PR**.
+- If the commit you reviewed isn't in the PR's history any more (a force-push or rebase), the tab shows the whole PR
+  and says so. If nothing has been pushed since, it says that instead.
+- If the author merged the base branch in since your review, its changes are part of "since" too.
+- It's one GitHub request (the compare API, which lists up to 300 files), kept like the whole diff while `alden ui`
+  runs.
 
 Large diffs stay quick: rows render as you scroll to them, and files over 400 lines of diff start collapsed, with
 **Show**. Alden keeps a PR's diff per push while `alden ui` runs, so opening it again is instant. The tab you were on
@@ -337,7 +354,8 @@ The desktop app adds **Command line tool**, **While you're away** and **Notifica
 
 **Ranking** sets [how the queue ranks](queue.md#your-ranking):
 
-- **Weights**: a slider per signal, from off (0) to ×3 here, ×1 by default. **Reset** puts them all back.
+- **Weights**: a slider per signal, from off (0) to ×3 here, ×1 by default, **Re-reviews** included. **Reset** puts
+  them all back.
 - **Rules**: add, edit, delete and reorder them. Each takes any of a path, label, author, repo, base branch and title,
   and puts PRs first or last, or boosts or lowers them. A rule's reason shows on the queue's rows, marked as yours
   ("↑ your rule: payments/ first").

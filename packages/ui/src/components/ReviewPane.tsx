@@ -121,7 +121,9 @@ interface ReviewPaneProps {
   /** Guided review: the PR's diff for its code excerpts. */
   guided?: Pick<GuidedReviewProps, "loadDiff"> | undefined;
   /** Fetches the diff for the Diff tab (`Api.diff`). Without it there's no Diff tab, only the briefing. */
-  loadDiff?: ((pr?: string) => Promise<PrDiff>) | undefined;
+  loadDiff?: ((pr?: string, since?: string) => Promise<PrDiff>) | undefined;
+  /** The head commit you last reviewed, on a PR you reviewed before: the Diff tab offers the changes since. */
+  reviewedHead?: string | undefined;
 }
 
 /**
@@ -224,7 +226,8 @@ function useBriefingTab(): [BriefingTab, (tab: BriefingTab) => void] {
 /** The briefing and its Diff tab: d switches between them, and a place's file:line in the briefing opens the diff there. */
 function BriefingTabs(props: {
   briefing: Briefing;
-  loadDiff: (pr?: string) => Promise<PrDiff>;
+  loadDiff: (pr?: string, since?: string) => Promise<PrDiff>;
+  reviewedHead?: string | undefined;
   onComment?: ((place: CommentPlace) => void) | undefined;
   comments?: BriefingComments | undefined;
   children: ReactNode;
@@ -333,6 +336,7 @@ function BriefingTabs(props: {
         >
           <DiffPane
             load={props.loadDiff}
+            since={target.kind === "pr" ? props.reviewedHead : undefined}
             pr={pr}
             headSha={target.kind === "pr" ? target.headSha : undefined}
             prUrl={target.kind === "pr" ? target.url : undefined}
@@ -513,6 +517,7 @@ export function ReviewPane(props: ReviewPaneProps) {
               <BriefingTabs
                 briefing={run.briefing}
                 loadDiff={props.loadDiff}
+                reviewedHead={props.reviewedHead}
                 onComment={drawer.actions?.onComment}
                 comments={props.comments}
               >

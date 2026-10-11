@@ -111,6 +111,36 @@ describe("renderQueue", () => {
     expect(colored[4]?.startsWith("\u001b[2m2.")).toBe(true);
   });
 
+  it("tags a re-review, says when you reviewed instead of the reason, and explains its points", () => {
+    const followUp = {
+      pr: "getalden/alden#3",
+      lastReviewedAt: "2026-09-26T18:00:00Z",
+      lastReviewedHead: "abc1234",
+      rereviewRequestedAt: "2026-09-28T10:00:00Z",
+      yourThreads: 5,
+      resolved: 3,
+      replied: 0,
+    };
+    const again = item(
+      3,
+      {
+        score: { risk: 0, wait: 0, blocking: 1, total: 2 },
+        reasons: ["Re-review: you were asked again", "touches db/"],
+        followUp,
+        breakdown: [{ signal: "rereview", points: 2, text: "Re-review: you were asked again" }],
+      },
+      { title: "Charge in cents" },
+    );
+    const before = item(4, { followUp: { ...followUp, rereviewRequestedAt: undefined, resolved: 0 } });
+    const now = Date.parse("2026-09-28T18:00:00Z");
+    const lines = renderQueue(queue([again, before]), { width: 120, color: false, explain: true, now }).split("\n");
+    expect(lines[2]).toMatch(/^1\.\s+getalden\/alden#3\s+\[Re-review\] Charge in cents\s+@sam/);
+    expect(lines[3]?.trim()).toBe("reviewed 2d ago · 3 of your 5 comments resolved · touches db/");
+    expect(lines[4]?.trim()).toBe("score 2: rereview +2");
+    expect(lines[5]).not.toContain("[Re-review]");
+    expect(lines[6]?.trim()).toBe("reviewed 2d ago");
+  });
+
   it("shows warnings first, and only colours when asked", () => {
     const plain = renderQueue(queue([item(1)], [], ["Couldn't list your teams"]), { width: 100, color: false });
     expect(plain.startsWith("Warning: Couldn't list your teams\n")).toBe(true);

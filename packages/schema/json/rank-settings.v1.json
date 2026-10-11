@@ -67,6 +67,13 @@
       "minimum": 0,
       "maximum": 10
     },
+    "rereview": {
+      "default": 1,
+      "description": "you reviewed it before and were asked again: 2 points (0 ignores it, 1 is the default)",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10
+    },
     "rules": {
       "default": [],
       "description": "applied after learning, which never overrides them",

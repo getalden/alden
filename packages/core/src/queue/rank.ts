@@ -13,6 +13,7 @@ import type { PullRequestFacts } from "../github/pull-requests.js";
 import type { ReviewQueue } from "../github/queue.js";
 import { type Learning, prFeatures, type QueueRow, queueBoost, sensitiveDir } from "../learn/learn.js";
 import { fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./files.js";
+import { followUpOf, REREVIEW_REASON } from "./rereview.js";
 import { applyRules } from "./rules.js";
 
 export type { FastTrackKind, Lane, RankedPullRequest, RankedQueue, Score };
@@ -160,6 +161,14 @@ export function rankPullRequest(
     );
   }
 
+  // You reviewed it and were asked again: someone is waiting on you a second time, usually having acted on what you
+  // said, so it sits a little above a first look of the same risk. Needs the viewer: without one there's no "you".
+  const followUp = context.viewer === undefined ? undefined : followUpOf(pr, context.viewer);
+  if (followUp?.rereviewRequestedAt !== undefined) {
+    blocking += 1;
+    blockingPoints += signal("rereview", WEIGHTS.blocking, REREVIEW_REASON);
+  }
+
   // Facts worth showing that don't change the score.
   if (pr.mergeable === "conflicting") add(0, "has conflicts");
   if (pr.isDraft) add(0, "draft");
@@ -219,6 +228,7 @@ export function rankPullRequest(
     reasons: reasons.sort((a, b) => b.weight - a.weight).map((r) => r.text),
     waitingHours,
     waitingOnAuthor,
+    ...(followUp ? { followUp } : {}),
   };
 }
 

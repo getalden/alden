@@ -22,7 +22,14 @@ export {
   parseHunks,
   parseUnifiedDiff,
 } from "./diff/parse.js";
-export { fetchPullRequestDiff, fromRestFile, type LocalDiff, readLocalDiff } from "./diff/sources.js";
+export {
+  COMMIT_SHA,
+  fetchCompareDiff,
+  fetchPullRequestDiff,
+  fromRestFile,
+  type LocalDiff,
+  readLocalDiff,
+} from "./diff/sources.js";
 export { DiffCache, localDiffView, pullRequestDiffView, toDiffView, toDiffViewFile } from "./diff/view.js";
 export { embeddedFile, embeddedFilesUnder, isStandaloneBinary, registerEmbeddedFiles } from "./embedded.js";
 export {
@@ -190,6 +197,7 @@ export {
   reviewableSize,
   type Score,
 } from "./queue/rank.js";
+export { followUpOf, isRereview, REREVIEW_REASON } from "./queue/rereview.js";
 export { applyRules, describeWhen, pathGlobs, ruleMatches, ruleReason } from "./queue/rules.js";
 export { buildBriefing, NOT_CHECKED, runChecks } from "./review/briefing.js";
 export {

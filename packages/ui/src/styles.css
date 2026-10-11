@@ -800,6 +800,18 @@ textarea.input {
 .learned-line.down {
   color: var(--ink2);
 }
+/* A PR you reviewed before: "Re-review" and when you last reviewed. */
+.followup-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font: 500 12px / 1.4 var(--font-ui);
+  color: var(--ink2);
+}
+.chip.rereview {
+  color: var(--warn);
+  background: var(--warn-soft);
+}
 .reactions {
   position: relative;
   z-index: 1;
@@ -2485,6 +2497,9 @@ details > summary {
 .pr-row.selected .chip.ready {
   background: var(--ok-soft);
 }
+.pr-row.selected .chip.rereview {
+  background: var(--warn-soft);
+}
 .mem-item.gone .text {
   text-decoration: line-through;
 }
@@ -3021,6 +3036,12 @@ details > summary {
 }
 .banner.diff-newer {
   margin: 0;
+}
+.diff-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
 }
 .diff-scroll {
   overflow-x: auto;

@@ -1,4 +1,4 @@
-import type { CiState, RankedPullRequest, RankedQueue } from "@alden/schema";
+import type { CiState, FollowUpSummary, RankedPullRequest, RankedQueue } from "@alden/schema";
 import {
   activeFilterCount,
   DEFAULT_QUEUE_NAV,
@@ -38,6 +38,32 @@ export const prKey = (pr: { repo: string; number: number }) => `${pr.repo}#${pr.
 export const isLearnedReason = (reason: string) => /^ranked (higher|lower):/.test(reason);
 /** "↑ your rule: payments/ first": a rule from Settings → Ranking, marked so it reads as yours. */
 export const isRuleReason = (reason: string) => /^[↑↓] your rule:/.test(reason);
+
+/** "Re-review: you were asked again": the row's Re-review label says it, so it isn't repeated as a chip. */
+export const isRereviewReason = (reason: string) => /^Re-review:/.test(reason);
+
+/** "2 days ago", "5 hours ago": when you last reviewed, in words. */
+export function reviewedAgo(at: string, now: number = Date.now()): string {
+  const hours = Math.max(0, (now - Date.parse(at)) / 3_600_000);
+  if (hours < 1) return "less than an hour ago";
+  if (hours < 24) return `${plural(Math.floor(hours), "hour")} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 14) return `${plural(days, "day")} ago`;
+  return `${plural(Math.floor(days / 7), "week")} ago`;
+}
+
+/**
+ * The line a PR you reviewed before gets on its row: "reviewed 2 days ago · 3 of your 5 comments resolved". The
+ * counts only show once something has happened to your comments.
+ */
+export function followUpLine(followUp: FollowUpSummary, now?: number): string {
+  const parts = [`reviewed ${reviewedAgo(followUp.lastReviewedAt, now)}`];
+  if (followUp.yourThreads > 0 && followUp.resolved > 0) {
+    parts.push(`${followUp.resolved} of your ${plural(followUp.yourThreads, "comment")} resolved`);
+  }
+  if (followUp.replied > 0) parts.push(`${plural(followUp.replied, "reply", "replies")} to you`);
+  return parts.join(" · ");
+}
 
 /** Sort orders as the menu names them; the note under the tools says the rest. */
 export const SORT_LABELS: Record<QueueSort, string> = {
@@ -287,6 +313,7 @@ export function QueueView({
                   onReact={onReact}
                   ready={ready?.has(prKey(row.pr).toLowerCase()) ?? false}
                   drafts={drafts[prKey(row.pr)] ?? 0}
+                  now={now}
                 />
               </li>
             ))}
@@ -377,6 +404,7 @@ function PrRow(props: {
   onReact: ((key: string, reaction: Reaction) => void) | undefined;
   ready?: boolean;
   drafts?: number;
+  now?: number | undefined;
 }) {
   const { row, rank, selected, reaction, note, onReact, ready = false, drafts = 0 } = props;
   const { pr } = row;
@@ -385,7 +413,11 @@ function PrRow(props: {
   const ci = CI[pr.ci];
   // The wait and failing CI have their own places in the row; learned reasons get their own line.
   const learned = row.reasons.find(isLearnedReason);
-  const reasons = row.reasons.filter((r) => !/^waiting \d/.test(r) && !/^CI failing/.test(r) && !isLearnedReason(r));
+  const reasons = row.reasons.filter(
+    (r) => !/^waiting \d/.test(r) && !/^CI failing/.test(r) && !isLearnedReason(r) && !isRereviewReason(r),
+  );
+  const { followUp } = row;
+  const rereview = followUp?.rereviewRequestedAt !== undefined;
   const react = (r: Reaction) => () => onReact?.(key, r);
   return (
     <div className={`pr-row${selected ? " selected" : ""}${reaction === "dismiss" ? " dismissed" : ""}`} data-pr={key}>
@@ -408,6 +440,12 @@ function PrRow(props: {
             <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
           </span>
         </span>
+        {followUp && (
+          <span className="followup-line">
+            {rereview && <span className="chip rereview">Re-review</span>}
+            <span>{rereview ? followUpLine(followUp, props.now) : capitalised(followUpLine(followUp, props.now))}</span>
+          </span>
+        )}
         {(reasons.length > 0 || row.waitingOnAuthor || ready || drafts > 0) && (
           <span className="pr-chips">
             {ready && <span className="chip ready">✓ Briefing ready</span>}
@@ -471,6 +509,8 @@ function PrRow(props: {
     </div>
   );
 }
+
+const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /** One filter menu, styled as a chip: its name when off, its value (highlighted) when on. */
 function FilterMenu(props: {

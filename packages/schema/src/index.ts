@@ -46,6 +46,8 @@ export {
   DiffHunkSchema,
   type DiffLineKind,
   DiffLineSchema,
+  type DiffSince,
+  DiffSinceSchema,
   type PrDiff,
   type PrDiffFile,
   type PrDiffHunk,

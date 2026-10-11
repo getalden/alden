@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
-import type { RankChange, ReviewStage } from "@alden/core";
+import { COMMIT_SHA, type RankChange, type ReviewStage } from "@alden/core";
 import {
   type Briefing,
   BriefingSchema,
@@ -123,8 +123,10 @@ export interface UiApi {
   /**
    * The Diff tab: a PR's diff at its current head ("owner/repo#12", a URL or a queue number), or without one the local
    * changes a briefing of them covers. A PR's diff is kept per head commit, so opening it again costs one request.
+   * `since` (a commit: the head you last reviewed) narrows a PR's diff to what changed from it to the head, or says
+   * it couldn't (`since.applied` false) and gives the whole PR.
    */
-  diff(pr?: string): Promise<PrDiff>;
+  diff(pr?: string, since?: string): Promise<PrDiff>;
   /**
    * The flagged places you saw in a PR at a head commit (a guided step, a marker in the Diff tab), so a review that
    * passes them without a word can teach Alden. Kept on this machine only; nothing is recorded while
@@ -690,8 +692,12 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       }
       case "GET /api/diff": {
         const pr = url.searchParams.get("pr")?.trim();
+        const since = url.searchParams.get("since")?.trim() || undefined;
+        if (since !== undefined && (!pr || !COMMIT_SHA.test(since))) {
+          throw new ApiError(400, "Send ?pr=owner/repo%2312&since=<commit sha>.");
+        }
         // Paths and lines are the PR author's text: `send` strips control sequences from every string.
-        send(res, 200, await api.diff(pr || undefined));
+        send(res, 200, await api.diff(pr || undefined, since));
         return;
       }
       case "POST /api/drafts": {
