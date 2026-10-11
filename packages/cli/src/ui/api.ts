@@ -802,7 +802,7 @@ export function createUiApi(options: {
       }
     },
 
-    async diff(pr) {
+    async diff(pr, since) {
       if (pr === undefined) {
         try {
           return await localDiffView(options.cwd);
@@ -813,7 +813,7 @@ export function createUiApi(options: {
       const ref = await prOf(pr);
       const resolved = await signedIn();
       try {
-        return await pullRequestDiffView(createGitHubClient(resolved.token), ref.repo, ref.number, diffs);
+        return await pullRequestDiffView(createGitHubClient(resolved.token), ref.repo, ref.number, diffs, since);
       } catch (error) {
         throw new ApiError(502, describeGitHubError(error, resolved.source));
       }

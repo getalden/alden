@@ -374,9 +374,13 @@ export class Api {
 
   /**
    * The Diff tab: a PR's diff at its current head ("owner/repo#12"), or without one the local changes. The server keeps
-   * a PR's diff per head commit, so asking again costs it one GitHub request.
+   * a PR's diff per head commit, so asking again costs it one GitHub request. `since`, a commit you reviewed, asks for
+   * only what changed from it to the head.
    */
-  diff = (pr?: string) => this.request<PrDiff>(`/api/diff${pr ? `?pr=${encodeURIComponent(pr)}` : ""}`);
+  diff = (pr?: string, since?: string) =>
+    this.request<PrDiff>(
+      `/api/diff${pr ? `?pr=${encodeURIComponent(pr)}${since ? `&since=${encodeURIComponent(since)}` : ""}` : ""}`,
+    );
 
   /** The flagged places you saw in a PR, at the head its briefing is of. Kept on this machine by the local API. */
   recordSeen = (batch: SeenBatch) =>

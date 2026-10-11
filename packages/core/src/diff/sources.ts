@@ -61,6 +61,41 @@ export async function fetchPullRequestDiff(client: GitHubClient, repo: string, n
   return files;
 }
 
+/** A commit id as `?since=` takes it: 7 to 40 hex digits, so it can't name a branch or a range. */
+export const COMMIT_SHA = /^[0-9a-f]{7,40}$/i;
+
+/**
+ * The changes from `base` to `head`, a PR's head, when `base` is in its history: what's new since the head you
+ * reviewed. Undefined when it isn't: GitHub no longer has `base`, or a force-push or rebase left it off the branch, so
+ * "since" has no meaning and the caller shows the whole PR. One request to GitHub's compare API, whose file list stops
+ * at 300 files. If the author merged the base branch in since, its changes are in the comparison too.
+ */
+export async function fetchCompareDiff(
+  client: GitHubClient,
+  repo: string,
+  base: string,
+  head: string,
+): Promise<DiffFile[] | undefined> {
+  if (!COMMIT_SHA.test(base) || !COMMIT_SHA.test(head)) return undefined;
+  const [owner, name] = repo.split("/") as [string, string];
+  let data: { status: string; files?: RestFile[] };
+  try {
+    ({ data } = (await client.request("GET /repos/{owner}/{repo}/compare/{basehead}", {
+      owner,
+      repo: name,
+      basehead: `${base}...${head}`,
+    })) as { data: { status: string; files?: RestFile[] } });
+  } catch (error) {
+    // 404: GitHub doesn't know the commit (garbage-collected after a force-push); 422: no common history.
+    const status = (error as { status?: number }).status;
+    if (status === 404 || status === 422) return undefined;
+    throw error;
+  }
+  // "ahead": head is base plus commits; "identical": nothing since. "diverged" or "behind": base isn't head's ancestor.
+  if (data.status !== "ahead" && data.status !== "identical") return undefined;
+  return (data.files ?? []).map(fromRestFile);
+}
+
 async function git(cwd: string, args: string[]): Promise<string> {
   const { stdout } = await run("git", ["-c", "core.quotepath=off", ...args], { cwd, maxBuffer: 256 * 1024 * 1024 });
   return stdout;

@@ -223,12 +223,18 @@ export function placeOrder(
 const cache = new Map<string, Promise<PrDiff>>();
 const CACHE_LIMIT = 12;
 
-export function cachedDiff(load: (pr?: string) => Promise<PrDiff>, pr?: string, headSha?: string): Promise<PrDiff> {
-  if (!pr || !headSha) return load(pr);
-  const key = `${pr.toLowerCase()}@${headSha}`;
+export function cachedDiff(
+  load: (pr?: string, since?: string) => Promise<PrDiff>,
+  pr?: string,
+  headSha?: string,
+  since?: string,
+): Promise<PrDiff> {
+  if (!pr || !headSha) return since ? load(pr, since) : load(pr);
+  // The changes since your review are kept apart from the whole PR.
+  const key = `${pr.toLowerCase()}@${headSha}${since ? `~${since}` : ""}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const loading = load(pr);
+  const loading = since ? load(pr, since) : load(pr);
   cache.set(key, loading);
   // A failed load isn't kept, so trying again asks again.
   loading.catch(() => cache.delete(key));

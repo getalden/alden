@@ -4,7 +4,7 @@ import type { PrDiff, PrDiffFile } from "@alden/schema";
 import type { GitHubClient } from "../github/client.js";
 import { fetchPullRequestState } from "../review/drafts.js";
 import type { DiffFile } from "./parse.js";
-import { readLocalDiff } from "./sources.js";
+import { fetchCompareDiff, readLocalDiff } from "./sources.js";
 
 const run = promisify(execFile);
 
@@ -46,12 +46,13 @@ export class DiffCache {
 
   constructor(private readonly limit = 8) {}
 
-  private key(repo: string, number: number, headSha: string): string {
-    return `${repo.toLowerCase()}#${number}@${headSha}`;
+  /** The changes since a commit are kept apart from the whole PR at the same head. */
+  private key(repo: string, number: number, headSha: string, since?: string): string {
+    return `${repo.toLowerCase()}#${number}@${headSha}${since ? `~${since.toLowerCase()}` : ""}`;
   }
 
-  get(repo: string, number: number, headSha: string): PrDiff | undefined {
-    const key = this.key(repo, number, headSha);
+  get(repo: string, number: number, headSha: string, since?: string): PrDiff | undefined {
+    const key = this.key(repo, number, headSha, since);
     const hit = this.entries.get(key);
     if (hit) {
       // Most recently used goes last; the first is evicted.
@@ -62,7 +63,7 @@ export class DiffCache {
   }
 
   set(repo: string, number: number, diff: PrDiff): void {
-    const key = this.key(repo, number, diff.headSha);
+    const key = this.key(repo, number, diff.headSha, diff.since?.applied ? diff.since.base : undefined);
     this.entries.delete(key);
     this.entries.set(key, diff);
     while (this.entries.size > this.limit) {
@@ -76,12 +77,17 @@ export class DiffCache {
   }
 }
 
-/** A PR's diff at its current head: one request for the head, then the files API only when it isn't cached. */
+/**
+ * A PR's diff at its current head: one request for the head, then the files API only when it isn't cached. With
+ * `since` (the head you last reviewed), the changes from it to the head instead, through the compare API; when
+ * `since` isn't in the PR's history any more, the whole PR, with `since.applied` false to say so.
+ */
 export async function pullRequestDiffView(
   client: GitHubClient,
   repo: string,
   number: number,
   cache: DiffCache,
+  since?: string,
 ): Promise<PrDiff> {
   const [owner, name] = repo.split("/") as [string, string];
   const { data } = await client.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
@@ -90,6 +96,18 @@ export async function pullRequestDiffView(
     pull_number: number,
   });
   const head = (data as { head: { sha: string } }).head.sha;
+  if (since !== undefined) {
+    const kept = cache.get(repo, number, head, since);
+    if (kept) return kept;
+    const files = await fetchCompareDiff(client, repo, since, head);
+    if (files) {
+      const diff = { ...toDiffView(head, files), since: { base: since, applied: true } };
+      cache.set(repo, number, diff);
+      return diff;
+    }
+    const whole = await pullRequestDiffView(client, repo, number, cache);
+    return { ...whole, since: { base: since, applied: false } };
+  }
   const cached = cache.get(repo, number, head);
   if (cached) return cached;
   // Re-reads the head after the files, so a push in between can't pair new files with an old head.

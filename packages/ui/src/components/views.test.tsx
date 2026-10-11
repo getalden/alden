@@ -106,6 +106,58 @@ describe("QueueView", () => {
     expect(screen.getByText("Needs you · 2")).toBeTruthy();
   });
 
+  it("labels a re-review, says when you reviewed, and counts your comments once something happened to them", () => {
+    const now = Date.parse("2026-09-30T10:00:00Z");
+    const followUp = {
+      pr: "acme/api#1",
+      lastReviewedAt: "2026-09-28T09:00:00Z",
+      lastReviewedHead: "abc1234",
+      rereviewRequestedAt: "2026-09-29T10:00:00Z",
+      yourThreads: 0,
+      resolved: 0,
+      replied: 0,
+    };
+    const { container, rerender } = render(
+      <QueueView
+        queue={{
+          ...queue,
+          needsYou: [
+            row("acme/api", 1, { reasons: ["Re-review: you were asked again", "touches migrations/"], followUp }),
+            row("acme/web", 2, { followUp: { ...followUp, pr: "acme/web#2", rereviewRequestedAt: undefined } }),
+          ],
+        }}
+        error={undefined}
+        loading={false}
+        onRefresh={noop}
+        selected={undefined}
+        now={now}
+      />,
+    );
+    const [again, before] = [...container.querySelectorAll("[data-pr]")] as HTMLElement[];
+    expect(within(again as HTMLElement).getByText("Re-review").className).toBe("chip rereview");
+    expect(within(again as HTMLElement).getByText("reviewed 2 days ago")).toBeTruthy();
+    // The label says it, so the reason isn't a chip as well.
+    expect(within(again as HTMLElement).queryByText("Re-review: you were asked again")).toBeNull();
+    // Reviewed, but not asked again: when, without the label.
+    expect(within(before as HTMLElement).queryByText("Re-review")).toBeNull();
+    expect(within(before as HTMLElement).getByText("Reviewed 2 days ago")).toBeTruthy();
+
+    rerender(
+      <QueueView
+        queue={{
+          ...queue,
+          needsYou: [row("acme/api", 1, { followUp: { ...followUp, yourThreads: 5, resolved: 3, replied: 1 } })],
+        }}
+        error={undefined}
+        loading={false}
+        onRefresh={noop}
+        selected={undefined}
+        now={now}
+      />,
+    );
+    expect(screen.getByText("reviewed 2 days ago · 3 of your 5 comments resolved · 1 reply to you")).toBeTruthy();
+  });
+
   it("takes Useful, Not useful and Dismiss on the selected row, and says what each does", () => {
     const reactions: string[] = [];
     const { rerender } = render(

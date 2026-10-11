@@ -571,6 +571,7 @@ function PrPane(props: {
       exportWith={props.draftsApi ? { api: props.draftsApi, desktop: !!session?.desktop } : undefined}
       guided={props.draftsApi ? { loadDiff: props.draftsApi.diff } : undefined}
       loadDiff={props.draftsApi?.diff}
+      reviewedHead={row?.followUp?.lastReviewedHead}
     />
   );
 }

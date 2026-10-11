@@ -21,6 +21,7 @@ export const RANK_WEIGHTS = [
   "risk",
   "noTests",
   "learned",
+  "rereview",
 ] as const;
 
 export const RankWeightSchema = z.enum(RANK_WEIGHTS);
@@ -41,6 +42,7 @@ export const RankWeightsSchema = z.object({
   risk: weight("sensitive paths (migrations, auth, payments, infra, CI, lockfiles) and major dependency bumps: 2 each"),
   noTests: weight("code changes with no test changes: 1 point"),
   learned: weight("what Alden learned from the PRs you open first or mark useful: up to 3 points either way"),
+  rereview: weight("you reviewed it before and were asked again: 2 points"),
 });
 
 /** Who wrote a PR, as a rule matches it: a login, or a kind of author. */

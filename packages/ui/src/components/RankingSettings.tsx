@@ -23,6 +23,7 @@ export const WEIGHTS: { name: RankWeight; label: string; help: string }[] = [
   },
   { name: "noTests", label: "No test changes", help: "code changes without tests · 1 point" },
   { name: "learned", label: "What Alden learned", help: "from the PRs you open first or mark useful · up to 3 points" },
+  { name: "rereview", label: "Re-reviews", help: "you reviewed it and were asked again · 2 points" },
 ];
 
 const DEFAULT_WEIGHTS = Object.fromEntries(WEIGHTS.map((w) => [w.name, 1])) as Record<RankWeight, number>;

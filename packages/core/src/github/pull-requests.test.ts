@@ -49,6 +49,23 @@ describe("toFacts", () => {
     expect(PULL_REQUEST_FIELDS).toContain("assignees(first: 10) { nodes { login } }");
   });
 
+  it("reads the commit each review was on, and none from a fixture recorded before Alden asked for it", () => {
+    const raw = pr("hugo", 15387);
+    raw.reviews = {
+      nodes: [
+        { author: { login: "bep" }, state: "COMMENTED", submittedAt: "2026-09-01T10:00:00Z" },
+        { author: { login: "bep" }, state: "APPROVED", submittedAt: "2026-09-02T10:00:00Z", commit: { oid: "abc123" } },
+        { author: { login: "bep" }, state: "DISMISSED", submittedAt: "2026-09-03T10:00:00Z", commit: null },
+      ],
+    };
+    const reviews = toFacts(raw, outsider).reviews;
+    expect(reviews.map((r) => r.commit)).toEqual([undefined, "abc123", undefined]);
+    expect(reviews[0]).not.toHaveProperty("commit");
+    expect(PULL_REQUEST_FIELDS).toContain(
+      "reviews(last: 20) { nodes { author { login } state submittedAt commit { oid } } }",
+    );
+  });
+
   it("maps CI rollups", () => {
     // Real CI results change between recordings, so set each rollup explicitly.
     const withRollup = (state: string | null) => {

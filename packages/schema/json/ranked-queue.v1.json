@@ -171,6 +171,10 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "commit": {
+                      "description": "the head commit the review was submitted on; absent in queues fetched before Alden read it, and when GitHub no longer has it",
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -359,7 +363,8 @@
                         "size",
                         "risk",
                         "noTests",
-                        "learned"
+                        "learned",
+                        "rereview"
                       ]
                     },
                     {
@@ -628,6 +633,10 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "commit": {
+                      "description": "the head commit the review was submitted on; absent in queues fetched before Alden read it, and when GitHub no longer has it",
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -816,7 +825,8 @@
                         "size",
                         "risk",
                         "noTests",
-                        "learned"
+                        "learned",
+                        "rereview"
                       ]
                     },
                     {
@@ -1086,6 +1096,10 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "commit": {
+                      "description": "the head commit the review was submitted on; absent in queues fetched before Alden read it, and when GitHub no longer has it",
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -1274,7 +1288,8 @@
                         "size",
                         "risk",
                         "noTests",
-                        "learned"
+                        "learned",
+                        "rereview"
                       ]
                     },
                     {

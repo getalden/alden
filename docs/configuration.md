@@ -56,7 +56,7 @@ See [Models, providers and budgets](models.md).
 | `queue.orgs` | `[]` | Only PRs in these organisations' (or users') repos. Empty means everywhere. Your user config only. |
 | `queue.repos` | `[]` | Only PRs in these repos (`owner/name`); with `queue.orgs`, a PR in either counts. Your user config only. |
 | `queue.ignore` | `[]` | Organisations or repos (`owner/name`) to leave out, even when covered above. Your user config only. |
-| `queue.rank.<weight>` | `1` | How much a ranking signal counts, 0 to 10: `urgentLabel`, `stacked`, `sameAuthor`, `ownsFiles`, `waiting`, `size`, `risk`, `noTests`, `learned`. 0 ignores it, 2 doubles it. Your user config only. |
+| `queue.rank.<weight>` | `1` | How much a ranking signal counts, 0 to 10: `urgentLabel`, `stacked`, `sameAuthor`, `ownsFiles`, `waiting`, `size`, `risk`, `noTests`, `learned`, `rereview`. 0 ignores it, 2 doubles it. Your user config only. |
 | `queue.rank.rules` | `[]` | Rules that put PRs first or last, or boost or lower them (`[[queue.rank.rules]]`). Your user config only. |
 
 `queue.orgs`, `queue.repos` and `queue.ignore` set what your queue covers on this machine, everywhere Alden shows it

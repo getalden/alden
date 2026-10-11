@@ -149,8 +149,8 @@ const api: UiApi = {
     if (id === "gone") throw new ApiError(404, "No draft gone.");
     return { ok: true };
   },
-  diff: async (pr) => {
-    calls.push({ method: "diff", args: pr });
+  diff: async (pr, since) => {
+    calls.push({ method: "diff", args: since === undefined ? pr : { pr, since } });
     if (pr === "a/b#404") throw new ApiError(502, "GitHub couldn't find a/b#404.");
     return {
       headSha: "h1",
@@ -517,6 +517,15 @@ describe("alden ui server", () => {
     // The same session token and host checks as every route.
     expect((await call("/api/diff?pr=a%2Fb%231")).status).toBe(401);
     expect((await call("/api/diff", { headers: { ...authed, Host: "evil.example:80" } })).status).toBe(403);
+  });
+
+  it("narrows a PR's diff to the changes since a commit, and only takes a commit for it", async () => {
+    expect((await call("/api/diff?pr=a%2Fb%231&since=abc1234", { headers: authed })).status).toBe(200);
+    expect(calls).toEqual([{ method: "diff", args: { pr: "a/b#1", since: "abc1234" } }]);
+    for (const query of ["pr=a%2Fb%231&since=main", "pr=a%2Fb%231&since=abc..def", "since=abc1234"]) {
+      expect((await call(`/api/diff?${query}`, { headers: authed })).status).toBe(400);
+    }
+    expect(calls).toHaveLength(1);
   });
 
   it("passes drafts and sending through, always as yours, and checks their bodies", async () => {

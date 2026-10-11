@@ -30,11 +30,22 @@ export const DiffFileSchema = z.object({
   hunks: z.array(DiffHunkSchema),
 });
 
+/** `GET /api/diff?since=<sha>`: what the diff covers when you asked for the changes since a commit you reviewed. */
+export const DiffSinceSchema = z.object({
+  base: z.string().describe("the commit asked for: the head you last reviewed"),
+  applied: z
+    .boolean()
+    .describe(
+      "true: `files` are the changes from `base` to `headSha`; false: `base` isn't in the PR's history any more (a force-push or rebase), so `files` are the whole PR",
+    ),
+});
+
 export const PrDiffSchema = z.object({
   headSha: z
     .string()
     .describe("the PR head commit the diff is of; for local changes, HEAD's commit (the working tree differs from it)"),
   files: z.array(DiffFileSchema),
+  since: DiffSinceSchema.optional().describe("only when the diff was asked for since a commit"),
 });
 
 export type DiffLineKind = z.infer<typeof DiffLineSchema>["kind"];
@@ -42,3 +53,4 @@ export type PrDiffLine = z.infer<typeof DiffLineSchema>;
 export type PrDiffHunk = z.infer<typeof DiffHunkSchema>;
 export type PrDiffFile = z.infer<typeof DiffFileSchema>;
 export type PrDiff = z.infer<typeof PrDiffSchema>;
+export type DiffSince = z.infer<typeof DiffSinceSchema>;

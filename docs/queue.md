@@ -52,6 +52,24 @@ touching app/api first", "ranked lower: you usually skip Dependabot PRs (4 marke
 **You can change the order.** Each signal is a weight you can turn up, down or off, and rules can put PRs first or
 last. See [Your ranking](#your-ranking).
 
+## Re-reviews
+
+A PR is a **re-review** when you've submitted a review on it (approved, requested changes, commented, or one later
+dismissed; not one you've started and not sent) and a review was requested from you, or one of your teams, after
+that. Submitting a review clears GitHub's request for you, so a newer one means someone asked you again, usually
+once they've acted on what you said.
+
+- A re-review gets 2 points (the `rereview` weight) and leads its reasons with "Re-review: you were asked again", so it
+  sits a little above a first look of similar risk. Its wait counts from when you were asked again.
+- The row says so: **Re-review** and when you last reviewed in the web UI ("Re-review · reviewed 2 days ago"),
+  `[Re-review]` before the title and "reviewed 2d ago" in the terminal.
+- In the briefing, the Diff tab opens on the changes since the commit you reviewed. See
+  [Since your review](web-ui.md#since-your-review).
+
+Alden reads this from what the queue already fetches: your reviews on the PR (the last 20, each with the commit it was
+on) and when you were last asked. It costs no extra requests. A PR you reviewed and weren't asked again carries the
+same follow-up on `--json` (`followUp`) without the re-review mark.
+
 ## Your ranking
 
 Set it in Settings → Ranking in the web UI or the desktop app, where a preview shows your current queue's top 5 with
@@ -74,8 +92,10 @@ reason leaves the row), `1` is the default, `2` doubles it. Weights go from 0 to
 | `risk` | Sensitive paths, and a major dependency bump. | 2 each |
 | `noTests` | Code changed without test changes. | 1 |
 | `learned` | What Alden learned from the PRs you open first and mark useful. | up to 3, either way |
+| `rereview` | You reviewed it and were asked again: a [re-review](#re-reviews). | 2 |
 
-With every weight at 1, the order is exactly the one Alden has always used (a test pins it over the recorded PRs).
+With every weight at 1, the order is exactly the one Alden has always used, re-reviews aside (a test pins it over the
+recorded PRs).
 Failing CI isn't a weight: a PR whose CI fails always comes after the others, since its author has to act first.
 Conflicts and drafts are shown on the row but don't score.
 
@@ -217,4 +237,6 @@ requests to stderr. The steps overlap, so their times add up to more than the to
 ## JSON
 
 `--json` prints the ranked queue in the format described by `packages/schema/json/ranked-queue.v1.json`, for scripts
-and other tools. Each row's `breakdown` is its score by weight and rule, as `--explain` shows it.
+and other tools. Each row's `breakdown` is its score by weight and rule, as `--explain` shows it. A PR you reviewed
+before has `followUp`: when you last reviewed (`lastReviewedAt`), the commit you reviewed when GitHub says
+(`lastReviewedHead`), and `rereviewRequestedAt` when it's a re-review.
