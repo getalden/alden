@@ -3217,3 +3217,65 @@ details > summary {
     display: block;
   }
 }
+
+/* The conversation already on a PR: its review threads in the drawer, and at their lines in the Diff tab. */
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+.thread:first-child {
+  border-top: 0;
+}
+.thread.resolved {
+  background: var(--sunk);
+}
+.thread-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.thread-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.thread-author {
+  font: 600 12px / 1.4 var(--font-ui);
+  color: var(--ink2);
+}
+.thread-body {
+  margin: 0;
+  font: 13px / 1.5 var(--font-ui);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.thread-reply-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 8px;
+  border-left: 2px solid var(--line);
+}
+.thread-resolve {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.diff-table tr.diff-thread-row td {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.diff-thread {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.diff-thread.resolved .diff-thread-toggle {
+  color: var(--ink2);
+}

@@ -138,6 +138,9 @@ Checks only, no model · briefed 2026-10-06 09:30 UTC by Alden
 
 ```sh
 alden comment <pr> [file:line[-endLine]] "text" [--suggest "code" | --suggest-file <path> | --suggest -]
+alden comment <pr> --threads
+alden comment <pr> --reply <thread> "text" [--resolve]
+alden comment <pr> --resolve <thread>
 ```
 
 Writes a comment on a PR, kept in Alden until you send it with `alden send`. With `file:line`, it's on that line of
@@ -153,8 +156,11 @@ text, lists the PR's comments, ranges and suggestions (old lines and new) shown,
 | `--left` | The line numbers are in the old file: a comment on removed lines. Not with a suggestion. |
 | `--suggest <code>` | Suggests replacement code for the line(s), exactly as they should read. `-` reads it from stdin; `""` deletes the lines. See [Suggesting changes](comments.md#suggesting-changes). |
 | `--suggest-file <path>` | Suggests the replacement code in this file. From a file or stdin, one trailing newline is dropped. |
-| `--delete <id>` | Deletes a comment, by the id the list shows. |
-| `--json` | Print the comments (or the new one) as JSON. Schema: `packages/schema/json/review-draft.v1.json`. |
+| `--delete <id>` | Deletes a comment (or a reply), by the id the list shows. |
+| `--threads` | Lists the PR's review threads, yours first and open ones first, each with a short id and every comment. |
+| `--reply <thread>` | Replies in a review thread already on the PR, by its short id or `file:line`, with your review. One reply per thread: again changes its text. See [Replying in a thread](comments.md#replying-in-a-thread). |
+| `--resolve [thread]` | With `--reply`, resolves the thread once your review is sent. Alone, names the thread to resolve, saying nothing. |
+| `--json` | Print the comments (or the new one, or with `--threads` the threads) as JSON. Schema: `packages/schema/json/review-draft.v1.json`. |
 
 ## alden send
 
@@ -163,7 +169,10 @@ alden send <pr> --comment | --approve | --request-changes [-m body]
 ```
 
 Sends the PR's comments to GitHub as one review. First it shows exactly what will post (the body, then each comment
-with its file and line or lines, each suggestion as the lines it replaces and the lines it suggests, and before an approval the places Alden flagged that you didn't comment on), then asks. Nothing
+with its file and line or lines, each suggestion as the lines it replaces and the lines it suggests, each reply in its
+thread and whether it resolves it, and before an approval the places Alden flagged that you didn't comment on), then
+asks. Replies post into the review before it's submitted; threads are resolved after (see
+[How a review with replies is sent](comments.md#how-a-review-with-replies-is-sent)). Nothing
 else in Alden posts to GitHub. See [Comments and sending a review](comments.md#sending).
 
 | Flag | What it does |

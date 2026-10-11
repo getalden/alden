@@ -9,6 +9,7 @@ import {
   checkLinkTarget,
   checkModelKey,
   checkProgress,
+  checkThread,
   cloneAt,
   createGitHubClient,
   DiffCache,
@@ -17,6 +18,7 @@ import {
   FeedbackLog,
   fetchPullRequestState,
   fetchReviewQueue,
+  fetchReviewThreads,
   fetchViewer,
   findClone,
   forget,
@@ -71,7 +73,15 @@ import {
   type WithModel,
   whyNoToken,
 } from "@alden/core";
-import type { Briefing, BriefingFreshness, BriefingTarget, DraftLink, RankedQueue, ReviewDraft } from "@alden/schema";
+import type {
+  Briefing,
+  BriefingFreshness,
+  BriefingTarget,
+  DraftLink,
+  RankedQueue,
+  ReviewDraft,
+  ReviewThreads,
+} from "@alden/schema";
 import { LAST_QUEUE_KEY, type LastQueue, openInBrowser } from "../commands/open.js";
 import { spendReport } from "../commands/spend.js";
 import { loadRepoStats } from "../commands/stats.js";
@@ -86,6 +96,9 @@ import { ApiError, type DraftInput, type ReviewRequest, type UiApi } from "./ser
 import { cliStatus, createSignIn, gitHubCliSignedIn, installCli } from "./setup.js";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+/** How long a PR's review threads are kept: the drawer, the Diff tab and a reply's check then share one read. */
+export const THREADS_TTL_MS = 30_000;
 
 /** The GitHub repos the directory `alden ui` started in points at: where PR reviews can find callers. */
 export function repoOf(cwd: string): Promise<{ root: string; repos: string[] } | undefined> {
@@ -224,6 +237,44 @@ export function createUiApi(options: {
     }
   };
   const drafts = new ReviewDrafts();
+  /** PRs' review threads as last read, by PR: each answer carries the head it's of. Dropped once a review is sent. */
+  const threadsRead = new Map<string, { at: number; threads: ReviewThreads }>();
+  /** Your login, for marking your comments in threads: asked once per sign-in. */
+  let viewer: { token: string; login: string } | undefined;
+  const threadsOf = async (ref: { repo: string; number: number; name: string }, refresh = false) => {
+    const key = ref.name.toLowerCase();
+    const hit = threadsRead.get(key);
+    if (!refresh && hit && Date.now() - hit.at < THREADS_TTL_MS) return hit.threads;
+    const resolved = await signedIn();
+    const client = createGitHubClient(resolved.token);
+    let found: ReviewThreads | undefined;
+    try {
+      if (viewer?.token !== resolved.token) {
+        const { data } = await client.request("GET /user");
+        viewer = { token: resolved.token, login: data.login };
+      }
+      found = await fetchReviewThreads(client, ref.repo, ref.number, viewer.login);
+    } catch (error) {
+      throw new ApiError(502, describeGitHubError(error, resolved.source));
+    }
+    if (!found) throw new ApiError(404, `${ref.name} isn't on GitHub, or your sign-in can't see it.`);
+    threadsRead.set(key, { at: Date.now(), threads: found });
+    return found;
+  };
+  /** Checks a reply's thread is on the PR and GitHub lets you reply there (with text) and resolve it (when ticked). */
+  const checkReplyThread = async (
+    ref: { repo: string; number: number; name: string },
+    threadId: string,
+    want: { reply: boolean; resolve: boolean },
+  ) => {
+    const threads = await threadsOf(ref);
+    try {
+      checkThread(threads, threadId, want);
+    } catch (error) {
+      throw new ApiError(422, (error as Error).message);
+    }
+    return threads;
+  };
   /**
    * Where a comment on `path` goes: inline when GitHub takes it on the diff, otherwise a note in the review body
    * linking to the code at the PR's head, once GitHub confirms the file (and line) are there to link to.
@@ -699,6 +750,7 @@ export function createUiApi(options: {
 
     async addDraft(input: DraftInput, source: ReviewDraft["source"] = "you") {
       const ref = await prOf(input.pr);
+      if (input.inReplyTo !== undefined) return addReply(ref, input, input.inReplyTo, source);
       const { headSha, files, client } = await followPr(ref);
       let spot: { place: Placement } | { linkTo: DraftLink } | undefined;
       if (input.path !== undefined || input.line !== undefined) {
@@ -726,6 +778,8 @@ export function createUiApi(options: {
     async editDraft(id, change) {
       const draft = drafts.get(id);
       if (!draft) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
+      if (draft.inReplyTo !== undefined) return editReply(draft, change);
+      if (change.resolve !== undefined) throw new ApiError(400, "Only a reply in a thread resolves it.");
       let place: (Placement & { headSha: string }) | undefined;
       let linkTo: (DraftLink & { headSha: string }) | undefined;
       if (change.path !== undefined || change.line !== undefined) {
@@ -787,10 +841,15 @@ export function createUiApi(options: {
         if (Object.values(counts.signals).some((n) => n > 0)) {
           void track("review_signals", { source: "review", ...counts.signals });
         }
+        // The threads changed: your replies, and what you resolved.
+        threadsRead.delete(ref.name.toLowerCase());
         return {
           url: sent.url,
           posted: sent.posted,
           review: sent.review,
+          ...(sent.replies !== undefined ? { replies: sent.replies } : {}),
+          ...(sent.resolved !== undefined ? { resolved: sent.resolved } : {}),
+          ...(sent.notResolved ? { notResolved: sent.notResolved } : {}),
           ...(sent.learning ? { learning: sent.learning } : {}),
         };
       } catch (error) {
@@ -800,6 +859,10 @@ export function createUiApi(options: {
         }
         throw new ApiError(502, describeGitHubError(error, resolved.source));
       }
+    },
+
+    async threads(pr, refresh = false) {
+      return threadsOf(await prOf(pr), refresh);
     },
 
     async diff(pr) {
@@ -839,6 +902,76 @@ export function createUiApi(options: {
       return { path: userConfigPath(), config: await loadConfig(options.cwd) };
     },
   };
+
+  /**
+   * A reply in a review thread, sent with the review: on a thread that's on the PR, where GitHub lets you reply (and
+   * resolve, when ticked). No place of its own, so no diff to read.
+   */
+  async function addReply(
+    ref: { repo: string; number: number; name: string },
+    input: DraftInput,
+    threadId: string,
+    source: ReviewDraft["source"],
+  ): Promise<ReviewDraft> {
+    if (
+      input.path !== undefined ||
+      input.line !== undefined ||
+      input.startLine !== undefined ||
+      input.side !== undefined ||
+      input.suggestion !== undefined
+    ) {
+      throw new ApiError(400, "A reply posts in its thread: leave out path, line, side and suggestion.");
+    }
+    const resolve = input.resolve === true;
+    const threads = await checkReplyThread(ref, threadId, { reply: input.body.trim() !== "", resolve });
+    try {
+      const draft = drafts.addReply({
+        pr: ref.name,
+        headSha: threads.headSha,
+        threadId,
+        body: input.body,
+        resolve,
+        source,
+      });
+      void track("draft_changed", { action: "add", source, inline: false });
+      return publicDraft(draft);
+    } catch (error) {
+      throw new ApiError(400, (error as Error).message);
+    }
+  }
+
+  /** A reply's text, or whether it resolves its thread; checked against the thread when it asks for more. */
+  async function editReply(
+    draft: ReturnType<ReviewDrafts["get"]> & {},
+    change: Parameters<UiApi["editDraft"]>[1],
+  ): Promise<ReviewDraft> {
+    if (
+      change.path !== undefined ||
+      change.line !== undefined ||
+      change.startLine !== undefined ||
+      change.suggestion !== undefined
+    ) {
+      throw new ApiError(400, "A reply posts in its thread: it can't go on a line or carry a suggestion.");
+    }
+    const body = change.body ?? draft.body;
+    const resolve = change.resolve ?? draft.resolve === true;
+    const more = (body.trim() !== "" && draft.body.trim() === "") || (resolve && draft.resolve !== true);
+    if (more) {
+      await checkReplyThread(await prOf(draft.pr), draft.inReplyTo as string, { reply: body.trim() !== "", resolve });
+    }
+    let edited: ReturnType<ReviewDrafts["editReply"]>;
+    try {
+      edited = drafts.editReply(draft.id, {
+        ...(change.body !== undefined ? { body: change.body } : {}),
+        ...(change.resolve !== undefined ? { resolve: change.resolve } : {}),
+      });
+    } catch (error) {
+      throw new ApiError(400, (error as Error).message);
+    }
+    if (!edited) throw new ApiError(404, `No draft ${draft.id}. It may have been sent or deleted.`);
+    void track("draft_changed", { action: "edit", source: edited.source, inline: false });
+    return publicDraft(edited);
+  }
 
   /** One review, for the UI or (background) for the desktop app ahead of time, which isn't you opening the PR. */
   async function runReview(

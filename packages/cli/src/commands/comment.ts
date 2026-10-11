@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
-import { composeReviewBody, JsonCache } from "@alden/core";
-import type { ReviewDraft, ReviewEvent, UnaddressedPlace } from "@alden/schema";
+import { composeReviewBody, findThread, JsonCache, shortThreadId, threadWhere } from "@alden/core";
+import type { ReviewDraft, ReviewEvent, ReviewThread, SendReviewResult, UnaddressedPlace } from "@alden/schema";
 import type { Command } from "commander";
 import { parsePrRef, queuePick } from "../pr-ref.js";
 import { paint, shouldColor, stripControlDeep } from "../render/style.js";
@@ -24,12 +24,22 @@ export function parseWhere(text: string): { path: string; line: number; startLin
 const lines = (d: { line?: number | undefined; startLine?: number | undefined }) =>
   d.line === undefined ? "" : `:${d.startLine !== undefined ? `${d.startLine}-` : ""}${d.line}`;
 
-const placeOf = (d: ReviewDraft) =>
-  d.path === undefined
-    ? d.linkTo
-      ? `general note, linking to ${d.linkTo.path}${lines(d.linkTo)}`
-      : "general note"
-    : `${d.path}${lines(d)}${d.side === "LEFT" ? " (old side)" : ""}`;
+/** "reply in thread on src/pay.ts:40, and resolve it": where a reply posts, by its thread when it's known. */
+export function replyPlace(d: ReviewDraft, threads: ReviewThread[] = []): string {
+  const thread = threads.find((t) => t.id === d.inReplyTo);
+  const where = thread ? `thread on ${threadWhere(thread)}` : `thread ${shortThreadId(d.inReplyTo ?? "")}`;
+  if (d.body.trim() === "") return `resolve the ${where}`;
+  return `reply in ${where}${d.resolve ? ", and resolve it" : ""}`;
+}
+
+const placeOf = (d: ReviewDraft, threads: ReviewThread[] = []) =>
+  d.inReplyTo !== undefined
+    ? replyPlace(d, threads)
+    : d.path === undefined
+      ? d.linkTo
+        ? `general note, linking to ${d.linkTo.path}${lines(d.linkTo)}`
+        : "general note"
+      : `${d.path}${lines(d)}${d.side === "LEFT" ? " (old side)" : ""}`;
 const indent = (text: string, by: string) =>
   text
     .split("\n")
@@ -61,9 +71,18 @@ const renderComment = (d: ReviewDraft, color: boolean): string[] => [
   ...renderSuggestion(d, color),
 ];
 
-/** A PR's drafts, as `alden comment <pr>` lists them. Text from drafts is shown, never run: escape codes are removed. */
-export function renderDrafts(pr: string, untrusted: ReviewDraft[], color: boolean): string {
+/**
+ * A PR's drafts, as `alden comment <pr>` lists them; a reply says which thread it's in when `threads` has it. Text from
+ * drafts is shown, never run: escape codes are removed.
+ */
+export function renderDrafts(
+  pr: string,
+  untrusted: ReviewDraft[],
+  color: boolean,
+  untrustedThreads: ReviewThread[] = [],
+): string {
   const drafts = stripControlDeep(untrusted);
+  const threads = stripControlDeep(untrustedThreads);
   if (drafts.length === 0) {
     return `No comments waiting for ${pr}.\nWrite one: alden comment ${pr} src/file.ts:12 "Your comment"\n`;
   }
@@ -74,7 +93,7 @@ export function renderDrafts(pr: string, untrusted: ReviewDraft[], color: boolea
   ];
   for (const d of drafts) {
     const who = d.source === "claude" ? " · drafted by Claude Code" : "";
-    out.push(`  ${paint(d.id, "dim", color)}  ${placeOf(d)}${paint(who, "dim", color)}`);
+    out.push(`  ${paint(d.id, "dim", color)}  ${placeOf(d, threads)}${paint(who, "dim", color)}`);
     if (d.state === "outdated") {
       out.push(
         paint(
@@ -119,12 +138,21 @@ const VERDICT_NAMES: Record<ReviewEvent, string> = {
 
 /** Everything `alden send` will post, exactly, before it asks. */
 export function renderSendSummary(
-  input: { pr: string; event: ReviewEvent; body?: string; drafts: ReviewDraft[]; unaddressed: UnaddressedPlace[] },
+  input: {
+    pr: string;
+    event: ReviewEvent;
+    body?: string;
+    drafts: ReviewDraft[];
+    unaddressed: UnaddressedPlace[];
+    /** The PR's threads, to say where each reply goes. */
+    threads?: ReviewThread[];
+  },
   color: boolean,
 ): string {
-  const { drafts, unaddressed, body } = stripControlDeep(input);
+  const { drafts, unaddressed, body, threads } = stripControlDeep(input);
   const text = composeReviewBody(body, drafts);
   const inline = drafts.filter((d) => d.path !== undefined);
+  const replies = drafts.filter((d) => d.inReplyTo !== undefined);
   const fromClaude = drafts.filter((d) => d.source === "claude").length;
   const out = [paint(`Review for ${input.pr}: ${VERDICT_NAMES[input.event]}`, "bold", color), ""];
   out.push(paint("Body", "bold", color), text ? indent(text, "  ") : paint("  (none)", "dim", color), "");
@@ -134,6 +162,7 @@ export function renderSendSummary(
     out.push(`  ${placeOf(d)}${d.source === "claude" ? paint(" · drafted by Claude Code", "dim", color) : ""}`);
     out.push(...renderComment(d, color));
   }
+  out.push(...renderReplies(replies, threads ?? [], color));
   const suggestions = inline.filter((d) => d.suggestion !== undefined).length;
   if (suggestions > 0) {
     out.push(
@@ -165,6 +194,83 @@ export function renderSendSummary(
   return `${out.join("\n")}\n`;
 }
 
+/** The summary's replies: each in its thread, and the threads resolved once the review is submitted. */
+function renderReplies(replies: ReviewDraft[], threads: ReviewThread[], color: boolean): string[] {
+  if (replies.length === 0) return [];
+  const out = ["", paint(`Replies in threads (${replies.length})`, "bold", color)];
+  for (const d of replies) {
+    const head = replyPlace(d, threads);
+    out.push(
+      `  ${head[0]?.toUpperCase()}${head.slice(1)}${d.source === "claude" ? paint(" · drafted by Claude Code", "dim", color) : ""}`,
+    );
+    if (d.body.trim()) out.push(indent(d.body, "    "));
+  }
+  if (replies.some((d) => d.resolve)) {
+    out.push(paint("Threads are resolved after the review is submitted, never before.", "dim", color));
+  }
+  return out;
+}
+
+/** "Sent: <url> (2 comments, 1 reply; 1 thread resolved)", then any thread GitHub wouldn't resolve. */
+export function sentLines(sent: SendReviewResult, color: boolean): string[] {
+  const replies = sent.replies ?? 0;
+  const comments = sent.posted - replies;
+  const parts = [
+    ...(comments > 0 || replies === 0 ? [`${comments} comment${comments === 1 ? "" : "s"}`] : []),
+    ...(replies > 0 ? [`${replies} repl${replies === 1 ? "y" : "ies"}`] : []),
+  ];
+  const threads = sent.resolved ? `${sent.resolved} thread${sent.resolved === 1 ? "" : "s"} resolved` : "";
+  // Only resolves: no review was posted, so there's nothing to count but them.
+  const what = sent.posted === 0 && threads ? threads : `${parts.join(", ")}${threads ? `; ${threads}` : ""}`;
+  return [
+    `Sent: ${sent.url} (${what}).`,
+    ...(sent.notResolved ?? []).map((line) =>
+      paint(`Not resolved (the review did post): ${stripControlDeep(line)}`, "yellow", color),
+    ),
+  ];
+}
+
+/** Threads yours first (started or replied in), then open before resolved, then by file and line. */
+export function sortThreads(threads: ReviewThread[]): ReviewThread[] {
+  const yours = (t: ReviewThread) => t.startedByYou || t.comments.some((c) => c.isYou);
+  return [...threads].sort(
+    (a, b) =>
+      Number(yours(b)) - Number(yours(a)) ||
+      Number(a.isResolved) - Number(b.isResolved) ||
+      a.path.localeCompare(b.path) ||
+      (a.line ?? a.originalLine ?? 0) - (b.line ?? b.originalLine ?? 0),
+  );
+}
+
+/** A PR's review threads, as `alden comment <pr> --threads` lists them: a short id to reply by, and every comment. */
+export function renderThreads(pr: string, untrusted: ReviewThread[], color: boolean): string {
+  const threads = sortThreads(stripControlDeep(untrusted));
+  if (threads.length === 0) return `${pr} has no review threads yet.\n`;
+  const open = threads.filter((t) => !t.isResolved).length;
+  const out = [
+    paint(`${pr}: ${threads.length} review thread${threads.length === 1 ? "" : "s"}, ${open} open`, "bold", color),
+    "",
+  ];
+  for (const t of threads) {
+    const state = [
+      t.isResolved ? "resolved" : "open",
+      ...(t.isOutdated ? ["outdated"] : []),
+      ...(t.startedByYou ? ["started by you"] : []),
+    ].join(" · ");
+    out.push(
+      `  ${paint(shortThreadId(t.id), "dim", color)}  ${threadWhere(t)}  ${paint(state, t.isResolved ? "dim" : "yellow", color)}`,
+    );
+    for (const c of t.comments) {
+      out.push(`    ${paint(c.isYou ? "you" : (c.author ?? "(deleted account)"), "bold", color)}`);
+      out.push(indent(c.body, "      "));
+    }
+    out.push("");
+  }
+  out.push(`Reply: alden comment ${pr} --reply <id or file:line> "Your reply" [--resolve]`);
+  out.push(`Resolve: alden comment ${pr} --resolve <id or file:line>. Both go with your review when you send it.`);
+  return `${out.join("\n")}\n`;
+}
+
 /** The PR as typed, named as drafts name it, saying which PR a queue number picked. */
 async function prFrom(program: Command, input: string, command: string): Promise<string> {
   const last = await new JsonCache().get<LastQueue>(LAST_QUEUE_KEY, 24 * 3_600_000);
@@ -193,6 +299,10 @@ interface CommentOptions {
   suggestFile?: string;
   delete?: string;
   json?: boolean;
+  threads?: boolean;
+  reply?: string;
+  /** With --reply, a flag; alone, the thread to resolve. */
+  resolve?: string | boolean;
 }
 
 /** One trailing newline off code read from a file or stdin: editors add one, and it isn't a line of the suggestion. */
@@ -249,6 +359,12 @@ export function registerCommentCommands(program: Command, version: string): void
     .option("--suggest <code>", "suggest replacement code for the line(s), - to read it from stdin; empty deletes them")
     .option("--suggest-file <path>", "suggest the replacement code in this file")
     .option("--delete <id>", "delete a comment instead")
+    .option("--threads", "list the PR's review threads, with ids to reply by")
+    .option("--reply <thread>", "reply in a review thread (its id from --threads, or file:line) instead")
+    .option(
+      "--resolve [thread]",
+      "resolve the thread once the review is sent: with --reply, or alone naming the thread",
+    )
     .option("--json", "print the comments as JSON")
     .action(async (prArg: string, words: string[], options: CommentOptions) => {
       const pr = await prFrom(program, prArg, "alden comment");
@@ -258,10 +374,30 @@ export function registerCommentCommands(program: Command, version: string): void
         console.log(`Deleted ${options.delete}.`);
         return;
       }
+      if (options.threads) {
+        const { threads } = await api().threads(pr).catch(fail);
+        if (options.json) console.log(JSON.stringify(sortThreads(threads), null, 2));
+        else process.stdout.write(renderThreads(pr, threads, color));
+        return;
+      }
+      if (options.reply !== undefined || typeof options.resolve === "string") {
+        await replyCommand(pr, words, options, color);
+        return;
+      }
+      if (options.resolve === true) {
+        program.error(`Say which thread to resolve: alden comment ${pr} --resolve <id or file:line> (see --threads).`);
+      }
       if (words.length === 0) {
-        const { drafts, unaddressed } = await api().drafts(pr).catch(fail);
+        const engine = api();
+        const { drafts, unaddressed } = await engine.drafts(pr).catch(fail);
         if (options.json) console.log(JSON.stringify({ drafts, unaddressed }, null, 2));
-        else process.stdout.write(renderDrafts(pr, drafts, color));
+        else {
+          // Name each reply's thread by where it is; without GitHub, by its id.
+          const threads = drafts.some((d) => d.inReplyTo !== undefined)
+            ? ((await engine.threads(pr).catch(() => undefined))?.threads ?? [])
+            : [];
+          process.stdout.write(renderDrafts(pr, drafts, color, threads));
+        }
         return;
       }
       const suggestion = await suggestionFrom(options).catch(fail);
@@ -289,6 +425,54 @@ export function registerCommentCommands(program: Command, version: string): void
       for (const line of draftedLines(draft, pr)) console.log(line);
       console.log(paint(`  alden send ${pr} --comment | --approve | --request-changes`, "dim", color));
     });
+
+  /**
+   * `--reply <thread> "text" [--resolve]`, or `--resolve <thread>` alone: a reply draft in that thread, or a change to
+   * the one already there (one reply per thread). `--resolve` before the text would take the text as its thread, so a
+   * word after a bare `--reply ... --resolve` is the reply.
+   */
+  async function replyCommand(pr: string, words: string[], options: CommentOptions, color: boolean): Promise<void> {
+    if (options.suggest !== undefined || options.suggestFile !== undefined || options.left) {
+      program.error("A reply posts in its thread: it takes no --suggest or --left.");
+    }
+    let target = options.reply;
+    let text = words;
+    let resolve = options.resolve !== undefined && options.resolve !== false;
+    if (typeof options.resolve === "string") {
+      if (target === undefined) target = options.resolve;
+      else text = [options.resolve, ...words];
+    }
+    const body = text.join(" ");
+    if (!body.trim() && !resolve) {
+      program.error(
+        `Add the reply's text: alden comment ${pr} --reply ${target} "Your reply" (and --resolve to resolve it).`,
+      );
+    }
+    const engine = api();
+    const { threads } = await engine.threads(pr).catch(fail);
+    let thread: ReviewThread;
+    try {
+      thread = findThread(threads, target as string);
+    } catch (error) {
+      program.error((error as Error).message);
+    }
+    const existing = (await engine.drafts(pr).catch(fail)).drafts.find((d) => d.inReplyTo === thread.id);
+    // A second --reply replaces the text; --resolve alone ticks Resolve on the reply that's there.
+    if (existing && !body.trim()) resolve = true;
+    const draft = existing
+      ? await engine
+          .editDraft(existing.id, { ...(body.trim() ? { body } : {}), ...(resolve ? { resolve: true } : {}) })
+          .catch(fail)
+      : await engine.addDraft({ pr, body, inReplyTo: thread.id, ...(resolve ? { resolve: true } : {}) }).catch(fail);
+    if (options.json) {
+      console.log(JSON.stringify(draft, null, 2));
+      return;
+    }
+    console.log(
+      `${existing ? "Changed" : "Drafted"} ${draft.id} (${replyPlace(draft, [thread])}) for ${pr}. Nothing is posted until you send your review:`,
+    );
+    console.log(paint(`  alden send ${pr} --comment | --approve | --request-changes`, "dim", color));
+  }
 
   program
     .command("send")
@@ -318,6 +502,9 @@ export function registerCommentCommands(program: Command, version: string): void
         const color = shouldColor(process.stdout);
         const engine = api();
         const { drafts, unaddressed } = await engine.drafts(pr).catch(fail);
+        const threads = drafts.some((d) => d.inReplyTo !== undefined)
+          ? ((await engine.threads(pr).catch(() => undefined))?.threads ?? [])
+          : [];
         const outdated = drafts.filter((d) => d.state === "outdated");
         if (outdated.length > 0) {
           process.stdout.write(renderDrafts(pr, drafts, color));
@@ -327,7 +514,14 @@ export function registerCommentCommands(program: Command, version: string): void
         }
         process.stdout.write(
           renderSendSummary(
-            { pr, event, ...(options.message !== undefined ? { body: options.message } : {}), drafts, unaddressed },
+            {
+              pr,
+              event,
+              ...(options.message !== undefined ? { body: options.message } : {}),
+              drafts,
+              unaddressed,
+              threads,
+            },
             color,
           ),
         );
@@ -343,7 +537,7 @@ export function registerCommentCommands(program: Command, version: string): void
         const sent = await engine
           .sendReview({ pr, event, ...(options.message !== undefined ? { body: options.message } : {}) })
           .catch(fail);
-        console.log(`Sent: ${sent.url} (${sent.posted} comment${sent.posted === 1 ? "" : "s"}).`);
+        for (const line of sentLines(sent, color)) console.log(line);
         // What the review taught Alden, so learning from it is never invisible.
         for (const line of sent.learning ?? []) console.log(paint(line, "dim", color));
       },

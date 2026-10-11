@@ -89,10 +89,17 @@ export const ReviewDraftSchema = z
         "outdated: the PR moved on and the line couldn't be found again, so it can't be sent until it's placed",
       ),
   })
-  .refine((d) => d.body.trim() !== "" || d.suggestion !== undefined, {
-    message: "a comment needs some text, unless it's a suggestion",
+  .refine((d) => d.body.trim() !== "" || d.suggestion !== undefined || (d.inReplyTo !== undefined && d.resolve), {
+    message: "a comment needs some text, unless it's a suggestion (or a reply that only resolves its thread)",
     path: ["body"],
   })
+  .refine(
+    (d) => d.inReplyTo === undefined || (d.path === undefined && d.linkTo === undefined && d.suggestion === undefined),
+    {
+      message: "a reply posts in its thread: it has no path, link or suggestion of its own",
+      path: ["inReplyTo"],
+    },
+  )
   .refine((d) => d.linkTo === undefined || d.path === undefined, {
     message: "a linked note goes in the review body: it has linkTo, not a path of its own",
     path: ["linkTo"],
@@ -103,8 +110,16 @@ export const ReviewEventSchema = z.enum(["COMMENT", "APPROVE", "REQUEST_CHANGES"
 
 export const SendReviewResultSchema = z.object({
   url: z.string().describe("the review on GitHub"),
-  posted: z.number().int().min(0).describe("comments posted: inline ones and general notes"),
+  posted: z.number().int().min(0).describe("comments posted: inline ones, general notes and replies"),
   review: ReviewEventSchema,
+  replies: z.number().int().min(0).optional().describe("of `posted`, replies in existing review threads"),
+  resolved: z.number().int().min(0).optional().describe("threads resolved after the review was submitted"),
+  notResolved: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "threads you asked to resolve that GitHub wouldn't resolve, one line each saying which and why; the review itself posted",
+    ),
   learning: z
     .array(z.string())
     .optional()

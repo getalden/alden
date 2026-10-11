@@ -12,6 +12,8 @@ import {
   type ReviewEvent,
   type ReviewSignalEvent,
   type ReviewSignalKind,
+  type ReviewThread,
+  type ReviewThreads,
   type SendReviewResult,
   type UnaddressedPlace,
 } from "@alden/schema";
@@ -20,6 +22,7 @@ import { fetchPullRequestDiff } from "../diff/sources.js";
 import { signalCounts } from "../feedback/log.js";
 import type { GitHubClient } from "../github/client.js";
 import { rememberSentComments, type SentCommentInput } from "../github/outcomes.js";
+import { fetchReviewThreads } from "../github/threads.js";
 import { loadLearning, reviewProgress } from "../learn/learn.js";
 import type { AldenStore } from "../store/db.js";
 import { type StoreSource, storeFrom } from "../store/source.js";
@@ -290,6 +293,8 @@ interface DraftRow {
   source: string;
   state: string;
   link_to: string | null;
+  in_reply_to: string | null;
+  resolve: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -322,6 +327,7 @@ function fromRow(row: DraftRow): StoredDraft {
     body: row.body,
     ...(row.suggestion !== null ? { suggestion: row.suggestion } : {}),
     ...(!inline && link ? { linkTo: link } : {}),
+    ...(row.in_reply_to ? { inReplyTo: row.in_reply_to, resolve: row.resolve === 1 } : {}),
     source: row.source,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -494,6 +500,12 @@ export class ReviewDrafts {
   ): StoredDraft | undefined {
     const draft = this.get(id);
     if (!draft) return undefined;
+    if (draft.inReplyTo !== undefined) {
+      if (change.place || change.linkTo || change.suggestion !== undefined) {
+        throw new Error("A reply posts in its thread: it can't go on a line or carry a suggestion.");
+      }
+      return this.editReply(id, change.body !== undefined ? { body: change.body } : {}, now);
+    }
     if (change.place && change.linkTo) throw new Error("A draft goes on a line of the diff or links to one, not both.");
     const body = change.body ?? draft.body;
     const suggestion = change.suggestion === null ? undefined : (change.suggestion ?? draft.suggestion);
@@ -571,6 +583,63 @@ export class ReviewDrafts {
   }
 
   /**
+   * Adds a reply to a review thread already on the PR (`threadId`, its GraphQL node id), sent with the review: no
+   * place of its own, and no suggestion. With `resolve`, the thread is resolved once the review is submitted; a reply
+   * that only resolves has no text. One reply per thread: a second is an edit of the first. Check the thread with
+   * `checkThread` first.
+   */
+  addReply(
+    input: {
+      pr: string;
+      headSha: string;
+      threadId: string;
+      body: string;
+      resolve?: boolean;
+      source: ReviewDraft["source"];
+    },
+    now: Date = new Date(),
+  ): StoredDraft {
+    const existing = this.list(input.pr).find((d) => d.inReplyTo === input.threadId);
+    if (existing) {
+      throw new Error(`You're already replying in that thread (${existing.id}): change that reply instead.`);
+    }
+    const at = now.toISOString();
+    const id = randomUUID().replaceAll("-", "").slice(0, 8);
+    this.store.run(
+      `INSERT INTO drafts (id, pr, pr_key, head_sha, body, source, state, in_reply_to, resolve, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+      id,
+      input.pr,
+      keyOf(input.pr),
+      input.headSha,
+      checkReply(input.body, input.resolve === true),
+      input.source,
+      input.threadId,
+      input.resolve ? 1 : 0,
+      at,
+      at,
+    );
+    return this.get(id) as StoredDraft;
+  }
+
+  /** Changes a reply's text, or whether it resolves its thread. Undefined when there's no such draft. */
+  editReply(id: string, change: { body?: string; resolve?: boolean }, now: Date = new Date()): StoredDraft | undefined {
+    const draft = this.get(id);
+    if (!draft) return undefined;
+    if (draft.inReplyTo === undefined) throw new Error(`${id} is a comment, not a reply in a thread.`);
+    const body = change.body ?? draft.body;
+    const resolve = change.resolve ?? draft.resolve === true;
+    this.store.run(
+      "UPDATE drafts SET body = ?, resolve = ?, updated_at = ? WHERE id = ?",
+      checkReply(body, resolve),
+      resolve ? 1 : 0,
+      now.toISOString(),
+      id,
+    );
+    return this.get(id);
+  }
+
+  /**
    * Follows a PR to its current head: a general note simply moves along, a draft on a line moves with its line if
    * it can be found again (see `findAgain`), and is marked outdated (keeping its old place and head) if not. A linked
    * note stays as it is: its link is to the code you saw when you wrote it, at the head it was written against.
@@ -581,7 +650,8 @@ export class ReviewDrafts {
     const outdated: string[] = [];
     this.store.transaction(() => {
       for (const draft of this.list(pr)) {
-        if (draft.headSha === headSha || draft.linkTo) continue;
+        // A reply is tied to its thread, not a line: it stays as written whatever the PR does.
+        if (draft.headSha === headSha || draft.linkTo || draft.inReplyTo) continue;
         const placement = placementOf(draft);
         if (draft.path === undefined) {
           this.store.run("UPDATE drafts SET head_sha = ? WHERE id = ?", headSha, draft.id);
@@ -642,10 +712,10 @@ export function unaddressedPlaces(places: BriefedPlace[], drafts: ReviewDraft[])
 
 /**
  * The review's body as it will post: what you wrote for it, then each general note, oldest first; a linked note with
- * its link to the code it's about first (see `noteText`).
+ * its link to the code it's about first (see `noteText`). Replies aren't notes: they post in their threads.
  */
 export function composeReviewBody(body: string | undefined, drafts: ReviewDraft[]): string {
-  return [body ?? "", ...drafts.filter((d) => d.path === undefined).map(noteText)]
+  return [body ?? "", ...drafts.filter((d) => d.path === undefined && d.inReplyTo === undefined).map(noteText)]
     .map((part) => part.trim())
     .filter(Boolean)
     .join("\n\n");
@@ -697,6 +767,258 @@ export function reviewRequest(
   };
 }
 
+// --- Replies in review threads ----------------------------------------------------------------------------------
+
+/** A draft that replies in (or only resolves) a thread already on the PR. */
+export const isReply = (d: Pick<ReviewDraft, "inReplyTo">) => d.inReplyTo !== undefined;
+
+/** Checks a reply's text: something to say, or Resolve ticked with nothing to say; within GitHub's limit. */
+export function checkReply(body: string, resolve: boolean): string {
+  if (body.trim() === "" && !resolve) throw new Error("A reply needs some text, or Resolve ticked.");
+  if (body.length > MAX_COMMENT_CHARS) {
+    throw new Error(`That reply is ${body.length} characters; GitHub takes at most ${MAX_COMMENT_CHARS}.`);
+  }
+  return body.trim() === "" ? "" : body;
+}
+
+/** Where a thread is, as it's named everywhere: "src/pay.ts:40", its first line when it's outdated, or the file. */
+export function threadWhere(thread: Pick<ReviewThread, "path" | "line" | "startLine" | "originalLine">): string {
+  const line = thread.line ?? thread.originalLine;
+  if (line === null) return thread.path;
+  const start =
+    thread.line !== null && thread.startLine !== null && thread.startLine < line ? `${thread.startLine}-` : "";
+  return `${thread.path}:${start}${line}`;
+}
+
+/** A thread's short id, for `alden comment --threads` and `--reply`: the end of its node id, unique enough on a PR. */
+export const shortThreadId = (id: string) => id.slice(-7);
+
+/**
+ * The thread a reply means: by its node id or the short id `alden comment --threads` shows, or by `file:line` (the
+ * thread's line now, or the line it was started on when it's outdated; an open thread before a resolved one). Says
+ * which threads there are when it's none, or which to pick when it's several.
+ */
+export function findThread(threads: ReviewThread[], ref: string): ReviewThread {
+  const text = ref.trim();
+  const exact = threads.find((t) => t.id === text);
+  if (exact) return exact;
+  const byId = text.length >= 4 ? threads.filter((t) => t.id.endsWith(text)) : [];
+  if (byId.length === 1) return byId[0] as ReviewThread;
+  const at = /^(\S+):(\d+)$/.exec(text);
+  if (at) {
+    const line = Number(at[2]);
+    const here = threads.filter(
+      (t) => t.path === at[1] && (t.line === line || (t.line === null && t.originalLine === line)),
+    );
+    const open = here.filter((t) => !t.isResolved);
+    const pick = open.length === 1 ? open : here;
+    if (pick.length === 1) return pick[0] as ReviewThread;
+    if (pick.length > 1) {
+      throw new Error(
+        `${pick.length} threads are on ${text}: name one by its id (${pick.map((t) => shortThreadId(t.id)).join(", ")}).`,
+      );
+    }
+  }
+  const listed =
+    threads.length === 0
+      ? "This PR has no review threads."
+      : `Its threads: ${threads.map((t) => `${shortThreadId(t.id)} (${threadWhere(t)})`).join(", ")}.`;
+  throw new Error(`No review thread ${text} on this PR. ${listed}`);
+}
+
+/**
+ * Checks GitHub lets you do what a reply asks in its thread: reply (when it has text) and resolve (when ticked and the
+ * thread isn't resolved already). Says why not in a sentence.
+ */
+export function checkThread(
+  threads: ReviewThreads | undefined,
+  threadId: string,
+  want: { reply: boolean; resolve: boolean },
+): ReviewThread {
+  const thread = threads?.threads.find((t) => t.id === threadId);
+  if (!thread) {
+    throw new Error("That review thread isn't on the PR any more (it was deleted, or the PR is hidden from you).");
+  }
+  if (want.reply && !thread.viewerCanReply) {
+    throw new Error(`GitHub won't take your reply in the thread on ${threadWhere(thread)} (it may be locked).`);
+  }
+  if (want.resolve && !thread.isResolved && !thread.viewerCanResolve) {
+    throw new Error(
+      `GitHub won't let you resolve the thread on ${threadWhere(thread)}: that takes write access to the repo, or being the PR's author.`,
+    );
+  }
+  return thread;
+}
+
+/** Adds a reply to a thread, inside a pending review: it posts when the review is submitted. */
+export const REPLY_MUTATION = `mutation($review: ID!, $thread: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewId: $review, pullRequestReviewThreadId: $thread, body: $body }) {
+    comment { id }
+  }
+}`;
+
+export const SUBMIT_MUTATION = `mutation($review: ID!, $event: PullRequestReviewEvent!, $body: String) {
+  submitPullRequestReview(input: { pullRequestReviewId: $review, event: $event, body: $body }) {
+    pullRequestReview { url }
+  }
+}`;
+
+export const RESOLVE_MUTATION = `mutation($thread: ID!) {
+  resolveReviewThread(input: { threadId: $thread }) { thread { id isResolved } }
+}`;
+
+/** What a review with replies did, beyond what `sendReview` already counts. */
+interface RepliesSent {
+  url: string;
+  reviewId?: number;
+  replied: number;
+  resolved: number;
+  notResolved: string[];
+}
+
+const said = (error: unknown) => ((error as Error).message ?? String(error)).slice(0, 300);
+
+/**
+ * Sends a review that replies in threads already on the PR, or resolves them, in an order where nothing half-posts:
+ * 1. the review, pending (no verdict yet), with its line comments and body: one REST request;
+ * 2. each reply, into that pending review (GraphQL `addPullRequestReviewThreadReply`);
+ * 3. the review submitted with your verdict (`submitPullRequestReview`): only now can anyone see any of it;
+ * 4. each thread you ticked, resolved (`resolveReviewThread`): never before the review is submitted.
+ * If 2 or 3 fails, the pending review is deleted (its replies with it), and the error says which step failed. A failed
+ * resolve can't take back a posted review: it's reported in `notResolved`. With nothing to post (a plain comment with
+ * only resolves) there's no review at all, just step 4. Every thread is checked first: still there, and yours to reply
+ * in or resolve.
+ */
+async function sendWithReplies(
+  client: GitHubClient,
+  input: { repo: string; number: number; event: ReviewEvent; body?: string },
+  headSha: string,
+  drafts: StoredDraft[],
+  replies: StoredDraft[],
+): Promise<RepliesSent> {
+  const [owner, name] = input.repo.split("/") as [string, string];
+  let threads: ReviewThreads | undefined;
+  try {
+    threads = await fetchReviewThreads(client, input.repo, input.number, "");
+  } catch (error) {
+    throw new SendReviewError(502, `Not sent: couldn't read the PR's review threads (${said(error)}).`, "github");
+  }
+  const problems = replies.flatMap((d) => {
+    try {
+      checkThread(threads, d.inReplyTo as string, { reply: d.body.trim() !== "", resolve: d.resolve === true });
+      return [];
+    } catch (error) {
+      return [{ id: d.id, problem: (error as Error).message }];
+    }
+  });
+  if (problems.length > 0) {
+    throw new SendReviewError(
+      422,
+      `Not sent: ${problems.map((p) => `${p.id}: ${p.problem}`).join(" ")} Change or delete ${problems.length === 1 ? "that reply" : "those replies"}, then send.`,
+      "thread",
+      problems.map((p) => p.id),
+    );
+  }
+  const threadOf = (d: StoredDraft) => threads?.threads.find((t) => t.id === d.inReplyTo) as ReviewThread;
+  const withText = replies.filter((d) => d.body.trim() !== "");
+  const toResolve = replies.filter((d) => d.resolve === true && !threadOf(d).isResolved);
+  const request = reviewRequest(headSha, input.event, input.body, drafts);
+  const posts = input.event !== "COMMENT" || !!request.body || request.comments.length > 0 || withText.length > 0;
+  let url = `https://github.com/${input.repo}/pull/${input.number}`;
+  let reviewId: number | undefined;
+
+  if (posts) {
+    const { event, ...pending } = request;
+    let created: { id?: unknown; node_id?: unknown; html_url?: unknown };
+    try {
+      ({ data: created } = await client.request("POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews", {
+        owner,
+        repo: name,
+        pull_number: input.number,
+        ...pending,
+        // Never retried: a retry after a timeout could start two reviews.
+        request: { retries: 0 },
+      }));
+    } catch (error) {
+      throw sendFailed(error, input.repo, drafts);
+    }
+    const id = created.id;
+    const node = created.node_id;
+    /** Takes back the pending review, so none of it posts, and says which step failed. */
+    const undo = async (step: string, error: unknown): Promise<never> => {
+      let deleted = typeof id === "number";
+      if (deleted) {
+        try {
+          await client.request("DELETE /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}", {
+            owner,
+            repo: name,
+            pull_number: input.number,
+            review_id: id as number,
+            request: { retries: 0 },
+          });
+        } catch {
+          deleted = false;
+        }
+      }
+      const forbidden = (error as { status?: number }).status === 403;
+      throw new SendReviewError(
+        forbidden ? 403 : 502,
+        `Not sent: GitHub refused ${step} (GitHub said: ${said(error)}). ${
+          deleted
+            ? "Alden deleted the pending review it had started, so nothing posted."
+            : "Alden couldn't delete the pending review it had started: discard it on the PR's page on GitHub, then send again."
+        } Your drafts are all still here.`,
+        forbidden ? "forbidden" : "github",
+      );
+    };
+    if (typeof node !== "string") await undo("the review", new Error("it didn't say which review it started"));
+    for (const d of withText) {
+      try {
+        await client.graphql(REPLY_MUTATION, {
+          review: node,
+          thread: d.inReplyTo,
+          body: d.body,
+          request: { retries: 0 },
+        });
+      } catch (error) {
+        await undo(`your reply in the thread on ${threadWhere(threadOf(d))}`, error);
+      }
+    }
+    try {
+      const submitted = await client.graphql<{ submitPullRequestReview?: { pullRequestReview?: { url?: string } } }>(
+        SUBMIT_MUTATION,
+        { review: node, event, ...(request.body ? { body: request.body } : {}), request: { retries: 0 } },
+      );
+      url =
+        submitted.submitPullRequestReview?.pullRequestReview?.url ??
+        (typeof created.html_url === "string" ? created.html_url : url);
+    } catch (error) {
+      await undo("submitting the review", error);
+    }
+    if (typeof id === "number") reviewId = id;
+  }
+
+  let resolved = 0;
+  const notResolved: string[] = [];
+  for (const d of toResolve) {
+    try {
+      await client.graphql(RESOLVE_MUTATION, { thread: d.inReplyTo, request: { retries: 0 } });
+      resolved++;
+    } catch (error) {
+      notResolved.push(`${threadWhere(threadOf(d))}: ${said(error)}`);
+    }
+  }
+  if (!posts && resolved === 0 && notResolved.length > 0) {
+    throw new SendReviewError(
+      502,
+      `Nothing was resolved: ${notResolved.join("; ")}. Your drafts are all still here.`,
+      "github",
+      toResolve.map((d) => d.id),
+    );
+  }
+  return { url, ...(reviewId !== undefined ? { reviewId } : {}), replied: withText.length, resolved, notResolved };
+}
+
 // --- GitHub -----------------------------------------------------------------------------------------------------
 
 /** Why a review wasn't sent. `status` is what the UI's API answers with; `drafts` are the ids it's about. */
@@ -704,7 +1026,7 @@ export class SendReviewError extends Error {
   constructor(
     readonly status: number,
     message: string,
-    readonly reason: "outdated" | "moved" | "not_in_diff" | "empty" | "forbidden" | "pending" | "github",
+    readonly reason: "outdated" | "moved" | "not_in_diff" | "empty" | "forbidden" | "pending" | "thread" | "github",
     readonly drafts: string[] = [],
   ) {
     super(message);
@@ -731,11 +1053,13 @@ export async function fetchPullRequestState(
 }
 
 const where = (d: ReviewDraft) =>
-  d.path === undefined
-    ? d.linkTo
-      ? `a note linking to ${linkText(d.linkTo)}`
-      : "general note"
-    : `${d.path}:${d.startLine !== undefined ? `${d.startLine}-` : ""}${d.line}`;
+  d.inReplyTo !== undefined
+    ? "a reply in a thread"
+    : d.path === undefined
+      ? d.linkTo
+        ? `a note linking to ${linkText(d.linkTo)}`
+        : "general note"
+      : `${d.path}:${d.startLine !== undefined ? `${d.startLine}-` : ""}${d.line}`;
 
 /** Checks everything GitHub would refuse before asking it, and says which drafts are the problem. */
 export function checkSendable(
@@ -774,7 +1098,9 @@ export function checkSendable(
   }
   const text = composeReviewBody(body, drafts);
   const inline = drafts.some((d) => d.path !== undefined);
-  if (event === "COMMENT" && !text && !inline) {
+  // A reply says something in its thread; one that only resolves still does something when sent.
+  const replies = drafts.some((d) => d.inReplyTo !== undefined && (d.body.trim() !== "" || d.resolve === true));
+  if (event === "COMMENT" && !text && !inline && !replies) {
     throw new SendReviewError(400, "Nothing to send: write a comment or a review body first.", "empty");
   }
   if (event === "REQUEST_CHANGES" && !text) {
@@ -844,7 +1170,8 @@ export interface SendLearning {
 /**
  * Sends a PR's drafts as one review: brings them to the PR's current head, refuses if that moved or outdated any
  * inline comment (so what posts is what you last saw), checks every line against the diff, then makes one
- * POST /repos/{owner}/{repo}/pulls/{n}/reviews. Afterwards: a local `review_sent` event (counts only), what the review
+ * POST /repos/{owner}/{repo}/pulls/{n}/reviews. With replies in existing threads (or threads to resolve) it takes a few
+ * steps instead, in an order where nothing half-posts: see `sendWithReplies`. Afterwards: a local `review_sent` event (counts only), what the review
  * taught (see `learnFromReview` and `confirmNotes`; never stops the send, which has posted by then), where each line
  * comment went (kept 30 days, to see later whether it was applied or resolved: see `checkOutcomes`), and the PR's
  * drafts are deleted.
@@ -869,26 +1196,36 @@ export async function sendReview(
       changed,
     );
   }
-  const pending = drafts.list(pr);
-  checkSendable(pending, files, input.event, input.body);
+  const all = drafts.list(pr);
+  checkSendable(all, files, input.event, input.body);
+  // Replies post in their threads: they're not the review's own comments, to count or learn from.
+  const replies = all.filter(isReply);
+  const pending = all.filter((d) => !isReply(d));
 
   const [owner, name] = input.repo.split("/") as [string, string];
   let url: string;
   let reviewId: number | undefined;
-  try {
-    const { data } = await client.request("POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews", {
-      owner,
-      repo: name,
-      pull_number: input.number,
-      ...reviewRequest(headSha, input.event, input.body, pending),
-      // Never retried: a retry after a timeout could post the review twice.
-      request: { retries: 0 },
-    });
-    url = (data as { html_url?: string }).html_url ?? `https://github.com/${input.repo}/pull/${input.number}`;
-    const id = (data as { id?: unknown }).id;
-    if (typeof id === "number") reviewId = id;
-  } catch (error) {
-    throw sendFailed(error, input.repo, pending);
+  let threads: Omit<RepliesSent, "url" | "reviewId"> | undefined;
+  if (replies.length > 0) {
+    const sent = await sendWithReplies(client, input, headSha, pending, replies);
+    ({ url, reviewId } = sent);
+    threads = sent;
+  } else {
+    try {
+      const { data } = await client.request("POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews", {
+        owner,
+        repo: name,
+        pull_number: input.number,
+        ...reviewRequest(headSha, input.event, input.body, pending),
+        // Never retried: a retry after a timeout could post the review twice.
+        request: { retries: 0 },
+      });
+      url = (data as { html_url?: string }).html_url ?? `https://github.com/${input.repo}/pull/${input.number}`;
+      const id = (data as { id?: unknown }).id;
+      if (typeof id === "number") reviewId = id;
+    } catch (error) {
+      throw sendFailed(error, input.repo, pending);
+    }
   }
 
   const inline = pending.filter((d) => d.path !== undefined);
@@ -932,8 +1269,10 @@ export async function sendReview(
   drafts.clear(pr);
   return {
     url,
-    posted: pending.length,
+    posted: pending.length + (threads?.replied ?? 0),
     review: input.event,
+    ...(threads ? { replies: threads.replied, resolved: threads.resolved } : {}),
+    ...(threads?.notResolved.length ? { notResolved: threads.notResolved } : {}),
     ...(lines.length > 0 ? { learning: lines } : {}),
     counts,
   };

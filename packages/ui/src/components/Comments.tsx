@@ -26,6 +26,7 @@ import {
   whereText,
 } from "../drafts";
 import { plural } from "../format";
+import { Conversation, type ReplyFocus, ReplySummary } from "./Conversation";
 import { Segmented } from "./Segmented";
 
 /**
@@ -62,6 +63,8 @@ export type Editing =
 export interface ReviewActions {
   onComment(place: CommentPlace): void;
   onFinish(): void;
+  /** Opens the drawer at a review thread's Reply box (by the thread's id): the Diff tab's Reply. */
+  onReply?(threadId: string): void;
 }
 
 export const ReviewActionsContext = createContext<ReviewActions | undefined>(undefined);
@@ -635,6 +638,7 @@ function Confirm(props: {
   useEffect(() => heading.current?.focus(), []);
   const body = reviewBody(comments.body, comments.drafts);
   const inline = comments.drafts.filter((d) => d.path);
+  const replies = comments.drafts.filter((d) => d.inReplyTo && d.body.trim()).length;
   const blocked = cannotSend(comments.event, comments.body, comments.drafts);
   const verdict = verdictOf(comments.event);
 
@@ -665,7 +669,11 @@ function Confirm(props: {
       </h3>
       <p className="muted small">
         It posts on GitHub under your name, as one review: <strong>{verdict.label}</strong>
-        {inline.length > 0 ? `, with ${plural(inline.length, "comment")} on lines` : ""}.
+        {inline.length > 0 ? `, with ${plural(inline.length, "comment")} on lines` : ""}
+        {replies > 0
+          ? `${inline.length > 0 ? " and" : ", with"} ${plural(replies, "reply", "replies")} in threads`
+          : ""}
+        .
       </p>
       {comments.event === "APPROVE" && comments.unaddressed.length > 0 && (
         <div className="banner">
@@ -703,6 +711,7 @@ function Confirm(props: {
           </ul>
         </div>
       )}
+      <ReplySummary drafts={comments.drafts} threads={comments.threads?.threads} heading="Replies in threads" />
       {(error ?? blocked) && (
         <p className="banner error" role="alert">
           {error ?? blocked}
@@ -721,7 +730,7 @@ function Confirm(props: {
 }
 
 /** Where focus goes when the drawer is asked to show something: its heading, or the review body (`onFinish`). */
-export type DrawerFocus = { to: "head" | "finish"; n: number };
+export type DrawerFocus = { to: "head" | "finish"; n: number } | ({ to: "reply" } & ReplyFocus);
 
 /**
  * The Comments drawer, beside the briefing (a full-width sheet in narrow windows): the drafts by where they'll post
@@ -772,7 +781,8 @@ export function CommentsDrawer(props: {
   const { focus } = props;
   // biome-ignore lint/correctness/useExhaustiveDependencies: only when asked again
   useEffect(() => {
-    if (!focus || !open) return;
+    // A thread's Reply box takes its own focus (see Conversation).
+    if (!focus || !open || focus.to === "reply") return;
     if (focus.to === "finish" && bodyField.current) {
       bodyField.current.scrollIntoView?.({ block: "nearest" });
       bodyField.current.focus();
@@ -802,7 +812,7 @@ export function CommentsDrawer(props: {
     comments.drafts.filter((d) => d.path),
     fileOrder,
   ).flatMap((g) => g.drafts);
-  const notes = comments.drafts.filter((d) => !d.path);
+  const notes = comments.drafts.filter((d) => !d.path && !d.inReplyTo);
   const count = comments.drafts.length;
   const blocked = cannotSend(comments.event, comments.body, comments.drafts);
   const closeForm = (back: RefObject<HTMLElement | null>) => {
@@ -865,10 +875,17 @@ export function CommentsDrawer(props: {
         {sent && (
           <p className="banner ok" role="status" tabIndex={-1} ref={sentLine}>
             <strong>Sent to GitHub.</strong> You {verdictOf(sent.review).past}
-            {sent.posted > 0 ? ` with ${plural(sent.posted, "comment")}` : ""}.{" "}
+            {sent.posted > 0 ? ` with ${plural(sent.posted, "comment")}` : ""}
+            {sent.resolved ? `, and resolved ${plural(sent.resolved, "thread")}` : ""}.{" "}
             <a href={sent.url} target="_blank" rel="noreferrer">
               See the review ↗
             </a>
+          </p>
+        )}
+        {sent?.notResolved && sent.notResolved.length > 0 && (
+          <p className="banner" role="status">
+            The review posted, but GitHub wouldn't resolve {plural(sent.notResolved.length, "thread")}:{" "}
+            {sent.notResolved.join("; ")}. Resolve {sent.notResolved.length === 1 ? "it" : "them"} on GitHub.
           </p>
         )}
         {sent?.learning && sent.learning.length > 0 && (
@@ -985,6 +1002,11 @@ export function CommentsDrawer(props: {
                     <ul className="visually-plain card drafts">{notes.map(row)}</ul>
                   </section>
                 )}
+                <ReplySummary
+                  drafts={comments.drafts}
+                  threads={comments.threads?.threads}
+                  heading="Replies in threads"
+                />
               </>
             )}
 
@@ -1028,6 +1050,7 @@ export function CommentsDrawer(props: {
                 onChange={(e) => comments.setBody(e.target.value)}
               />
             </label>
+            <Conversation comments={comments} focus={focus?.to === "reply" ? focus : undefined} />
           </>
         )}
       </div>

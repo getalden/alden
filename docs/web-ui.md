@@ -183,6 +183,9 @@ Once a PR is briefed, **Diff** (or `d`) shows the code itself, so you don't have
 - Your comments show as a ✎ badge at their lines. Hover one for its text, or click it to open the text under the line.
 - On a PR, **+** beside a line starts a comment on it in the Comments drawer. Shift-click a second line, or drag, for
   a range on the same side of one hunk.
+- On a PR, the review threads already on it show under their lines: who's in each and how many comments, open
+  unless resolved. **Reply** opens that thread's Reply box in the Comments drawer. See
+  [Replying in a thread](comments.md#replying-in-a-thread).
 
 A marker that's been on screen for 1.5 seconds counts as a place you saw, which Alden learns from when you send your
 review: see [Places you saw](memory.md#places-you-saw).
@@ -236,7 +239,11 @@ this machine until you send them to acme/shop#412 on GitHub, as one review." It 
 - **In the review body**: your general notes, which follow what you write in the body. A linked note says "links to
   py/orders/tasks.py, line 5"; hovering it names the commit its link shows, the PR's head when you wrote it.
 
-Below them are **Add a general note**, **Comment on a line…** and the review body. At the bottom, always in view, are
+- **Replies in threads**: where each reply goes, "Reply in thread on src/pay.ts:40, and resolve it".
+
+Below them are **Add a general note**, **Comment on a line…**, the review body, and the PR's **Conversation**: its
+review threads, yours first and open ones first, each with **Reply** and **Resolve when sent**. A reply or a resolve
+is a draft like any other, sent with your review (see [Replying in a thread](comments.md#replying-in-a-thread)). At the bottom, always in view, are
 the verdict (**Comment**, **Approve** or **Request changes**) and **Send review · 3 comments**.
 
 The drawer stays open or closed as you left it in this window, and starts open when the window is wide enough for it

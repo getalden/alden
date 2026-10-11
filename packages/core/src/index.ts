@@ -217,14 +217,18 @@ export {
 export {
   checkBody,
   checkLinkTarget,
+  checkReply,
   checkSendable,
   checkSuggestion,
+  checkThread,
   commentableLines,
   commentBody,
   composeReviewBody,
   fetchPullRequestState,
   findAgain,
+  findThread,
   isNear,
+  isReply,
   type LineAnchor,
   linkText,
   MAX_COMMENT_CHARS,
@@ -243,7 +247,9 @@ export {
   type Side,
   type StoredDraft,
   sendReview,
+  shortThreadId,
   suggestionFence,
+  threadWhere,
   unaddressedPlaces,
 } from "./review/drafts.js";
 export {

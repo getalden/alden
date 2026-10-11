@@ -144,6 +144,10 @@ const api: UiApi = {
     calls.push({ method: "editDraft", args: { id, change } });
     return { id } as unknown as ReviewDraft;
   },
+  threads: async (pr, refresh) => {
+    calls.push({ method: "threads", args: { pr, refresh } });
+    return { schemaVersion: 1, pr, headSha: "h", viewer: "me", threads: [] };
+  },
   deleteDraft: async (id) => {
     calls.push({ method: "deleteDraft", args: id });
     if (id === "gone") throw new ApiError(404, "No draft gone.");
@@ -590,6 +594,32 @@ describe("alden ui server", () => {
     expect((await call("/api/review/send", { method: "POST", body: { pr: "a/b#1", event: "APPROVE" } })).status).toBe(
       401,
     );
+  });
+
+  it("reads a PR's threads, and passes replies through as drafts", async () => {
+    const send = (method: string, path: string, body?: unknown) =>
+      call(path, { method, headers: authed, ...(body === undefined ? {} : { body }) });
+    calls.length = 0;
+    expect((await send("GET", "/api/threads?pr=a%2Fb%231")).status).toBe(200);
+    await send("GET", "/api/threads?pr=a%2Fb%231&refresh=1");
+    await send("POST", "/api/drafts", { pr: "a/b#1", inReplyTo: "PRRT_kwDO1", body: "Fixed." });
+    await send("POST", "/api/drafts", { pr: "a/b#1", inReplyTo: "PRRT_kwDO2", resolve: true });
+    await send("PATCH", "/api/drafts/d1", { resolve: true });
+    expect(calls).toEqual([
+      { method: "threads", args: { pr: "a/b#1", refresh: false } },
+      { method: "threads", args: { pr: "a/b#1", refresh: true } },
+      { method: "addDraft", args: { input: { pr: "a/b#1", body: "Fixed.", inReplyTo: "PRRT_kwDO1" }, source: "you" } },
+      {
+        method: "addDraft",
+        args: { input: { pr: "a/b#1", body: "", inReplyTo: "PRRT_kwDO2", resolve: true }, source: "you" },
+      },
+      { method: "editDraft", args: { id: "d1", change: { resolve: true } } },
+    ]);
+    expect((await send("GET", "/api/threads")).status).toBe(400);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", inReplyTo: 3, body: "x" })).status).toBe(400);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", inReplyTo: "T", resolve: "yes" })).status).toBe(400);
+    // Only a reply resolves.
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", resolve: true })).status).toBe(400);
   });
 
   it("passes memory changes and reactions through, and checks their bodies", async () => {

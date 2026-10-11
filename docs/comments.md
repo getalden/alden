@@ -6,7 +6,9 @@ pending review, and send them to GitHub as **one review** that
 comments, approves or requests changes.
 
 Alden posts only what you send. Nothing goes to GitHub until you press Send in the UI or confirm `alden send` in a
-terminal: never in the background, never from a model, never from Claude Code.
+terminal: never in the background, never from a model, never from Claude Code. That includes
+[replies and resolves](#replying-in-a-thread) in threads already on the PR: they go with your review, never on their
+own.
 
 ## Writing comments
 
@@ -107,6 +109,67 @@ From Claude Code, ask Claude to draft a comment or suggest a change and it uses 
 yours, marked "drafted by Claude Code", and post as you only when you send them. There is no tool for sending. See
 [Alden in your AI coding tool](mcp.md).
 
+## Replying in a thread
+
+A PR you come back to already has a conversation: the review threads on its lines, yours and other people's. Alden
+shows them, and lets you answer one, or resolve it, as part of the review you send. A reply is a draft like any
+comment: kept on your machine, and posted only with Send.
+
+In the UI, the Comments drawer's **Conversation** lists the PR's threads, yours (threads you started or replied in)
+first and open ones before resolved ones, which are folded away. Each shows its comments, a **Reply** box and
+**Resolve when sent**. The Diff tab shows each thread under its line (folded once resolved), with **Reply**, which opens
+that thread's box in the drawer. An outdated thread (its code has changed since) has no line in today's diff, so it's
+only in the drawer.
+
+In a terminal:
+
+```sh
+alden comment acme/shop#7 --threads                                  # the threads, with short ids
+alden comment acme/shop#7 --reply q9aZ1Lw "Fixed in 3f2c."           # reply in a thread, by its id
+alden comment acme/shop#7 --reply src/pay.ts:40 "Fixed." --resolve   # by its line, and resolve it
+alden comment acme/shop#7 --resolve src/pay.ts:40                    # resolve it, saying nothing
+```
+
+A thread is named by the short id `--threads` shows, or by `file:line`: its line at the PR's head, or the line it was
+started on when it's outdated. When several threads are on that line, an open one is picked before a resolved one, and
+when that's still more than one, Alden asks for an id.
+
+- **One reply per thread.** A second `--reply` in the same thread changes the text of the first, and `--resolve` alone
+  ticks Resolve on it. Delete one with `--delete <id>`, like any comment.
+- **Resolve with nothing to say** is a reply with no text: it resolves the thread and posts nothing in it.
+- **A reply has no line of its own.** It's tied to its thread, not to the diff, so it doesn't move or go outdated when
+  the PR moves, and it takes no suggestion.
+- Alden checks the thread is on the PR, and that GitHub lets you reply there (and resolve it, when you tick Resolve:
+  resolving takes write access to the repo, or being the PR's author) when you write the reply, and again when you
+  send.
+- From Claude Code, `alden_draft_comment` drafts a reply with `in_reply_to` (the thread's `file:line` or id). It can't
+  resolve a thread: that's yours to tick.
+
+The drawer, its summary before Send and `alden send` say where each reply goes: "Reply in thread on src/pay.ts:40",
+"…, and resolve it", or "Resolve the thread on src/pay.ts:40". Replies are never part of the review's body.
+
+### How a review with replies is sent
+
+A review without replies or resolves is sent as it always was, in one request (see [Sending](#sending)). With them,
+GitHub needs a few, and Alden makes them in an order where nothing half-posts:
+
+1. The review is started as **pending**, with your line comments and body: `POST /repos/{owner}/{repo}/pulls/{n}/reviews`
+   without a verdict. A pending review is visible only to you.
+2. Each reply is added to that pending review (GraphQL `addPullRequestReviewThreadReply`).
+3. The review is **submitted** with your verdict (`submitPullRequestReview`). Only now does anyone see any of it.
+4. Each thread you ticked is resolved (`resolveReviewThread`), after the review is submitted and never before. A
+   thread that's already resolved is left alone.
+
+If step 2 or 3 fails, Alden deletes the pending review it started (and the replies in it), so nothing posts, and says
+which step GitHub refused, e.g. "GitHub refused your reply in the thread on src/pay.ts:40". Your drafts stay. If it
+can't delete the pending review either, it says so: discard it on the PR's page on GitHub before sending again.
+
+If a resolve fails in step 4, the review has already posted and can't be taken back: Alden says which thread wasn't
+resolved and why ("The review posted, but GitHub wouldn't resolve 1 thread"), and you can resolve it on GitHub.
+
+A review of only replies works as a plain comment review. With nothing to post at all (a plain comment, no body, and
+only resolves), there is no review: Alden just resolves the threads.
+
 ## When the PR moves
 
 A comment is written against the PR's head commit. When the author pushes, Alden brings your comments along the next
@@ -138,12 +201,14 @@ alden send acme/shop#7 --approve -m "Thanks, looks good."
 
 Before anything posts, Alden shows the whole review: the body (your `-m` text, then the general notes, a linked note
 with its link), each comment
-with its file and line (or lines), each suggestion as old lines and new ones, who drafted it, and the verdict. Before an approval it also lists the places Alden flagged in
+with its file and line (or lines), each suggestion as old lines and new ones, each reply with its thread and whether it
+resolves it, who drafted it, and the verdict. Before an approval it also lists the places Alden flagged in
 its latest briefing of this PR that none of your comments is near (within three lines, on the same file). Then it asks.
 `--yes` skips the question; without a terminal to ask on and without `--yes`, it refuses.
 
 It sends one request, `POST /repos/{owner}/{repo}/pulls/{n}/reviews`, at the PR's current head commit, with exactly
-what you wrote. Alden adds nothing to it but a suggestion's ` ```suggestion ` block and a linked note's link (and its
+what you wrote (with replies or resolves, a few: see
+[How a review with replies is sent](#how-a-review-with-replies-is-sent)). Alden adds nothing to it but a suggestion's ` ```suggestion ` block and a linked note's link (and its
 "Suggested change" block): no signature, no footer. A comment
 on several lines goes as `start_line` and `start_side` to `line` and `side`.
 
@@ -153,8 +218,9 @@ Alden won't send, and says why, when:
 - the PR got new commits since you last looked, which moved comments: look them over and send again,
 - a comment's line isn't in the diff, or its range no longer fits in one hunk (it names which),
 - the code a suggestion replaces isn't the code it was written against,
-- there's nothing to say: a plain comment review needs a comment or a body, and requesting changes needs a body or a
-  general note.
+- there's nothing to say: a plain comment review needs a comment, a reply, a resolve or a body, and requesting changes
+  needs a body or a general note,
+- a reply's thread is gone, or GitHub won't let you reply there or resolve it (it names which).
 
 On success, the PR's comments are deleted from Alden (they're on GitHub now) and Alden prints the review's link. If
 GitHub refuses, nothing is deleted.

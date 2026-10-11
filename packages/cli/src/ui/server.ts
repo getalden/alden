@@ -14,6 +14,7 @@ import {
   type RankRule,
   type ReviewDraft,
   type ReviewDrafts,
+  type ReviewThreads,
   type ReviewEvent as ReviewVerdict,
   type SendReviewResult,
 } from "@alden/schema";
@@ -126,6 +127,11 @@ export interface UiApi {
    */
   diff(pr?: string): Promise<PrDiff>;
   /**
+   * A PR's review threads ("owner/repo#12", a URL or a queue number): the conversation already on it, each comment marked
+   * when it's yours. Read only; kept briefly per PR, `refresh` asks GitHub again.
+   */
+  threads(pr: string, refresh?: boolean): Promise<ReviewThreads>;
+  /**
    * The flagged places you saw in a PR at a head commit (a guided step, a marker in the Diff tab), so a review that
    * passes them without a word can teach Alden. Kept on this machine only; nothing is recorded while
    * `learning.fromReviews` is off.
@@ -190,6 +196,12 @@ export interface DraftInput {
   side?: "RIGHT" | "LEFT";
   body: string;
   suggestion?: string;
+  /**
+   * A reply in a review thread already on the PR (its node id) instead: no place or suggestion of its own. `resolve`
+   * resolves the thread once the review is sent; with it, `body` may be empty.
+   */
+  inReplyTo?: string;
+  resolve?: boolean;
 }
 
 /**
@@ -199,6 +211,8 @@ export interface DraftInput {
 export interface DraftChange {
   body?: string;
   suggestion?: string | null;
+  /** On a reply: whether it resolves its thread. */
+  resolve?: boolean;
   path?: string;
   line?: number;
   startLine?: number;
@@ -350,6 +364,26 @@ function placeFrom(
   };
 }
 
+/** Whether a request asks to resolve a reply's thread: true or false, or nothing. */
+function resolveFrom(body: Record<string, unknown>): boolean | undefined {
+  if (body.resolve === undefined) return undefined;
+  if (typeof body.resolve !== "boolean") throw new ApiError(400, "resolve is true or false.");
+  return body.resolve;
+}
+
+/** A reply from a request: the thread's node id (`inReplyTo`) and `resolve`; undefined when it isn't a reply. */
+function replyFrom(body: Record<string, unknown>): { inReplyTo: string; resolve?: boolean } | undefined {
+  const resolve = resolveFrom(body);
+  if (body.inReplyTo === undefined) {
+    if (resolve !== undefined) throw new ApiError(400, "resolve goes with inReplyTo: only a reply resolves a thread.");
+    return undefined;
+  }
+  if (typeof body.inReplyTo !== "string" || !/^[\w=-]{1,200}$/.test(body.inReplyTo)) {
+    throw new ApiError(400, "inReplyTo is a review thread's id, as GET /api/threads lists it.");
+  }
+  return { inReplyTo: body.inReplyTo, ...(resolve !== undefined ? { resolve } : {}) };
+}
+
 /** A suggestion from a request: replacement code (a string, empty to delete the lines), or nothing. */
 function suggestionFrom(body: Record<string, unknown>, removable: boolean): { suggestion?: string | null } {
   if (body.suggestion === undefined) return {};
@@ -452,13 +486,14 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       const body = await readJsonBody(req);
       const place = placeFrom(body);
       const suggestion = suggestionFrom(body, true);
+      const resolve = resolveFrom(body);
       if (
         (body.body !== undefined && typeof body.body !== "string") ||
-        (body.body === undefined && body.suggestion === undefined && !place)
+        (body.body === undefined && body.suggestion === undefined && !place && resolve === undefined)
       ) {
         throw new ApiError(
           400,
-          "Send { body?, suggestion? }, or { path, line?, side?, startLine? } to place it on a line again.",
+          "Send { body?, suggestion? }, or { path, line?, side?, startLine? } to place it on a line again, or { resolve } on a reply.",
         );
       }
       send(
@@ -468,6 +503,7 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
           ...(typeof body.body === "string" ? { body: body.body } : {}),
           ...suggestion,
           ...place,
+          ...(resolve !== undefined ? { resolve } : {}),
         }),
       );
       return;
@@ -688,6 +724,13 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         send(res, 200, await api.drafts(pr));
         return;
       }
+      case "GET /api/threads": {
+        const pr = url.searchParams.get("pr")?.trim();
+        if (!pr) throw new ApiError(400, "Send ?pr=owner/repo%2312.");
+        // Comments in threads are other people's text: `send` strips control sequences from every string.
+        send(res, 200, await api.threads(pr, url.searchParams.get("refresh") === "1"));
+        return;
+      }
       case "GET /api/diff": {
         const pr = url.searchParams.get("pr")?.trim();
         // Paths and lines are the PR author's text: `send` strips control sequences from every string.
@@ -697,6 +740,27 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       case "POST /api/drafts": {
         const body = await readJsonBody(req);
         const { suggestion } = suggestionFrom(body, false);
+        const reply = replyFrom(body);
+        if (reply) {
+          if (typeof body.pr !== "string" || (body.body !== undefined && typeof body.body !== "string")) {
+            throw new ApiError(400, "Send { pr, inReplyTo, body, resolve? }: a reply in a review thread.");
+          }
+          send(
+            res,
+            200,
+            await api.addDraft(
+              {
+                pr: body.pr,
+                body: typeof body.body === "string" ? body.body : "",
+                ...placeFrom(body),
+                ...(typeof suggestion === "string" ? { suggestion } : {}),
+                ...reply,
+              },
+              "you",
+            ),
+          );
+          return;
+        }
         if (
           typeof body.pr !== "string" ||
           (typeof body.body !== "string" && !(body.body === undefined && suggestion !== undefined))

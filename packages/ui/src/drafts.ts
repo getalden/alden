@@ -8,6 +8,7 @@ import type {
 import { linkLines, noteText } from "@alden/schema/note-text";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Api } from "./api";
+import { type ThreadsState, useThreads } from "./threads";
 
 /*
  * Comment from Alden: the comments you write in a briefing, kept on this machine as drafts until you send them to
@@ -32,12 +33,17 @@ export interface NewDraft {
   side?: "RIGHT" | "LEFT";
   body: string;
   suggestion?: string;
+  /** A reply in a review thread already on the PR (its id), sent with the review; no place of its own. */
+  inReplyTo?: string;
+  /** On a reply: resolve the thread once the review is sent. With it, `body` may be empty. */
+  resolve?: boolean;
 }
 
-/** A change to a draft: its text, and its suggestion (`null` takes the suggestion off). */
+/** A change to a draft: its text, and its suggestion (`null` takes the suggestion off), or a reply's Resolve. */
 export interface DraftPatch {
   body: string;
   suggestion?: string | null;
+  resolve?: boolean;
 }
 
 /**
@@ -104,11 +110,11 @@ export function groupDrafts(
 
 /**
  * What the review's body says on GitHub: what you wrote for it, then each general note, a blank line between, a
- * linked note starting with its link. (The server builds it with the same `noteText`; the confirmation shows it so
+ * linked note starting with its link. Replies aren't in it: they post in their threads. (The server builds it with the same `noteText`; the confirmation shows it so
  * what you see is what posts.)
  */
 export function reviewBody(body: string, drafts: ReviewDraft[]): string {
-  return [body.trim(), ...drafts.filter((d) => !d.path).map(noteText)].filter(Boolean).join("\n\n");
+  return [body.trim(), ...drafts.filter((d) => !d.path && !d.inReplyTo).map(noteText)].filter(Boolean).join("\n\n");
 }
 
 /** What GitHub needs before it takes a review, or undefined when it's ready to send. */
@@ -143,9 +149,12 @@ export interface BriefingComments {
   reload(): Promise<void>;
   /** Sends every draft as one review. Throws with the server's message, keeping the drafts. */
   send(): Promise<SendReviewResult>;
+  /** The conversation already on the PR, where the API can read it: what replies (`inReplyTo`) answer. */
+  threads?: ThreadsState | undefined;
 }
 
-type DraftsApi = Pick<Api, "drafts" | "addDraft" | "editDraft" | "deleteDraft" | "sendReview">;
+type DraftsApi = Pick<Api, "drafts" | "addDraft" | "editDraft" | "deleteDraft" | "sendReview"> &
+  Partial<Pick<Api, "threads">>;
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : "Something went wrong.");
 
@@ -158,6 +167,7 @@ export function useDrafts(api: DraftsApi | undefined, pr: string | undefined): B
   const [events, setEvents] = useState<Record<string, ReviewEvent>>({});
   const current = useRef(pr);
   current.current = pr;
+  const threads = useThreads(api?.threads ? (api as Pick<Api, "threads">) : undefined, pr);
 
   const reload = useCallback(async () => {
     if (!api || !pr) return;
@@ -222,8 +232,11 @@ export function useDrafts(api: DraftsApi | undefined, pr: string | undefined): B
       setData({ drafts: [], unaddressed: [] });
       setBodies(({ [pr]: _, ...rest }) => rest);
       setEvents(({ [pr]: _, ...rest }) => rest);
+      // Your replies, and the threads you resolved, are on GitHub now.
+      void threads?.reload(true);
       return result;
     },
+    threads,
   };
 }
 

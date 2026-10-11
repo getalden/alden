@@ -16,6 +16,7 @@ import type {
   RankRule,
   RankWeight,
   RepoStats,
+  ReviewThreads,
 } from "@alden/schema";
 import type {
   DraftPatch,
@@ -377,6 +378,10 @@ export class Api {
    * a PR's diff per head commit, so asking again costs it one GitHub request.
    */
   diff = (pr?: string) => this.request<PrDiff>(`/api/diff${pr ? `?pr=${encodeURIComponent(pr)}` : ""}`);
+
+  /** A PR's review threads ("owner/repo#12"): the conversation already on it. `refresh` skips the server's short cache. */
+  threads = (pr: string, refresh = false) =>
+    this.request<ReviewThreads>(`/api/threads?pr=${encodeURIComponent(pr)}${refresh ? "&refresh=1" : ""}`);
 
   /** The flagged places you saw in a PR, at the head its briefing is of. Kept on this machine by the local API. */
   recordSeen = (batch: SeenBatch) =>

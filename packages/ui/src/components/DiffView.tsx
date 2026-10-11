@@ -31,6 +31,7 @@ import {
 } from "../diff";
 import { plural, prFileUrl } from "../format";
 import { onScreen, SEEN_AFTER_MS, useRecordSeen } from "../seen";
+import { ThreadsAtLine } from "./DiffThreads";
 import { StateCard } from "./StateCard";
 
 export type { CommentPlace, DiffDraft, DiffPlace };
@@ -153,6 +154,8 @@ const who = (source: string) => (source === "claude" ? "Claude" : "You");
 interface RowProps {
   line: PrDiffLine;
   at: LineRef;
+  /** The line's file: where its review threads are found. */
+  path: string;
   places: DiffPlace[] | undefined;
   drafts: DiffDraft[] | undefined;
   selected: boolean;
@@ -171,6 +174,7 @@ interface RowActions {
 const DiffRow = memo(function DiffRow({
   line,
   at,
+  path,
   places,
   drafts,
   selected,
@@ -246,6 +250,7 @@ const DiffRow = memo(function DiffRow({
           {line.text}
         </td>
       </tr>
+      <ThreadsAtLine path={path} line={line} />
       {noteOpen && hasNote && (
         <tr className="diff-note-row">
           <td colSpan={4}>
@@ -309,6 +314,7 @@ function useNearView(element: Element | null, skip: boolean): boolean {
 
 interface ChunkProps {
   items: Item[];
+  path: string;
   force: boolean;
   markers: Markers;
   selection: Set<string>;
@@ -319,7 +325,7 @@ interface ChunkProps {
 }
 
 /** A run of rows, rendered once it nears the screen (or at once when it holds the row being jumped to). */
-function Chunk({ items, force, markers, selection, highlight, notes, commentable, actions }: ChunkProps) {
+function Chunk({ items, path, force, markers, selection, highlight, notes, commentable, actions }: ChunkProps) {
   const [placeholder, setPlaceholder] = useState<HTMLTableRowElement | null>(null);
   const shown = useNearView(placeholder, force);
   if (!shown) {
@@ -353,6 +359,7 @@ function Chunk({ items, force, markers, selection, highlight, notes, commentable
             key={key}
             line={item.line}
             at={item.at}
+            path={path}
             places={marks?.places.length ? marks.places : undefined}
             drafts={marks?.drafts.length ? marks.drafts : undefined}
             selected={selection.has(key)}
@@ -509,6 +516,7 @@ function DiffFileSection(props: FileProps) {
                     <Chunk
                       key={id}
                       items={chunk}
+                      path={file.path}
                       force={force}
                       markers={markers}
                       selection={props.selection}

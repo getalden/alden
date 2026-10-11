@@ -26,6 +26,7 @@ import {
   ReviewActionsContext,
   typing,
 } from "./Comments";
+import { DiffThreadsProvider } from "./DiffThreads";
 import { DiffPane, type DiffPlace, ShowInDiffContext } from "./DiffView";
 import { ExportMenu } from "./ExportMenu";
 import type { GuidedReviewProps } from "./GuidedReview";
@@ -157,9 +158,16 @@ function useCommentsDrawer(comments: BriefingComments | undefined, hasFiles: boo
     setOpen(true);
     setFocus((f) => ({ to: "finish", n: (f?.n ?? 0) + 1 }));
   }, [setOpen]);
+  const onReply = useCallback(
+    (threadId: string) => {
+      setOpen(true);
+      setFocus((f) => ({ to: "reply", threadId, n: (f?.n ?? 0) + 1 }));
+    },
+    [setOpen],
+  );
   const actions = useMemo<ReviewActions | undefined>(
-    () => (enabled ? { onComment, onFinish } : undefined),
-    [enabled, onComment, onFinish],
+    () => (enabled ? { onComment, onFinish, onReply } : undefined),
+    [enabled, onComment, onFinish, onReply],
   );
 
   const close = useCallback(() => {
@@ -331,16 +339,18 @@ function BriefingTabs(props: {
           hidden={tab !== "diff"}
           className="diff-panel"
         >
-          <DiffPane
-            load={props.loadDiff}
-            pr={pr}
-            headSha={target.kind === "pr" ? target.headSha : undefined}
-            prUrl={target.kind === "pr" ? target.url : undefined}
-            places={places}
-            drafts={drafts}
-            focus={focus}
-            onComment={props.onComment}
-          />
+          <DiffThreadsProvider comments={props.comments} pr={pr}>
+            <DiffPane
+              load={props.loadDiff}
+              pr={pr}
+              headSha={target.kind === "pr" ? target.headSha : undefined}
+              prUrl={target.kind === "pr" ? target.url : undefined}
+              places={places}
+              drafts={drafts}
+              focus={focus}
+              onComment={props.onComment}
+            />
+          </DiffThreadsProvider>
         </div>
       )}
     </>
