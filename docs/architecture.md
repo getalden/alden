@@ -68,6 +68,10 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | `POST /api/briefing/save` | Desktop app: saves `{ briefing }` as Markdown to the Downloads folder and says where. |
 | `POST /api/feedback/save` | Desktop app: saves the redacted feedback export to the Downloads folder. |
 | `POST /api/open` | Desktop app: opens `{ url }` (http or https, never Alden's own page) in the default browser. |
+| `GET /api/follow-ups` | Desktop app: checks the open PRs you reviewed in the last 14 days (one GitHub request to find them, then one per PR whose `updatedAt` moved; at most once a minute) and answers `{ notifications: [{ pr, title, url, text, events }], sound }`: one per PR with news not yet shown, at its level. Read only. |
+| `POST /api/follow-ups/ack` | Marks `{ events }` (the ids a notification covered) shown, so they're never shown again. |
+| `GET /api/watch` | `pr=owner/repo#12`'s notification level: `{ pr, override?, level }` (`PrWatchSchema`). |
+| `PUT /api/watch` | Sets `pr`'s own level, `{ level: off \| rereview \| your-turn \| every-reply }`, or `{ level: null }` for the global one. |
 | `GET /api/rank` | Settings → Ranking: your weights, rules and `background.prepare`. |
 | `PUT /api/rank` | Saves `{ weights?, rules?, prepare? }` to the user config (`[queue.rank]`, `background.prepare`); a `null` weight or `prepare` goes back to the default. |
 | `POST /api/rank/preview` | The current queue ranked with `{ weights?, rules? }`, unsaved, beside where each PR sits now. |

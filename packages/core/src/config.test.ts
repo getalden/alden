@@ -54,6 +54,17 @@ describe("notification sound", () => {
   });
 });
 
+describe("follow-up notifications", () => {
+  it("tell you when it's your turn by default, and only your user config changes that", async () => {
+    expect((await loadConfig(repo)).notifications.followUps).toBe("your-turn");
+    await writeFile(join(repo, ".alden.toml"), '[notifications]\nfollowUps = "every-reply"\n');
+    expect((await loadConfig(repo)).notifications.followUps).toBe("your-turn");
+    await setConfigValue("notifications.followUps", "off");
+    expect((await loadConfig(repo)).notifications.followUps).toBe("off");
+    await expect(setConfigValue("notifications.followUps", "loud")).rejects.toThrow();
+  });
+});
+
 describe("learning from reviews", () => {
   it("is on by default, and only your user config turns it off", async () => {
     expect((await loadConfig(repo)).learning.fromReviews).toBe(true);

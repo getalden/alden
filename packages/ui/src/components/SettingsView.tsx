@@ -249,7 +249,12 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
           )}
 
           {session.desktop && (
-            <NotificationSettings api={api} sound={session.notifications?.sound ?? true} onSaved={onSaved} />
+            <NotificationSettings
+              api={api}
+              sound={session.notifications?.sound ?? true}
+              followUps={session.notifications?.followUps}
+              onSaved={onSaved}
+            />
           )}
 
           <TelemetrySettings api={api} />

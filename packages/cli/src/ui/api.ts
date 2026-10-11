@@ -80,6 +80,7 @@ import { learningFor, learningForQueue, noteOpened } from "../learning.js";
 import { checkSentOutcomes } from "../outcomes.js";
 import { parsePrRef } from "../pr-ref.js";
 import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
+import { createFollowUpsApi } from "./follow-ups.js";
 import { createModelSetupApi } from "./model-setup.js";
 import { createRankingApi } from "./rank.js";
 import { ApiError, type DraftInput, type ReviewRequest, type UiApi } from "./server.js";
@@ -224,6 +225,7 @@ export function createUiApi(options: {
     }
   };
   const drafts = new ReviewDrafts();
+  const followUps = createFollowUpsApi({ cwd: options.cwd, signedIn, prRef: prOf });
   /**
    * Where a comment on `path` goes: inline when GitHub takes it on the diff, otherwise a note in the review body
    * linking to the code at the PR's head, once GitHub confirms the file (and line) are there to link to.
@@ -310,7 +312,7 @@ export function createUiApi(options: {
         eyes: config.review.eyes,
         ...(options.desktop ? { cli: cliStatus() } : {}),
         background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
-        notifications: { sound: config.notifications.sound },
+        notifications: { sound: config.notifications.sound, followUps: config.notifications.followUps },
         learning: { fromReviews: config.learning.fromReviews },
         repo: (await repoOf(options.cwd)) ?? null,
         user,
@@ -352,7 +354,8 @@ export function createUiApi(options: {
           (await shared(JSON.stringify([scope.repos, scope.orgs, scope.ignore, refresh]), () =>
             fetchReviewQueue(client, { ...scope, refresh }),
           ));
-        const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
+        // Rows you reviewed before get their thread counts from the last follow-up check.
+        const ranked = followUps.noteQueue(rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue)));
         void track("queue_ranked", queueEvent(ranked));
         // What came of the comments you sent lately, after the queue is in: at most a request per PR per day.
         if (!cached) {
@@ -405,6 +408,8 @@ export function createUiApi(options: {
     },
 
     modelSetup: createModelSetupApi({ cwd: options.cwd }),
+
+    followUps,
 
     ranking: createRankingApi({
       cwd: options.cwd,

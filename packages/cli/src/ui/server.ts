@@ -9,6 +9,7 @@ import {
   BriefingSchema,
   type BriefingTarget,
   BriefingTargetSchema,
+  FollowUpLevelSchema,
   type LocalSetupEvent,
   type PrDiff,
   type RankRule,
@@ -19,6 +20,7 @@ import {
 } from "@alden/schema";
 import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
 import { stripControlDeep } from "../render/style.js";
+import type { FollowUpsApi } from "./follow-ups.js";
 import type { ModelSetupApi, SetupPage } from "./model-setup.js";
 import type { RankingApi } from "./rank.js";
 
@@ -67,6 +69,8 @@ export interface UiApi {
   setModelKey(key: string | null): Promise<unknown>;
   /** "Set up a model": what's available, testing and storing a key, a local model through Ollama (see model-setup.ts). */
   modelSetup: ModelSetupApi;
+  /** Follow-ups on PRs you reviewed, for the desktop app's notifications, and each PR's own level (see follow-ups.ts). */
+  followUps: FollowUpsApi;
   /** Settings → Ranking: your weights and rules (`[queue.rank]`), `background.prepare`, and a preview (see rank.ts). */
   ranking: RankingApi;
   /** The local clone PR briefings on `repo` ("owner/name") find callers in, or null when there's none. */
@@ -661,6 +665,37 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
             ...(rules ? { rules } : {}),
           }),
         );
+        return;
+      }
+      case "GET /api/follow-ups":
+        send(res, 200, await api.followUps.check());
+        return;
+      case "POST /api/follow-ups/ack": {
+        const body = await readJsonBody(req);
+        const { events } = body;
+        if (!Array.isArray(events) || events.length > 500 || !events.every((e) => typeof e === "string")) {
+          throw new ApiError(400, "Send { events: [id, …] }, the ids a notification covered.");
+        }
+        send(res, 200, await api.followUps.ack(events as string[]));
+        return;
+      }
+      case "GET /api/watch":
+      case "PUT /api/watch": {
+        const pr = url.searchParams.get("pr")?.trim();
+        if (!pr) throw new ApiError(400, "Send ?pr=owner/repo%2312.");
+        if (req.method === "GET") {
+          send(res, 200, await api.followUps.watch(pr));
+          return;
+        }
+        const body = await readJsonBody(req);
+        const level = body.level === null ? null : FollowUpLevelSchema.safeParse(body.level).data;
+        if (level === undefined) {
+          throw new ApiError(
+            400,
+            "Send { level: off | rereview | your-turn | every-reply }, or { level: null } for the default.",
+          );
+        }
+        send(res, 200, await api.followUps.setWatch(pr, level));
         return;
       }
       case "GET /api/clone": {

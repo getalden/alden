@@ -957,6 +957,19 @@ textarea.input {
   color: var(--ink3);
   overflow-wrap: anywhere;
 }
+/* The bell on a PR: its notification level, at the end of the line above the title. */
+.watch-bell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--ink3);
+}
+@media print {
+  .watch-bell {
+    display: none;
+  }
+}
 .brief-title {
   font: 500 28px / 1.2 var(--font-ui);
   letter-spacing: -0.01em;

@@ -172,6 +172,26 @@ else in Alden posts to GitHub. See [Comments and sending a review](comments.md#s
 | `-m, --message <body>` | The review's body. General notes follow it. |
 | `-y, --yes` | Send without asking. Without a terminal to ask on, Alden won't send unless you pass it. |
 
+## alden watch
+
+```sh
+alden watch [pr] [--off | --rereview | --your-turn | --every-reply | --default]
+```
+
+How much the desktop app tells you about a PR after you review it: its own level, overriding
+`notifications.followUps` until the PR is merged or closed. With a level, sets it; `--default` puts the PR back on the
+global level; with neither, says which level applies. Without a PR, lists the PRs with their own level. `pr` takes the
+same forms as `alden review`. See [Follow-ups on PRs you reviewed](desktop.md#follow-ups-on-prs-you-reviewed).
+
+| Flag | What it does |
+| --- | --- |
+| `--off` | No notifications about this PR. |
+| `--rereview` | Only when you're asked to review it again. |
+| `--your-turn` | A re-review, or when every comment you left is resolved or answered. |
+| `--every-reply` | Each reply, resolve and re-review, and a push that makes one of your comments outdated. |
+| `--default` | Back to the global level. |
+| `--json` | Print the PR's level (`{ pr, override?, level }`), or the global level and the list, as JSON. |
+
 ## alden ui
 
 Opens the queue and briefings in your browser, served on 127.0.0.1 only until you stop it. See

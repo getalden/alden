@@ -65,6 +65,28 @@ const api: UiApi = {
       return { opened: page };
     },
   },
+  followUps: {
+    check: async () => {
+      calls.push({ method: "followUps.check", args: undefined });
+      return {
+        notifications: [{ pr: "a/b#1", title: "Fix \u001b[31mit", url: "u", text: "2 replies", events: ["e1", "e2"] }],
+        sound: true,
+      };
+    },
+    ack: async (ids) => {
+      calls.push({ method: "followUps.ack", args: ids });
+      return { acked: ids.length };
+    },
+    watch: async (pr) => {
+      calls.push({ method: "followUps.watch", args: pr });
+      return { pr, level: "your-turn" };
+    },
+    setWatch: async (pr, level) => {
+      calls.push({ method: "followUps.setWatch", args: { pr, level } });
+      return { pr, ...(level ? { override: level } : {}), level: level ?? "your-turn" };
+    },
+    noteQueue: (queue) => queue,
+  },
   // Settings → Ranking has its own tests, in rank.test.ts.
   ranking: {
     state: async () => ({}) as never,
@@ -399,6 +421,45 @@ describe("alden ui server", () => {
   it("streams a failed review as an error event", async () => {
     const res = await call("/api/review", { method: "POST", headers: authed, body: { pr: "bad" } });
     expect(JSON.parse(res.text.trim())).toEqual({ type: "error", message: "Not a PR." });
+  });
+
+  it("checks follow-ups, acknowledges what was shown, and reads and sets a PR's level", async () => {
+    const checked = await call("/api/follow-ups", { headers: authed });
+    expect(JSON.parse(checked.text)).toEqual({
+      notifications: [{ pr: "a/b#1", title: "Fix it", url: "u", text: "2 replies", events: ["e1", "e2"] }],
+      sound: true,
+    });
+    const ack = await call("/api/follow-ups/ack", { method: "POST", headers: authed, body: { events: ["e1", "e2"] } });
+    expect(JSON.parse(ack.text)).toEqual({ acked: 2 });
+    for (const body of [{}, { events: "e1" }, { events: [1] }]) {
+      expect((await call("/api/follow-ups/ack", { method: "POST", headers: authed, body })).status).toBe(400);
+    }
+
+    expect((await call("/api/watch", { headers: authed })).status).toBe(400);
+    const watch = await call(`/api/watch?pr=${encodeURIComponent("a/b#1")}`, { headers: authed });
+    expect(JSON.parse(watch.text)).toEqual({ pr: "a/b#1", level: "your-turn" });
+    const set = await call(`/api/watch?pr=${encodeURIComponent("a/b#1")}`, {
+      method: "PUT",
+      headers: authed,
+      body: { level: "every-reply" },
+    });
+    expect(JSON.parse(set.text)).toEqual({ pr: "a/b#1", override: "every-reply", level: "every-reply" });
+    await call(`/api/watch?pr=${encodeURIComponent("a/b#1")}`, {
+      method: "PUT",
+      headers: authed,
+      body: { level: null },
+    });
+    for (const body of [{}, { level: "loud" }]) {
+      const bad = await call(`/api/watch?pr=${encodeURIComponent("a/b#1")}`, { method: "PUT", headers: authed, body });
+      expect(bad.status).toBe(400);
+    }
+    expect(calls).toEqual([
+      { method: "followUps.check", args: undefined },
+      { method: "followUps.ack", args: ["e1", "e2"] },
+      { method: "followUps.watch", args: "a/b#1" },
+      { method: "followUps.setWatch", args: { pr: "a/b#1", level: "every-reply" } },
+      { method: "followUps.setWatch", args: { pr: "a/b#1", level: null } },
+    ]);
   });
 
   it("validates config changes and reports the engine's errors", async () => {

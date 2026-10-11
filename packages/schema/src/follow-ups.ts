@@ -90,6 +90,10 @@ export const FollowUpNotificationSchema = z.object({
 
 export const FollowUpNotificationsSchema = z.object({
   notifications: z.array(FollowUpNotificationSchema),
+  sound: z
+    .boolean()
+    .optional()
+    .describe("`notifications.sound`: whether the desktop app plays the system's sound with them"),
 });
 
 /** A PR's notification level: its own override, or the global setting. */

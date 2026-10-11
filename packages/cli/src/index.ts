@@ -16,6 +16,7 @@ import { registerSetupCommand } from "./commands/setup.js";
 import { registerSpendCommand } from "./commands/spend.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerUiCommand } from "./commands/ui.js";
+import { registerWatchCommand } from "./commands/watch.js";
 import { instrument, registerTelemetryCommand } from "./telemetry.js";
 import { updateNotice } from "./version.js";
 
@@ -31,6 +32,7 @@ registerQueueCommand(program);
 registerOpenCommand(program);
 registerReviewCommand(program);
 registerCommentCommands(program, pkg.version);
+registerWatchCommand(program);
 registerSpendCommand(program);
 registerFeedbackCommand(program);
 registerMemoryCommand(program);
