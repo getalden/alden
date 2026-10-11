@@ -120,6 +120,11 @@ export interface UiApi {
   editDraft(id: string, change: DraftChange): Promise<ReviewDraft>;
   deleteDraft(id: string): Promise<{ ok: true }>;
   /**
+   * Keeps Alden's drafts, by id or every one on a PR: each becomes yours and is sent with the review. Untouched, they
+   * never are. Dropping one is `deleteDraft`.
+   */
+  keepDrafts(input: { ids?: string[]; pr?: string }): Promise<{ kept: ReviewDraft[] }>;
+  /**
    * Sends the PR's drafts to GitHub as one review, and deletes them once it's posted. The only call that writes to
    * GitHub: it runs on your click or command, never in the background, and Claude Code has no tool for it.
    */
@@ -760,6 +765,27 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
             },
             "you",
           ),
+        );
+        return;
+      }
+      case "POST /api/drafts/keep": {
+        const body = await readJsonBody(req);
+        const ids = Array.isArray(body.ids) ? body.ids : undefined;
+        const validIds = ids?.every((id) => typeof id === "string" && /^[\w-]{1,64}$/.test(id)) && ids.length <= 100;
+        if (
+          (ids !== undefined && !validIds) ||
+          (body.pr !== undefined && typeof body.pr !== "string") ||
+          (!ids && !body.pr)
+        ) {
+          throw new ApiError(400, "Send { ids: [draft ids] } or { pr: owner/repo#12 } to keep Alden's drafts there.");
+        }
+        send(
+          res,
+          200,
+          await api.keepDrafts({
+            ...(ids ? { ids: ids as string[] } : {}),
+            ...(typeof body.pr === "string" ? { pr: body.pr } : {}),
+          }),
         );
         return;
       }

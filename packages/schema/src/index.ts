@@ -30,6 +30,8 @@ export {
   type FromNote,
   FromNoteSchema,
   type LlmFinding,
+  type LlmFindingDraft,
+  LlmFindingDraftSchema,
   LlmFindingSchema,
   type LlmSection,
   LlmSectionSchema,

@@ -49,6 +49,7 @@ const USER_ONLY = [
   ["notifications", "sound"],
   ["notifications", "followUps"],
   ["learning", "fromReviews"],
+  ["drafts", "auto"],
 ] as const;
 
 /** Defaults, then `~/.alden/config.toml`, then the repo's `.alden.toml` (except the user-only settings). */

@@ -2229,6 +2229,19 @@ details > summary {
   color: var(--acc);
   background: var(--acc-soft);
 }
+/* Alden's drafts: suggestions until you keep or edit them, so they read apart from your own. */
+.chip.from-alden {
+  color: var(--warn);
+  background: var(--warn-soft);
+  flex: none;
+}
+.alden-drafts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--warn-soft);
+}
 /* The PR pane: the briefing (it scrolls) and, beside it, the Comments drawer. */
 .review-pane {
   flex: 1;

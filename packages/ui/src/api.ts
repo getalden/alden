@@ -133,6 +133,8 @@ export interface Session {
   notifications?: { sound: boolean; followUps?: FollowUpLevel };
   /** Whether Alden learns from the reviews you send (`learning.fromReviews`, on unless you turn it off). */
   learning?: { fromReviews: boolean };
+  /** Whether a model briefing drafts comments for you to keep, edit or drop (`drafts.auto`, on unless turned off). */
+  drafts?: { auto: boolean };
 }
 
 /** Why there's no GitHub sign-in: the keychain refused (an unsigned build of the app), or there's none anywhere. */
@@ -390,6 +392,10 @@ export class Api {
 
   deleteDraft = (id: string) =>
     this.request<{ ok: true }>(`/api/drafts/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  /** Keeps Alden's drafts (by id, or all of them on `pr`): they become yours, and are sent with the review. */
+  keepDrafts = (which: { ids: string[] } | { pr: string }) =>
+    this.request<{ kept: ReviewDraft[] }>("/api/drafts/keep", { method: "POST", body: JSON.stringify(which) });
 
   /**
    * The Diff tab: a PR's diff at its current head ("owner/repo#12"), or without one the local changes. The server keeps

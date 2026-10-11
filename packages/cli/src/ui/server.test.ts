@@ -171,6 +171,10 @@ const api: UiApi = {
     if (id === "gone") throw new ApiError(404, "No draft gone.");
     return { ok: true };
   },
+  keepDrafts: async (input) => {
+    calls.push({ method: "keepDrafts", args: input });
+    return { kept: [] };
+  },
   diff: async (pr, since) => {
     calls.push({ method: "diff", args: since === undefined ? pr : { pr, since } });
     if (pr === "a/b#404") throw new ApiError(502, "GitHub couldn't find a/b#404.");
@@ -660,6 +664,21 @@ describe("alden ui server", () => {
     expect((await call("/api/review/send", { method: "POST", body: { pr: "a/b#1", event: "APPROVE" } })).status).toBe(
       401,
     );
+  });
+
+  it("keeps Alden's drafts by id or for a whole PR, and checks the body", async () => {
+    const post = (body: unknown) => call("/api/drafts/keep", { method: "POST", headers: authed, body });
+    expect((await post({ ids: ["d1", "d2"] })).status).toBe(200);
+    expect((await post({ pr: "a/b#1" })).status).toBe(200);
+    expect(calls).toEqual([
+      { method: "keepDrafts", args: { ids: ["d1", "d2"] } },
+      { method: "keepDrafts", args: { pr: "a/b#1" } },
+    ]);
+    expect((await post({})).status).toBe(400);
+    expect((await post({ ids: "d1" })).status).toBe(400);
+    expect((await post({ ids: ["../x"] })).status).toBe(400);
+    expect((await post({ pr: 7 })).status).toBe(400);
+    expect((await call("/api/drafts/keep", { method: "POST", body: { pr: "a/b#1" } })).status).toBe(401);
   });
 
   it("passes memory changes and reactions through, and checks their bodies", async () => {
