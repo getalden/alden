@@ -2,7 +2,14 @@ import type { BriefingTarget, CheckResult } from "@alden/schema";
 import { describe, expect, it } from "vitest";
 import type { DiffFile } from "../../diff/parse.js";
 import { parseHunks } from "../../diff/parse.js";
-import { buildPrompt, renderFileDiff, SYSTEM_PROMPT } from "./prompt.js";
+import {
+  buildPrompt,
+  DRAFTS_PROMPT,
+  LlmOutputSchema,
+  LlmOutputWithDraftsSchema,
+  renderFileDiff,
+  SYSTEM_PROMPT,
+} from "./prompt.js";
 import { noteOf, restatesCi, validateFindings } from "./validate.js";
 
 const target: BriefingTarget = {
@@ -102,6 +109,23 @@ describe("buildPrompt", () => {
     expect(prompt.user).toContain("    - no matching test change: src/rank.ts");
     expect(prompt.user).toContain("   11 + if (ci) sink = true;");
     expect(prompt).toMatchObject({ includedFiles: ["src/rank.ts"], omittedFiles: [] });
+  });
+
+  it("adds the drafting section only when drafts are asked for, leaving the base prompt as it was", () => {
+    const base = buildPrompt({ target, files: [code], checks, maxInputTokens: 100_000 });
+    const drafting = buildPrompt({ target, files: [code], checks, maxInputTokens: 100_000, drafts: true });
+    expect(base.system).toBe(SYSTEM_PROMPT);
+    expect(drafting.system).toBe(`${SYSTEM_PROMPT}\n\n${DRAFTS_PROMPT}`);
+    expect(drafting.user).toBe(base.user);
+    expect(DRAFTS_PROMPT).toContain("medium or high severity finding whose first anchor is an added line");
+    expect(DRAFTS_PROMPT).toContain("never mention being an AI");
+    // The drafted comment is optional on each finding, so an answer without drafts still fits.
+    const finding = { title: "t", detail: "d", severity: "medium", anchors: [] };
+    const answer = { summary: "s", matchesTitle: { verdict: "yes", reason: "r" }, findings: [finding] };
+    expect(LlmOutputWithDraftsSchema.safeParse(answer).success).toBe(true);
+    const drafted = { ...answer, findings: [{ ...finding, draft: { body: "b", suggestion: "x" } }] };
+    expect(LlmOutputWithDraftsSchema.parse(drafted).findings[0]?.draft).toEqual({ body: "b", suggestion: "x" });
+    expect(LlmOutputSchema.parse(drafted).findings[0]).not.toHaveProperty("draft");
   });
 
   it("adds callers after the diff only when the diff fitted and there's room", () => {

@@ -64,6 +64,16 @@ describe("learning from reviews", () => {
   });
 });
 
+describe("Alden's drafted comments", () => {
+  it("are on by default, and only your user config turns them off", async () => {
+    expect((await loadConfig(repo)).drafts.auto).toBe(true);
+    await writeFile(join(repo, ".alden.toml"), "[drafts]\nauto = false\n");
+    expect((await loadConfig(repo)).drafts.auto).toBe(true);
+    await setConfigValue("drafts.auto", "false");
+    expect((await loadConfig(repo)).drafts.auto).toBe(false);
+  });
+});
+
 describe("queue scope", () => {
   it("comes from this machine's user config, and a repo's config can't change it", async () => {
     await writeFile(userConfigPath(), '[queue]\norgs = ["acme"]\nignore = ["acme/legacy"]\n');

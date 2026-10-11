@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import type { Api, Session, SpendReport } from "../api";
 import { formatUsd, plural } from "../format";
 import { applyTheme, readTheme, type Theme } from "../theme";
+import { DraftSettings } from "./DraftSettings";
 import { LearningSettings } from "./LearningSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { RankingSettings } from "./RankingSettings";
@@ -235,6 +236,8 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
           </div>
 
           <LearningSettings api={api} on={session.learning?.fromReviews ?? true} onSaved={onSaved} />
+
+          <DraftSettings api={api} on={session.drafts?.auto ?? true} onSaved={onSaved} />
 
           <QueueScopeSettings api={api} initial={session.queueScope} onSaved={onSaved} />
 

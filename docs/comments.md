@@ -129,6 +129,39 @@ Alden only compares lines it can see in the diff. It doesn't follow a line that 
 whose text changed, even trivially: those are outdated, on purpose. A comment Alden guessed the place of would post
 somewhere you didn't choose.
 
+## Alden's drafts
+
+When a model briefs a PR (your own Anthropic key, a cloud provider or a local model: any of them, on every plan), it
+also drafts a comment for its findings worth one. Alden makes them drafts in the Comments drawer, marked **Drafted by
+Alden**, and the briefing marks each finding it drafted for **Draft ready**. They're suggestions, nothing more:
+
+- **At most five per PR**, most severe first: only medium and high findings, each on the first line it points at, and
+  only on a changed line GitHub takes a comment on. A finding your feedback quietened or dismissed gets none, and none
+  goes where a comment (yours, Claude Code's or Alden's) is already within three lines.
+- **A suggested change** comes with one only when the fix is a small, certain replacement of that line. Alden checks it
+  the way it checks yours: it must change the line, apply to it, and be a few lines at most.
+- **Keep**, **Edit** or **Drop** each in the drawer, or **Keep all** / **Drop all** at its top. Keeping or editing one
+  makes it yours (it's then sent like anything you wrote); dropping deletes it.
+- **Untouched, it's never sent.** Send posts your comments and the ones you kept; the drawer says "2 drafts by Alden not
+  kept won't be sent", and they're cleared once the review is sent. A draft never approves anything: the verdict is
+  always yours.
+- **Briefing the PR again** replaces Alden's untouched drafts with new ones, and never touches one you kept or edited.
+- **A PR with text aimed at AI reviewers** (the [injection check](checks.md)) gets no drafts, and the briefing says why:
+  its author may have steered the model, and a draft is text you'd send under your name.
+
+In a terminal, `alden review` says "Alden drafted 3 comments — see them with `alden comment acme/shop#7`", where
+they're marked "drafted by Alden, not kept". `alden comment acme/shop#7 --keep <id>` (or `--keep all`) keeps them,
+`--delete <id>` drops one, and `alden send` leaves the ones you didn't keep behind and says so.
+
+Keep, edit and drop teach Alden too, for the finding's check: keeping or editing one counts once as a comment near
+that place (sending it later doesn't count it again), and dropping one counts a little the other way, like approving
+past a place you saw (0.2, never for secrets or text aimed at AI reviewers, and never enough alone to quieten a check).
+Nothing is learned while `learning.fromReviews` is off. Usage stats count keeps, edits and drops, never the text.
+
+To turn drafting off, switch off **Draft comments for me** in Settings, or `alden config set drafts.auto false`. The
+model is then asked exactly what it was asked before. See [Models](models.md#drafted-comments) for what the model is
+asked and what it costs.
+
 ## Sending
 
 ```sh

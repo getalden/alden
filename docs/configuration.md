@@ -119,6 +119,12 @@ For the [desktop app](desktop.md#while-youre-away).
 | --- | --- | --- |
 | `notifications.sound` | `true` | Play the system's notification sound with "Briefing ready". Read from your user config only. Settings → Notifications sets it too. |
 
+## drafts
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `drafts.auto` | `true` | When a model briefs a PR, also draft comments for up to five of its medium and high findings, in the same call, for you to keep, edit or drop in the Comments drawer. Untouched drafts are never sent, and none approves. Off asks the model exactly what it asked before. Read from your user config only. Settings → Drafts sets it too. See [Alden's drafts](comments.md#aldens-drafts). |
+
 ## learning
 
 | Key | Default | What it does |

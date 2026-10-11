@@ -1,6 +1,8 @@
-import type { Anchor, LlmFinding } from "@alden/schema";
+import type { Anchor, LlmFinding, LlmFindingDraft } from "@alden/schema";
 import type { DiffFile } from "../../diff/parse.js";
 import { MODEL_TOPICS } from "../../learn/learn.js";
+import { checkSuggestion, placeOnDiff } from "../drafts.js";
+import { findInjection } from "../injection.js";
 import type { LlmOutput } from "./prompt.js";
 
 /**
@@ -32,6 +34,46 @@ export interface ValidatedFindings {
   dropped: number;
 }
 
+/** The longest drafted comment Alden keeps: a draft is a few sentences, so anything longer went wrong. */
+export const MAX_DRAFT_CHARS = 2_000;
+/** The most lines a drafted suggestion may have: "a small, certain replacement" of one line. */
+export const MAX_SUGGESTION_LINES = 10;
+
+/**
+ * The model's drafted comment for a finding, when Alden can offer it as one: the finding is medium or high, its first
+ * line anchor is an added line of a file the model saw, the comment says something in plain words (not "as an AI…",
+ * nothing aimed at AI reviewers) and fits, and any suggestion is a real change GitHub can apply to that line (see
+ * `checkSuggestion`) with no redaction placeholder in it. Undefined otherwise: the finding stays, without a draft.
+ */
+export function checkDraft(
+  draft: { body: string; suggestion?: string | undefined } | undefined,
+  finding: { severity: LlmFinding["severity"]; anchors: Anchor[] },
+  shownFiles: DiffFile[],
+): LlmFindingDraft | undefined {
+  if (!draft || (finding.severity !== "medium" && finding.severity !== "high")) return undefined;
+  const anchor = finding.anchors.find((a) => a.line !== undefined);
+  if (!anchor || anchor.line === undefined) return undefined;
+  const file = shownFiles.find((f) => f.path === anchor.path);
+  const added = file?.hunks.some((h) => h.lines.some((l) => l.kind === "add" && l.newLine === anchor.line));
+  if (!file || !added) return undefined;
+  const body = draft.body.trim();
+  if (!body || body.length > MAX_DRAFT_CHARS || /\bas an ai\b/i.test(body) || findInjection(body)) return undefined;
+  if (draft.suggestion === undefined) return { body };
+  const suggestion = draft.suggestion.replace(/\r?\n$/, "");
+  const place = placeOnDiff(shownFiles, anchor.path, anchor.line, "RIGHT");
+  if ("problem" in place) return undefined;
+  try {
+    checkSuggestion(suggestion, place);
+  } catch {
+    return undefined;
+  }
+  const same = suggestion === (place.lines ?? [place.anchor.text]).join("\n");
+  if (same || suggestion.split("\n").length > MAX_SUGGESTION_LINES || /\[redacted\b/i.test(suggestion)) {
+    return undefined;
+  }
+  return { body, suggestion };
+}
+
 /**
  * Keeps only what can be checked against the diff. Each anchor must name a file the model was shown, and a line in
  * that file's visible hunks when it gives one. A finding whose anchors all fail is dropped as invented; a finding
@@ -55,6 +97,8 @@ export function validateFindings(
   output: LlmOutput,
   shownFiles: DiffFile[],
   notes: ReadonlyMap<string, { id: string; text: string }> = new Map(),
+  /** Whether drafts were asked for: without it, a draft the model sent anyway is ignored. */
+  options: { drafts?: boolean } = {},
 ): ValidatedFindings {
   const index = visibleLines(shownFiles);
   const findings: LlmFinding[] = [];
@@ -78,6 +122,9 @@ export function validateFindings(
     // The topic the model tagged it with, as the check it counts toward when the reviewer reacts to it. A finding
     // from one of your notes counts toward the note instead, so it's tied to no check.
     const checkId = !fromNote && finding.topic && finding.topic !== "other" ? MODEL_TOPICS[finding.topic] : undefined;
+    const draft = options.drafts
+      ? checkDraft(finding.draft, { severity: finding.severity, anchors: valid }, shownFiles)
+      : undefined;
     findings.push({
       title: finding.title,
       ...(checkId ? { checkId } : {}),
@@ -85,6 +132,7 @@ export function validateFindings(
       severity: finding.severity,
       anchors: valid,
       ...(fromNote ? { fromNote } : {}),
+      ...(draft ? { draft } : {}),
     });
   }
   return { findings, dropped };

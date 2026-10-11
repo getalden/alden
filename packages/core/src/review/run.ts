@@ -81,6 +81,8 @@ export interface GraphOptions {
   onStage?: (stage: ReviewStage, label: string) => void;
   /** What Alden has learned about the reviewer in this repo (see `loadLearning`). Absent: a briefing for anyone. */
   learning?: Learning;
+  /** Given a PR's diff as the briefing saw it, for placing Alden's drafted comments on it (see `makeAldenDrafts`). */
+  onDiff?: (files: DiffFile[]) => void;
 }
 
 type GraphResult = {
@@ -133,6 +135,7 @@ export async function reviewPullRequest(
   const raw = await fetchPullRequest(client, repo, number);
   const [{ viewer }, files] = await Promise.all([fetchViewer(client), fetchPullRequestDiff(client, repo, number)]);
   const pr = toFacts(raw, viewer);
+  graphOptions.onDiff?.(files);
   if (graphOptions.enabled !== false) stage("graph", "Checking out the PR and finding callers");
   const [manifests, graph] = await Promise.all([
     tryManifests(() => loadPullRequestManifests(client, repo, number, files)),

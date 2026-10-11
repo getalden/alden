@@ -119,6 +119,25 @@ If Ollama already has the one for your memory, or a smaller one from the table, 
 Any other model Ollama has can be chosen too. Local models are free and private, but they flag less than Claude: expect
 fewer findings, and more missed.
 
+## Drafted comments
+
+With `drafts.auto` on (the default), the briefing's own model call also drafts the comments Alden offers you in the
+Comments drawer (see [Alden's drafts](comments.md#aldens-drafts)). There's no second call. For a PR (never your local
+changes, and never a PR the injection check flagged), the system prompt gains one paragraph asking, for each medium or
+high finding whose first anchor is an added line, for the comment a careful reviewer would leave on that line: to the
+author, in one to three plain sentences, with no preamble, praise or sign-off, never mentioning being an AI; and a
+suggested replacement for the line only when the fix is small and certain. Each finding in the answer may then carry
+a `draft` (`body`, optional `suggestion`).
+
+Alden checks every draft before offering it: it must be on a medium or high finding, on an added line the model was
+shown, say something in plain words of reasonable length (nothing aimed at AI reviewers), and any suggestion must
+change that line, apply to it, be a few lines at most and contain no redaction placeholder. A draft that fails is
+dropped; the finding stays.
+
+**Cost:** a little more output on the same call, usually a few hundred tokens for a PR's handful of drafts, within the
+same per-review cap. It works with any model, your own key or a local one. With `drafts.auto = false` the prompt and
+the answer's shape are exactly what they were without drafts, so nothing extra is asked or paid for.
+
 ## Budgets
 
 Every model call is checked against two caps before it's sent:

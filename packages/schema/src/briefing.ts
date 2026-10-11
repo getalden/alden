@@ -81,6 +81,19 @@ export const BriefingLearningSchema = z.object({
   memory: z.number().int().describe("notes about you that were given to the model"),
 });
 
+/**
+ * The review comment the model drafted for a finding, when `drafts.auto` is on: what a careful reviewer would leave on
+ * the finding's first anchored line. Alden turns it into a draft labelled "Drafted by Alden", which you keep, edit or
+ * drop; it's never sent on its own.
+ */
+export const LlmFindingDraftSchema = z.object({
+  body: z.string().describe("the comment, in plain direct words"),
+  suggestion: z
+    .string()
+    .optional()
+    .describe("replacement code for the anchored line, only when the fix is a small, certain replacement"),
+});
+
 /** What the model found, after Alden has thrown away anything pointing at a line that isn't in the diff. */
 export const LlmFindingSchema = z.object({
   title: z.string(),
@@ -96,6 +109,9 @@ export const LlmFindingSchema = z.object({
   anchors: z.array(AnchorSchema),
   fromNote: FromNoteSchema.optional().describe(
     "the reviewer's note that is the reason for this finding, when the model said so and the note was in its prompt",
+  ),
+  draft: LlmFindingDraftSchema.optional().describe(
+    "a comment the model drafted for it, checked against the diff: only on medium and high findings on a changed line, when `drafts.auto` is on",
   ),
 });
 
@@ -122,6 +138,12 @@ export const LlmSectionSchema = z.object({
     .optional()
     .describe("likely secrets replaced with placeholders before the prompt was sent"),
   usd: z.number().optional().describe("what the call cost at list price, when known"),
+  draftsNote: z
+    .string()
+    .optional()
+    .describe(
+      "why the model drafted no comments though `drafts.auto` is on, e.g. text in the PR aimed at AI reviewers",
+    ),
 });
 
 export const BriefingFileSchema = z.object({
@@ -213,6 +235,7 @@ export type BriefingLearning = z.infer<typeof BriefingLearningSchema>;
 export type BriefingFile = z.infer<typeof BriefingFileSchema>;
 export type BriefingTarget = z.infer<typeof BriefingTargetSchema>;
 export type LlmFinding = z.infer<typeof LlmFindingSchema>;
+export type LlmFindingDraft = z.infer<typeof LlmFindingDraftSchema>;
 export type FromNote = z.infer<typeof FromNoteSchema>;
 export type LlmSection = z.infer<typeof LlmSectionSchema>;
 export type Briefing = z.infer<typeof BriefingSchema>;

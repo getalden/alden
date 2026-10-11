@@ -153,7 +153,8 @@ text, lists the PR's comments, ranges and suggestions (old lines and new) shown,
 | `--left` | The line numbers are in the old file: a comment on removed lines. Not with a suggestion. |
 | `--suggest <code>` | Suggests replacement code for the line(s), exactly as they should read. `-` reads it from stdin; `""` deletes the lines. See [Suggesting changes](comments.md#suggesting-changes). |
 | `--suggest-file <path>` | Suggests the replacement code in this file. From a file or stdin, one trailing newline is dropped. |
-| `--delete <id>` | Deletes a comment, by the id the list shows. |
+| `--delete <id>` | Deletes a comment, by the id the list shows. On one of [Alden's drafts](comments.md#aldens-drafts), drops it. |
+| `--keep <id>` | Keeps one of Alden's drafts (or `all` of them on the PR), making it yours so it's sent with your review. |
 | `--json` | Print the comments (or the new one) as JSON. Schema: `packages/schema/json/review-draft.v1.json`. |
 
 ## alden send
@@ -164,7 +165,7 @@ alden send <pr> --comment | --approve | --request-changes [-m body]
 
 Sends the PR's comments to GitHub as one review. First it shows exactly what will post (the body, then each comment
 with its file and line or lines, each suggestion as the lines it replaces and the lines it suggests, and before an approval the places Alden flagged that you didn't comment on), then asks. Nothing
-else in Alden posts to GitHub. See [Comments and sending a review](comments.md#sending).
+else in Alden posts to GitHub. Alden's drafts you haven't kept stay behind, and it says how many. See [Comments and sending a review](comments.md#sending).
 
 | Flag | What it does |
 | --- | --- |

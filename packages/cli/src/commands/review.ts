@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
+  aldenDraftsLine,
   createGitHubClient,
+  type DiffFile,
   type Effort,
   JsonCache,
   loadConfig,
+  makeAldenDrafts,
   ReviewDrafts,
   repoFromRemote,
   resolveToken,
@@ -86,6 +89,7 @@ export function registerReviewCommand(program: Command): void {
       let briefing: Briefing;
       let source: TokenSource | undefined;
       let picked: string | undefined;
+      let drafted: string | undefined;
       try {
         if (prArg === undefined) {
           const learning = await learningFor(await originRepo(process.cwd()));
@@ -105,9 +109,13 @@ export function registerReviewCommand(program: Command): void {
           }
           source = resolved.source;
           const learning = await learningFor(ref.repo);
+          let diff: DiffFile[] | undefined;
           briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model, {
             enabled: options.graph,
             ...(learning ? { learning } : {}),
+            onDiff: (files) => {
+              diff = files;
+            },
           });
           if (briefing.target.kind === "pr") noteOpened(last?.rows, briefing.target.url, "cli");
           // Its places to look, for `alden send` ("you didn't comment on…") and learning from comments.
@@ -115,6 +123,13 @@ export function registerReviewCommand(program: Command): void {
             new ReviewDrafts().rememberBriefing(briefing);
           } catch {
             // the database is locked or damaged: the review still stands
+          }
+          // Comments drafted from the model's findings, kept until you keep, edit or drop them: never sent on their own.
+          try {
+            const { made } = makeAldenDrafts(briefing, diff, { enabled: config.drafts.auto });
+            drafted = aldenDraftsLine(made.length, `${ref.repo}#${ref.number}`);
+          } catch {
+            // the review stands without drafts
           }
         }
       } catch (error) {
@@ -140,14 +155,17 @@ export function registerReviewCommand(program: Command): void {
 
       if (options.json) {
         console.log(JSON.stringify(briefing, null, 2));
+        if (drafted) console.error(drafted);
         return;
       }
       if (options.markdown) {
         process.stdout.write(briefingMarkdown(briefing));
+        if (drafted) console.error(drafted);
         return;
       }
       const render = { width: Math.min(process.stdout.columns ?? 100, 120), color: shouldColor(process.stdout) };
       process.stdout.write(renderBriefing(briefing, render));
+      if (drafted) process.stdout.write(`\n${drafted}\n`);
       if (wantsNext(options.json)) {
         const rank =
           prArg !== undefined && /^#?\d+$/.test(prArg.trim()) ? Number(prArg.trim().replace("#", "")) : undefined;

@@ -138,7 +138,11 @@ function modelFooter(llm: LlmSection | undefined, options: RenderOptions): strin
     llm.redactedSecrets &&
       `${llm.redactedSecrets} likely secret${llm.redactedSecrets === 1 ? "" : "s"} hidden from the model`,
   ].filter(Boolean);
-  return ["", ...wrap(parts.join(" · "), width).map((l) => paint(l, "dim", color))];
+  return [
+    "",
+    ...wrap(parts.join(" · "), width).map((l) => paint(l, "dim", color)),
+    ...(llm.draftsNote ? wrap(llm.draftsNote, width).map((l) => paint(l, "yellow", color)) : []),
+  ];
 }
 
 /**

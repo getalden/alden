@@ -274,6 +274,11 @@ In the Diff tab, a linked note shows at its line, or on its file, when the diff 
 Drafts that Claude Code added (through [the plugin or `alden mcp`](claude-code.md)) are marked **from Claude**, so you
 read them before they go out under your name. Claude can draft comments, but never send them.
 
+Drafts Alden made from its model's findings are marked **Drafted by Alden**, with **Keep**, **Edit** and **Drop**, and
+**Keep all** / **Drop all** at the top of the drawer. Until you keep or edit one, it isn't sent: the drawer says how
+many won't be, and **Send review** counts only what will post. The briefing marks a finding with one **Draft ready**.
+See [Alden's drafts](comments.md#aldens-drafts).
+
 A draft written before the PR's latest commits is marked **Outdated** when its lines changed. **Rewrite** puts it in a
 new comment on the current code (check the line), or delete it. The review won't send until you've done one or the
 other.
@@ -321,6 +326,7 @@ Settings change your user config, like `alden config set`; a repo's `.alden.toml
 - **Your feedback**: how often you found Alden's places useful, and **Export redacted feedback**.
 - **Learning**: **Learn from my reviews** (on by default). Off, Alden stops noting which places you saw and learns only
   from Useful and Not useful. See [Places you saw](memory.md#places-you-saw).
+- **Drafts**: **Draft comments for me** (on by default, `drafts.auto`). Off, a model briefing drafts no comments.
 - **Your queue on this machine**: which organisations and repos the queue covers, and what to leave out. The queue
   says when it's narrowed.
 - **Ranking**: see below.

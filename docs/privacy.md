@@ -33,8 +33,9 @@ API data by default.
 ## What stays on your machine
 
 Feedback, the PRs you open and what Alden learns from them stay in `~/.alden/alden.db` ([Learning and
-memory](memory.md)). So do the comments you're drafting, until you send or delete them; they're never in usage stats
-or the feedback export ([Comments and sending a review](comments.md)). So do the [places you
+memory](memory.md)). So do the comments you're drafting, and the ones Alden drafted for you from its model's
+findings, until you send or delete them; they're never in usage stats (which count keeps, edits and drops, never
+text) or the feedback export ([Comments and sending a review](comments.md)). So do the [places you
 saw](memory.md#places-you-saw) in guided review and the Diff tab: which of Alden's places (check, file and line) were
 in front of you for 1.5 seconds, kept 90 days. They're never in usage stats or the feedback export either, and
 **Learn from my reviews** off (`learning.fromReviews`) stops Alden noting them. So does where each line comment you sent
