@@ -277,3 +277,84 @@ describe("follow-up counts and text", () => {
     expect(notificationText([e("outdated"), e("outdated")])).toBe("2 outdated by a push");
   });
 });
+
+describe("first checks that start from your last review", () => {
+  const DAY = 24 * 60;
+  const said = (id: string, login: string, when: Date) => ({ ...comment(id, login, 0), createdAt: when.toISOString() });
+
+  it("tells a PR that sat quiet for weeks about the replies and re-review that woke it", async () => {
+    const pr: FakePr = {
+      repo: "acme/shop",
+      number: 12,
+      updatedAt: at(0).toISOString(),
+      threads: [thread("T1", [said("a", "sam", at(-60))])],
+    };
+    const search = [pr];
+    const { client } = fakeGitHub([pr], search);
+    await check(client, 0);
+    // Sixteen days without a change, and out of the search: no longer followed.
+    search.length = 0;
+    await check(client, 16 * DAY);
+    expect(store.get("SELECT * FROM follow_ups WHERE pr_key = 'acme/shop#12'")).toBeUndefined();
+
+    pr.updatedAt = at(17 * DAY).toISOString();
+    pr.threads = [thread("T1", [said("a", "sam", at(-60)), said("b", "bo", at(17 * DAY - 30))])];
+    search.push(pr);
+    const row = {
+      pr: { ...pr, title: "Charge tax", url: "https://github.com/acme/shop/pull/12", author: "ana" },
+      followUp: { lastReviewedAt: at(-60).toISOString(), rereviewRequestedAt: at(17 * DAY - 10).toISOString() },
+    };
+    const woke = await check(client, 17 * DAY, { queue: [row] });
+    expect(woke.recorded.map((e) => e.kind)).toEqual(["rereview", "reply", "your-turn"]);
+  });
+
+  it("tells what happened between a review you sent from Alden and the first check, but not a fresh install's history", async () => {
+    const { client: nothing } = fakeGitHub([]);
+    await check(nothing, 0); // follow-ups start here
+    rememberSentComments(
+      store,
+      { repo: "acme/shop", number: 12, reviewId: 1, headSha: "h0", sentAt: at(60).toISOString() },
+      [{ path: "src/pay.ts", line: 40, side: "RIGHT" }],
+    );
+    const pr: FakePr = {
+      repo: "acme/shop",
+      number: 12,
+      updatedAt: at(90).toISOString(),
+      threads: [
+        thread("T1", [said("a", "sam", at(59)), said("b", "bo", at(80))]),
+        thread("T2", [said("c", "sam", at(59))], { isResolved: true, resolvedBy: { login: "bo" } }),
+        thread("T3", [said("d", "sam", at(59))], { isResolved: true, resolvedBy: { login: "sam" } }),
+      ],
+    };
+    const first = await check(fakeGitHub([pr]).client, 100);
+    expect(first.recorded.map((e) => [e.kind, e.text])).toEqual([
+      ["reply", "bo replied to your comment on src/pay.ts:40"],
+      ["resolved", "Your comment on src/pay.ts:40 was resolved"],
+      ["your-turn", "Your turn: every comment you left is resolved or answered"],
+    ]);
+
+    // Another PR, reviewed before follow-ups ever ran: its old replies aren't news.
+    const old: FakePr = {
+      repo: "acme/web",
+      number: 3,
+      updatedAt: at(90).toISOString(),
+      threads: [thread("T9", [said("x", "sam", at(-DAY)), said("y", "bo", at(-30))])],
+    };
+    expect((await check(fakeGitHub([old]).client, 200)).recorded).toEqual([]);
+  });
+
+  it("never tells you about threads you resolved yourself", async () => {
+    const pr: FakePr = {
+      repo: "acme/shop",
+      number: 12,
+      updatedAt: "2026-10-11T10:00:00Z",
+      threads: [thread("T1", [comment("a", "sam", 0)]), thread("T2", [comment("c", "sam", 1)])],
+    };
+    const { client } = fakeGitHub([pr]);
+    await check(client, 0, { global: "every-reply" });
+    // You resolve both and approve.
+    pr.updatedAt = "2026-10-11T12:30:00Z";
+    pr.threads = pr.threads.map((t) => ({ ...t, isResolved: true, resolvedBy: { login: "sam" } }));
+    expect((await check(client, 40, { global: "every-reply" })).recorded).toEqual([]);
+  });
+});

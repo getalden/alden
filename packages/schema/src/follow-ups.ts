@@ -35,6 +35,10 @@ export const ReviewThreadSchema = z.object({
   originalLine: z.number().int().positive().nullable().describe("the line when the thread was started"),
   side: z.enum(["LEFT", "RIGHT"]),
   isResolved: z.boolean(),
+  resolvedByYou: z
+    .boolean()
+    .optional()
+    .describe("resolved, and by the viewer: a follow-up that's your own doing, never news to you"),
   isOutdated: z.boolean().describe("the code it's on has changed since"),
   startedByYou: z.boolean(),
   viewerCanReply: z.boolean(),

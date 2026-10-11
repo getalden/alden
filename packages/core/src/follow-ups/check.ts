@@ -2,7 +2,7 @@ import type { FollowUpEvent, FollowUpLevel, ReviewThreads } from "@alden/schema"
 import type { GitHubClient } from "../github/client.js";
 import { fetchReviewThreads } from "../github/threads.js";
 import type { AldenStore } from "../store/db.js";
-import { compareFollowUp, type FollowedPr, type FollowUpState, parseState } from "./state.js";
+import { compareFollowUp, type FollowedPr, type FollowUpBaseline, type FollowUpState, parseState } from "./state.js";
 import { clearWatch, levelAllows, prKeyOf } from "./watch.js";
 
 /**
@@ -28,6 +28,8 @@ export const FOLLOW_UP_MIN_INTERVAL_MS = 60_000;
 const CONCURRENCY = 4;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LAST_CHECK_KEY = "follow_ups:checked_at";
+/** When follow-ups first ran here: nothing before it is news, so a fresh install isn't flooded with history. */
+const ENABLED_KEY = "follow_ups:enabled_at";
 /** Events are kept this long, notified or not. */
 const EVENTS_KEEP_DAYS = 30;
 
@@ -66,7 +68,7 @@ export function followedSearch(now: Date): string {
 /** A queue row as the check needs it: the PR, and the queue's word on whether you were asked to review again. */
 export interface FollowUpQueueRow {
   pr: { repo: string; number: number; title: string; url: string; author?: string | null; updatedAt: string };
-  followUp?: { rereviewRequestedAt?: string | undefined } | undefined;
+  followUp?: { rereviewRequestedAt?: string | undefined; lastReviewedAt?: string | undefined } | undefined;
 }
 
 export interface FollowUpCheckOptions {
@@ -99,6 +101,8 @@ interface Followed extends FollowedPr {
   key: string;
   updatedAt: string;
   rereviewRequestedAt?: string | undefined;
+  /** When you last reviewed it, from the queue, if it says. */
+  lastReviewedAt?: string | undefined;
 }
 
 interface FollowRow {
@@ -139,7 +143,8 @@ function lookups(store: AldenStore, since: string, known: Set<string>): { repo: 
       since,
     ),
     ...store.all<{ repo: string; number: number }>(
-      "SELECT repo, number FROM follow_ups ORDER BY COALESCE(updated_at, checked_at) DESC",
+      "SELECT repo, number FROM follow_ups WHERE COALESCE(updated_at, checked_at) >= ? ORDER BY COALESCE(updated_at, checked_at) DESC",
+      since,
     ),
   ];
   const out: { repo: string; number: number }[] = [];
@@ -211,6 +216,30 @@ function save(
   return recorded;
 }
 
+/**
+ * Where a PR's first check starts: your last review of it (the queue's `lastReviewedAt`, or the last comments you sent
+ * from Alden), but never before follow-ups first ran here, nor before the follow window. Resolves and outdated threads
+ * (GitHub gives them no time) count only when the start is a review of yours.
+ */
+export function baselineOf(
+  store: AldenStore,
+  pr: { key: string; lastReviewedAt?: string | undefined },
+  enabledAt: string,
+  windowStart: string,
+): FollowUpBaseline {
+  const sent = store.get<{ at: string | null }>(
+    "SELECT MAX(sent_at) AS at FROM sent_comments WHERE pr_key = ?",
+    pr.key,
+  )?.at;
+  const reviewed = [pr.lastReviewedAt, sent ?? undefined]
+    .filter((t): t is string => typeof t === "string")
+    .map((t) => new Date(t).toISOString())
+    .sort()
+    .at(-1);
+  const floor = enabledAt > windowStart ? enabledAt : windowStart;
+  return reviewed !== undefined && reviewed >= floor ? { at: reviewed, untimed: true } : { at: floor, untimed: false };
+}
+
 const running = new Map<string, Promise<FollowUpCheckResult>>();
 
 /**
@@ -244,11 +273,11 @@ async function runCheck(
   }
 
   const since = new Date(now.getTime() - FOLLOW_UP_WINDOW_DAYS * DAY_MS).toISOString();
-  // Quiet for the whole window, and no level of its own: no longer followed.
-  store.run(
-    "DELETE FROM follow_ups WHERE COALESCE(updated_at, checked_at) < ? AND pr_key NOT IN (SELECT pr_key FROM pr_watch)",
-    since,
-  );
+  let enabledAt = store.get<{ value: string }>("SELECT value FROM meta WHERE key = ?", ENABLED_KEY)?.value;
+  if (!enabledAt) {
+    enabledAt = now.toISOString();
+    store.run("INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)", ENABLED_KEY, enabledAt);
+  }
   store.run(
     "DELETE FROM follow_up_events WHERE at < ?",
     new Date(now.getTime() - EVENTS_KEEP_DAYS * DAY_MS).toISOString(),
@@ -267,6 +296,7 @@ async function runCheck(
       author: row.pr.author ?? undefined,
       updatedAt: row.pr.updatedAt,
       rereviewRequestedAt: row.followUp.rereviewRequestedAt,
+      lastReviewedAt: row.followUp.lastReviewedAt,
     });
   }
   const toLookUp = lookups(store, since, new Set(followed.keys()));
@@ -297,6 +327,15 @@ async function runCheck(
     if (!followed.has(pr.key)) followed.set(pr.key, pr);
   }
   result.followed = followed.size;
+  // Quiet for the whole window and found by none of the above: no longer followed. Should it come back (a reply after
+  // weeks), its first check starts from your last review, so what's new isn't lost.
+  const keep = [...followed.keys()];
+  store.run(
+    `DELETE FROM follow_ups WHERE COALESCE(updated_at, checked_at) < ? AND pr_key NOT IN (SELECT pr_key FROM pr_watch)
+       AND pr_key NOT IN (${keep.map(() => "?").join(", ") || "''"})`,
+    since,
+    ...keep,
+  );
 
   const rows = new Map(store.all<FollowRow>("SELECT * FROM follow_ups").map((r) => [r.pr_key, r]));
   const queue = [...followed.values()];
@@ -322,8 +361,9 @@ async function runCheck(
         }
         result.read++;
       }
-      // Without a previous state this read is the baseline, and records nothing that already happened.
-      const { state, events } = compareFollowUp(pr, previous, threads, pr.rereviewRequestedAt, now);
+      // A first check tells what happened after your last review (see `baselineOf`).
+      const baseline = previous ? undefined : baselineOf(store, pr, enabledAt, since);
+      const { state, events } = compareFollowUp(pr, previous, threads, pr.rereviewRequestedAt, now, baseline);
       if (!moved && events.length === 0) continue;
       try {
         result.recorded.push(...save(store, pr, state, events, moved, options.global, now));

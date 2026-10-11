@@ -50,7 +50,14 @@ struct AppState {
     preparing: Mutex<bool>,
     /// You just chose a folder: the window's next link says so, and the UI shows that repo's PRs.
     chose_folder: Mutex<bool>,
+    /// Follow-up events shown this run, by id: never shown twice, even when acknowledging them failed.
+    follow_ups_shown: Mutex<HashSet<String>>,
+    /// Follow-up events shown but not yet acknowledged: the next poll tries again.
+    follow_ups_unacked: Mutex<HashSet<String>>,
 }
+
+/// The most event ids one `POST /api/follow-ups/ack` takes.
+const ACK_LIMIT: usize = 500;
 
 #[derive(Deserialize)]
 struct PrepareResult {
@@ -412,10 +419,16 @@ async fn poll(app: &AppHandle) {
 }
 
 /// Asks the server what happened on the PRs you reviewed (it reads GitHub only for PRs that changed, at most once a
-/// minute), shows one notification per PR, then acknowledges them so they're never shown twice. Tauri's notifications
-/// can't act on a click on every platform, so a click brings Alden forward rather than opening the PR; the
-/// notification names it.
+/// minute), shows one notification per PR with news, then acknowledges every event shown so the server never returns
+/// it again. Each event is shown at most once a run, whatever the server says; ids whose acknowledgement failed are
+/// sent again next poll. Tauri's notifications can't act on a click on every platform, so a click brings Alden
+/// forward rather than opening the PR; the notification names it.
 async fn follow_ups(app: &AppHandle, base: &str, token: &str) {
+    let state = app.state::<AppState>();
+    // Shown before but not acknowledged: first, so the check below doesn't return them again.
+    let pending: Vec<String> = state.follow_ups_unacked.lock().unwrap().iter().cloned().collect();
+    ack_follow_ups(app, base, token, pending).await;
+
     let response = reqwest::Client::new()
         .get(format!("{base}/api/follow-ups"))
         .header("X-Alden-Token", token)
@@ -428,30 +441,62 @@ async fn follow_ups(app: &AppHandle, base: &str, token: &str) {
         _ => None,
     };
     let Some(found) = found else { return };
-    let mut shown: Vec<String> = Vec::new();
-    for note in found.notifications {
-        // Shown already this run (acknowledging them failed): never twice.
-        let key = format!("follow-up:{}", note.events.join(","));
-        if note.events.is_empty() || !app.state::<AppState>().notified.lock().unwrap().insert(key) {
-            continue;
-        }
-        let mut builder = app.notification().builder().title(follow_up_title(&note)).body(clip(&note.text, 120));
+    let (to_show, to_ack) = {
+        let shown = state.follow_ups_shown.lock().unwrap();
+        plan_follow_ups(found.notifications, &shown)
+    };
+    for note in &to_show {
+        let mut builder = app.notification().builder().title(follow_up_title(note)).body(clip(&note.text, 120));
         if found.sound {
             builder = builder.sound(DEFAULT_SOUND);
         }
         let _ = builder.show();
-        shown.extend(note.events);
     }
-    if shown.is_empty() {
-        return;
+    state.follow_ups_shown.lock().unwrap().extend(to_ack.iter().cloned());
+    state.follow_ups_unacked.lock().unwrap().extend(to_ack.iter().cloned());
+    ack_follow_ups(app, base, token, to_ack).await;
+}
+
+/// Which notifications to show, and which event ids to acknowledge: a notification with at least one event not shown
+/// yet this run is shown; events already shown (the server returned them because an acknowledgement failed) are only
+/// acknowledged.
+fn plan_follow_ups(notes: Vec<FollowUp>, shown: &HashSet<String>) -> (Vec<FollowUp>, Vec<String>) {
+    let mut to_show = Vec::new();
+    let mut to_ack = Vec::new();
+    for note in notes {
+        let fresh = note.events.iter().any(|id| !shown.contains(id));
+        to_ack.extend(note.events.iter().cloned());
+        if fresh {
+            to_show.push(note);
+        }
     }
-    let _ = reqwest::Client::new()
-        .post(format!("{base}/api/follow-ups/ack"))
-        .header("X-Alden-Token", token)
-        .json(&serde_json::json!({ "events": shown }))
-        .timeout(Duration::from_secs(30))
-        .send()
-        .await;
+    (to_show, to_ack)
+}
+
+/// Event ids in batches the ack route takes.
+fn ack_chunks(ids: &[String]) -> Vec<Vec<String>> {
+    ids.chunks(ACK_LIMIT).map(|chunk| chunk.to_vec()).collect()
+}
+
+/// Acknowledges events, a batch at a time; what the server confirms is no longer retried.
+async fn ack_follow_ups(app: &AppHandle, base: &str, token: &str, ids: Vec<String>) {
+    for chunk in ack_chunks(&ids) {
+        let acked = reqwest::Client::new()
+            .post(format!("{base}/api/follow-ups/ack"))
+            .header("X-Alden-Token", token)
+            .json(&serde_json::json!({ "events": chunk }))
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await
+            .is_ok_and(|res| res.status().is_success());
+        if acked {
+            let state = app.state::<AppState>();
+            let mut unacked = state.follow_ups_unacked.lock().unwrap();
+            for id in &chunk {
+                unacked.remove(id);
+            }
+        }
+    }
 }
 
 /// The PR's title, or "owner/repo#123" when it has none.
@@ -781,6 +826,35 @@ mod tests {
         assert_eq!((pr.pr.as_str(), pr.places), ("a/b#1", 2));
         let none: PrepareResult = serde_json::from_str(r#"{"prepared":null,"reason":"off"}"#).unwrap();
         assert!(none.prepared.is_none());
+    }
+
+    fn note(pr: &str, events: &[&str]) -> FollowUp {
+        FollowUp {
+            pr: pr.into(),
+            title: String::new(),
+            text: "news".into(),
+            events: events.iter().map(|e| e.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn shows_each_follow_up_event_once_and_acknowledges_what_comes_back() {
+        let shown: HashSet<String> = ["e1".to_string(), "e2".to_string()].into();
+        let (to_show, to_ack) = plan_follow_ups(
+            vec![note("a/b#1", &["e1", "e2"]), note("a/b#2", &["e2", "e3"]), note("a/b#3", &["e4"])],
+            &shown,
+        );
+        // a/b#1 was shown but its acknowledgement failed: acknowledged again, not shown again.
+        assert_eq!(to_show.iter().map(|n| n.pr.as_str()).collect::<Vec<_>>(), vec!["a/b#2", "a/b#3"]);
+        assert_eq!(to_ack, vec!["e1", "e2", "e2", "e3", "e4"]);
+    }
+
+    #[test]
+    fn acknowledges_in_batches_the_route_takes() {
+        let ids: Vec<String> = (0..1_201).map(|i| format!("e{i}")).collect();
+        let chunks = ack_chunks(&ids);
+        assert_eq!(chunks.iter().map(Vec::len).collect::<Vec<_>>(), vec![500, 500, 201]);
+        assert!(ack_chunks(&[]).is_empty());
     }
 
     #[test]

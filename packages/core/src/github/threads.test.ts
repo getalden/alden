@@ -60,6 +60,20 @@ describe("toReviewThreads", () => {
     expect(yourThreads(threads).map((t) => t.id)).toEqual(["T1", "T2"]);
     expect(threads.filter(repliedToYou).map((t) => t.id)).toEqual(["T1"]);
   });
+
+  it("says when you resolved a thread yourself", () => {
+    const { threads } = toReviewThreads("acme/shop", 1, "Me", {
+      headRefOid: "abc",
+      reviewThreads: {
+        nodes: [
+          thread("T1", [comment("me", "2026-10-01T10:00:00Z")], { isResolved: true, resolvedBy: { login: "me" } }),
+          thread("T2", [comment("me", "2026-10-01T10:00:00Z")], { isResolved: true, resolvedBy: { login: "ana" } }),
+          thread("T3", [comment("me", "2026-10-01T10:00:00Z")], { isResolved: true, resolvedBy: null }),
+        ],
+      },
+    });
+    expect(threads.map((t) => t.resolvedByYou)).toEqual([true, undefined, undefined]);
+  });
 });
 
 describe("fetchReviewThreads", () => {

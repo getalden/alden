@@ -138,7 +138,9 @@ news, you get one notification per PR, titled with the PR and saying what happen
 
 **Which PRs.** The open PRs you reviewed in the last 14 days: those GitHub finds with `reviewed-by:@me`, the ones you
 sent comments on from Alden, and any PR you gave its own level. A PR stops being followed when it's merged or closed,
-and after 14 days without a change on GitHub.
+and after 14 days without a change on GitHub. When Alden first looks at a PR (or again after it was quiet), what
+happened since your last review is news; nothing from before Alden first checked follow-ups on this Mac is. Threads you
+resolved yourself are never news, and never make it your turn.
 
 **How much it tells you.** Choose in Settings → Notifications, or with `alden config set notifications.followUps
 <level>`:

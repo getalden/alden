@@ -18,6 +18,7 @@ export const THREADS_QUERY = `query($owner: String!, $name: String!, $number: In
           originalLine
           diffSide
           isResolved
+          resolvedBy { login }
           isOutdated
           viewerCanReply
           viewerCanResolve
@@ -38,6 +39,8 @@ export interface RawThread {
   originalLine: number | null;
   diffSide: "LEFT" | "RIGHT";
   isResolved: boolean;
+  /** Who resolved it; null when it's open or the account was deleted. Absent from older fixtures. */
+  resolvedBy?: { login: string } | null;
   isOutdated: boolean;
   viewerCanReply: boolean;
   viewerCanResolve: boolean;
@@ -91,6 +94,8 @@ export function toReviewThreads(
         originalLine: t.originalLine,
         side: t.diffSide === "LEFT" ? "LEFT" : "RIGHT",
         isResolved: t.isResolved,
+        // Only said when true, so threads read before this field look the same.
+        ...(t.isResolved && same(t.resolvedBy?.login, viewer) ? { resolvedByYou: true } : {}),
         isOutdated: t.isOutdated,
         startedByYou: comments[0]?.isYou ?? false,
         viewerCanReply: t.viewerCanReply,

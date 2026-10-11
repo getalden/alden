@@ -233,3 +233,89 @@ describe("state helpers", () => {
     expect(isYourTurn([])).toBe(false);
   });
 });
+
+describe("a first check from your last review", () => {
+  const BASE = { at: "2026-10-05T12:00:00.000Z", untimed: true };
+
+  it("tells replies and a re-review after the baseline, and the turn they complete, but nothing before", () => {
+    const { events, state } = compareFollowUp(
+      PR,
+      undefined,
+      threads(
+        t("T1", [c("a", "sam", "05T11:00"), c("b", "bo", "05T11:30"), c("d", "ana", "06T10:00")]),
+        t("T2", [c("e", "sam", "05T11:10")], { isResolved: true }),
+      ),
+      "2026-10-06T09:00:00.000Z",
+      NOW,
+      { ...BASE, untimed: false },
+    );
+    expect(events.map((e) => [e.kind, e.text])).toEqual([
+      ["rereview", "ana asked you to review again"],
+      ["reply", "ana replied to your comment on src/pay.ts:40"],
+      ["your-turn", "Your turn: every comment you left is resolved or answered"],
+    ]);
+    expect(state.rereviewSeen).toBe("2026-10-06T09:00:00.000Z");
+    // A re-review from before the baseline isn't news.
+    expect(compareFollowUp(PR, undefined, threads(), "2026-10-04T09:00:00.000Z", NOW, BASE).events).toEqual([]);
+  });
+
+  it("tells resolves and outdated threads only from a review of yours, never your own resolves", () => {
+    const now = threads(
+      t("T1", [c("a", "sam", "05T11:00")], { isResolved: true }),
+      t("T2", [c("e", "sam", "05T11:10")], { isResolved: true, resolvedByYou: true }),
+      t("T3", [c("h", "sam", "05T11:20")], { isOutdated: true }),
+      // From an older review: when it was resolved can't be told.
+      t("T4", [c("x", "sam", "01T11:00")], { isResolved: true }),
+    );
+    const told = compareFollowUp(PR, undefined, now, undefined, NOW, BASE).events;
+    expect(told.map((e) => e.kind)).toEqual(["resolved", "outdated"]);
+    // Started from when follow-ups first ran, not a review of yours: only what has a time counts.
+    expect(compareFollowUp(PR, undefined, now, undefined, NOW, { ...BASE, untimed: false }).events).toEqual([]);
+  });
+});
+
+describe("threads you resolved yourself", () => {
+  it("aren't news, and don't make it your turn", () => {
+    const before = compareFollowUp(
+      PR,
+      undefined,
+      threads(t("T1", [c("a", "sam", "01T10:00")]), t("T2", [c("e", "sam", "01T10:30")])),
+      undefined,
+      NOW,
+    ).state;
+    // You tick Resolve on both and approve.
+    const both = compareFollowUp(
+      PR,
+      before,
+      threads(
+        t("T1", [c("a", "sam", "01T10:00")], { isResolved: true, resolvedByYou: true }),
+        t("T2", [c("e", "sam", "01T10:30")], { isResolved: true, resolvedByYou: true }),
+      ),
+      undefined,
+      NOW,
+    );
+    expect(both.events).toEqual([]);
+    expect(both.state.threads.T1).toMatchObject({ resolved: true, resolvedByYou: true });
+    // One you closed, one answered: the answered one is your turn.
+    const one = compareFollowUp(
+      PR,
+      before,
+      threads(
+        t("T1", [c("a", "sam", "01T10:00")], { isResolved: true, resolvedByYou: true }),
+        t("T2", [c("e", "sam", "01T10:30"), c("g", "ana", "02T10:00")]),
+      ),
+      undefined,
+      NOW,
+    );
+    expect(one.events.map((e) => e.kind)).toEqual(["reply", "your-turn"]);
+  });
+
+  it("don't count as answered while another is still open", () => {
+    expect(
+      isYourTurn([
+        t("T1", [c("a", "sam", "01T10:00")], { isResolved: true, resolvedByYou: true }),
+        t("T2", [c("e", "sam", "01T10:30")]),
+      ]),
+    ).toBe(false);
+  });
+});
