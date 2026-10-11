@@ -174,7 +174,7 @@ with its file and line or lines, each suggestion as the lines it replaces and th
 thread and whether it resolves it, and before an approval the places Alden flagged that you didn't comment on), then
 asks. Replies post into the review before it's submitted; threads are resolved after (see
 [How a review with replies is sent](comments.md#how-a-review-with-replies-is-sent)). Nothing
-else in Alden posts to GitHub. Alden's drafts you haven't kept stay behind, and it says how many. See [Comments and sending a review](comments.md#sending).
+else in Alden posts to GitHub. Alden's drafts you haven't kept aren't sent, and it says how many; like every draft on the PR, they're cleared once the review is sent. See [Comments and sending a review](comments.md#sending).
 
 | Flag | What it does |
 | --- | --- |
