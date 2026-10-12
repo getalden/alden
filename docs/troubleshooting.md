@@ -43,8 +43,13 @@ a local model; or `alden auth model`, `ANTHROPIC_API_KEY` or `ant auth login`. `
 app doesn't see your shell's `ANTHROPIC_API_KEY`: use **Set up a model** there, or store the key with `alden auth model`
 or in Settings.
 
-**`alden setup` says the key has no credit.** The key is valid, but its Anthropic account can't pay for requests. Add
-credit at [console.anthropic.com/settings/billing](https://console.anthropic.com/settings/billing) and run it again.
+**"No OpenAI API key found, so only the checks ran."** The provider is `openai` and there's no key: run `alden setup`
+or `alden auth model` and paste one, or set `OPENAI_API_KEY`. The desktop app doesn't see your shell's variables.
+
+**`alden setup` says the key has no credit.** The key is valid, but its account can't pay for requests. Add credit at
+[console.anthropic.com/settings/billing](https://console.anthropic.com/settings/billing) for an Anthropic key, or
+[platform.openai.com/settings/organization/billing](https://platform.openai.com/settings/organization/billing) for an
+OpenAI key, and run it again.
 
 **`alden setup` doesn't find Ollama.** Start it (`ollama serve`, or open the Ollama app). If it listens somewhere other
 than `http://localhost:11434`, set `OLLAMA_HOST` in the terminal you run `alden setup` from.

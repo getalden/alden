@@ -29,7 +29,7 @@ fastTrackMaxLines = 50
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `model.provider` | `anthropic` | `anthropic`, `bedrock`, `vertex`, `foundry` or `openai-compatible`. |
+| `model.provider` | `anthropic` | `anthropic`, `openai`, `bedrock`, `vertex`, `foundry` or `openai-compatible`. |
 | `model.name` | `sonnet` | An alias (`sonnet`, `opus`, `haiku`, `fable`), a full model ID, or a local model's name. |
 | `model.effort` | unset | `low`, `medium`, `high`, `xhigh` or `max`. Unset uses the model's own default. |
 | `model.baseUrl` | `http://localhost:11434/v1` | `openai-compatible` only: the endpoint. |
@@ -173,6 +173,7 @@ to find callers in every repo under `~/src`.
 | `ALDEN_OPENAI_API_KEY` | The key for an `openai-compatible` endpoint (falls back to `OPENAI_API_KEY`). |
 | `ALDEN_TELEMETRY` | `0` or `false` turns usage stats off, whatever your config says. |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key, for the `anthropic` provider. Comes before the key stored with `alden auth model`. |
+| `OPENAI_API_KEY` | Your OpenAI API key, for the `openai` provider. Comes before the key stored with `alden auth model`. |
 | `DO_NOT_TRACK` | Set (to anything but `0`) to turn usage stats off. |
 | `OLLAMA_HOST` | Where Ollama listens, as Ollama reads it, for `alden setup`. Default `http://localhost:11434`. |
 

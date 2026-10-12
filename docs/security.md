@@ -17,9 +17,10 @@ What Alden protects, against whom, and how. For reporting a problem, see [SECURI
 
 ## How Alden handles it
 
-**Tokens.** Your GitHub token, and the Anthropic API key if you stored one with `alden auth model` or in Settings, live
-in the OS keychain, or, where there's no keychain, a file only your user can read. Alden never logs them, never sends
-them anywhere but GitHub and Anthropic, and never puts them in a prompt. `alden auth model` reads the key without
+**Tokens.** Your GitHub token, and the Anthropic or OpenAI API key if you stored one with `alden auth model` or in
+Settings, live in the OS keychain, or, where there's no keychain, a file only your user can read. Alden never logs
+them, never sends them anywhere but GitHub and the key's own provider (Anthropic, or OpenAI), and never puts them in a
+prompt. `alden auth model` reads the key without
 echoing it; the web UI's key field is write-only (the server stores the key and answers only where the key comes
 from, never the key), and `alden auth status`, `alden doctor` and the session API name the source, never the key.
 Other model credentials come from the provider's own configuration and stay with its SDK.
