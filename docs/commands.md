@@ -6,6 +6,52 @@ In a terminal, `alden queue`, `alden review` and `alden doctor` end with a dim "
 command: `alden review 1` for the top of the queue, `alden open <#>` or `alden ui` after a review, the fix `doctor`
 found. It never appears with `--json` or when the output goes to a pipe or a file.
 
+## alden (interactive)
+
+```sh
+alden
+```
+
+On its own in a terminal, `alden` opens a full-screen view of your queue: brief a PR, mark its places useful or not,
+write comments and send your review without leaving it. It draws with the same renderers as `alden queue`,
+`alden review` and `alden send`, so what you see is what they print. Quit with `q` (or Ctrl-C anywhere), and the
+terminal is as you left it.
+
+It opens only when both standard input and output are a terminal, outside CI (`CI` set) and not on a dumb terminal
+(`TERM=dumb`). Otherwise `alden` prints its help, as before; `alden --help` always does, and every command works as it
+always has. It needs you signed in (`alden auth login`), and respects `NO_COLOR`. 80 by 24 or bigger works best; a
+smaller terminal cuts long lines, and one too small to use says so. It redraws when you resize it.
+
+The queue screen is `alden queue`'s table: Your turn (when you have one), Needs you and Fast-track, ranked. While it
+loads it says what it's doing, as `alden queue` does. A briefing is `alden review`'s, without the model until you
+press `m`: then it says which model and what a review may cost against your caps, and runs only on `y`, saying what
+it cost. `u` and `n` record feedback as `alden ui` does (the same mark again takes it back), and say how close a lesson
+is. `c` writes a draft comment as `alden comment` does: on the place's file and line, or a general note when the
+cursor isn't on a place. `s` shows exactly what `alden send` would post; nothing is sent until you press Enter and
+then `y`. Afterwards it's back to the queue, asked for again.
+
+| Screen | Key | What it does |
+| --- | --- | --- |
+| Queue | `j` / `k`, `↓` / `↑` | Move down or up a PR. `g` / `G` the first or last; space and `b` half a screen. |
+| Queue | `/` | Search as you type: title, repo, `#number`, author (`@sam`), branch. Enter keeps it, Esc puts it back; Esc on the queue clears it. |
+| Queue | Enter | Brief the selected PR (checks and the code graph, no model). |
+| Queue | `o` | Open the selected PR on GitHub. |
+| Queue | `r` | Ask GitHub again, skipping the 60-second cache. |
+| Queue | `q` | Quit. |
+| Briefing | `j` / `k`, `↓` / `↑` | Move the cursor a line; the place it's on is marked. Space / `b` a screen down or up, `g` / `G` the top or bottom. |
+| Briefing | `1`–`9` | Go to that place under "Needs your eyes". |
+| Briefing | `u` / `n` | Mark the place under the cursor useful / not useful. Again takes it back. |
+| Briefing | `c` | Write a comment on the place under the cursor (a general note elsewhere). Enter saves it as a draft, Esc cancels, Ctrl-U clears. |
+| Briefing | `s` | The send screen. |
+| Briefing | `m` | Run the model on this PR, after saying which and what it may cost; `y` runs it. |
+| Briefing | `o` | Open the PR on GitHub. |
+| Briefing | Esc, `q` | Back to the queue. |
+| Send | Tab / Shift-Tab, `c` `a` `x` | Comment, Approve or Request changes. Approve also lists the places you didn't comment on. |
+| Send | `j` / `k`, space / `b`, `g` / `G` | Scroll. |
+| Send | Enter, then `y` | Send the review to GitHub. Any other key after Enter doesn't send. |
+| Send | Esc, `q` | Back to the briefing. |
+| Anywhere | Ctrl-C | Quit. |
+
 ## alden --version
 
 Prints Alden's version. When a newer Alden is out, it also says so, with how to upgrade, on standard error so scripts

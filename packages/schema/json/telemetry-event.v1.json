@@ -111,6 +111,7 @@
                     "comment",
                     "send",
                     "setup",
+                    "interactive",
                     "other"
                   ]
                 },

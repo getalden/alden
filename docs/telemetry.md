@@ -30,7 +30,7 @@ dropped.
 
 | Event | What it says |
 | --- | --- |
-| `command_run` | Which command (queue, review, ui, mcp, …), whether it worked, how long it took |
+| `command_run` | Which command (queue, review, ui, mcp, … or `interactive` for `alden` on its own), whether it worked, how long it took |
 | `queue_ranked` | How many PRs need you, are fast-track or dismissed, across how many repos, how many your feedback moved |
 | `review_completed` | PR or local; a salted repo hash; files and lines; languages; whether callers were looked for, and how many were found; checks flagged; places shown; how many your feedback hid; notes used; model, its status and cost; how long it took |
 | `feedback_given` | Useful, not useful or dismiss; on a place, finding or check; which of Alden's checks |
