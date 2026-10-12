@@ -6,10 +6,13 @@ import type {
   FeedbackSummary,
   FollowUpLevel,
   FollowUpNotifications,
+  KeyKind,
   KeyTestResult,
   LocalSetupEvent,
   MemoryItem,
   MemorySource,
+  ModelChoices,
+  ModelPick,
   ModelSetupState,
   PrDiff,
   PrWatch,
@@ -127,7 +130,8 @@ export interface Session {
   eyes?: number;
   /** What this machine's queue covers (queue.orgs, queue.repos, queue.ignore); empty lists mean everywhere. */
   queueScope?: { orgs: string[]; repos: string[]; ignore: string[] };
-  background?: { enabled: boolean; model: boolean };
+  /** `prepare`: how many of the top PRs the desktop app keeps briefed (`background.prepare`). */
+  background?: { enabled: boolean; model: boolean; prepare?: number };
   /**
    * Whether the desktop app's "Briefing ready" notification plays a sound (`notifications.sound`), and how much it
    * tells you about PRs you reviewed (`notifications.followUps`).
@@ -302,9 +306,22 @@ export class Api {
 
   useGitHubCli = () => this.request<{ login: string } | { error: string }>("/api/auth/gh", { method: "POST" });
 
-  /** Stores the Anthropic API key (null removes it). The answer says where the key comes from, never the key. */
-  setModelKey = (key: string | null) =>
-    this.request<{ key: Session["model"]["key"] }>("/api/model-key", { method: "PUT", body: JSON.stringify({ key }) });
+  /**
+   * Stores an API key, Anthropic's or OpenAI's (the server tells them apart); null removes the stored key of
+   * `provider`. The answer says whose key it was and where that provider's key comes from, never the key.
+   */
+  setModelKey = (key: string | null, provider?: KeyKind) =>
+    this.request<{ provider?: KeyKind; key: Session["model"]["key"] }>("/api/model-key", {
+      method: "PUT",
+      body: JSON.stringify({ key, ...(provider ? { provider } : {}) }),
+    });
+
+  /** The model picker: the model in use, and each provider's models (available only where set up). */
+  models = () => this.request<ModelChoices>("/api/models");
+
+  /** Makes a model the one reviews use. A provider that isn't set up answers 409. */
+  pickModel = (pick: ModelPick) =>
+    this.request<ModelChoices>("/api/models", { method: "PUT", body: JSON.stringify(pick) });
 
   /** What "Set up a model" offers: any key Alden finds, Ollama and its models, the local model for this machine. */
   modelSetup = () => this.request<ModelSetupState>("/api/model-setup");
@@ -511,7 +528,7 @@ export interface RankChange {
 }
 
 /** The pages the setup step links to: where to create an Anthropic key, Alden Cloud's waitlist, Ollama's download. */
-export type SetupPage = "keys" | "cloud" | "ollama";
+export type SetupPage = "keys" | "openaiKeys" | "cloud" | "ollama";
 
 /** The lines of a newline-delimited JSON response, parsed; a failed request throws its error. */
 async function* ndjson<T>(res: Response): AsyncGenerator<T> {

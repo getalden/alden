@@ -19,9 +19,10 @@ export function initialChoices(session: Session | undefined): Choices {
   };
 }
 
-/** Effort is Claude's, and Haiku 4.5 doesn't take it. */
+/** Effort is Claude's (Haiku 4.5 doesn't take it) and the GPT-6 models' (the server says, for the model in use). */
 export function effortSupported(session: Session, model: string): boolean {
   if (session.model.provider === "openai-compatible") return false;
+  if (session.model.provider === "openai") return session.model.supportsEffort;
   const id = session.aliases[model] ?? model;
   return !id.startsWith("claude-haiku");
 }
@@ -77,7 +78,7 @@ export function ReviewOptions({
   if (!session) return null;
   const available = session.model.available;
   const models =
-    session.model.provider === "openai-compatible"
+    session.model.provider === "openai-compatible" || session.model.provider === "openai"
       ? [session.model.name]
       : [...new Set([session.model.name, ...Object.keys(session.aliases)])];
   const left = Math.max(0, session.budget.dailyUsd - session.budget.spentToday);

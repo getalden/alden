@@ -1,0 +1,370 @@
+/*
+ * The first run (FirstRun.tsx), from "Alden App v3" § 02 First run: one 460 × 520 card per step, centred over the app.
+ * Colours are the UI's tokens; the two v3 shades without one yet read --hover and --panel-2 when the shell defines
+ * them, with the design's hex (dark) or a light-mode equivalent from today's light tokens as the fallback.
+ */
+
+.first-run {
+  --fr-chip: var(--hover, #13262c);
+  --fr-row: var(--panel-2, #0b161a);
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  background: var(--bg);
+}
+:root[data-theme="light"] .first-run {
+  --fr-chip: var(--hover, #ffffff);
+  --fr-row: var(--panel-2, #ffffff);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .first-run {
+    --fr-chip: var(--hover, #ffffff);
+    --fr-row: var(--panel-2, #ffffff);
+  }
+}
+
+.first-run-card {
+  width: min(460px, 100%);
+  min-height: 520px;
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--line);
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin: auto;
+}
+.first-run-card[data-step="1"] {
+  gap: 24px;
+}
+.first-run-card:focus {
+  outline: none;
+}
+
+.first-run-top {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+.first-run-steps {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 500 12px var(--font-mono);
+  color: var(--ink3);
+}
+.first-run-steps .current {
+  color: var(--ok);
+}
+.first-run-skip {
+  margin-left: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink3);
+  font: 500 12px var(--font-ui);
+}
+.first-run-skip:hover {
+  color: var(--ink2);
+}
+
+/* 2a · sign in */
+.first-run-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+}
+.first-run-hero {
+  margin: 0;
+  font: 600 26px / 1.2 var(--font-ui);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.first-run-body {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--ink2);
+  text-wrap: pretty;
+}
+.first-run-cta {
+  margin-top: 8px;
+  height: 40px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--acc);
+  color: var(--acc-ink);
+  font: 600 14px var(--font-ui);
+}
+.first-run-cta:hover,
+.first-run-next:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.first-run-foot {
+  font: 500 12px var(--font-mono);
+  color: var(--ink3);
+  text-align: center;
+}
+.first-run-center .first-run-foot {
+  text-align: center;
+}
+.first-run-actions .first-run-foot {
+  text-align: left;
+}
+.first-run-alt {
+  font-size: 12.5px;
+  color: var(--ink3);
+  text-align: center;
+}
+.first-run-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--acc);
+  font: inherit;
+}
+.first-run-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.first-run-code {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+/* 2b · set up a model */
+.first-run-title {
+  margin: 0;
+  font: 600 22px / 1.25 var(--font-ui);
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+.first-run-model,
+.first-run-queue {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.first-run-note {
+  margin: -8px 0 0;
+  font-size: 12.5px;
+  color: var(--ink2);
+}
+.first-run-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.first-run-option {
+  padding: 12px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.first-run-option.on {
+  border-color: var(--acc);
+  background: var(--acc-soft);
+}
+.first-run-option-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.first-run-option-pick {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.first-run-option-title {
+  font: 500 14px var(--font-ui);
+}
+.first-run-option-sub {
+  font-size: 12.5px;
+  color: var(--ink3);
+}
+.first-run-option .setup-step {
+  gap: 10px;
+}
+.first-run-input {
+  height: 32px;
+  border-radius: 6px;
+  background: var(--sunk);
+  border: 1px solid var(--line2);
+  padding: 0 10px;
+  font: 500 12px var(--font-mono);
+  color: var(--ink);
+  min-width: 0;
+}
+.first-run-input::placeholder {
+  color: var(--ink3);
+}
+.first-run-input:focus {
+  outline: none;
+  border-color: var(--acc);
+}
+.first-run-help {
+  font-size: 12.5px;
+  color: var(--ink2);
+  text-wrap: pretty;
+}
+
+/* Anthropic | OpenAI: which kind of key Alden sees in the box. Shared with "Set up a model". */
+.key-kind {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--sunk);
+  font: 500 11.5px var(--font-ui);
+  color: var(--ink3);
+  flex: none;
+}
+.key-kind > span {
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.key-kind > span.on {
+  background: var(--fr-chip, var(--hover, #13262c));
+  color: var(--ink);
+}
+:root[data-theme="light"] .key-kind > span.on {
+  background: var(--hover, var(--panel));
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .key-kind > span.on {
+    background: var(--hover, var(--panel));
+  }
+}
+.key-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.first-run-actions {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.first-run-cloud {
+  font-size: 12.5px;
+  color: var(--ink3);
+}
+.first-run-next {
+  margin-left: auto;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--acc);
+  color: var(--acc-ink);
+  font: 600 13px var(--font-ui);
+  flex: none;
+}
+.first-run-next:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* 2c · first queue */
+.first-run-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.first-run-queue .first-run-body {
+  font-size: 14px;
+}
+.first-run-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.first-run-rows li {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--fr-row);
+  min-width: 0;
+}
+.first-run-rows li:last-child {
+  border-bottom: 0;
+}
+.first-run-row-title {
+  font: 500 13px var(--font-ui);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.first-run-row-meta {
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .first-run-card {
+    padding: 24px 20px;
+    min-height: 0;
+  }
+}
+
+/* Settings → API keys: one line per provider, where its key comes from. */
+.api-keys {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.api-keys li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.api-keys li:last-child {
+  border-bottom: 0;
+}
+.api-keys-name {
+  font-weight: 600;
+  min-width: 80px;
+}
+.api-keys .btn {
+  margin-left: auto;
+}

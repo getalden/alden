@@ -392,7 +392,11 @@ export function createUiApi(options: {
         queueScope: queueScope(config),
         eyes: config.review.eyes,
         ...(options.desktop ? { cli: cliStatus() } : {}),
-        background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
+        background: {
+          enabled: config.background.enabled,
+          model: await backgroundModelAllowed(),
+          prepare: config.background.prepare,
+        },
         notifications: { sound: config.notifications.sound, followUps: config.notifications.followUps },
         learning: { fromReviews: config.learning.fromReviews },
         drafts: { auto: config.drafts.auto },

@@ -331,6 +331,48 @@ const preparedAt = new Date(Date.now() - 25 * 60_000).toISOString();
 // ALDEN_DEMO_NO_MODEL=1 starts with no model, to show "Set up a model". Its key test and Ollama download are pretend:
 // a key ending in "bad" is refused, one ending in "offline" can't be checked, and Ollama "downloads" in a few seconds.
 let demoModel = process.env.ALDEN_DEMO_NO_MODEL !== "1";
+// ALDEN_DEMO_FIRST_RUN=1 starts with no GitHub sign-in, to show the first run; "signing in" takes a few seconds.
+let demoSignedIn = process.env.ALDEN_DEMO_FIRST_RUN !== "1";
+// The model the picker (GET /api/models) shows in use; PUT /api/models changes it.
+let demoPick: { provider: "anthropic" | "openai" | "ollama"; model: string } = {
+  provider: "anthropic",
+  model: "claude-sonnet-5",
+};
+const demoChoices = () => ({
+  current: demoPick,
+  groups: [
+    {
+      provider: "anthropic" as const,
+      label: "Anthropic",
+      via: "your key",
+      available: demoModel,
+      items: [
+        { id: "claude-sonnet-5", note: "fast" },
+        { id: "claude-opus-5-5", note: "deep" },
+        { id: "claude-fable-5-1", note: "deepest" },
+        { id: "claude-haiku-4-5", note: "cheap" },
+      ],
+    },
+    {
+      provider: "openai" as const,
+      label: "OpenAI",
+      via: "your key",
+      available: true,
+      items: [
+        { id: "gpt-6.1-sol", note: "fast" },
+        { id: "gpt-6-astra", note: "deepest" },
+        { id: "gpt-6-luna", note: "cheap" },
+      ],
+    },
+    {
+      provider: "ollama" as const,
+      label: "Local",
+      via: "Ollama",
+      available: true,
+      items: [{ id: "llama3.2:3b", note: "offline" }],
+    },
+  ],
+});
 // What the queue last showed, so reactions find their row as the real API does.
 let lastRows: ReturnType<typeof queueRows> = [];
 
@@ -340,7 +382,11 @@ const api: UiApi = {
     cwd: ROOT,
     repo: { root: ROOT, repos: [DEMO_REPO] },
     // ALDEN_DEMO_SIGNED_OUT=1 shows the sign-in card, as if GitHub had rejected the saved sign-in.
-    user: process.env.ALDEN_DEMO_SIGNED_OUT === "1" ? { error: "rejected" } : { login: "you", source: "demo" },
+    user: !demoSignedIn
+      ? null
+      : process.env.ALDEN_DEMO_SIGNED_OUT === "1"
+        ? { error: "rejected" }
+        : { login: "you", source: "demo" },
     signIn: { source: "alden" as const, gitHubCli: true },
     // ALDEN_DEMO_SCOPED=1 shows a queue scoped to some orgs on this machine.
     queueScope:
@@ -407,7 +453,11 @@ const api: UiApi = {
         return { ok: false, reason: "network", message: "Couldn't reach api.anthropic.com to check the key." };
       }
       demoModel = true;
-      return { ok: true, key: { source: "alden", where: "the key you stored with `alden auth model`" } };
+      return {
+        ok: true,
+        provider: key.startsWith("sk-ant-") ? "anthropic" : "openai",
+        key: { source: "alden", where: "the key you stored with `alden auth model`" },
+      };
     },
     useLocal: async (model, onEvent, signal) => {
       onEvent({ type: "progress", status: "pulling manifest", completed: null, total: null });
@@ -420,14 +470,27 @@ const api: UiApi = {
       onEvent({ type: "done", model, baseUrl: "http://localhost:11434/v1" });
     },
     open: async (page) => ({ opened: page }),
+    models: async () => demoChoices(),
+    pickModel: async (pick) => {
+      if (pick.provider !== "anthropic" && pick.provider !== "openai" && pick.provider !== "ollama") {
+        throw new ApiError(409, `${pick.provider} isn't set up in the demo.`);
+      }
+      demoPick = { provider: pick.provider, model: pick.model };
+      return demoChoices();
+    },
   },
-  startSignIn: async () => ({
-    state: "waiting",
-    userCode: "DEMO-1234",
-    verificationUri: "https://github.com/login/device",
-    expiresAt: new Date(Date.now() + 900_000).toISOString(),
-  }),
-  signInStatus: async () => ({ state: "idle" }),
+  startSignIn: async () => {
+    setTimeout(() => {
+      demoSignedIn = true;
+    }, 4_000);
+    return {
+      state: "waiting",
+      userCode: "DEMO-1234",
+      verificationUri: "https://github.com/login/device",
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+    };
+  },
+  signInStatus: async () => (demoSignedIn ? { state: "done", login: "you" } : { state: "waiting" }),
   openSignIn: async () => ({ state: "idle" }),
   useGitHubCli: async () => ({ login: "you" }),
   cliStatus: async () => ({ state: "missing", bundled: "/Applications/Alden.app/Contents/MacOS/alden" }),

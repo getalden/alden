@@ -1,6 +1,7 @@
 import type { BriefingFreshness, BriefingTarget, RankedPullRequest, RankedQueue } from "@alden/schema";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { type Api, ApiError, type CloneInfo, type Session } from "./api";
+import { FirstRun, type FirstRunStep } from "./components/FirstRun";
 import { MemoryView } from "./components/MemoryView";
 import { ModelSetupDialog } from "./components/ModelSetup";
 import { isLearnedReason, prKey, QueueView, type Reaction, unseen, useNavigatedQueue } from "./components/QueueView";
@@ -54,6 +55,9 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
     [],
   );
   const [settingUpModel, setSettingUpModel] = useState(false);
+  // The first run (sign in, a model, the queue): when there's no GitHub sign-in at all, or from Settings.
+  const [firstRun, setFirstRun] = useState<FirstRunStep>();
+  const firstRunShown = useRef(false);
   // The follow-up events of the PRs opened in this window: seen, so they leave Your turn (the server keeps it too).
   const [seenNews, setSeenNews] = useState<ReadonlySet<string>>(new Set());
   // Opening a PR with news opens the Comments drawer's Conversation on the thread it's in, once.
@@ -78,6 +82,10 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
       .session()
       .then((next) => {
         setSession(next);
+        if (!firstRunShown.current) {
+          firstRunShown.current = true;
+          if (next.user === null) setFirstRun(1);
+        }
         // The first session sets the picker; later ones (after a review or a settings change) only refresh the budget.
         setChoices((current) => current ?? initialChoices(next));
       })
@@ -424,6 +432,7 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
               <SettingsView
                 api={api}
                 session={session}
+                onRunSetup={() => setFirstRun(session.user && "login" in session.user ? 2 : 1)}
                 onSaved={() => {
                   setChoices(undefined);
                   loadSession();
@@ -433,6 +442,28 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
               <StateCard tone="spin" title="Loading…" live />
             )}
           </div>
+        )}
+        {firstRun && session && (
+          <FirstRun
+            api={api}
+            session={session}
+            start={firstRun}
+            queue={queue}
+            queueLoading={queueLoading}
+            queueError={queueError}
+            onSignedIn={() => {
+              loadSession();
+              loadQueue(true);
+            }}
+            onModelReady={() => {
+              setChoices(undefined);
+              loadSession();
+            }}
+            onClose={() => {
+              setFirstRun(undefined);
+              navigate({ view: "queue" });
+            }}
+          />
         )}
         {settingUpModel && (
           <ModelSetupDialog
