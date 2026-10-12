@@ -11,6 +11,7 @@ import type {
 import type { DiffFile } from "../diff/parse.js";
 import { recordReviewSignals } from "../feedback/log.js";
 import { neverQuietened } from "../learn/learn.js";
+import { noteKept } from "../stats/review-time.js";
 import { type StoreSource, storeFrom } from "../store/source.js";
 import { placeOnDiff, prName, ReviewDrafts, type StoredDraft } from "./drafts.js";
 import { isNear, NEAR_LINES } from "./near.js";
@@ -193,6 +194,14 @@ export async function keepAldenDrafts(
       return drafts.get(d.id) as StoredDraft;
     }),
   );
+  // For time to review: how many of Alden's drafts you kept, per PR.
+  try {
+    const byPr = new Map<string, number>();
+    for (const d of kept) byPr.set(d.pr, (byPr.get(d.pr) ?? 0) + 1);
+    for (const [pr, count] of byPr) noteKept(store, pr, count, now);
+  } catch {
+    // only the count is lost
+  }
   const signals = await learnSafely(
     kept.flatMap((d) => signalFor(d, "comment") ?? []),
     store,

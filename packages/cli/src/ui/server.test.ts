@@ -213,6 +213,14 @@ const api: UiApi = {
     calls.push({ method: "recordSeen", args: input });
     return { recorded: input.places.length };
   },
+  reportActive: async (input) => {
+    calls.push({ method: "reportActive", args: input });
+    return { counted: true };
+  },
+  reviewTime: async () => {
+    calls.push({ method: "reviewTime", args: undefined });
+    return { windows: [] };
+  },
   sendReview: async (input) => {
     calls.push({ method: "sendReview", args: input });
     if (input.pr === "a/b#403") throw new ApiError(403, "Your GitHub sign-in can't write reviews on a/b.");
@@ -837,6 +845,27 @@ describe("alden ui server", () => {
     const big = { pr: "acme/shop#1", headSha: "abc1234", places: [{ path: "x".repeat(20_000), how: "diff" }] };
     expect((await post(big)).status).toBe(413);
     expect(calls).toHaveLength(1);
+  });
+
+  it("takes active time on a PR for time to review, checking the body, and serves time to review", async () => {
+    const post = (body: unknown, headers: Record<string, string> = authed) =>
+      call("/api/review-time", { method: "POST", headers, body });
+    expect((await post({ pr: "acme/shop#412", activeMs: 15_000 }, {})).status).toBe(401);
+    const ok = await post({ pr: "acme/shop#412", activeMs: 15_000 });
+    expect([ok.status, JSON.parse(ok.text)]).toEqual([200, { counted: true }]);
+    const bad = [
+      { pr: "acme/shop", activeMs: 1000 },
+      { pr: "acme/shop#1", activeMs: 0 },
+      { pr: "acme/shop#1", activeMs: -5 },
+      { pr: "acme/shop#1", activeMs: "1000" },
+      { pr: "acme/shop#1", activeMs: 5 * 60_000 + 1 },
+    ];
+    for (const body of bad) expect((await post(body)).status).toBe(400);
+    expect(JSON.parse((await call("/api/review-time", { headers: authed })).text)).toEqual({ windows: [] });
+    expect(calls).toEqual([
+      { method: "reportActive", args: { pr: "acme/shop#412", activeMs: 15_000 } },
+      { method: "reviewTime", args: undefined },
+    ]);
   });
 
   it("serves the UI without a token, the app for unknown paths, and nothing outside its folder", async () => {

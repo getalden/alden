@@ -9,6 +9,8 @@ import {
   JsonCache,
   loadConfig,
   makeAldenDrafts,
+  openReviewSession,
+  openStore,
   ReviewDrafts,
   rememberForDrafting,
   repoFromRemote,
@@ -19,6 +21,7 @@ import {
   SpendLedger,
   selectProvider,
   type TokenSource,
+  telemetrySurface,
   track,
   UsageLog,
   type WithModel,
@@ -126,6 +129,18 @@ export function registerReviewCommand(program: Command): void {
             new ReviewDrafts().rememberBriefing(briefing);
           } catch {
             // the database is locked or damaged: the review still stands
+          }
+          // Starts (or continues) the PR's review session, for time to review: before Alden's drafts, so they count.
+          if (config.stats.reviewTime) {
+            try {
+              openReviewSession(openStore(), {
+                pr: `${ref.repo}#${ref.number}`,
+                surface: telemetrySurface(),
+                model: briefing.llm?.status === "ok",
+              });
+            } catch {
+              // only the timing is lost
+            }
           }
           // What `alden comment <pr> --draft` drafts from.
           await rememberForDrafting(briefing);

@@ -20,6 +20,7 @@ import type {
   RankWeight,
   RepoStats,
   ReviewThreads,
+  ReviewTimeStats,
 } from "@alden/schema";
 import type {
   DraftPatch,
@@ -136,6 +137,8 @@ export interface Session {
   learning?: { fromReviews: boolean };
   /** Whether a model briefing drafts comments for you to keep, edit or drop (`drafts.auto`, on unless turned off). */
   drafts?: { auto: boolean };
+  /** Whether Alden records how long your reviews take, on this machine (`stats.reviewTime`, on unless turned off). */
+  stats?: { reviewTime: boolean };
 }
 
 /** Why there's no GitHub sign-in: the keychain refused (an unsigned build of the app), or there's none anywhere. */
@@ -370,6 +373,13 @@ export class Api {
     if (options.refresh) params.set("refresh", "1");
     return this.request<RepoStats>(`/api/stats?${params}`);
   };
+
+  /** Time to review over the last 14, 30 and 90 days, from the review sessions on this machine. */
+  reviewTime = () => this.request<ReviewTimeStats>("/api/review-time");
+
+  /** Active time on a PR's pane ("owner/repo#12"), for time to review. Kept on this machine by the local API. */
+  reportActive = (pr: string, activeMs: number) =>
+    this.request<{ counted: boolean }>("/api/review-time", { method: "POST", body: JSON.stringify({ pr, activeMs }) });
 
   /** Settings → Ranking: your weights, rules and how many top PRs to keep briefed (`[queue.rank]`). */
   rank = () => this.request<RankingState>("/api/rank");

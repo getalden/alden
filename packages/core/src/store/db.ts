@@ -192,6 +192,35 @@ const MIGRATIONS: ((store: AldenStore) => void)[] = [
       CREATE INDEX follow_up_events_pending ON follow_up_events (notified, at);
     `);
   },
+  (store) => {
+    store.exec(`
+      -- How long each review took (stats.reviewTime): one row per review session of a PR, from first opening its
+      -- briefing (any surface) until the review is sent; a later re-review is a new row. Durations and counts only,
+      -- never text. opened_at is the first open, terminal_opened_at the latest open from a terminal or AI tool;
+      -- active_ms is active time the UI measured (the PR pane visible and focused, idle stretches over 2 min left
+      -- out), or at send, without any, the terminal's estimate (measured 0). Kept 120 days. Never synced or exported.
+      CREATE TABLE review_sessions (
+        id TEXT PRIMARY KEY,
+        pr_key TEXT NOT NULL,
+        surface TEXT NOT NULL,
+        opened_at TEXT NOT NULL,
+        terminal_opened_at TEXT,
+        ui INTEGER NOT NULL DEFAULT 0,
+        active_ms INTEGER NOT NULL DEFAULT 0,
+        measured INTEGER NOT NULL DEFAULT 0,
+        model INTEGER NOT NULL DEFAULT 0,
+        drafted INTEGER NOT NULL DEFAULT 0,
+        drafted_by_alden INTEGER NOT NULL DEFAULT 0,
+        kept INTEGER NOT NULL DEFAULT 0,
+        places_seen INTEGER,
+        sent_comments INTEGER,
+        verdict TEXT,
+        sent_at TEXT
+      );
+      CREATE INDEX review_sessions_open ON review_sessions (pr_key, sent_at);
+      CREATE INDEX review_sessions_by_open ON review_sessions (opened_at);
+    `);
+  },
 ];
 
 /** How many schema changes there are: the database's `user_version` once it's up to date. */

@@ -8,6 +8,7 @@ import { LearningSettings } from "./LearningSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { RankingSettings } from "./RankingSettings";
 import { Switch } from "./ReviewOptions";
+import { ReviewTimeSettings } from "./ReviewTimeSettings";
 import { Segmented } from "./Segmented";
 import { TelemetrySettings } from "./TelemetryCard";
 
@@ -238,6 +239,8 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
           <LearningSettings api={api} on={session.learning?.fromReviews ?? true} onSaved={onSaved} />
 
           <DraftSettings api={api} on={session.drafts?.auto ?? true} onSaved={onSaved} />
+
+          <ReviewTimeSettings api={api} on={session.stats?.reviewTime ?? true} onSaved={onSaved} />
 
           <QueueScopeSettings api={api} initial={session.queueScope} onSaved={onSaved} />
 

@@ -116,7 +116,8 @@ work, the code graph, learning and memory, models and budgets, privacy, and trou
 
 ## Also
 
-- `alden stats` shows your repo's time to first review and review cycle time, before and after Alden.
+- `alden stats` shows your repo's time to first review and review cycle time, before and after Alden, and how long
+  your own reviews take with Alden (recorded on your machine).
 - In Claude Code, the [Alden plugin](https://getalden.dev/docs/claude-code/) adds `/alden:review` and your queue;
   `alden mcp` gives [any MCP client](https://getalden.dev/docs/mcp/) the same tools.
 - On macOS, the [desktop app](https://getalden.dev/docs/desktop/) keeps your queue in the menu bar.

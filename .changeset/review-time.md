@@ -1,0 +1,5 @@
+---
+"alden": minor
+---
+
+Time to review. Alden now records, on your machine, how long each review takes: from first opening a PR's briefing (the web UI, the desktop app, `alden review`, or an AI tool's `alden_review`) to sending the review from Alden. Active time in the UI is how long the PR's pane is visible and focused, leaving out stretches over 2 minutes without input; from a terminal, it's the time from the briefing to the send, at most 30 minutes. Stats and `alden stats` show **Time to review**: median active time and median time from opening to sending, with and without Alden's model, over the last 14, 30 or 90 days by the day you opened the briefing, with how many reviews each rests on and a note when there are fewer than 10. `alden stats --review-time` shows only that, without GitHub. Durations and counts only, never what the PR or your comments say. Turn it off with **Time my reviews** in Settings or `alden config set stats.reviewTime false`. With usage stats on, each sent review adds one `review_timed` event with the times in coarse buckets and the counts, never the PR or repo.

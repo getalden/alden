@@ -350,7 +350,9 @@ learned from, newest first: "from your review of acme/shop#412, Oct 8", then "an
 
 **Stats** shows a repo's time to first review and review cycle time, week by week, before and after you started using
 Alden there (or a date you pick), over the last 90 days or another window. See
-[`alden stats`](commands.md#alden-stats).
+[`alden stats`](commands.md#alden-stats). Below it, **Time to review**: your own reviews sent with Alden, from this
+machine, over the last 14, 30 or 90 days: median active time and median time from opening the briefing to sending,
+with and without the model, and how many reviews each rests on. See [Time to review](commands.md#time-to-review).
 
 ## Settings
 
@@ -366,6 +368,8 @@ Settings change your user config, like `alden config set`; a repo's `.alden.toml
 - **Learning**: **Learn from my reviews** (on by default). Off, Alden stops noting which places you saw and learns only
   from Useful and Not useful. See [Places you saw](memory.md#places-you-saw).
 - **Drafts**: **Draft comments for me** (on by default, `drafts.auto`). Off, a model briefing drafts no comments.
+- **Time to review**: **Time my reviews** (on by default, `stats.reviewTime`). Off, Alden records no review sessions.
+  See [Time to review](commands.md#time-to-review).
 - **Your queue on this machine**: which organisations and repos the queue covers, and what to leave out. The queue
   says when it's narrowed.
 - **Ranking**: see below.

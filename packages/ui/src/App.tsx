@@ -17,6 +17,7 @@ import { useDrafts } from "./drafts";
 import { useFeedback } from "./feedback";
 import { fetchedAgo, waitingSince } from "./format";
 import { useQueueCollapsed, useQueueNav } from "./queue-prefs";
+import { useReviewTimeReporter } from "./review-time";
 import { useReviews } from "./reviews";
 import { navigate, useRoute } from "./router";
 import { SeenBatcher, SeenContext } from "./seen";
@@ -55,6 +56,8 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
   const [settingUpModel, setSettingUpModel] = useState(false);
   // The flagged places you see, sent to the local API a few at a time (and before the page goes away).
   const seen = useMemo(() => (api ? new SeenBatcher(api.recordSeen) : undefined), [api]);
+  // Time to review: the PR pane's active time, to the local API, while stats.reviewTime is on.
+  useReviewTimeReporter(session?.stats?.reviewTime === false ? undefined : api?.reportActive);
   useEffect(() => {
     if (!seen) return;
     const flush = () => seen.flush();

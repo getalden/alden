@@ -132,6 +132,12 @@ For the [desktop app](desktop.md#while-youre-away).
 | --- | --- | --- |
 | `learning.fromReviews` | `true` | Learn from the reviews you send: comments and suggestions near Alden's flags, approving past a place you saw, comments where it flagged nothing, and what the author did with your comments afterwards (suggestions applied, comments resolved). Off records none of it: Alden notes nothing about what you saw, keeps no record of where your comments went and asks GitHub nothing about them; Useful and Not useful still count, and what was already learned stays. Read from your user config only. Settings → Learning sets it too. See [Reviews you send](memory.md#reviews-you-send), [Places you saw](memory.md#places-you-saw) and [What comes of them](memory.md#what-comes-of-them). |
 
+## stats
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `stats.reviewTime` | `true` | Record how long your reviews take, on this machine, for [time to review](commands.md#time-to-review): when you first open a PR's briefing, active time, how many flagged places you saw, comments drafted, kept and sent, whether Alden's model helped, the verdict and when you sent it. Durations and counts only, kept 120 days. Off records nothing new and drops a review under way; what's recorded stays until it ages out. Read from your user config only. Settings → Time to review sets it too. |
+
 ## telemetry
 
 | Key | Default | What it does |
@@ -181,7 +187,7 @@ Everything is under `~/.alden` (or `ALDEN_HOME`):
 | `cache/` | GitHub responses, cached briefly, and your last queue (for `alden open` and `alden review <#>`). |
 | `index/` | The code graph's per-file cache. Around 100 MB for a repo the size of Kubernetes. |
 | `worktrees/` | Checkouts of PRs for the code graph, one per repo. |
-| `alden.db` | The local database: feedback, the PRs you open, your notes, your draft comments, the places you saw (90 days), where your sent line comments went (30 days, without their text), model spending, first use per repo, the follow-ups on PRs you reviewed (each thread of yours as last seen, and the news not yet shown; 30 days) and the PRs you gave their own level, queued usage stats, the clone Alden last saw for each repo, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
+| `alden.db` | The local database: feedback, the PRs you open, your notes, your draft comments, the places you saw (90 days), where your sent line comments went (30 days, without their text), model spending, first use per repo, the follow-ups on PRs you reviewed (each thread of yours as last seen, and the news not yet shown; 30 days) and the PRs you gave their own level, how long your reviews took (120 days, durations and counts only), queued usage stats, the clone Alden last saw for each repo, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
 | `legacy/` | Files from before the database, kept after their one-time import. Safe to delete. |
 
 Deleting any of these is safe, but deleting `alden.db` also deletes your feedback, notes and what Alden learned, and

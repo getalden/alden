@@ -72,7 +72,7 @@ vi.mock("../learning.js", () => ({
 }));
 
 const { createUiApi } = await import("./api.js");
-const { closeStores } = await import("@alden/core");
+const { closeStores, configureTelemetry, openStore } = await import("@alden/core");
 
 let home: string;
 let now: number;
@@ -138,5 +138,31 @@ describe("background briefings and staleness", () => {
     await api.prepareNext();
     github.freshness.push(new Error("offline"));
     expect(await api.prepared(key)).toMatchObject({ briefing: { target: { headSha: "h1" } } });
+  });
+
+  it("times a review from when you read the briefing, not when it was prepared in the background", async () => {
+    // The desktop app's server says where it runs, as `alden ui --json` does.
+    configureTelemetry({ version: "test", surface: "desktop" });
+    const api = createUiApi({ version: "test", cwd: home, desktop: true });
+    const sessions = () =>
+      openStore().all<{ pr_key: string; surface: string; ui: number }>(
+        "SELECT pr_key, surface, ui FROM review_sessions",
+      );
+    await api.prepareNext();
+    expect(sessions()).toEqual([]);
+    expect(await api.reportActive({ pr: key, activeMs: 10_000 })).toEqual({ counted: false });
+
+    await api.prepared(key);
+    expect(sessions()).toEqual([{ pr_key: "acme/app#7", surface: "desktop", ui: 1 }]);
+    expect(await api.reportActive({ pr: key, activeMs: 10_000 })).toEqual({ counted: true });
+    // Briefed again in the UI: the same review.
+    await api.review({ pr: key, llm: false, graph: false }, () => {});
+    expect(sessions()).toHaveLength(1);
+    expect(openStore().get<{ active_ms: number }>("SELECT active_ms FROM review_sessions")?.active_ms).toBe(10_000);
+
+    // Off: nothing more is counted.
+    await api.setConfig("stats.reviewTime", "false");
+    expect(await api.reportActive({ pr: key, activeMs: 10_000 })).toEqual({ counted: false });
+    expect(await api.reviewTime()).toMatchObject({ enabled: false, horizonHours: 72 });
   });
 });

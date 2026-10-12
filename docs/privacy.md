@@ -43,7 +43,14 @@ went (file, line, and a suggestion's code, never the comment's text, kept 30 day
 applied or resolved ([After you send](comments.md#after-you-send)). So do the [follow-ups](desktop.md#follow-ups-on-prs-you-reviewed)
 on PRs you reviewed: each of your threads as last seen (resolved, outdated, its newest comment's id, never the text),
 and one line per piece of news ("Ana replied to your comment on src/pay.ts:40"), kept 30 days, plus any PR's own
-notification level. So do your notes, what you've spent on models, usage stats waiting to be sent (only if you said
+notification level. So does how long each review took, for [time to review](commands.md#time-to-review) (on unless you
+turn off **Time my reviews**, `stats.reviewTime`): one record per review of a PR, from first opening its briefing to
+sending the review, with the PR's name (to tell one review from the next), when you opened and sent it, active time
+(in the UI, how long the PR's pane was visible and focused, leaving out stretches over 2 minutes without input; from a
+terminal, the time from its briefing to the send, at most 30 minutes), how many flagged places you saw, how many
+comments were drafted, kept and sent, whether Alden's model helped, and your verdict. Durations and counts only, never
+what the PR or your comments say; kept 120 days, never synced or exported. With usage stats on, each review you send
+adds one `review_timed` event with the times in coarse buckets and the counts, never the PR or repo. So do your notes, what you've spent on models, usage stats waiting to be sent (only if you said
 yes), and this install's anonymous id and the salt for repo hashes. Checkouts of PRs for the code graph are in
 `~/.alden/worktrees`. PR descriptions and last commit messages that the queue reads for [AI agents'
 markers](queue.md#bots-and-ai-agents) are checked on your machine and dropped: only which agent was found (or that
@@ -67,8 +74,8 @@ feedback in `alden ui` always exports redacted.
 ## Usage stats
 
 Off unless you say yes. With your OK, Alden sends anonymous usage stats (which commands and views you use, review
-counts and timings, which way your feedback points) to PostHog in the EU. Never code, titles, paths, repo or user
-names. See [Usage stats](telemetry.md) for every event and how to turn it off.
+counts and timings, roughly how long your reviews took, which way your feedback points) to PostHog in the EU. Never
+code, titles, paths, repo or user names. See [Usage stats](telemetry.md) for every event and how to turn it off.
 
 ## This website
 

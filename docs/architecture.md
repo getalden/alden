@@ -26,7 +26,7 @@ Alden is a TypeScript monorepo. The engine does the whole review locally; the CL
 | `graph/` | tree-sitter parsing and symbol extraction, the repo index and its cache, changed symbols, import resolution, caller queries, and PR worktrees. |
 | `feedback/` | The feedback log (verdicts and misses), its summary, and the redacted export. |
 | `learn/` | What Alden learns from one reviewer in one repo, as plain counts, and how it moves flags and queue rows. |
-| `stats/` | Time to first review and cycle time for `alden stats`, and the first use of Alden per repo. |
+| `stats/` | Time to first review and cycle time for `alden stats`, the first use of Alden per repo, and review sessions for time to review (opened on a briefing, ended by `sendReview`). |
 | `store/` | The SQLite database, `~/.alden/alden.db` (`node:sqlite`, or Bun's in the standalone binary), and its migrations. |
 | `telemetry/` | Opt-in usage stats: consent, the salted repo hash, the queue in the database and sending to PostHog. |
 
@@ -49,6 +49,8 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | `GET /api/config` | The merged settings. |
 | `PUT /api/config` | Sets `{ key, value }` in the user config; a `null` value removes it. |
 | `GET /api/stats` | `alden stats` for `repo`, over `days` (90), split at `since`; `refresh=1` skips the cache. |
+| `GET /api/review-time` | Time to review over the last 14, 30 and 90 days, from this machine's review sessions. |
+| `POST /api/review-time` | Active time on a PR's pane: `{ pr, activeMs }` (at most 5 minutes a report), added to its review session under way. |
 | `GET /api/feedback` | The feedback summary. |
 | `POST /api/feedback` | Records a verdict on a flag, or a miss. |
 | `GET /api/feedback/export` | Your feedback, always redacted (see [Privacy and data](privacy.md#sharing-your-feedback)). |
