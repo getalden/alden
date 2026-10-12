@@ -20,8 +20,10 @@ import { saveToDownloads } from "../packages/cli/src/ui/api.js";
 import { createRankingApi } from "../packages/cli/src/ui/rank.js";
 import { ApiError, startUiServer, type UiApi } from "../packages/cli/src/ui/server.js";
 import {
+  addActiveTime,
   addNote,
   buildBriefing,
+  closeReviewSession,
   editNote,
   FeedbackLog,
   forget,
@@ -34,6 +36,7 @@ import {
   memoryItems,
   memoryRepos,
   mergeLookHere,
+  openReviewSession,
   openStore,
   placeOrLink,
   prFeatures,
@@ -47,6 +50,7 @@ import {
   recordSeen,
   redactFeedback,
   restore,
+  reviewTimeStats,
   type StatsPullRequest,
   scopeNote,
   setLearning,
@@ -177,6 +181,34 @@ function briefingFor(repo: string, number: number, learning?: Learning, withMode
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // Feedback and memory in the demo go to a throwaway database, never your real one.
 const store = openStore(join(mkdtempSync(join(tmpdir(), "alden-demo-")), "alden.db"));
+
+// Time to review: a few weeks of pretend reviews in the throwaway database, so Stats has something to show.
+{
+  const DAY = 86_400_000;
+  const MIN = 60_000;
+  const reviews: [daysAgo: number, activeMin: number, wallMin: number, model: boolean][] = [
+    [4, 9, 35, true],
+    [5, 14, 180, true],
+    [6, 6, 22, false],
+    [8, 11, 95, true],
+    [9, 4, 18, false],
+    [11, 17, 300, true],
+    [13, 8, 40, false],
+    [16, 12, 70, true],
+    [19, 22, 1500, false],
+    [23, 7, 25, true],
+    [27, 10, 60, false],
+    [40, 15, 130, true],
+  ];
+  reviews.forEach(([daysAgo, active, wall, model], i) => {
+    const pr = `demo/past#${i + 1}`;
+    const opened = new Date(Date.now() - daysAgo * DAY);
+    openReviewSession(store, { pr, surface: "ui", model }, opened);
+    // The UI reports a few seconds at a time; here, at most five minutes a report, as the server takes.
+    for (let left = active; left > 0; left -= 5) addActiveTime(store, pr, Math.min(left, 5) * MIN, opened);
+    closeReviewSession(store, { pr, verdict: "APPROVE", comments: i % 3 }, new Date(opened.getTime() + wall * MIN));
+  });
+}
 const feedback = new FeedbackLog(store);
 const DEMO_REPO = "vercel/next.js";
 
@@ -437,6 +469,7 @@ const api: UiApi = {
     }
     const briefing = briefingFor(ref[1], Number(ref[2]), await learningFor(ref[1]), request.llm !== false);
     drafts.rememberBriefing(briefing);
+    openReviewSession(store, { pr: `${ref[1]}#${ref[2]}`, surface: "ui", model: request.llm !== false });
     return briefing;
   },
   spend: async () => ({
@@ -641,6 +674,8 @@ const api: UiApi = {
     if (!demoLearnFromReviews) return { recorded: 0 };
     return { recorded: places.filter((place) => recordSeen(store, { pr, headSha, ...place })).length };
   },
+  reportActive: async ({ pr, activeMs }) => ({ counted: addActiveTime(store, pr, activeMs) }),
+  reviewTime: async () => reviewTimeStats(store),
   sendReview: async () => {
     throw new ApiError(409, "This is Alden's demo: it never sends anything to GitHub. Your drafts are kept.");
   },

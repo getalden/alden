@@ -13,6 +13,7 @@ import type { Api, ReviewRequest } from "../api";
 import { cachedDiff } from "../diff";
 import { type BriefingComments, type CommentPlace, useDrawerOpen } from "../drafts";
 import type { BriefingFeedback } from "../feedback";
+import { useActiveTime } from "../review-time";
 import type { ReviewRun } from "../reviews";
 import { onLinkClick } from "../router";
 import { AldenAssistContext, DraftMyReview, useAssist } from "./AldenAssist";
@@ -409,6 +410,9 @@ export function ReviewPane(props: ReviewPaneProps) {
     drawer.editing !== undefined && drawer.editing.kind !== "note",
   );
   const count = comments && !comments.loading ? comments.drafts.length : 0;
+  // Time to review: while a PR's briefing is up, how long this pane is in front of you.
+  const briefed = run?.briefing?.target.kind === "pr" ? run.briefing.target : undefined;
+  useActiveTime(briefed ? `${briefed.repo}#${briefed.number}` : undefined);
   const assist = useAssist({
     api: props.assist?.api,
     comments,

@@ -1,4 +1,10 @@
-import type { Distribution, RepoStats } from "@alden/schema";
+import {
+  type Distribution,
+  REVIEW_TIME_SMALL_SAMPLE,
+  type RepoStats,
+  type ReviewTimeGroup,
+  type ReviewTimeStats,
+} from "@alden/schema";
 import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import type { Api, Session } from "../api";
 import { plural } from "../format";
@@ -192,6 +198,108 @@ function column(x: number, top: number, w: number, base: number): string {
   return `M${x},${base}V${top + r}Q${x},${top} ${x + r},${top}H${x + w - r}Q${x + w},${top} ${x + w},${top + r}V${base}Z`;
 }
 
+/** "40s", "12m", "1h 5m", "3d+" (at the horizon: at least that long). */
+export function formatMinutes(minutes: number | null, horizonMinutes = Number.POSITIVE_INFINITY): string {
+  if (minutes === null) return "–";
+  if (minutes >= horizonMinutes) return `${Math.round(horizonMinutes / 1440)}d+`;
+  if (minutes < 1) return `${Math.max(1, Math.round(minutes * 60))}s`;
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = Math.round(minutes - hours * 60);
+  if (hours < 48) return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+}
+
+/**
+ * Time to review: your own reviews sent with Alden, from the sessions recorded on this machine. The two medians with
+ * and without the model side by side, each with how many reviews it rests on; no "faster" or "slower": too few
+ * reviews, and too much else differs between them, for that to be honest.
+ */
+export function ReviewTimeSection({ stats }: { stats: ReviewTimeStats }) {
+  const [days, setDays] = useState(30);
+  const shown = stats.windows.find((w) => w.days === days) ?? stats.windows[0];
+  const horizonDays = Math.round(stats.horizonHours / 24);
+  const horizon = stats.horizonHours * 60;
+  const longest = stats.windows.at(-1);
+  const anything = stats.windows.some((w) => w.all.count > 0);
+  const row = (label: string, g: ReviewTimeGroup) => (
+    <tr key={label}>
+      <th scope="row">{label}</th>
+      <td>{g.count === 0 ? "–" : formatMinutes(g.activeMedianMinutes)}</td>
+      <td>{g.count === 0 ? "–" : formatMinutes(g.wallMedianMinutes, horizon)}</td>
+      <td>
+        {g.count}
+        {g.count > 0 && g.small ? <span className="faint"> · few</span> : null}
+      </td>
+    </tr>
+  );
+  const small =
+    shown && [shown.withModel, shown.withoutModel].some((g) => g.count > 0 && g.count < REVIEW_TIME_SMALL_SAMPLE);
+  return (
+    <section className="card panel" aria-labelledby="review-time-title">
+      <div className="section-head">
+        <h2 className="tile-label" id="review-time-title" style={{ color: "var(--ink)" }}>
+          Time to review
+        </h2>
+        {anything && (
+          <Segmented label="Reviews opened in the last">
+            {stats.windows.map((w) => (
+              <button key={w.days} type="button" aria-pressed={w.days === days} onClick={() => setDays(w.days)}>
+                {w.days} days
+              </button>
+            ))}
+          </Segmented>
+        )}
+      </div>
+      <p className="muted small">
+        Your reviews sent with Alden, from this machine, by the day you first opened the briefing. Active is time with
+        the PR in front of you in Alden (idle stretches over 2 minutes left out); open to send is from first opening its
+        briefing to sending your review.
+      </p>
+      {!stats.enabled && (
+        <p className="banner">
+          Off: Alden isn't recording how long reviews take. Turn it on in Settings → Time to review.
+        </p>
+      )}
+      {!anything || !shown ? (
+        <p className="muted">
+          {longest && longest.excluded.tooRecent > 0
+            ? `Nothing to show yet: ${plural(longest.excluded.tooRecent, "review")} opened in the last ${horizonDays} days ${longest.excluded.tooRecent === 1 ? "counts" : "count"} once ${horizonDays} days old.`
+            : "No reviews timed yet: open a PR's briefing in Alden, then send your review from Alden."}
+        </p>
+      ) : (
+        <>
+          <table className="table">
+            <thead>
+              <tr>
+                <th scope="col">Last {shown.days} days</th>
+                <th scope="col">Median active</th>
+                <th scope="col">Median open to send</th>
+                <th scope="col">Reviews</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row("With the model", shown.withModel)}
+              {row("Without the model", shown.withoutModel)}
+            </tbody>
+          </table>
+          <p className="faint small">
+            {small &&
+              `Few reviews (under ${REVIEW_TIME_SMALL_SAMPLE}): one review can swing these medians, so read them as anecdotes, not a trend. `}
+            {shown.excluded.tooRecent > 0 &&
+              `${plural(shown.excluded.tooRecent, "review")} opened in the last ${horizonDays} days ${shown.excluded.tooRecent === 1 ? "isn't" : "aren't"} counted yet, so slow reviews aren't left out. `}
+            {shown.excluded.notSent > 0 &&
+              `${plural(shown.excluded.notSent, "briefing")} opened and never sent from Alden ${shown.excluded.notSent === 1 ? "isn't" : "aren't"} counted. `}
+            {shown.all.estimated > 0 &&
+              `${plural(shown.all.estimated, "review")} from a terminal or AI tool: active time there is briefing to send, at most 30 minutes. `}
+            Open to send is capped at {horizonDays} days.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
 /** A repo's review speed from GitHub: before and after Alden, and week by week. */
 export function StatsView({ api, session }: { api: Api; session: Session }) {
   const [repo, setRepo] = useState(session.repo?.repos[0] ?? "");
@@ -201,6 +309,7 @@ export function StatsView({ api, session }: { api: Api; session: Session }) {
   const [stats, setStats] = useState<RepoStats>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
+  const [reviewTime, setReviewTime] = useState<ReviewTimeStats>();
 
   const load = useCallback(
     (refresh = false) => {
@@ -217,6 +326,13 @@ export function StatsView({ api, session }: { api: Api; session: Session }) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: load once on open; later loads are the form's
   useEffect(() => load(), []);
+
+  // Your own time to review: from this machine, whichever repo is picked above.
+  useEffect(() => {
+    Promise.resolve()
+      .then(() => api.reviewTime())
+      .then(setReviewTime, () => setReviewTime(undefined));
+  }, [api]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -335,6 +451,8 @@ export function StatsView({ api, session }: { api: Api; session: Session }) {
           </p>
         </>
       )}
+
+      {reviewTime && <ReviewTimeSection stats={reviewTime} />}
     </section>
   );
 }

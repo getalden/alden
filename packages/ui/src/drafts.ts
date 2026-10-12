@@ -8,6 +8,7 @@ import type {
 import { linkLines, noteText } from "@alden/schema/note-text";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Api } from "./api";
+import { flushActiveTime } from "./review-time";
 import { type ThreadsState, useThreads } from "./threads";
 
 /*
@@ -272,6 +273,8 @@ export function useDrafts(api: DraftsApi | undefined, pr: string | undefined): B
     },
     async send() {
       const body = bodies[pr]?.trim();
+      // Time to review: the pane's last seconds count before the send ends the review's session.
+      await flushActiveTime(pr);
       const result = await api.sendReview({ pr, event: events[pr] ?? "COMMENT", ...(body ? { body } : {}) });
       setData({ drafts: [], unaddressed: [] });
       setBodies(({ [pr]: _, ...rest }) => rest);
