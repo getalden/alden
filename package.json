@@ -34,6 +34,7 @@
     "desktop:build": "pnpm build && pnpm build:binary && pnpm desktop:sidecar && pnpm --filter @alden/desktop app:build && tsx scripts/unsigned-app.ts warn",
     "desktop:forget-build": "tsx scripts/unsigned-app.ts",
     "screenshots": "tsx scripts/screenshots.ts",
+    "og": "tsx scripts/og.ts",
     "posthog:dashboard": "tsx scripts/posthog-dashboard.ts",
     "gate": "tsx scripts/gate.ts",
     "e2e:sandbox": "tsx scripts/e2e/sandbox.ts",

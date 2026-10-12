@@ -12,6 +12,9 @@ The landing page and the docs, built into `site/dist` and served by Cloudflare P
   `![alt](../site/src/assets/screens/x.png)`, which works on GitHub and which `build.ts` turns into
   `/assets/screens/x.png` on the site. After retaking them, check the alt text where each is used still says what it
   shows (`git grep screens/`).
+- `site/src/assets/og.png` is the social card (1200x630), for the site's `og:image` and GitHub's social preview:
+  `pnpm og` renders `scripts/og.html` in headless Chrome with the site's font and `screens/briefing-dark.png`, so
+  retake it after the screenshots. GitHub's copy is uploaded by hand: the repo's Settings → General → Social preview.
 
 ```sh
 pnpm site:build                       # site/dist

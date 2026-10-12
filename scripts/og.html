@@ -1,0 +1,87 @@
+<!doctype html>
+<!--
+  The social card, site/src/assets/og.png: `pnpm og` renders this at 1200x630 in headless Chrome. The site's colours,
+  grid and glow; the headline is the site's; the picture is a real screenshot of the app (briefing-dark.png, from
+  `pnpm screenshots`). {{…}} are filled in by scripts/og.ts.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: "Geist";
+        src: url("{{GEIST}}") format("woff2");
+        font-weight: 100 900;
+      }
+      :root {
+        --bg: #081014;
+        --line2: #263c44;
+        --ink: #f0fdfa;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Geist", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(94, 234, 212, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(94, 234, 212, 0.05) 1px, transparent 1px);
+        background-size: 56px 56px;
+        mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 30%, transparent 75%);
+      }
+      .glow {
+        position: absolute;
+        left: 50%;
+        top: -320px;
+        width: 1100px;
+        height: 640px;
+        transform: translateX(-50%);
+        background: radial-gradient(closest-side, rgba(20, 184, 166, 0.22), transparent);
+      }
+      h1 {
+        position: absolute;
+        left: 80px;
+        right: 80px;
+        top: 58px;
+        margin: 0;
+        font-size: 46px;
+        white-space: nowrap;
+        font-weight: 450;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+      }
+      .frame {
+        position: absolute;
+        left: 80px;
+        top: 150px;
+        width: 1040px;
+        height: 520px;
+        border: 1px solid var(--line2);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow:
+          0 0 0 1px rgba(94, 234, 212, 0.08),
+          0 30px 80px rgba(0, 0, 0, 0.5);
+      }
+      .frame img {
+        display: block;
+        width: 1040px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid"></div>
+    <div class="glow"></div>
+    <h1>The review companion that knows what you look for.</h1>
+    <div class="frame"><img src="{{SCREEN}}" alt="" /></div>
+  </body>
+</html>
