@@ -14,8 +14,11 @@ Alden in a window and the menu bar. A [Tauri 2](https://tauri.app) shell around 
   app's end of its stdin closes, so a crash can't leave it running.
 
 The window only ever shows Alden's own server on 127.0.0.1 (and the bundled loading page), with the same session key
-and checks as `alden ui` in a browser. It calls no Tauri commands, so its capability set is `core:default`, plus one
-permission for Export → Print (`capabilities/print.json`): the local server's page may call `print`, and nothing else.
+and checks as `alden ui` in a browser. It calls no Tauri commands, so its capability set is `core:default`, plus two
+permissions: Export → Print (`capabilities/print.json`), where the local server's page may call `print`, and the title
+bar (`capabilities/drag.json`), where it may start dragging the window. The window's title bar is Alden's top bar
+(`titleBarStyle: "Overlay"`): the traffic lights sit over its left end, which leaves them 82px, and its empty parts
+(`data-tauri-drag-region`) drag the window.
 
 ## Install
 

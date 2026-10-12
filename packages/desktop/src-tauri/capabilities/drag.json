@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "drag",
+  "description": "The window's title bar is Alden's top bar (titleBarStyle Overlay), so the local server's page (http://127.0.0.1, any port) may start dragging the window from it (data-tauri-drag-region) and nothing else.",
+  "windows": ["main"],
+  "remote": { "urls": ["http://127.0.0.1:*"] },
+  "permissions": ["core:window:allow-start-dragging"]
+}
