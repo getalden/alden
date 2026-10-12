@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import {
+  addActiveTime,
   addNote,
   backgroundModelAllowed,
   briefingForDrafting,
@@ -39,6 +40,8 @@ import {
   memoryItems,
   memoryRepos,
   modelKeyStore,
+  noteModelUsed,
+  openReviewSession,
   openStore,
   type Placement,
   placeOrLink,
@@ -62,6 +65,8 @@ import {
   reviewEvent,
   reviewLocalChanges,
   reviewPullRequest,
+  reviewTimedEvent,
+  reviewTimeStats,
   SendReviewError,
   SpendLedger,
   scopeNote,
@@ -76,6 +81,7 @@ import {
   supportsEffort,
   telemetryBlocked,
   telemetryConsent,
+  telemetrySurface,
   track,
   UsageLog,
   unaddressedPlaces,
@@ -85,6 +91,7 @@ import {
   whyNoToken,
 } from "@alden/core";
 import type {
+  AldenConfig,
   Briefing,
   BriefingFreshness,
   BriefingTarget,
@@ -385,6 +392,7 @@ export function createUiApi(options: {
         notifications: { sound: config.notifications.sound, followUps: config.notifications.followUps },
         learning: { fromReviews: config.learning.fromReviews },
         drafts: { auto: config.drafts.auto },
+        stats: { reviewTime: config.stats.reviewTime },
         repo: (await repoOf(options.cwd)) ?? null,
         user,
         model: {
@@ -581,6 +589,7 @@ export function createUiApi(options: {
       if (target.kind === "pr") {
         await new UsageLog().markUsed(target.repo).catch(() => {});
         noteOpened(last?.rows, target.url, "ui");
+        openedBriefing(entry.briefing, await loadConfig(options.cwd));
       }
       return { briefing: entry.briefing, at: entry.at };
     },
@@ -906,6 +915,7 @@ export function createUiApi(options: {
           checkLink: (link) => checkLinkTarget(client, ref.repo, headSha, link),
         });
         for (const d of result.made) void track("draft_changed", { action: "add", source: "alden", inline: inline(d) });
+        if (result.asked) modelUsed(ref.name);
         return {
           made: result.made.length,
           skipped: result.skipped,
@@ -965,6 +975,7 @@ export function createUiApi(options: {
           ledger: new SpendLedger(),
           ...(signal ? { signal } : {}),
         });
+        modelUsed(ref.name);
         return { text: result.text, costUsd: result.usd ?? null };
       } catch (error) {
         throw draftingProblem(error);
@@ -982,9 +993,15 @@ export function createUiApi(options: {
           { repo: ref.repo, number: ref.number, event, ...(body !== undefined ? { body } : {}) },
           new Date(),
           // What you saw in guided review and the Diff tab, so approving past a place you saw counts as a silent pass.
-          { fromReviews: config.learning.fromReviews, seen: seenPlaces },
+          {
+            fromReviews: config.learning.fromReviews,
+            seen: seenPlaces,
+            reviewTime: config.stats.reviewTime,
+          },
         );
         const { counts } = sent;
+        // How long it took, in coarse buckets (stats.reviewTime on, and a session from opening its briefing).
+        if (sent.timing) void track("review_timed", reviewTimedEvent(sent.timing));
         void track("review_sent", {
           review: event === "APPROVE" ? "approve" : event === "REQUEST_CHANGES" ? "request_changes" : "comment",
           inline: counts.inline,
@@ -1036,6 +1053,16 @@ export function createUiApi(options: {
       } catch (error) {
         throw new ApiError(502, describeGitHubError(error, resolved.source));
       }
+    },
+
+    async reportActive({ pr, activeMs }) {
+      if (!(await loadConfig(options.cwd)).stats.reviewTime) return { counted: false };
+      return { counted: addActiveTime(openStore(), pr, activeMs) };
+    },
+
+    async reviewTime() {
+      const config = await loadConfig(options.cwd);
+      return reviewTimeStats(openStore(), { enabled: config.stats.reviewTime });
     },
 
     async recordSeen({ pr, headSha, places }) {
@@ -1131,6 +1158,29 @@ export function createUiApi(options: {
     return publicDraft(edited);
   }
 
+  /** A PR briefing you opened: starts or continues its review session (stats.reviewTime). Never stops the review. */
+  function openedBriefing(briefing: Briefing, config: AldenConfig): void {
+    if (briefing.target.kind !== "pr" || !config.stats.reviewTime) return;
+    try {
+      openReviewSession(openStore(), {
+        pr: prName(briefing.target.repo, briefing.target.number),
+        surface: telemetrySurface(),
+        model: briefing.llm?.status === "ok",
+      });
+    } catch {
+      // only the timing is lost
+    }
+  }
+
+  /** Alden's model drafted on a PR ("Draft my review", "Draft with Alden"): its review session used the model. */
+  function modelUsed(pr: string): void {
+    try {
+      noteModelUsed(openStore(), pr);
+    } catch {
+      // only the timing is lost
+    }
+  }
+
   /** One review, for the UI or (background) for the desktop app ahead of time, which isn't you opening the PR. */
   async function runReview(
     request: ReviewRequest,
@@ -1189,6 +1239,9 @@ export function createUiApi(options: {
     } catch {
       // the database is locked or damaged: the review still stands
     }
+    // Opening it starts (or continues) the PR's review session, for time to review: before Alden's drafts, so they
+    // count. A background briefing isn't you opening it: that's when you read it (see `prepared`).
+    if (!background) openedBriefing(briefing, config);
     // What "Draft my review" and "Draft with Alden" draft from.
     await rememberForDrafting(briefing);
     // Comments drafted from the model's findings, for you to keep, edit or drop: never sent on their own. Not beside

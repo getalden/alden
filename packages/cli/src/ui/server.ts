@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
-import { COMMIT_SHA, type RankChange, type ReviewStage } from "@alden/core";
+import { COMMIT_SHA, MAX_ACTIVE_REPORT_MS, type RankChange, type ReviewStage } from "@alden/core";
 import {
   type Briefing,
   BriefingSchema,
@@ -159,6 +159,14 @@ export interface UiApi {
    * `learning.fromReviews` is off.
    */
   recordSeen(input: SeenInput): Promise<{ recorded: number }>;
+  /**
+   * Time to review: active time the UI measured on a PR ("owner/repo#12"), its pane visible and focused, idle
+   * stretches over 2 minutes left out, added to the PR's review session under way. Nothing while `stats.reviewTime`
+   * is off, or without a session (its briefing not opened yet, or the review already sent).
+   */
+  reportActive(input: { pr: string; activeMs: number }): Promise<{ counted: boolean }>;
+  /** Time to review over the last 14, 30 and 90 days, from the review sessions on this machine. */
+  reviewTime(): Promise<unknown>;
 }
 
 /** What `POST /api/seen` takes: a PR ("owner/repo#12"), the head commit its places are from, and the places. */
@@ -962,6 +970,25 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
           200,
           await api.sendReview({ pr: body.pr, event, ...(typeof body.body === "string" ? { body: body.body } : {}) }),
         );
+        return;
+      }
+      case "GET /api/review-time":
+        send(res, 200, await api.reviewTime());
+        return;
+      case "POST /api/review-time": {
+        const body = await readJsonBody(req, 1024);
+        const { pr, activeMs } = body;
+        if (
+          typeof pr !== "string" ||
+          !/^[\w.-]+\/[\w.-]+#\d{1,9}$/.test(pr) ||
+          typeof activeMs !== "number" ||
+          !Number.isFinite(activeMs) ||
+          activeMs <= 0 ||
+          activeMs > MAX_ACTIVE_REPORT_MS
+        ) {
+          throw new ApiError(400, `Send { pr: owner/repo#12, activeMs } with activeMs up to ${MAX_ACTIVE_REPORT_MS}.`);
+        }
+        send(res, 200, await api.reportActive({ pr, activeMs }));
         return;
       }
       case "POST /api/seen":
