@@ -88,6 +88,23 @@ export const ReviewDraftSchema = z
       .describe(
         "outdated: the PR moved on and the line couldn't be found again, so it can't be sent until it's placed",
       ),
+    changedIn: z
+      .string()
+      .optional()
+      .describe(
+        "on an outdated draft, as the local API lists it: the PR's head commit its lines no longer match at. Absent when GitHub couldn't be reached",
+      ),
+    movedTo: z
+      .object({
+        path: z.string(),
+        line: z.number().int().positive().describe("the line (a range's last line) at the PR's head"),
+        side: z.enum(["RIGHT", "LEFT"]),
+        startLine: z.number().int().positive().optional().describe("a range's first line, less than `line`"),
+      })
+      .optional()
+      .describe(
+        "on an outdated draft, as the local API lists it: where its code reads most like it now, to move it there (PATCH it with this place). Absent when nothing is close enough or two places are equally close: pick a line",
+      ),
   })
   .refine((d) => d.body.trim() !== "" || d.suggestion !== undefined || (d.inReplyTo !== undefined && d.resolve), {
     message: "a comment needs some text, unless it's a suggestion (or a reply that only resolves its thread)",

@@ -1,7 +1,7 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
 import type { BriefingComments, ReviewDraft } from "../drafts";
-import { plural } from "../format";
-import { type ReviewThread, replyIn, replyWhere, threadPlace } from "../threads";
+import { formatWait, plural } from "../format";
+import { isYours, type ReviewThread, replyIn, replyWhere, threadPlace } from "../threads";
 import { DraftWithAlden } from "./AldenAssist";
 import { DraftText } from "./DraftText";
 
@@ -24,16 +24,32 @@ export interface ReplyFocus {
 }
 
 /** Who wrote a comment in a thread: you, them, or an account that's gone. */
-const authorOf = (c: ReviewThread["comments"][number]) => (c.isYou ? "You" : (c.author ?? "A deleted account"));
+const authorOf = (c: ReviewThread["comments"][number]) => (c.isYou ? "you" : (c.author ?? "a deleted account"));
 
-/** One comment of a thread, as GitHub has it. Shown as text, never as HTML. */
+/** One comment of a thread, as GitHub has it: who, in bold, then what they said. Shown as text, never as HTML. */
 function ThreadComment({ comment }: { comment: ReviewThread["comments"][number] }) {
   return (
     <li className="thread-comment">
-      <span className="thread-author">{authorOf(comment)}</span>
-      <p className="thread-body">{comment.body}</p>
+      <p className="thread-body">
+        <b className="thread-author">{authorOf(comment)}</b> {comment.body}
+      </p>
     </li>
   );
+}
+
+/** "2h ago", from an ISO time. */
+const ago = (at: string, now = Date.now()) => `${formatWait(Math.max(0, now - Date.parse(at)) / 3_600_000)} ago`;
+
+/**
+ * A thread's state, on the right of its card: resolved, outdated, "replied 2h ago" when someone answered in a thread
+ * of yours, or open.
+ */
+export function threadState(t: ReviewThread, now = Date.now()): { text: string; tone: string } {
+  if (t.isResolved) return { text: "resolved", tone: "done" };
+  if (t.isOutdated) return { text: "outdated", tone: "warn" };
+  const last = t.comments[t.comments.length - 1];
+  if (isYours(t) && last && !last.isYou) return { text: `replied ${ago(last.createdAt, now)}`, tone: "new" };
+  return { text: "open", tone: "open" };
 }
 
 /**
@@ -53,6 +69,7 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
   const area = useRef<HTMLTextAreaElement>(null);
   const replyButton = useRef<HTMLButtonElement>(null);
   const where = threadPlace(thread);
+  const state = threadState(thread);
 
   const startWriting = () => {
     setText(draft?.body ?? "");
@@ -112,18 +129,15 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
   return (
     <li
       ref={card}
-      className={`thread${thread.isResolved ? " resolved" : ""}${focus?.show && focus.threadId === thread.id ? " shown" : ""}`}
+      className={`thread tcard${thread.isResolved ? " resolved" : ""}${focus?.show && focus.threadId === thread.id ? " shown" : ""}`}
       tabIndex={-1}
     >
-      <div className="draft-head">
-        <span className="draft-where">
-          On <span className="mono">{where}</span>
+      <div className="tcard-head">
+        <span className="tcard-where" title={where}>
+          {threadPlace({ ...thread, path: thread.path.split("/").pop() ?? thread.path })} ·{" "}
+          {isYours(thread) ? "yours" : "open"}
         </span>
-        {thread.isResolved && <span className="pill neutral">Resolved</span>}
-        {thread.isOutdated && <span className="pill warn">Outdated</span>}
-        <a className="small" href={thread.comments[0]?.url} target="_blank" rel="noreferrer">
-          On GitHub ↗
-        </a>
+        <span className={`tcard-state ${state.tone}`}>{state.text}</span>
       </div>
       <ul className="visually-plain thread-comments">
         {thread.comments.map((c) => (
@@ -176,12 +190,12 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
           </div>
         </div>
       ) : (
-        <div className="draft-acts">
+        <div className="draft-acts tcard-acts">
           {thread.viewerCanReply && (
             <button
               ref={replyButton}
               type="button"
-              className="btn xs"
+              className="tcard-act reply"
               aria-label={`${draft?.body.trim() ? "Edit your reply" : "Reply"} in the thread on ${where}`}
               onClick={startWriting}
             >
@@ -191,7 +205,7 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
           {draft?.body.trim() && (
             <button
               type="button"
-              className="btn xs quiet"
+              className="tcard-act"
               disabled={busy}
               aria-label={`Discard your reply in the thread on ${where}`}
               onClick={() => void save("", draft.resolve === true)}
@@ -225,6 +239,9 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
               Resolve when sent
             </label>
           )}
+          <a className="tcard-link" href={thread.comments[0]?.url} target="_blank" rel="noreferrer">
+            On GitHub ↗
+          </a>
         </div>
       )}
       {error && (
@@ -254,7 +271,7 @@ export function Conversation(props: { comments: BriefingComments; focus?: ReplyF
   const card = (t: ReviewThread) => <ThreadCard key={t.id} thread={t} comments={comments} focus={focus} />;
   return (
     <section className="drawer-group conversation" aria-labelledby="drawer-conversation">
-      <h3 className="label" id="drawer-conversation">
+      <h3 className="visually-hidden" id="drawer-conversation">
         Conversation{state.threads.length > 0 ? ` · ${open.length} open` : ""}
       </h3>
       {state.error && <p className="banner error">{state.error}</p>}
@@ -265,7 +282,7 @@ export function Conversation(props: { comments: BriefingComments; focus?: ReplyF
       ) : (
         <>
           <p className="faint small">Replies and resolves go with your review when you send it, never on their own.</p>
-          {open.length > 0 && <ul className="visually-plain card drafts">{open.map(card)}</ul>}
+          {open.length > 0 && <ul className="visually-plain tcards">{open.map(card)}</ul>}
           {resolved.length > 0 && (
             <>
               <button
@@ -276,7 +293,7 @@ export function Conversation(props: { comments: BriefingComments; focus?: ReplyF
               >
                 {showResolved ? "Hide" : "Show"} {plural(resolved.length, "resolved thread")}
               </button>
-              {showResolved && <ul className="visually-plain card drafts">{resolved.map(card)}</ul>}
+              {showResolved && <ul className="visually-plain tcards">{resolved.map(card)}</ul>}
             </>
           )}
         </>

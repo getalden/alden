@@ -277,6 +277,95 @@ export function findAgain(placement: Placement, files: DiffFile[]): Placement | 
   };
 }
 
+/** Where "Move to new lines" offers to put an outdated draft: a line (or range) of the diff at the PR's head. */
+export interface MoveCandidate {
+  path: string;
+  line: number;
+  side: Side;
+  startLine?: number;
+}
+
+const squash = (text: string) => text.trim().replace(/\s+/g, " ");
+
+/** How alike two lines read, 0 to 1: the share of character pairs they have in common, ignoring spacing. */
+export function lineLikeness(a: string, b: string): number {
+  const x = squash(a);
+  const y = squash(b);
+  if (x === y) return 1;
+  if (x.length < 2 || y.length < 2) return 0;
+  const pairs = (s: string) => {
+    const out = new Map<string, number>();
+    for (let i = 0; i < s.length - 1; i++) {
+      const pair = s.slice(i, i + 2);
+      out.set(pair, (out.get(pair) ?? 0) + 1);
+    }
+    return out;
+  };
+  const px = pairs(x);
+  const py = pairs(y);
+  let shared = 0;
+  for (const [pair, n] of px) shared += Math.min(n, py.get(pair) ?? 0);
+  return (2 * shared) / (x.length - 1 + y.length - 1);
+}
+
+/**
+ * Where an outdated draft's code went at the PR's head, for "Move to new lines": the line on the same side of the same
+ * file (or the file it was renamed to) that reads most like the draft's line, with its neighbours as they were
+ * counting for it, nearest the old place on a tie. Looser than `findAgain`, which moves drafts on its own: this only
+ * offers a place you then accept. Undefined when nothing reads enough like it (the line went, or was rewritten), or
+ * when two places are equally good: then you pick a line. A range keeps its length, within the hunk it lands in.
+ */
+export function moveCandidate(placement: Placement, files: DiffFile[]): MoveCandidate | undefined {
+  const file = files.find((f) => f.path === placement.path) ?? files.find((f) => f.previousPath === placement.path);
+  if (!file || file.binary || file.patchMissing) return undefined;
+  const { anchor } = placement;
+  const trivial = squash(anchor.text).length < 3;
+  const same = (a: string | undefined, b: string | undefined) =>
+    a !== undefined && b !== undefined && squash(a) === squash(b);
+  const lines = commentableLines(file, placement.side);
+  // A range's lines, first to last, as they read when it was written; the last is the anchor's.
+  const original = placement.lines && placement.lines.length > 1 ? placement.lines : [anchor.text];
+  const scored = lines.flatMap((l, i) => {
+    // The run of lines ending here, within the hunk, as long as the range (shorter at a hunk's start).
+    const run = lines.slice(Math.max(0, i - original.length + 1), i + 1).filter((x) => x.hunk === l.hunk);
+    const head = run[0] as SideLine;
+    const like = lineLikeness(l.text, anchor.text);
+    // Every line of a range counts, the last one most.
+    const others =
+      run.length === original.length && run.length > 1
+        ? original.slice(0, -1).reduce((sum, text, k) => sum + lineLikeness((run[k] as SideLine).text, text), 0) /
+          (run.length - 1)
+        : like;
+    const around = (same(head.before, anchor.before) ? 1 : 0) + (same(l.after, anchor.after) ? 1 : 0);
+    // Blank lines and lone braces are only themselves when what's around them agrees; anything else must read alike.
+    if (trivial ? like < 1 || around === 0 : like < 0.5 || (like < 0.8 && around === 0)) return [];
+    return [{ l, score: like * 1.5 + others * 0.5 + around * 0.75 }];
+  });
+  if (scored.length === 0) return undefined;
+  const best = Math.max(...scored.map((c) => c.score));
+  const top = scored.filter((c) => best - c.score < 1e-9);
+  const distance = (c: { l: SideLine }) => Math.abs(c.l.line - placement.line);
+  const nearest = Math.min(...top.map(distance));
+  const closest = top.filter((c) => distance(c) === nearest);
+  if (closest.length !== 1) return undefined;
+  const { l: last } = closest[0] as { l: SideLine };
+  const length = placement.startLine !== undefined ? placement.line - placement.startLine + 1 : 1;
+  const first =
+    length > 1
+      ? Math.min(
+          ...lines
+            .filter((l) => l.hunk === last.hunk && l.line <= last.line && l.line > last.line - length)
+            .map((l) => l.line),
+        )
+      : last.line;
+  return {
+    path: file.path,
+    line: last.line,
+    side: placement.side,
+    ...(first < last.line ? { startLine: first } : {}),
+  };
+}
+
 // --- The store --------------------------------------------------------------------------------------------------
 
 interface DraftRow {
@@ -351,6 +440,21 @@ function fromRow(row: DraftRow): StoredDraft {
 
 /** Strips the stored-only fields, for anything that leaves the engine. */
 export const publicDraft = ({ anchor: _anchor, ...draft }: StoredDraft): ReviewDraft => draft;
+
+/**
+ * A PR's drafts as the UI lists them, after `follow` brought them to `headSha`: each outdated draft on a line says
+ * the head its lines no longer match at (`changedIn`) and, when it can be told, where its code is now (`movedTo`, see
+ * `moveCandidate`).
+ */
+export function draftsAtHead(list: StoredDraft[], headSha: string, files: DiffFile[]): ReviewDraft[] {
+  return list.map((d) => {
+    const draft = publicDraft(d);
+    if (d.state !== "outdated" || d.path === undefined) return draft;
+    const placement = placementOf(d);
+    const movedTo = placement ? moveCandidate(placement, files) : undefined;
+    return { ...draft, changedIn: headSha, ...(movedTo ? { movedTo } : {}) };
+  });
+}
 
 const placementOf = (d: StoredDraft): Placement | undefined =>
   d.path !== undefined && d.line !== undefined && d.anchor
@@ -1216,22 +1320,31 @@ export interface SendLearning {
 export async function sendReview(
   client: GitHubClient,
   store: AldenStore,
-  input: { repo: string; number: number; event: ReviewEvent; body?: string },
+  input: {
+    repo: string;
+    number: number;
+    event: ReviewEvent;
+    body?: string;
+    /**
+     * Leaves out the drafts you already saw were outdated (the UI's summary counts them as "Outdated, left out")
+     * rather than refusing to send; they stay, to move or delete. A draft this send finds outdated still stops it.
+     */
+    leaveOutdated?: boolean;
+  },
   now: Date = new Date(),
   learning: SendLearning = {},
 ): Promise<SendReviewResult & { counts: SentCounts; timing?: ReviewTiming }> {
   const pr = prName(input.repo, input.number);
   const drafts = new ReviewDrafts(store);
   const { headSha, files } = await fetchPullRequestState(client, input.repo, input.number);
+  const before = drafts.list(pr);
   // Alden's drafts you haven't kept don't post, so their moving doesn't stop the review.
-  const unkept = new Set(
-    drafts
-      .list(pr)
-      .filter((d) => d.source === "alden")
-      .map((d) => d.id),
+  const unkept = new Set(before.filter((d) => d.source === "alden").map((d) => d.id));
+  const leftOut = new Set(
+    input.leaveOutdated ? before.filter((d) => d.state === "outdated" && !unkept.has(d.id)).map((d) => d.id) : [],
   );
   const followed = drafts.follow(pr, headSha, files);
-  const changed = [...followed.moved, ...followed.outdated].filter((id) => !unkept.has(id));
+  const changed = [...followed.moved, ...followed.outdated].filter((id) => !unkept.has(id) && !leftOut.has(id));
   if (changed.length > 0) {
     throw new SendReviewError(
       409,
@@ -1241,7 +1354,7 @@ export async function sendReview(
     );
   }
   // Only what's yours posts: a comment Alden drafted goes out once you keep or edit it, never on its own.
-  const all = drafts.list(pr).filter((d) => d.source !== "alden");
+  const all = drafts.list(pr).filter((d) => d.source !== "alden" && !leftOut.has(d.id));
   checkSendable(all, files, input.event, input.body);
   // Replies post in their threads: they're not the review's own comments, to count or learn from.
   const replies = all.filter(isReply);
@@ -1311,7 +1424,9 @@ export async function sendReview(
     repo: input.repo,
     body: { pr, number: input.number, headSha, review: input.event, url, at: now.toISOString(), ...counts },
   });
-  drafts.clear(pr);
+  // The outdated drafts left out stay, to move or delete; everything else was sent or (Alden's, unkept) let go.
+  if (leftOut.size === 0) drafts.clear(pr);
+  else for (const d of drafts.list(pr)) if (!leftOut.has(d.id)) drafts.delete(d.id);
   // How long the review took (stats.reviewTime): the session ends here. Never fails the send, which has posted.
   let timing: ReviewTiming | undefined;
   try {

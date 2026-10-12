@@ -29,12 +29,14 @@ import type {
   ToneState,
 } from "@alden/schema";
 import type {
+  DraftMove,
   DraftPatch,
   DraftsResponse,
   NewDraft,
   ReviewDraft,
   ReviewEvent as ReviewVerdict,
   SendReviewResult,
+  Tone,
 } from "./drafts";
 import type { SeenBatch } from "./seen";
 
@@ -443,7 +445,7 @@ export class Api {
     this.request<ReviewDraft>("/api/drafts", { method: "POST", body: JSON.stringify(draft) });
 
   /** A plain string changes the text only. */
-  editDraft = (id: string, patch: string | DraftPatch) =>
+  editDraft = (id: string, patch: string | DraftPatch | DraftMove) =>
     this.request<ReviewDraft>(`/api/drafts/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(typeof patch === "string" ? { body: patch } : patch),
@@ -455,6 +457,12 @@ export class Api {
   /** Keeps Alden's drafts (by id, or all of them on `pr`): they become yours, and are sent with the review. */
   keepDrafts = (which: { ids: string[] } | { pr: string }) =>
     this.request<{ kept: ReviewDraft[] }>("/api/drafts/keep", { method: "POST", body: JSON.stringify(which) });
+
+  /** How Alden writes the comments it drafts in a repo ("owner/repo"): terse, concise, detailed or teaching. */
+  tone = (repo: string) => this.request<{ tone: Tone }>(`/api/tone?repo=${encodeURIComponent(repo)}`);
+
+  setTone = (repo: string, tone: Tone) =>
+    this.request<{ tone: Tone }>("/api/tone", { method: "PUT", body: JSON.stringify({ repo, tone }) });
 
   /**
    * "Draft my review": one model call that drafts Alden's comments for the places in the PR's latest briefing with no

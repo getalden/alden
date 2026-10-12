@@ -24,6 +24,7 @@ import {
   addNote,
   buildBriefing,
   closeReviewSession,
+  draftsAtHead,
   editNote,
   FeedbackLog,
   forget,
@@ -277,7 +278,7 @@ const DRAFTS_PR = "cli/cli#10513";
   const draft = (
     at: { path: string; line?: number; startLine?: number },
     body: string,
-    options: { suggestion?: string; source?: "you" | "claude" } = {},
+    options: { suggestion?: string; source?: "you" | "claude" | "alden" } = {},
   ) => {
     const spot = placeOrLink(pr.files, at.path, at.line, "RIGHT", at.startLine);
     if ("problem" in spot) throw new Error(spot.problem);
@@ -312,8 +313,116 @@ const DRAFTS_PR = "cli/cli#10513";
       "PushDefault now returns an error for a value it doesn't know, where before it passed the string through. The new tests cover the known values but not an unknown one.",
       { source: "claude" },
     );
+    // Alden's drafts: one suggested (Keep, Edit, Drop), one you kept, which looks like yours now.
+    draft(
+      { path: "git/client.go", line: 456 },
+      "An unknown push.default now fails the whole command. Could this fall back to simple with a warning, as git does?",
+      { source: "alden" },
+    );
+    draft(
+      { path: "git/client.go", line: 543 },
+      "ParseRemoteTrackingRef splits on every slash, so a branch named feature/x won't parse. SplitN with 4 keeps it whole.",
+      { source: "alden" },
+    );
+    const kept = drafts.list(pr.name).find((d) => d.line === 543);
+    if (kept) {
+      store.run(
+        "UPDATE drafts SET source = 'you', drafted = ? WHERE id = ?",
+        JSON.stringify({ checkId: "model", title: "Branch names with slashes" }),
+        kept.id,
+      );
+    }
+    // Two drafts written against an older head whose lines have changed since: one Alden can move, one you place.
+    const outdated = (
+      line: number,
+      startLine: number | undefined,
+      text: string,
+      body: string,
+      source: "you" | "claude",
+    ) => {
+      const spot = placeOrLink(pr.files, "git/client.go", line, "RIGHT", startLine);
+      if (!("place" in spot)) throw new Error("not on the diff");
+      const lines = [...(spot.place.lines ?? [])];
+      lines[lines.length - 1] = text;
+      drafts.add({
+        pr: pr.name,
+        headSha: "3f2a91c0d4e5b6a7c8d9e0f1a2b3c4d5e6f7a8b9",
+        body,
+        source,
+        place: { ...spot.place, anchor: { ...spot.place.anchor, text }, lines },
+      });
+    };
+    outdated(
+      486,
+      485,
+      '\t\treturn "simple", nil',
+      "Return the PushDefaultSimple constant here, so the default is named in one place.",
+      "claude",
+    );
+    outdated(
+      488,
+      undefined,
+      '\tlog.Printf("push.default unset for %s", branch)',
+      "Is logging here useful, or noise for everyone without push.default set?",
+      "you",
+    );
   }
 }
+
+/** The conversation on the demo's PR with drafts, for the drawer's Conversation tab. Made up; nothing is fetched. */
+const demoThreads = (pr: string) => {
+  const at = (h: number) => new Date(Date.now() - h * hour).toISOString();
+  const comment = (author: string, body: string, hoursAgo: number, isYou = false) => ({
+    id: `C_${author}_${hoursAgo}`,
+    databaseId: hoursAgo,
+    author: isYou ? "you" : author,
+    isYou,
+    body,
+    createdAt: at(hoursAgo),
+    url: "https://github.com/cli/cli/pull/10513",
+  });
+  const thread = (id: string, line: number, extra: Record<string, unknown>) => ({
+    id,
+    path: "git/client.go",
+    line,
+    startLine: null,
+    originalLine: line,
+    side: "RIGHT" as const,
+    isResolved: false,
+    isOutdated: false,
+    startedByYou: false,
+    viewerCanReply: true,
+    viewerCanResolve: true,
+    comments: [],
+    ...extra,
+  });
+  return {
+    schemaVersion: 1 as const,
+    pr,
+    headSha: recordedPr(pr).headSha,
+    viewer: "you",
+    threads:
+      pr.toLowerCase() === DRAFTS_PR
+        ? [
+            thread("T_yours", 477, {
+              startedByYou: true,
+              comments: [
+                comment("you", "Should Config errors other than a missing key reach the caller?", 26, true),
+                comment("babakks", "Good call, they do now. Does this read better?", 2),
+              ],
+            }),
+            thread("T_open", 538, {
+              comments: [comment("williammartin", "Should PushRevision say which branch it couldn't resolve?", 5)],
+            }),
+            thread("T_done", 445, {
+              startedByYou: true,
+              isResolved: true,
+              comments: [comment("you", "Name this PushDefault?", 30, true)],
+            }),
+          ]
+        : [],
+  };
+};
 
 const learningFor = (repo: string) => loadLearning(store, repo);
 const memoryOf = async (repo = DEMO_REPO) => {
@@ -671,7 +780,7 @@ const api: UiApi = {
     drafts.follow(name, headSha, files);
     const list = drafts.list(name);
     return {
-      drafts: list.map(publicDraft),
+      drafts: draftsAtHead(list, headSha, files),
       unaddressed: unaddressedPlaces(drafts.briefed(name)?.places ?? [], list),
     };
   },
@@ -757,6 +866,7 @@ const api: UiApi = {
   },
   reportActive: async ({ pr, activeMs }) => ({ counted: addActiveTime(store, pr, activeMs) }),
   reviewTime: async () => reviewTimeStats(store),
+  threads: async (pr) => demoThreads(recordedPr(pr).name),
   sendReview: async () => {
     throw new ApiError(409, "This is Alden's demo: it never sends anything to GitHub. Your drafts are kept.");
   },
