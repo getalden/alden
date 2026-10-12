@@ -1,4 +1,4 @@
-import type { AldenConfig, Briefing, LlmFinding, LlmSection } from "@alden/schema";
+import type { AldenConfig, Briefing, DraftTone, LlmFinding, LlmSection } from "@alden/schema";
 import type { z } from "zod";
 import type { DiffFile } from "../../diff/parse.js";
 import { checkLesson, checkReason, dismissKey, type Learning, noteStoppedAt, promptNotes } from "../../learn/learn.js";
@@ -80,6 +80,8 @@ export interface ModelReviewOptions {
   callerSnippets?: string;
   /** What Alden knows about this reviewer: notes go to the model, dismissed findings stay down. */
   learning?: Learning;
+  /** The tone of the drafted comments (the repo's, see `toneFor`); `drafts.tone` from config when absent. */
+  tone?: DraftTone;
 }
 
 function withSection(briefing: Briefing, llm: LlmSection): Briefing {
@@ -128,6 +130,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
         options.files.map((f) => f.path).filter((p) => !isLockfile(p)),
       ),
       drafts,
+      tone: options.tone ?? config.drafts.tone,
     });
   let prompt = promptFor(maxInputTokens);
   if (prompt.includedFiles.length === 0) {
