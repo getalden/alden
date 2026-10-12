@@ -2372,13 +2372,22 @@ details > summary {
   font: 600 12px / 1.4 var(--font-mono);
   color: var(--ink);
 }
-/* The start of a long comment; Edit shows all of it. */
+/* The start of a long comment; Show all (see DraftText) shows all of it. */
 .draft-body.excerpt {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   line-clamp: 4;
   overflow: hidden;
+}
+.draft-body.excerpt.open {
+  display: block;
+  -webkit-line-clamp: none;
+  line-clamp: none;
+  overflow: visible;
+}
+.draft-more {
+  align-self: flex-start;
 }
 .draft-suggestion {
   display: flex;

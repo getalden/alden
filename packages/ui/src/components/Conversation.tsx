@@ -2,6 +2,7 @@ import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState }
 import type { BriefingComments, ReviewDraft } from "../drafts";
 import { plural } from "../format";
 import { type ReviewThread, replyIn, replyWhere, threadPlace } from "../threads";
+import { DraftText } from "./DraftText";
 
 /*
  * The conversation already on a PR, in the Comments drawer: its review threads, each with a Reply box and a Resolve
@@ -114,7 +115,7 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
       {draft && !writing && draft.body.trim() !== "" && (
         <div className="thread-reply-draft">
           <span className="faint small">Your reply · posts with your review</span>
-          <p className="draft-body excerpt">{draft.body}</p>
+          <DraftText text={draft.body} />
         </div>
       )}
       {writing ? (
@@ -270,7 +271,7 @@ export function ReplySummary(props: { drafts: ReviewDraft[]; threads: ReviewThre
                 props.threads?.find((t) => t.id === d.inReplyTo),
               )}
             </span>
-            {d.body.trim() && <p className="draft-body excerpt">{d.body}</p>}
+            {d.body.trim() && <DraftText text={d.body} />}
           </li>
         ))}
       </ul>

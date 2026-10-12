@@ -30,6 +30,7 @@ import {
 import { plural } from "../format";
 import { AldenDraftActs, AldenDraftsBar, AldenLabel } from "./AldenDrafts";
 import { Conversation, type ReplyFocus, ReplySummary } from "./Conversation";
+import { DraftText } from "./DraftText";
 import { Segmented } from "./Segmented";
 
 /**
@@ -559,7 +560,7 @@ function DraftRow(props: {
         />
       ) : (
         <>
-          {draft.body && <p className="draft-body excerpt">{draft.body}</p>}
+          {draft.body && <DraftText text={draft.body} />}
           {draft.suggestion !== undefined && <SuggestionBlock code={draft.suggestion} />}
         </>
       )}
