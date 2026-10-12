@@ -111,10 +111,11 @@ describe("a model finding from one of your notes", () => {
   it("says it's because of your note, and after Not useful offers to stop the note there", async () => {
     const { feedback, items, changes } = fakeFeedback();
     const { rerender } = render(<BriefingView briefing={briefing} feedback={feedback} />);
+    fireEvent.click(screen.getByRole("button", { name: /^The model also noticed/ }));
     const finding = screen.getByText("Missing code owner header.").closest("li") as HTMLElement;
     expect(within(finding).getByText("Because of your note: Every file needs a code owner header")).toBeTruthy();
     // Only the finding from the note says so.
-    expect(screen.getAllByText(/Because of your note/)).toHaveLength(1);
+    expect(document.querySelectorAll(".from-note")).toHaveLength(1);
     expect(within(finding).queryByText(/Stop applying this note/)).toBeNull();
 
     fireEvent.click(within(finding).getByRole("button", { name: "Not useful" }));
@@ -143,6 +144,7 @@ describe("a model finding from one of your notes", () => {
   it("offers nothing on Useful, or without a repo to change the note in", () => {
     const { feedback } = fakeFeedback();
     const { rerender } = render(<BriefingView briefing={briefing} feedback={feedback} />);
+    fireEvent.click(screen.getByRole("button", { name: /^The model also noticed/ }));
     const finding = screen.getByText("Missing code owner header.").closest("li") as HTMLElement;
     fireEvent.click(within(finding).getByRole("button", { name: "Useful" }));
     rerender(<BriefingView briefing={briefing} feedback={feedback} />);
@@ -157,7 +159,7 @@ describe("a model finding from one of your notes", () => {
   it("says so in guided review's extra steps, with the same offer", async () => {
     const { feedback, changes } = fakeFeedback();
     const { rerender } = render(<BriefingView briefing={briefing} feedback={feedback} />);
-    fireEvent.click(screen.getByRole("button", { name: /Start guided review/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Walk through th/ }));
     fireEvent.click(screen.getByRole("button", { name: /Next: 1 more from the model/ }));
     const guided = screen.getByRole("region", { name: "Missing code owner header" });
     expect(within(guided).getByText("Because of your note: Every file needs a code owner header")).toBeTruthy();

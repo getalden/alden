@@ -59,29 +59,28 @@ function LineThread({ thread, value }: { thread: ReviewThread; value: ThreadsAt 
   const [open, setOpen] = useState(!thread.isResolved);
   const draft = replyIn(value.drafts, thread.id);
   return (
-    <div className={`diff-thread${thread.isResolved ? " resolved" : ""}`}>
+    <div className={`v3-dcard diff-thread${thread.isResolved ? " resolved" : ""}`}>
       <button
         type="button"
-        className="link-button small diff-thread-toggle"
+        className="v3-dcard-head diff-thread-toggle"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
         <span aria-hidden="true">{open ? "▾" : "▸"}</span> {people(thread)} ·{" "}
-        {plural(thread.comments.length, "comment")}
-        {thread.isResolved ? " · resolved" : ""}
+        {plural(thread.comments.length, "comment")}{" "}
+        <span className="v3-dcard-state">· {thread.isResolved ? "resolved" : "open"}</span>
       </button>
       {open && (
         <>
           {thread.comments.map((c) => (
-            <div key={c.id} className="diff-note-draft">
-              <span className="faint small">{c.isYou ? "You" : (c.author ?? "A deleted account")}</span>
-              <p className="diff-note-body">{c.body}</p>
-            </div>
+            <p key={c.id} className="v3-dcard-body diff-note-body">
+              <b className="v3-dcard-who">{c.isYou ? "you" : (c.author ?? "a deleted account")}</b> {c.body}
+            </p>
           ))}
-          {draft && <p className="faint small">Drafted: {replyWhere(draft, thread)}. It posts with your review.</p>}
+          {draft && <p className="v3-dcard-meta">Drafted: {replyWhere(draft, thread)}. It posts with your review.</p>}
           {value.onReply && thread.viewerCanReply && (
             <div>
-              <button type="button" className="btn xs" onClick={() => value.onReply?.(thread.id)}>
+              <button type="button" className="v3-btn sm" onClick={() => value.onReply?.(thread.id)}>
                 {draft?.body.trim() ? "Edit reply" : "Reply"}
               </button>
             </div>

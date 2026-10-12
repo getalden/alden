@@ -2,14 +2,16 @@
 import type { Briefing, FeedbackItem } from "@alden/schema";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearDiffCache } from "../diff";
 import type { BriefingFeedback, Verdict } from "../feedback";
-import { type CommentPlace, forgetProgress, type PrDiff } from "../guided";
+import { type CommentPlace, forgetProgress, guidedKey, leaveGuided, type PrDiff, startGuided } from "../guided";
 import { SeenContext } from "../seen";
 import { BriefingView } from "./BriefingView";
 
 afterEach(() => {
   cleanup();
   forgetProgress();
+  clearDiffCache();
 });
 
 const briefing: Briefing = {
@@ -172,8 +174,10 @@ function setup(guided: { onComment?: (p: CommentPlace) => void; onFinish?: () =>
 describe("guided review", () => {
   it("starts from its button, one step at a time, with the code at the place", async () => {
     const { loadDiff } = setup();
-    expect(loadDiff).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /Start guided review/ }));
+    // The brief's first place is open with its code: the diff loads once, for the brief and the walk-through.
+    await screen.findByRole("region", { name: "src/charge.ts, lines 1 to 3" });
+    expect(loadDiff).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: /Walk through these 2 places/ }));
 
     const heading = screen.getByRole("heading", { name: "Public API change in src/charge.ts" });
     expect(document.activeElement).toBe(heading);
@@ -184,8 +188,35 @@ describe("guided review", () => {
     const code = await screen.findByRole("region", { name: "src/charge.ts, lines 1 to 3" });
     expect(within(code).getByText("export function charge(a, b) {")).toBeTruthy();
     expect(code.querySelector(".ex-focus")?.textContent).toContain("charge(a, b)");
-    // The list of places makes way for the step.
-    expect(screen.queryByRole("button", { name: /Start guided review/ })).toBeNull();
+    expect(loadDiff).toHaveBeenCalledOnce();
+    // The brief makes way for the step.
+    expect(screen.queryByRole("button", { name: /Walk through these/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Needs your eyes" })).toBeNull();
+  });
+
+  it("opens the first place with its code; another opens on +, and walks through from there", async () => {
+    setup();
+    const second = screen.getByRole("button", { name: "Show the code for E2" });
+    expect(second.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: "Hide the code for E1" }).getAttribute("aria-expanded")).toBe("true");
+    expect(await screen.findByRole("region", { name: "src/charge.ts, lines 1 to 3" })).toBeTruthy();
+    fireEvent.click(second);
+    // src/api.ts isn't in the diff: it says so and links it on GitHub.
+    expect(await screen.findByText(/This line isn't in the diff/)).toBeTruthy();
+    const walk = screen.getAllByRole("button", { name: "Walk through from here" });
+    fireEvent.click(walk[1] as HTMLElement);
+    expect(screen.getByText("Step 2 of 2")).toBeTruthy();
+    expect(screen.getByText("E2")).toBeTruthy();
+  });
+
+  it("is started and left from outside, as a Walk through control in the header would", () => {
+    setup();
+    const key = guidedKey(briefing);
+    act(() => startGuided(key, 1));
+    expect(screen.getByText("Step 2 of 2")).toBeTruthy();
+    act(() => leaveGuided(key));
+    expect(screen.queryByText("Step 2 of 2")).toBeNull();
+    expect(screen.getByRole("button", { name: /Resume the walk-through at step 2/ })).toBeTruthy();
   });
 
   it("shows the files to look at too: excerpts for ones in the diff, GitHub at the head commit for the rest", async () => {
@@ -225,15 +256,17 @@ describe("guided review", () => {
     await key("n");
     expect(screen.getByText("Extra 1 of 1 · from the model")).toBeTruthy();
 
-    const input = screen.getByRole("textbox", { name: "What should it have flagged?" });
+    // Typing anywhere (the brief's own inputs make way for the step).
+    const input = document.body.appendChild(document.createElement("input"));
     await key("p", input);
     expect(screen.getByText("Extra 1 of 1 · from the model")).toBeTruthy();
+    input.remove();
     await key("p");
     expect(screen.getByText("Step 2 of 2")).toBeTruthy();
 
     await key("Escape");
     expect(screen.queryByText("Step 2 of 2")).toBeNull();
-    expect(screen.getByRole("button", { name: /Resume guided review at step 2/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Resume the walk-through at step 2/ })).toBeTruthy();
     expect(screen.getByText("calls charge (signature changed).")).toBeTruthy();
   });
 
@@ -256,7 +289,7 @@ describe("guided review", () => {
       expect.objectContaining({ title: "Public API change in src/charge.ts", placement: "eyes" }),
       "agree",
     );
-    fireEvent.click(within(step).getByRole("button", { name: "Comment" }));
+    fireEvent.click(within(step).getByRole("button", { name: "Comment here" }));
     expect(onComment).toHaveBeenCalledWith({ path: "src/charge.ts", line: 2, side: "RIGHT" });
   });
 
@@ -289,7 +322,7 @@ describe("guided review", () => {
     await key("n");
     await key("n");
     const retry = screen.getByRole("region", { name: "Retry loops" });
-    const comment = within(retry).getByRole("button", { name: "Comment" });
+    const comment = within(retry).getByRole("button", { name: "Comment here" });
     await waitFor(() =>
       expect(comment.getAttribute("title")).toMatch(/Not in the PR's diff: it goes in the review body/),
     );
@@ -297,7 +330,7 @@ describe("guided review", () => {
     expect(onComment).toHaveBeenLastCalledWith({ path: "src/web.ts", line: 5, side: "RIGHT" });
     await key("n");
     fireEvent.click(
-      within(screen.getByRole("region", { name: "Stale docs" })).getByRole("button", { name: "Comment" }),
+      within(screen.getByRole("region", { name: "Stale docs" })).getByRole("button", { name: "Comment here" }),
     );
     expect(onComment).toHaveBeenLastCalledWith({ path: "README.md", side: "RIGHT" });
   });
@@ -305,7 +338,7 @@ describe("guided review", () => {
   it("has no Comment without somewhere to write it", async () => {
     setup();
     await key("g");
-    expect(screen.queryByRole("button", { name: "Comment" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Comment/ })).toBeNull();
   });
 
   it("offers to finish on the last of Alden's steps and on the last step", async () => {
@@ -318,7 +351,7 @@ describe("guided review", () => {
     await key("n");
     fireEvent.click(screen.getByRole("button", { name: "Finish: review your comments" }));
     expect(onFinish).toHaveBeenCalledOnce();
-    expect(screen.getByRole("button", { name: /Start guided review/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Walk through these 2 places/ })).toBeTruthy();
   });
 
   it("says when the diff couldn't be loaded, and links the place on GitHub", async () => {
@@ -332,7 +365,7 @@ describe("guided review", () => {
 
   it("isn't offered when nothing needs your eyes", () => {
     render(<BriefingView briefing={{ ...briefing, needsYourEyes: [], llm: undefined }} />);
-    expect(screen.queryByRole("button", { name: /guided review/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Walk through/ })).toBeNull();
   });
 
   it("works without a diff for local changes: the place, its reason and related files", async () => {
