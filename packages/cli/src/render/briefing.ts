@@ -183,8 +183,10 @@ function learnedNote(briefing: Briefing, { width, color }: RenderOptions): strin
   return out;
 }
 
-/** Splits text into lines of at most `room` columns, breaking at spaces where it can: each line's [start, end). */
-function breakLines(text: string, room: number): [number, number][] {
+/** Splits text into lines of at most `columns` (at least one), breaking at spaces where it can: each line's [start, end). */
+function breakLines(text: string, columns: number): [number, number][] {
+  // At least a column a line, so a very narrow terminal still moves through the text.
+  const room = Math.max(1, columns);
   const lines: [number, number][] = [];
   let start = 0;
   while (text.length - start > room) {
