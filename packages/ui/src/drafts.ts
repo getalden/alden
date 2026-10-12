@@ -227,7 +227,7 @@ function useTone(api: DraftsApi | undefined, repo: string | undefined) {
       const was = tones[repo];
       setTones((all) => ({ ...all, [repo]: tone }));
       try {
-        await api.setTone(repo, tone);
+        await api.setTone(tone, repo);
       } catch (e) {
         if (was) setTones((all) => ({ ...all, [repo]: was }));
         throw e;

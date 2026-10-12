@@ -403,7 +403,7 @@ describe("Alden writes", () => {
         calls.push(`GET ${repo}`);
         return { tone: "concise" };
       },
-      setTone: async (repo: string, tone: string) => {
+      setTone: async (tone: string, repo: string) => {
         calls.push(`PUT ${repo} ${tone}`);
         return { tone };
       },
