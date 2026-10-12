@@ -473,6 +473,7 @@ export function createUiApi(options: {
       return signIn.status();
     },
     useGitHubCli: () => signIn.useGitHubCli(),
+    signOut: () => signIn.signOut(),
     async setModelKey(key) {
       const store = modelKeyStore();
       if (key === null) await store.delete();

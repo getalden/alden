@@ -35,6 +35,32 @@ export interface SignIn {
   open(): void;
   /** Drops Alden's stored token, so it uses the GitHub CLI's sign-in. */
   useGitHubCli(): Promise<{ login: string } | { error: string }>;
+  /** Signs out of Alden: see `signOut`. */
+  signOut(): Promise<SignOutResult>;
+}
+
+/** What signing out left: where Alden still finds a GitHub sign-in, in words ("Your GitHub CLI sign-in"), or null. */
+export interface SignOutResult {
+  remaining: string | null;
+}
+
+const STILL_SIGNED_IN: Record<"env" | "alden" | "gh", string> = {
+  env: "ALDEN_GITHUB_TOKEN",
+  alden: "Alden's own sign-in",
+  gh: "Your GitHub CLI sign-in",
+};
+
+/**
+ * The avatar menu's Sign out, as `alden auth logout`: removes the token Alden stored, and says what still signs you in
+ * (the GitHub CLI's sign-in, or a token in the environment, which Alden doesn't own and leaves alone).
+ */
+export async function signOut(
+  store: { delete(): Promise<void> } = new DefaultCredentialStore(),
+  resolve: () => Promise<{ source: "env" | "alden" | "gh" } | undefined> = resolveToken,
+): Promise<SignOutResult> {
+  await store.delete();
+  const remaining = await resolve().catch(() => undefined);
+  return { remaining: remaining ? STILL_SIGNED_IN[remaining.source] : null };
 }
 
 export function createSignIn(): SignIn {
@@ -80,6 +106,11 @@ export function createSignIn(): SignIn {
       } catch {
         return { error: "GitHub rejected the GitHub CLI's sign-in too. Run `gh auth login`, or sign in with GitHub." };
       }
+    },
+    async signOut() {
+      pending = undefined;
+      current = { state: "idle" };
+      return signOut();
     },
   };
 }
