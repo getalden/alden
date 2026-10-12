@@ -1,4 +1,4 @@
-import type { AldenConfig, Briefing } from "@alden/schema";
+import type { AldenConfig, Briefing, DraftTone } from "@alden/schema";
 import type { DiffFile } from "../diff/parse.js";
 import { fetchPullRequestDiff, readLocalDiff } from "../diff/sources.js";
 import type { GitHubClient } from "../github/client.js";
@@ -21,6 +21,8 @@ export interface WithModel {
   ledger: SpendLedger;
   /** A one-off effort, overriding `model.effort` from config. */
   effort?: Effort;
+  /** The tone of the briefing's drafted comments: the repo's (see `toneFor`), else `drafts.tone`. */
+  tone?: DraftTone;
 }
 
 /** What a review needs beyond the queue's fields: the description, and the commits the code graph is built from. */

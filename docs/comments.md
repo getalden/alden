@@ -250,6 +250,16 @@ anyway, ask. Both need a model set up (without one, the drawer offers **Set up a
 your [budget caps](models.md#budgets) and say what it cost, and never run on a PR with text aimed at AI reviewers
 (they say why, in the briefing's words).
 
+### The tone Alden writes in
+
+Every draft (the briefing's, Draft my review's, Draft with Alden's) is written in a tone you pick: **Terse** (one line,
+no reasoning), **Concise** (the default: what's wrong and what to do, in one to three sentences), **Detailed** (why,
+the impact and a fix) or **Teaching** (for newer teammates: the principle behind it, and the usual way). It's a style,
+not an imitation of you. The default is `drafts.tone`; a repo can have its own on this machine (Tune in the UI), and
+Draft my review and Draft with Alden can take one for a single call (`alden comment <pr> --draft --tone terse`). Every
+tone keeps the same rules: never an approval, never sent untouched. See
+[The tone of drafts](models.md#the-tone-of-drafts).
+
 ### Draft my review
 
 **Draft my review**, beside **Comments** in the briefing and in the Comments drawer, asks the model in one call for a

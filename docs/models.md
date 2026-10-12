@@ -125,8 +125,9 @@ With `drafts.auto` on (the default), the briefing's own model call also drafts t
 Comments drawer (see [Alden's drafts](comments.md#aldens-drafts)). There's no second call. For a PR (never your local
 changes, and never a PR the injection check flagged), the system prompt gains one paragraph asking, for each medium or
 high finding whose first anchor is an added line, for the comment a careful reviewer would leave on that line: to the
-author, in one to three plain sentences, with no preamble, praise or sign-off, never mentioning being an AI; and a
-suggested replacement for the line only when the fix is small and certain. Each finding in the answer may then carry
+author, in the repo's [tone](#the-tone-of-drafts) (concise: one to three plain sentences), with no preamble, praise or
+sign-off, never mentioning being an AI; and a suggested replacement for the line only when the fix is small and
+certain. Each finding in the answer may then carry
 a `draft` (`body`, optional `suggestion`).
 
 Alden checks every draft before offering it: it must be on a medium or high finding, on an added line the model was
@@ -146,7 +147,7 @@ own, made only when you press them (or run `alden comment <pr> --draft`), with t
 | | Draft my review | Draft with Alden |
 | --- | --- | --- |
 | What it sends | The PR's title and description, your notes for the repo, Alden's check results, and each place without a comment near it (at most 12), with its reason and the diff around it | The PR's title and description, your notes, where the comment goes and the diff around it, what Alden flagged there, the thread so far for a reply, and what you've written |
-| What it asks for | A comment (and, on an added line, maybe a suggested change) per place worth one | One comment or reply, in your voice |
+| What it asks for | A comment (and, on an added line, maybe a suggested change) per place worth one | One comment or reply, for you to edit |
 | Effort, output cap | Medium (low if `model.effort` is low), 8,000 tokens | Low, 2,000 tokens |
 | Spend ledger | `owner/repo#12 drafts` | `owner/repo#12 comment text` |
 
@@ -166,6 +167,46 @@ checks. What fails is dropped.
 (a budget stop sends nothing), recorded in `alden spend`, and its cost is shown when it's done. Draft my review asks
 nothing when every place already has a comment. A cancelled Draft with Alden sends nothing if it hasn't been sent yet;
 once it has, the call completes and is recorded, and its answer is dropped.
+
+## The tone of drafts
+
+Every drafting path (the briefing's drafts, Draft my review, Draft with Alden) writes in one of four tones, a style you
+pick, not an imitation of anyone:
+
+| Tone | What the system prompt asks for |
+| --- | --- |
+| `terse` | One short line per comment, a statement or a question: the problem and, when it isn't obvious, the fix. No reasoning, background or examples. |
+| `concise` (default) | One to three plain sentences: what's wrong or worth checking, and what to do. |
+| `detailed` | A short paragraph of three to six sentences: what's wrong, why it matters (what breaks, for whom, when) and a concrete fix, pointing at what in the diff shows it. |
+| `teaching` | Three to six plain, friendly sentences for a teammate newer to the code: the principle at stake, why it matters here, and the usual way to do it, with an example from the diff or repo when there is one. |
+
+The default is `drafts.tone` in your user config (`alden config set drafts.tone detailed`); any repo can have its own,
+kept on this machine (the UI's Tune, or `PUT /api/tone`). Draft my review and Draft with Alden also take a tone for one
+call (`alden comment <pr> --draft --tone terse`). The tone only changes the length and how much reasoning goes in: the
+rules around it (the PR's text fenced as data, never approving, never mentioning being an AI, the checks before a draft
+is offered) are the same for every tone. A concise briefing sends exactly the prompt it always did, so it keeps its
+prompt cache; another tone adds its instruction as the drafting section's last paragraph.
+
+## Ask about this PR
+
+A question about a PR, in your words (the UI, or `alden ask <pr> "question"`), answered by your model in one streamed
+call. There's no tool for it in `alden mcp`: in Claude Code, Claude is the model.
+
+| | |
+| --- | --- |
+| What it sends | The PR's title and description, your notes for the repo, the PR's latest briefing at its current head (the model's summary, the places to look, its findings, Alden's check results), the diff around the places that matter (lines and files your question names first, then the flagged places; about 48,000 characters at most), and up to five earlier questions on the PR from this session with their answers |
+| What it asks for | A short, direct answer from what that shows, saying so when it doesn't show enough, pointing at code as `path:line`. Never an approval or a verdict, never mentioning being an AI |
+| Effort, output cap | Medium (low if `model.effort` is low), 3,000 tokens |
+| Spend ledger | `owner/repo#12 question` |
+
+Everything from the PR is fenced between `<pr-content>` markers as in the drafting prompts, earlier answers too (they
+can quote it); your question and notes are outside. Likely secrets are redacted. Alden asks nothing without a briefing
+of the PR's current head, and never about a PR whose briefing (or current title, description or added lines) has text
+aimed at AI reviewers. The call is checked against your caps before it's sent; stopping it (closing the request, or
+Ctrl-C in the terminal) aborts the request, and what it may have cost (the input it sent, the output that arrived) is
+still recorded. Answers aren't stored: the last five questions and answers per PR stay in the running `alden ui` (or
+desktop app) process for follow-ups, and go when it quits or the PR gets a new push. Claude streams token by token, an
+OpenAI-compatible server through its server-sent events.
 
 ## Budgets
 

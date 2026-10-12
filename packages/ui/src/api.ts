@@ -1,7 +1,9 @@
 import type {
+  AskEvent,
   Briefing,
   BriefingFreshness,
   BriefingTarget,
+  DraftTone,
   FeedbackInput,
   FeedbackSummary,
   FollowUpLevel,
@@ -21,6 +23,7 @@ import type {
   RepoStats,
   ReviewThreads,
   ReviewTimeStats,
+  ToneState,
 } from "@alden/schema";
 import type {
   DraftPatch,
@@ -136,7 +139,7 @@ export interface Session {
   /** Whether Alden learns from the reviews you send (`learning.fromReviews`, on unless you turn it off). */
   learning?: { fromReviews: boolean };
   /** Whether a model briefing drafts comments for you to keep, edit or drop (`drafts.auto`, on unless turned off). */
-  drafts?: { auto: boolean };
+  drafts?: { auto: boolean; tone?: DraftTone };
   /** Whether Alden records how long your reviews take, on this machine (`stats.reviewTime`, on unless turned off). */
   stats?: { reviewTime: boolean };
 }
@@ -217,6 +220,8 @@ export interface SuggestTextRequest {
   threadId?: string;
   /** What you've written so far, to make into a clear comment. */
   text?: string;
+  /** How Alden writes this one; the repo's tone when absent. */
+  tone?: DraftTone;
 }
 
 export class ApiError extends Error {
@@ -438,8 +443,43 @@ export class Api {
    * "Draft my review": one model call that drafts Alden's comments for the places in the PR's latest briefing with no
    * comment near them. They're Alden's drafts: kept, edited or dropped in the drawer, never sent untouched.
    */
-  draftReview = (pr: string) =>
-    this.request<DraftReviewResult>("/api/drafts/alden", { method: "POST", body: JSON.stringify({ pr }) });
+  draftReview = (pr: string, tone?: DraftTone) =>
+    this.request<DraftReviewResult>("/api/drafts/alden", {
+      method: "POST",
+      body: JSON.stringify({ pr, ...(tone ? { tone } : {}) }),
+    });
+
+  /** How Alden writes for a repo ("owner/name"): its own tone on this machine, or the default (`drafts.tone`). */
+  tone = (repo?: string) => this.request<ToneState>(`/api/tone${repo ? `?repo=${encodeURIComponent(repo)}` : ""}`);
+
+  /** Sets a repo's tone (null goes back to the default), or without a repo the default itself. */
+  setTone = (tone: DraftTone | null, repo?: string) =>
+    this.request<ToneState>("/api/tone", { method: "PUT", body: JSON.stringify({ ...(repo ? { repo } : {}), tone }) });
+
+  /**
+   * Ask about this PR: one model call within your caps, answered from its briefing, diff and your notes. `onText`
+   * hears the answer as it's written; resolves with what it cost, or throws an `ApiError` with the server's status
+   * (409: no model, no briefing for this head, text aimed at AI reviewers, over budget; 502: the provider failed).
+   * `signal` stops the call.
+   */
+  async ask(
+    input: { pr: string; question: string; model?: string },
+    onText: (text: string) => void,
+    signal?: AbortSignal,
+  ): Promise<{ costUsd: number | null; model: string }> {
+    const res = await this.fetcher("/api/ask", {
+      method: "POST",
+      headers: { "X-Alden-Token": this.token, "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      ...(signal ? { signal } : {}),
+    });
+    for await (const event of ndjson<AskEvent>(res)) {
+      if (event.type === "delta") onText(event.text);
+      else if (event.type === "done") return { costUsd: event.costUsd, model: event.model };
+      else throw new ApiError(event.status, event.message);
+    }
+    throw new ApiError(500, "The answer ended without saying how it went.");
+  }
 
   /** "Draft with Alden": one comment's (or reply's) text for the box you're writing in. Saves nothing; `signal` stops it. */
   suggestText = (input: SuggestTextRequest, signal?: AbortSignal) =>

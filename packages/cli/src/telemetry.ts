@@ -29,6 +29,7 @@ const KNOWN = new Set<string>([
   "comment",
   "send",
   "setup",
+  "ask",
 ]);
 
 /** The top-level command (`memory` for `alden memory add`). */

@@ -177,3 +177,58 @@ describe("toLlmError", () => {
     expect(toLlmError(error).kind).toBe(kind);
   });
 });
+
+describe("AnthropicProvider.streamText", () => {
+  it("streams text deltas, passes the signal to the SDK, and reads usage from the final message", async () => {
+    const calls: { params: Record<string, unknown>; options: unknown }[] = [];
+    const client = {
+      messages: {
+        stream: (params: Record<string, unknown>, options: unknown) => {
+          calls.push({ params, options });
+          let onText: ((delta: string) => void) | undefined;
+          return {
+            on: (event: string, listener: (delta: string) => void) => {
+              if (event === "text") onText = listener;
+            },
+            finalMessage: async () => {
+              onText?.("It rounds ");
+              onText?.("down.");
+              return {
+                content: [
+                  { type: "thinking", thinking: "hmm" },
+                  { type: "text", text: "It rounds down." },
+                ],
+                stop_reason: "end_turn",
+                stop_details: null,
+                usage,
+                model: "claude-sonnet-5",
+              };
+            },
+          };
+        },
+        countTokens: async () => ({ input_tokens: 1 }),
+      },
+    } as unknown as Anthropic;
+    const stop = new AbortController();
+    const heard: string[] = [];
+    const result = await new AnthropicProvider("sonnet", client).streamText(
+      { system: "sys", user: "q", maxOutputTokens: 3000, effort: "medium", signal: stop.signal },
+      (delta) => heard.push(delta),
+    );
+    expect(heard).toEqual(["It rounds ", "down."]);
+    expect(result).toEqual({
+      text: "It rounds down.",
+      usage: { inputTokens: 1000, outputTokens: 200, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      stopReason: "end",
+      model: "claude-sonnet-5",
+    });
+    expect(calls[0]?.params).toMatchObject({
+      model: "claude-sonnet-5",
+      max_tokens: 3000,
+      system: "sys",
+      output_config: { effort: "medium" },
+    });
+    expect(calls[0]?.params.output_config).not.toHaveProperty("format");
+    expect(calls[0]?.options).toEqual({ signal: stop.signal });
+  });
+});

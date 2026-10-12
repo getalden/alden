@@ -16,6 +16,8 @@ const hours = z.number().min(0).nullable();
 export const ACTIVE_MINUTES_BUCKETS = ["0-2", "2-5", "5-10", "10-20", "20-30", "30-60", "60+"] as const;
 /** From first opening a briefing to sending the review, coarsely. */
 export const WALL_TIME_BUCKETS = ["0-15m", "15-60m", "1-4h", "4-24h", "1-3d", "3d+"] as const;
+/** What one model call cost, coarsely, in US dollars; "unpriced" for a model with no known price (a local one). */
+export const COST_BUCKETS = ["unpriced", "0-0.01", "0.01-0.05", "0.05-0.25", "0.25+"] as const;
 
 /** Added to every event. */
 export const TelemetryCommonSchema = z.object({
@@ -51,6 +53,7 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
         "send",
         "setup",
         "interactive",
+        "ask",
         "other",
       ]),
       ok: z.boolean(),
@@ -170,6 +173,26 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
       comments: count.describe("comments and replies sent"),
       model: z.boolean().describe("Alden's model briefed or drafted during the review"),
       verdict: z.enum(["comment", "approve", "request_changes"]),
+    }),
+  }),
+  z.object({
+    event: z.literal("tone_set"),
+    properties: z.object({
+      tone: z.enum(["terse", "concise", "detailed", "teaching"]).nullable().describe("null: a repo's own tone removed"),
+      scope: z.enum(["repo", "default"]).describe("one repo's tone on this machine, or the global drafts.tone"),
+    }),
+  }),
+  z.object({
+    event: z.literal("question_asked"),
+    properties: z.object({
+      outcome: z
+        .enum(["answered", "refused", "cancelled", "failed"])
+        .describe("refused: Alden didn't ask (no model, no briefing, text aimed at AI reviewers, over budget)"),
+      cost: z
+        .enum(COST_BUCKETS)
+        .nullable()
+        .describe("what the call cost, as a bucket; null when no call was made or a failed one's cost isn't known"),
+      follow_up: z.boolean().describe("earlier questions on the same PR were sent along"),
     }),
   }),
   z.object({

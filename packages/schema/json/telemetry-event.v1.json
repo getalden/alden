@@ -112,6 +112,7 @@
                     "send",
                     "setup",
                     "interactive",
+                    "ask",
                     "other"
                   ]
                 },
@@ -806,6 +807,112 @@
                 "comments",
                 "model",
                 "verdict"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "tone_set"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "tone": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "terse",
+                        "concise",
+                        "detailed",
+                        "teaching"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "null: a repo's own tone removed"
+                },
+                "scope": {
+                  "type": "string",
+                  "enum": [
+                    "repo",
+                    "default"
+                  ],
+                  "description": "one repo's tone on this machine, or the global drafts.tone"
+                }
+              },
+              "required": [
+                "tone",
+                "scope"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "question_asked"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "answered",
+                    "refused",
+                    "cancelled",
+                    "failed"
+                  ],
+                  "description": "refused: Alden didn't ask (no model, no briefing, text aimed at AI reviewers, over budget)"
+                },
+                "cost": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "unpriced",
+                        "0-0.01",
+                        "0.01-0.05",
+                        "0.05-0.25",
+                        "0.25+"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "what the call cost, as a bucket; null when no call was made or a failed one's cost isn't known"
+                },
+                "follow_up": {
+                  "type": "boolean",
+                  "description": "earlier questions on the same PR were sent along"
+                }
+              },
+              "required": [
+                "outcome",
+                "cost",
+                "follow_up"
               ],
               "additionalProperties": false
             }

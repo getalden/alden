@@ -1,6 +1,7 @@
 import { configureTelemetry, noteClone } from "@alden/core";
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
+import { registerAskCommand } from "./commands/ask.js";
 import { registerAuthCommand } from "./commands/auth.js";
 import { registerCommentCommands } from "./commands/comment.js";
 import { registerCompletionCommand } from "./commands/completion.js";
@@ -34,6 +35,7 @@ registerQueueCommand(program);
 registerOpenCommand(program);
 registerReviewCommand(program);
 registerCommentCommands(program, pkg.version);
+registerAskCommand(program, pkg.version);
 registerWatchCommand(program);
 registerSpendCommand(program);
 registerFeedbackCommand(program);

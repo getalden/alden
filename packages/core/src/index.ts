@@ -128,7 +128,15 @@ export {
   checkBudget,
   estimateTokens,
 } from "./llm/budget.js";
-export { BudgetExceededError, type BudgetedOptions, type BudgetedResult, budgetedGenerate } from "./llm/budgeted.js";
+export {
+  BudgetExceededError,
+  type BudgetedOptions,
+  type BudgetedResult,
+  type BudgetedText,
+  budgetedGenerate,
+  budgetedStreamText,
+  StreamStoppedError,
+} from "./llm/budgeted.js";
 export {
   checkModelKey,
   type ModelKey,
@@ -162,6 +170,7 @@ export {
 export { DEFAULT_BASE_URL, OpenAICompatibleProvider } from "./llm/openai-compatible.js";
 export { createPlatformClient, type Platform, platformModelId } from "./llm/platforms.js";
 export {
+  canStream,
   type Effort,
   type GenerateRequest,
   type GenerateResult,
@@ -169,6 +178,9 @@ export {
   type LlmErrorKind,
   type LlmProvider,
   type StopReason,
+  type StreamTextRequest,
+  type StreamTextResult,
+  type TextStreamer,
 } from "./llm/provider.js";
 export { type ProviderChoice, selectProvider } from "./llm/select.js";
 export {
@@ -200,6 +212,20 @@ export {
 } from "./queue/rank.js";
 export { followUpOf, isRereview, REREVIEW_REASON } from "./queue/rereview.js";
 export { applyRules, describeWhen, pathGlobs, ruleMatches, ruleReason } from "./queue/rules.js";
+export {
+  ASK_OUTPUT_TOKENS,
+  ASK_SYSTEM,
+  AskError,
+  type AskOptions,
+  type AskTurn,
+  askAboutPr,
+  askDiff,
+  askPrompt,
+  filesNamed,
+  INJECTED_ASK_NOTE,
+  MAX_ASK_HISTORY,
+  MAX_QUESTION_CHARS,
+} from "./review/ask.js";
 export {
   type AldenDraftsMade,
   aldenDraftsLine,
@@ -243,6 +269,7 @@ export {
   draftPlaces,
   draftReview,
   draftReviewPrompt,
+  draftReviewSystem,
   fence,
   hasCommentNear,
   INJECTED_DRAFTING_NOTE,
@@ -254,6 +281,7 @@ export {
   sentComments,
   suggestCommentText,
   suggestTextPrompt,
+  suggestTextSystem,
   talksToAi,
   usableText,
 } from "./review/draft-review.js";
@@ -307,6 +335,7 @@ export {
   type BuiltPrompt,
   buildPrompt,
   DRAFTS_PROMPT,
+  draftsPrompt,
   type LlmOutput,
   LlmOutputSchema,
   LlmOutputWithDraftsSchema,
@@ -341,6 +370,14 @@ export {
   wasSeen,
 } from "./review/signals.js";
 export { type Declaration, declarationIn, type SignatureChange, signatureChanges } from "./review/signatures.js";
+export {
+  isDraftTone,
+  repoTone,
+  setRepoTone,
+  TONE_INSTRUCTIONS,
+  toneFor,
+  toneInstruction,
+} from "./review/tone.js";
 export { type Check, type CheckOutcome, type GraphContext, type ReviewContext, symbolKey } from "./review/types.js";
 export {
   addActiveTime,
@@ -375,6 +412,7 @@ export { UsageLog } from "./stats/usage.js";
 export { AldenStore, closeStores, MIGRATION_COUNT, openStore } from "./store/db.js";
 export {
   activeBucket,
+  costBucket,
   queueEvent,
   reviewEvent,
   reviewTimedEvent,

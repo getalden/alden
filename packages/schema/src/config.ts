@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FollowUpLevelSchema } from "./follow-ups.js";
 import { RankSettingsSchema } from "./rank.js";
+import { DraftToneSchema } from "./writing.js";
 
 /** Paths that raise a PR's risk score unless the user overrides them. */
 export const DEFAULT_SENSITIVE_PATHS = [
@@ -90,6 +91,12 @@ export const AldenConfigSchema = z.object({
        * Never sent on their own. Adds a little output to the model call Alden already makes. User config only.
        */
       auto: z.boolean().default(true),
+      /**
+       * How Alden writes the comments it drafts: terse (one line), concise (the default), detailed (why, impact and a
+       * fix) or teaching (for newer teammates). Any repo can have its own on this machine (the UI's Tune, or
+       * `PUT /api/tone`). User config only.
+       */
+      tone: DraftToneSchema.default("concise"),
     })
     .prefault({}),
   learning: z

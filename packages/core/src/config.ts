@@ -50,6 +50,7 @@ const USER_ONLY = [
   ["notifications", "followUps"],
   ["learning", "fromReviews"],
   ["drafts", "auto"],
+  ["drafts", "tone"],
   ["stats", "reviewTime"],
 ] as const;
 

@@ -125,6 +125,7 @@ For the [desktop app](desktop.md#while-youre-away).
 | Key | Default | What it does |
 | --- | --- | --- |
 | `drafts.auto` | `true` | On as soon as a model is set up. When a model briefs a PR, also draft comments for up to five of its medium and high findings, in the same call, for you to keep, edit or drop in the Comments drawer. Untouched drafts are never sent, and none approves. Off asks the model exactly what it asked before. Read from your user config only. Settings → Drafts sets it too. See [Alden's drafts](comments.md#aldens-drafts). |
+| `drafts.tone` | `"concise"` | How Alden writes the comments it drafts, in every drafting path: `terse` (one line, no reasoning), `concise`, `detailed` (why, impact and a fix) or `teaching` (for newer teammates). A style you pick, not an imitation of anyone. Any repo can have its own, kept on this machine (the UI's Tune, or `PUT /api/tone`); `alden comment <pr> --draft --tone …` picks one for one call. Read from your user config only. See [The tone of drafts](models.md#the-tone-of-drafts). |
 
 ## learning
 
