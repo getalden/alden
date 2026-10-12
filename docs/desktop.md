@@ -94,8 +94,12 @@ The menu refreshes every 5 minutes, and with **Refresh now**.
 Closing the window keeps Alden running in the menu bar. Click Alden in the Dock, or **Open Alden**, to bring the
 window back.
 
-The window remembers the queue's filters, sort and fold across restarts, and which tab (Briefing or Diff) and whether
-the Comments drawer was open until you quit.
+The window has no separate title bar: Alden's top bar is it. The window's buttons sit at its left end, and dragging an
+empty part of the bar moves the window. Settings is in the avatar's menu at its right end, beside **Export feedback**
+and **Sign out**.
+
+The window remembers the queue's filters, sort and fold across restarts, and which reading step (the briefing or its
+Diff) and whether the Comments drawer was open until you quit.
 
 ## While you're away
 
@@ -171,7 +175,7 @@ does, unless you turned it off.
 
 ![Settings in the desktop app: Command line tool, While you're away, and Notifications](../site/src/assets/screens/desktop-settings-dark.png)
 
-Settings has everything described in [Alden in your browser](web-ui.md#settings), and three more sections:
+Settings (from the avatar's menu) has everything described in [Alden in your browser](web-ui.md#settings), and three more sections:
 
 - **Command line tool**: whether the `alden` command is installed, and **Install the alden command** if it isn't.
 - **While you're away**: **Prepare briefings in the background** and **Ask the model too** (see
@@ -188,8 +192,8 @@ The window can't open tabs or download files, so:
 
 - Links to PRs, files on GitHub, docs and anything else outside Alden open in your default browser.
 - **Export → Save as Markdown** saves the briefing to your Downloads folder and says where ("Saved to
-  ~/Downloads/acme-shop-412-briefing.md."), adding `-2` rather than replace a file. **Export redacted feedback** in
-  Settings does the same.
+  ~/Downloads/acme-shop-412-briefing.md."), adding `-2` rather than replace a file. **Export feedback** in the
+  avatar's menu, and **Export redacted feedback** in Settings, do the same.
 - **Export → Print / Save as PDF** opens the macOS print dialog, whose **PDF** menu saves it.
 
 ## Where its data lives

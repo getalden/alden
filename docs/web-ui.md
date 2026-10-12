@@ -28,11 +28,14 @@ Stop it with Ctrl+C. The link holds a session key, so open Alden from the link i
 
 ## The layout
 
-- **The top bar** has the views: **Queue**, **My changes**, **Memory**, **Stats** and **Settings**, and on the right
-  today's model spend against your daily cap.
+- **The top bar** has the views: **Queue**, **My changes**, **Memory** and **Stats**, and on the right today's model
+  spend against your daily cap ("$1.84 of $5.00 today") and your avatar (your initials). The avatar's menu has
+  **Settings**, **Export feedback** (a JSON file of your feedback, as Settings exports it; the desktop app saves it to
+  Downloads) and **Sign out**, which removes the GitHub sign-in Alden stored, as `alden auth logout` does. When the
+  GitHub CLI's sign-in or `ALDEN_GITHUB_TOKEN` still signs you in, it says so: Alden leaves those alone.
 - **The queue** is on the left: the PRs waiting on you, ranked.
-- **The PR pane** is in the middle. Pick a PR and its briefing shows here, with **Briefing** and **Diff** tabs once
-  it's briefed.
+- **The PR pane** is in the middle. Pick a PR and its briefing shows here. Once it's briefed, three numbered steps
+  read it in order: **1 Brief**, **2 Walk through** (`g`) and **3 Diff** (`d`).
 - **The Comments drawer** is on the right. It collects the comments you write on this PR, and sends them.
 
 Below 960px wide, the queue and the PR take turns: pick a PR to open it, and **← Queue** or `Esc` goes back. At 700px
@@ -54,28 +57,33 @@ app), GitHub rejected the token, or there's no sign-in anywhere.
 
 ## The queue
 
-The queue has two lanes: **Needs you**, ranked, and **Fast-track**, small low-risk PRs you can clear quickly. Above
-them, **Your turn** lists the PRs you reviewed where something happened you haven't seen, when there are any (see
-below). Each row
-shows the PR's title, repo and author, how long it has waited on you, its size and CI, and the reasons it ranks where
-it does. A reason marked ↑ or ↓ comes from your own feedback, and "↑ your rule: payments/ first" from a rule you set
-(see [Ranking](#ranking)). See [The review queue](queue.md) for how ranking works.
+The queue has two groups: **Ranked for you**, and **Fast-track**, small low-risk PRs you can clear quickly. Above
+them, **Your turn** (in teal) lists the PRs you reviewed where something happened you haven't seen, when there are any
+(see below). Each row is two lines, so a long queue scans quickly:
 
-A PR you reviewed before says so under its title: **Re-review** when you've been asked again since, then when you last
-reviewed ("Re-review · reviewed 2 days ago"). Once something has happened to your comments the line counts it too
-("3 of your 5 comments resolved"). See [Re-reviews](queue.md#re-reviews).
+- the title, and how long it has waited on you ("5h", "3d");
+- a mono line: CI (✓ passing, ✕ failing, ● running, ⊘ cancelled, nothing without CI), "repo #number · author", and
+  plain flags: **re-review** (asked again since you reviewed), **✎ 2** (comments you haven't sent), **L** or **XL**
+  (400 or 1,000 changed lines and up), **draft**, **agent** or **bot** (as [Bots and AI
+  agents](queue.md#bots-and-ai-agents) tells them apart), **ping @author** (CI failing, so it's on them) and **✓
+  briefed** (a briefing the desktop app prepared).
+
+The selected row also says why it ranks where it does. A reason marked ↑ or ↓ comes from your own feedback, and "↑
+your rule: payments/ first" from a rule you set (see [Ranking](#ranking)). On a PR you reviewed before, it says when
+("Reviewed 2 days ago"), and once something has happened to your comments, it counts it ("3 of your 5 comments
+resolved"). See [The review queue](queue.md) for how ranking works, and [Re-reviews](queue.md#re-reviews).
 
 **Your turn.** A PR you reviewed that isn't in your queue, where someone answered you since, shows at the top: its
 title, what happened ("Ana replied to 2 of your comments · 1 resolved"), and when ("3h ago"). Click it to open the PR,
 with the Comments drawer's Conversation open on the thread the news is in; it stays in the list while it's open, and
-leaves once you move on. A PR that's in your queue (a re-review always is) gets the news on its own row instead,
-marked **New**, in place of the counts. Search and filters don't hide Your turn; your queue's scope does. It follows
+leaves once you move on. A PR that's in your queue (a re-review always is) gets the news on its own row instead, in
+teal under it, the same way. Search and filters don't hide Your turn; your queue's scope does. It follows
 each PR's follow-up level (Off hides it) and shares what you've seen with the desktop app's notifications. See
 [Your turn](queue.md#your-turn) for what counts, and what it asks of GitHub.
 
-When you open the page, the last queue shows at once (up to a day old), marked "As of 3 min ago, refreshing…" until
-the current one arrives. `r`, or the refresh button, fetches it again. A PR you've opened shows "2 drafts" while it has
-comments waiting to be sent.
+Under the search, a line says how the queue is sorted ("Sorted by rank") and how old it is. When you open the page,
+the last queue shows at once (up to a day old), "as of 3 min ago, refreshing…" until the current one arrives. `r`, or
+a click on "as of …", fetches it again. A PR you've opened shows **✎ 2** while it has comments waiting to be sent.
 
 The first time, a card at the top asks whether to send [anonymous usage stats](telemetry.md). Your answer is kept, and
 Settings changes it.
@@ -86,34 +94,40 @@ Settings changes it.
 
 Alden fetches your whole queue (up to the 1,000 PRs a GitHub search returns), so search and filters cover all of it.
 
-- **Search** (`/`) matches the title, repo, `#number`, author and branch names. Every word has to match, and `@sam`
+- **Search** (`/`, "Search 142 PRs") matches the title, repo, `#number`, author and branch names. Every word has to match, and `@sam`
   means the author sam. `Enter` opens the first match; `Esc` clears the search and goes back to the list.
-- **Filters** are the row of menus under the search: repo, author (you, people, bots or AI agents, as
+- **Filter**, beside the search, opens every filter in one popover: author (you, people, bots or AI agents, as
   [Bots and AI agents](queue.md#bots-and-ai-agents) tells them apart), how you were asked (you directly, your
   teams, or one team), assignee (you, unassigned, or someone), label, drafts (hide them, or only drafts; shown when the queue has any), CI
-  (passing, failing, running, none; cancelled CI is none of the first three) and age (opened today, this week, or before). They combine. A filter that's on is
-  highlighted with its value, and the count says "3 of 33" with **Clear filters**.
-- **Sort**: Alden's rank (the default), open longest, waiting longest on you, recently updated, or smallest first for
-  quick wins. It sorts inside each lane, and dismissed PRs stay at the bottom. Each row keeps its number from Alden's
-  rank.
+  (passing, failing, running, none; cancelled CI is none of the first three), age (opened today, this week, or
+  before) and repo. They combine. A filter that's on is highlighted with its value, the button says how many are on
+  ("Filter 2"), and the line under the search says "3 of 33" with **Clear filters**. `Esc` or **Done** closes it.
+- **Sort**, in the same popover: Alden's rank (the default), open longest, waiting longest on you, recently updated,
+  or smallest first for quick wins. It sorts inside each group, and dismissed PRs stay at the bottom. Each row then
+  says where Alden ranks it ("rank 3").
 
 `j` and `k` (or `↓` and `↑`) move through the queue as it's shown, opening each PR. Filters and sort are remembered in
 this browser until you reset them; the search isn't.
 
 ### Collapse the queue
 
-`[`, or **«** beside the search, folds the queue into a thin rail, so the PR takes the full width. `[` again, or a
+`[`, or the **[** button beside Filter, folds the queue into a thin rail, so the PR takes the full width. `[` again, or a
 click on the rail, brings it back. `/` and `j`/`k` still work while it's folded, and the fold is remembered like the
 filters. Below 960px wide there's nothing to fold.
 
 ### React to a PR
 
-The selected row has **Useful**, **Not useful** and **Dismiss** (or `+`, `−` and `x`). Useful and not useful teach
+The selected row has **Useful**, **Not useful** and **Dismiss** (or `+`, `−` and `x`), in plain words under it. Useful and not useful teach
 Alden which PRs like it to rank higher or lower ("ranked lower: you usually skip Dependabot PRs"). **Dismiss** moves
 a PR to the bottom until it changes; dismiss it again to undo. Briefing a PR from the queue counts as opening it,
 which teaches Alden too. See [The review queue](queue.md) and [Learning and memory](memory.md).
 
 ## A briefing
+
+Over the briefing, the PR's header has a mono line ("acme/api #482 · ana → main · 6 files · +214 −38"; the repo
+and number open it on GitHub, and the bell beside it sets its notifications), the title, the reading steps with
+**Comments** (`s`) and **Draft my review**, and the age line: when it was briefed, **Brief again**, the model line
+and **Export**.
 
 Pick a PR, then **Brief me** (or `b`). Alden fetches the PR, finds the callers of the code it changes, runs its checks
 and asks the model, showing each stage as it goes. `Esc` stops it. A briefing keeps running if you look at another PR,
@@ -122,7 +136,7 @@ and it's there when you come back.
 The briefing follows the CLI's order. See [Briefings and checks](checks.md) for what's in it.
 
 - **Needs your eyes**: the few places to look first (3 unless you change it in Settings), each with its file and line,
-  the reason, and the check that raised it. A place's `file:line` opens the [Diff tab](#the-diff-tab) at that line;
+  the reason, and the check that raised it. A place's `file:line` opens the [Diff](#the-diff-tab) at that line;
   **GitHub ↗** beside it opens the PR's "Files changed" on GitHub.
 - **Checks**: every check Alden ran, with its evidence, and what it couldn't check.
 - **Callers outside the diff**, from the [code graph](code-graph.md).
@@ -135,11 +149,21 @@ your note: …". Useful on it confirms the note; after Not useful, it offers **S
 [Findings from your notes](memory.md#findings-from-your-notes). **You missed something** tells Alden what it should have flagged.
 "Shaped by your feedback" says what your feedback changed in this briefing.
 
-### Model, effort and callers
+### Tune: model, tone, effort, callers and cap
 
-The toolbar above the briefing sets the next review: **Ask the model** or not, which model, which effort, and
-**Callers** (whether to find callers). The line beside them shows the per-briefing cap, or "checks only". These
-choices last until you close the tab; Settings changes the defaults.
+The model line on the age line ("sonnet-5 · medium ▾", or "checks only") opens **Tune this briefing**:
+
+- **Model**: the models Alden can use, by provider (Anthropic, OpenAI, Local), with how it reaches each ("your key",
+  "Ollama") and a word on what each is good for. A provider without a key can't be picked; **Add a key** sets one up.
+  Picking a model saves it as the one briefings use. **Checks only** briefs without the model, for this window.
+- **Alden writes**: how Alden words the comments it drafts in this repo (terse, concise, detailed or teaching).
+- **Effort**: Low, Medium, High, X-high or Max, for models that take it. More effort, more time and cost.
+- **Read callers outside the diff**: whether to find the callers of the changed code.
+- **Stop at $0.50 per brief**: the per-briefing cap, saved to your config (`budget.perReviewUsd`).
+- **Ask the model about this PR…**: a question, answered in the popover as it streams in, with the model and what it
+  cost under it. Without a model set up, it says so instead.
+
+Effort and callers last until you close the tab; Settings changes the defaults. `Esc` closes the popover.
 
 Above the briefing, Alden says which clone the callers come from, when it isn't the folder `alden ui` runs in. With no
 clone of the PR's repo, it says so, and how to point Alden at your clones (`alden config set clones.folders ~/src`).
@@ -148,7 +172,8 @@ clone of the PR's repo, it says so, and how to point Alden at your clones (`alde
 
 ![The Set up a model dialog: paste an Anthropic API key, use a local model, or checks only](../site/src/assets/screens/model-setup-dark.png)
 
-With no model set up, the toolbar offers **Set up a model** instead of Ask the model. It has the same three choices as
+With no model set up, the model line says "no model" and Tune offers **Set up a model** (or **Add a key** in the
+model list). It has the same three choices as
 `alden setup`, in the same order:
 
 1. **Paste an Anthropic API key.** Alden checks it with one tiny request, which costs a fraction of a cent, then keeps
@@ -160,17 +185,17 @@ With no model set up, the toolbar offers **Set up a model** instead of Ask the m
 Below them is a link to [Alden Cloud (beta)](https://getalden.dev/cloud). The next briefing uses the new model, with no
 restart. See [Models, providers and budgets](models.md).
 
-### When it was briefed, and Re-brief
+### When it was briefed, and Brief again
 
-Under the title, the briefing says when it was made ("Briefed 30 min ago"). Once the PR or its base has moved on, it
-says what changed, with **Re-brief**: "main has 4 new commits since" (callers merged there since aren't in it) or
-"the PR has 2 new commits". Alden asks GitHub, one request, when the briefing is shown and when the window comes back to
+The age line says when the briefing was made ("briefed 30m ago"), then **Brief again** (`b`). Once the PR or its base
+has moved on, it says what changed, in amber: "main +4 commits" (callers merged there since aren't in it) or "PR +2
+commits"; hovering says it in full. Alden asks GitHub, one request, when the briefing is shown and when the window comes back to
 the front, at most once a minute. It doesn't poll. See
 [Keeping up with the base](code-graph.md#keeping-up-with-the-base).
 
 ### Export
 
-**Export** (or `e`) in the toolbar copies, saves or prints the briefing:
+**Export** (or `e`), at the end of the age line, copies, saves or prints the briefing:
 
 - **Copy as Markdown** puts the same document as [`alden review --markdown`](commands.md#alden-review) on the
   clipboard.
@@ -186,7 +211,7 @@ them, and ends with the model, its cost and when it was briefed. A line beside t
 
 ![The Diff tab on a Go PR: git/client.go with the place to look, E1, highlighted at line 445](../site/src/assets/screens/diff-dark.png)
 
-Once a PR is briefed, **Diff** (or `d`) shows the code itself, so you don't have to go to GitHub to read it.
+Once a PR is briefed, **3 Diff** (or `d`) shows the code itself, so you don't have to go to GitHub to read it.
 
 - Every changed file, with its `+` and `−` counts, "old → new" for a rename, and a note for a binary file or one too
   large for GitHub to send (with a link to it on GitHub).
@@ -228,7 +253,8 @@ is remembered until you close the window.
 
 ![Guided review, step 1 of 3: a public API change in git/client.go, with the code at that place](../site/src/assets/screens/guided-dark.png)
 
-When a briefing has places that need your eyes, **Start guided review** (or `g`) takes them one at a time, in
+When a briefing has places that need your eyes, **2 Walk through** in the PR's header, **Start guided review**, or
+`g` (from the Diff too) takes them one at a time, in
 Alden's order. Each step shows:
 
 - "Step 2 of 4", the place's title, and why it's there: its reason, the check, and how severe.
@@ -258,7 +284,7 @@ it. See [Comments and sending a review](comments.md) for the same from the termi
 
 ### The Comments drawer
 
-**Comments · 3** (or `s`) in the PR's toolbar opens and closes the drawer. It says where your comments go: "Kept on
+**Comments 3** (or `s`) in the PR's header opens and closes the drawer. It says where your comments go: "Kept on
 this machine until you send them to acme/shop#412 on GitHub, as one review." It lists them by where they'll post:
 
 - **On lines**: each with its file and line or range, its text and any suggested change, with **Edit** and
@@ -424,10 +450,10 @@ Keys never fire while you're typing in a text box.
 | `+` `−` `x` | Useful, Not useful, Dismiss on this PR |
 | `b` | Brief me on this PR |
 | `e` | Open the Export menu (`↑` `↓` move, `↵` picks, `Esc` closes) |
-| `d` | Switch between the briefing and its Diff tab |
+| `d` | Switch between the briefing and its diff (3 Diff) |
 | `]` `[` | In the Diff tab: next and previous place to look (E1, E2…) |
 | `f` | In the Diff tab: open or close the file you're in |
-| `g` | Start guided review, or resume it at the step you left |
+| `g` | Walk through the places (guided review), or resume it at the step you left |
 | `n` `p` | Next and previous step in guided review |
 | `s` | Open or close the Comments drawer |
 | `c` | Comment on the place you're on (a place in "Needs your eyes", an evidence line); elsewhere, open "Comment on a line…" |
@@ -450,4 +476,6 @@ Don't share the link while `alden ui` is running. A new run makes a new key. See
 
 See [`packages/ui/README.md`](../packages/ui/README.md). `pnpm ui:demo` serves the UI over the recorded public PRs,
 with no GitHub or model calls, for UI work; `pnpm screenshots` takes the pictures on this page from it. Every route
-of the local API is listed in [Architecture](architecture.md#the-web-uis-server).
+of the local API is listed in [Architecture](architecture.md#the-web-uis-server). Colours, fonts and radii are CSS
+custom properties listed, with what each is for, at the top of `packages/ui/src/styles.css`: dark is the v3 design's
+palette, and light is derived from it.
