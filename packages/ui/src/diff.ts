@@ -34,6 +34,10 @@ export interface DiffPlace {
   index: number;
   /** The check that flagged it, for what you saw; absent for the model's own places. */
   checkId?: string | undefined;
+  /** How much it matters, shown on its card under the line. */
+  severity?: string | undefined;
+  /** Why it's a place to look, shown on its card under the line. */
+  reason?: string | undefined;
 }
 
 /** A line of the diff by position: file, hunk and line within the hunk. */

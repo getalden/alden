@@ -68,6 +68,8 @@ export interface DiffViewProps {
   prUrl?: string | undefined;
   /** Files with more diff lines than this start collapsed. */
   collapseOver?: number | undefined;
+  /** Shown first in the bar above the files: Whole PR or Since your review, when there's a choice. */
+  lead?: ReactNode;
   /** Called once for each place whose E1, E2… marker has been on screen for 1.5 s: you saw it. */
   onSeen?: ((place: DiffPlace) => void) | undefined;
 }
@@ -107,22 +109,54 @@ function useSeenMarker(place: DiffPlace): (element: HTMLElement | null) => void 
   return setElement;
 }
 
-function PlaceMarker(props: { place: DiffPlace; noteOpen: boolean; noteId: string; onClick: () => void }) {
+const SEVERITY: Record<string, string> = { critical: "critical", high: "high", medium: "med", low: "low", info: "" };
+
+/**
+ * One of Alden's places under its line: "E1 · high" and why. The label folds it to one line, and it counts as seen
+ * once on screen for 1.5 s.
+ */
+function PlaceCard(props: { place: DiffPlace; folded: boolean; onToggle: () => void }) {
   const { place } = props;
   const ref = useSeenMarker(place);
+  const severity = place.severity ? SEVERITY[place.severity] : "";
   return (
-    <button
-      ref={ref}
-      type="button"
-      className="diff-place"
-      title={place.title}
-      aria-label={`Place E${place.index}: ${place.title}`}
-      aria-expanded={props.noteOpen}
-      aria-controls={props.noteOpen ? props.noteId : undefined}
-      onClick={props.onClick}
-    >
-      E{place.index}
-    </button>
+    <div className={`v3-dcard place${props.folded ? " folded" : ""}`}>
+      <button
+        ref={ref}
+        type="button"
+        className="v3-dcard-head diff-place"
+        title={place.title}
+        aria-label={`Place E${place.index}: ${place.title}`}
+        aria-expanded={!props.folded}
+        onClick={props.onToggle}
+      >
+        E{place.index}
+        {severity && <span className={`v3-sev ${place.severity}`}> · {severity}</span>}
+      </button>
+      {!props.folded && (
+        <p className="v3-dcard-body">
+          <strong>{place.title}.</strong>
+          {place.reason ? ` ${place.reason}` : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A comment drafted on a line, as it will post: who it's from first, then the text. */
+function DraftCard({ draft }: { draft: DiffDraft }) {
+  const outdated = draft.state === "outdated";
+  const from = draft.source === "claude" ? "Claude Code" : draft.source === "alden" ? "Alden" : "you";
+  const state = outdated ? "outdated" : draft.source === "alden" ? "suggested" : "draft";
+  return (
+    <div className={`v3-dcard draft ${draft.source}${outdated ? " outdated" : ""}`}>
+      <span className="v3-dcard-head">
+        <span className="v3-dcard-who">{from}</span>
+        {draft.startLine !== undefined && draft.line !== undefined ? ` · lines ${draft.startLine}–${draft.line}` : ""}
+        <span className="v3-dcard-state"> · {state}</span>
+      </span>
+      <p className="v3-dcard-body diff-note-body">{draft.body}</p>
+    </div>
   );
 }
 
@@ -161,7 +195,8 @@ interface RowProps {
   drafts: DiffDraft[] | undefined;
   selected: boolean;
   highlighted: boolean;
-  noteOpen: boolean;
+  /** The places folded to their label on this row, by index: "1,3". */
+  folded: string;
   commentable: boolean;
   actions: RowActions;
 }
@@ -180,102 +215,72 @@ const DiffRow = memo(function DiffRow({
   drafts,
   selected,
   highlighted,
-  noteOpen,
+  folded,
   commentable,
   actions,
 }: RowProps) {
   const key = rowKey(at);
   const where = sideOf(line);
-  const noteId = `diff-note-${key.replaceAll(":", "-")}`;
   const hasNote = (places?.length ?? 0) + (drafts?.length ?? 0) > 0;
   return (
     <>
       <tr
-        className={`dl ${line.kind}${selected ? " sel" : ""}${highlighted ? " hl" : ""}`}
+        className={`dl ${line.kind}${places ? " marked" : ""}${selected ? " sel" : ""}${highlighted ? " hl" : ""}`}
         data-row={key}
         aria-selected={selected || undefined}
       >
         <td className="ln">{line.oldLine ?? ""}</td>
         <td className="ln">{line.newLine ?? ""}</td>
         <td className="gut">
-          <div className="gut-in">
-            {places?.map((p) => (
-              <PlaceMarker
-                key={`p${p.index}`}
-                place={p}
-                noteOpen={noteOpen}
-                noteId={noteId}
-                onClick={() => actions.toggleNote(key)}
-              />
-            ))}
-            {drafts && drafts.length > 0 && (
-              <button
-                type="button"
-                className={`diff-draft${drafts.some((d) => d.state === "outdated") ? " outdated" : ""}`}
-                title={drafts.map((d) => `${who(d.source)}: ${d.body}`).join("\n\n")}
-                aria-label={`${plural(drafts.length, "comment")} on this line`}
-                aria-expanded={noteOpen}
-                aria-controls={noteOpen ? noteId : undefined}
-                onClick={() => actions.toggleNote(key)}
-              >
-                <span aria-hidden="true">✎</span>
-                {drafts.length > 1 ? drafts.length : ""}
-              </button>
-            )}
-            {commentable && where && (
-              <button
-                type="button"
-                className="diff-plus"
-                title="Comment on this line. Shift-click another line, or drag, for a range."
-                aria-label={`Comment on ${where.side === "LEFT" ? "removed " : ""}line ${where.line}`}
-                onMouseDown={(e) => {
-                  if (e.button !== 0) return;
-                  e.preventDefault();
-                  actions.startDrag(at, e.shiftKey);
-                }}
-                onClick={(e) => {
-                  // A mouse click was handled on mouse down and up; this is Enter or Space.
-                  if (e.detail === 0) actions.pickByKey(at, e.shiftKey);
-                }}
-              >
-                +
-              </button>
-            )}
-          </div>
-        </td>
-        <td className="code">
           <span className="sign" aria-hidden="true">
             {SIGN[line.kind]}
           </span>
+          {commentable && where && (
+            <button
+              type="button"
+              className="diff-plus"
+              title="Comment on this line. Shift-click another line, or drag, for a range."
+              aria-label={`Comment on ${where.side === "LEFT" ? "removed " : ""}line ${where.line}`}
+              onMouseDown={(e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                actions.startDrag(at, e.shiftKey);
+              }}
+              onClick={(e) => {
+                // A mouse click was handled on mouse down and up; this is Enter or Space.
+                if (e.detail === 0) actions.pickByKey(at, e.shiftKey);
+              }}
+            >
+              +
+            </button>
+          )}
+        </td>
+        <td className="code">
           <span className="visually-hidden">{SPOKEN[line.kind]}</span>
           {line.text}
         </td>
       </tr>
-      <ThreadsAtLine path={path} line={line} />
-      {noteOpen && hasNote && (
-        <tr className="diff-note-row">
+      {hasNote && (
+        <tr className="diff-note-row" data-notes-for={key}>
           <td colSpan={4}>
-            <div className="diff-note" id={noteId}>
+            <div className="diff-note">
               {places?.map((p) => (
-                <p key={`p${p.index}`}>
-                  <span className="diff-place static">E{p.index}</span> {p.title}
-                </p>
+                <PlaceCard
+                  key={`p${p.index}`}
+                  place={p}
+                  folded={folded.split(",").includes(String(p.index))}
+                  onToggle={() => actions.toggleNote(`${key}|${p.index}`)}
+                />
               ))}
               {drafts?.map((d, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: drafts on one line have no other stable key here.
-                <div key={i} className="diff-note-draft">
-                  <span className="faint small">
-                    {who(d.source)}
-                    {d.startLine !== undefined && d.line !== undefined ? ` · lines ${d.startLine}–${d.line}` : ""}
-                    {d.state === "outdated" ? " · outdated" : ""}
-                  </span>
-                  <p className="diff-note-body">{d.body}</p>
-                </div>
+                <DraftCard key={i} draft={d} />
               ))}
             </div>
           </td>
         </tr>
       )}
+      <ThreadsAtLine path={path} line={line} />
     </>
   );
 });
@@ -365,7 +370,10 @@ function Chunk({ items, path, force, markers, selection, highlight, notes, comme
             drafts={marks?.drafts.length ? marks.drafts : undefined}
             selected={selection.has(key)}
             highlighted={highlight === key}
-            noteOpen={notes.has(key)}
+            folded={(marks?.places ?? [])
+              .filter((p) => notes.has(`${key}|${p.index}`))
+              .map((p) => p.index)
+              .join(",")}
             commentable={commentable}
             actions={actions}
           />
@@ -422,6 +430,18 @@ function DiffFileSection(props: FileProps) {
     return out;
   }, [items]);
   const fileMarks = markers.files.get(index);
+  // What's marked on this file's lines, for its header: "E1, E2 · 1 draft".
+  const onLines = useMemo(() => {
+    const places: DiffPlace[] = [];
+    const drafts: DiffDraft[] = [];
+    for (const [key, marks] of markers.rows) {
+      if (!key.startsWith(`${index}:`)) continue;
+      places.push(...marks.places);
+      drafts.push(...marks.drafts);
+    }
+    return { places: places.sort((a, b) => a.index - b.index), drafts };
+  }, [markers, index]);
+  const draftCount = onLines.drafts.length + (fileMarks?.drafts.length ?? 0);
   const status = STATUS[file.status];
 
   let notice: ReactNode;
@@ -467,23 +487,36 @@ function DiffFileSection(props: FileProps) {
             )}
           </span>
         </button>
-        <span className="diff-file-meta">
-          {fileMarks?.places.map((p) => (
-            <FilePlaceMarker key={`p${p.index}`} place={p} />
-          ))}
-          {fileMarks && fileMarks.drafts.length > 0 && (
-            <span
-              className="diff-draft static"
-              title={fileMarks.drafts.map((d) => `${who(d.source)}: ${d.body}`).join("\n\n")}
-            >
-              ✎ {fileMarks.drafts.length}
-            </span>
-          )}
-          {status && <span className="chip">{status}</span>}
-          <span className="mono small">
-            <span className="add">+{counts.additions}</span> <span className="del">−{counts.deletions}</span>
-          </span>
+        <span className="mono small diff-file-counts">
+          <span className="add">+{counts.additions}</span> <span className="del">−{counts.deletions}</span>
         </span>
+        {status && <span className="chip">{status}</span>}
+        {(onLines.places.length > 0 || fileMarks?.places.length || draftCount > 0) && (
+          <span className="diff-file-meta">
+            {onLines.places.map((p, i) => (
+              <span key={`l${p.index}`} title={p.title}>
+                {i > 0 ? ", " : ""}E{p.index}
+              </span>
+            ))}
+            {fileMarks?.places.map((p, i) => (
+              <span key={`p${p.index}`}>
+                {i > 0 || onLines.places.length > 0 ? ", " : ""}
+                <FilePlaceMarker place={p} />
+              </span>
+            ))}
+            {draftCount > 0 && (
+              <span
+                className="diff-file-drafts"
+                title={[...onLines.drafts, ...(fileMarks?.drafts ?? [])]
+                  .map((d) => `${who(d.source)}: ${d.body}`)
+                  .join("\n\n")}
+              >
+                {onLines.places.length > 0 || fileMarks?.places.length ? " · " : ""}
+                {plural(draftCount, "draft")}
+              </span>
+            )}
+          </span>
+        )}
       </header>
       <div id={bodyId} hidden={collapsed}>
         {notice ? (
@@ -572,6 +605,28 @@ export function DiffView(props: DiffViewProps) {
   const [said, setSaid] = useState("");
   /** Shown: a place or file that isn't in the diff. */
   const [notice, setNotice] = useState("");
+  /** The file at the top of the screen, for "file 2 of 6"; -1 until one is seen. */
+  const [inView, setInView] = useState(-1);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: observes the files again when the diff changes
+  useEffect(() => {
+    const container = root.current;
+    if (!container || typeof IntersectionObserver === "undefined") return;
+    const showing = new Set<number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const index = Number(entry.target.getAttribute("data-file"));
+          if (entry.isIntersecting) showing.add(index);
+          else showing.delete(index);
+        }
+        if (showing.size > 0) setInView(Math.min(...showing));
+      },
+      // The upper part of the screen: the file you're reading, not the next one coming up.
+      { rootMargin: "0px 0px -55% 0px" },
+    );
+    for (const section of container.querySelectorAll("[data-file]")) observer.observe(section);
+    return () => observer.disconnect();
+  }, [diff]);
 
   const markers = useMemo(() => placeMarkers(diff, props.places, props.drafts), [diff, props.places, props.drafts]);
   const order = useMemo(() => placeOrder(diff, props.places), [diff, props.places]);
@@ -619,7 +674,11 @@ export function DiffView(props: DiffViewProps) {
     const fileEl = container?.querySelector<HTMLElement>(`[data-file="${scrollTo.file}"]`);
     const rowEl = scrollTo.row ? container?.querySelector<HTMLElement>(`[data-row="${scrollTo.row}"]`) : null;
     const target = rowEl ?? fileEl;
-    const focusable = rowEl?.querySelector<HTMLElement>("button") ?? fileEl?.querySelector<HTMLElement>(".diff-toggle");
+    const card = scrollTo.row
+      ? container?.querySelector<HTMLElement>(`[data-notes-for="${scrollTo.row}"] .diff-place`)
+      : null;
+    const focusable =
+      card ?? rowEl?.querySelector<HTMLElement>("button") ?? fileEl?.querySelector<HTMLElement>(".diff-toggle");
     focusable?.focus({ preventScroll: true });
     // Rows near the target render as it comes into view and change the heights above it, so it's placed again
     // until they've settled (a few frames). No smooth scrolling: it would aim at where the row was.
@@ -749,9 +808,12 @@ export function DiffView(props: DiffViewProps) {
       {/* biome-ignore lint/a11y/noStaticElementInteractions: moving the mouse only extends a drag the + buttons start. */}
       <div className="diff-view" ref={root} onMouseMove={onMouseOver}>
         <div className="diff-bar">
-          <span className="mono small">
-            {plural(diff.files.length, "file")} · <span className="add">+{totals.additions}</span>{" "}
-            <span className="del">−{totals.deletions}</span>
+          {props.lead}
+          <span className="diff-at mono small">
+            file {Math.max(1, (inView === -1 ? current.file : inView) + 1)} of {diff.files.length}
+          </span>
+          <span className="mono small faint" title={plural(diff.files.length, "file")}>
+            <span className="add">+{totals.additions}</span> <span className="del">−{totals.deletions}</span>
           </span>
           {order.length > 0 && (
             <span className="faint small">
@@ -881,22 +943,21 @@ export function DiffPane({ load, pr, headSha, since: reviewed, ...view }: DiffPa
     [onComment, narrowed],
   );
 
-  const scopes = offered && (
-    <div className="diff-scope">
-      <Segmented label="Which changes to show">
-        <button type="button" aria-pressed={scope === "since"} onClick={() => setScope("since")}>
-          Since your review
-        </button>
-        <button type="button" aria-pressed={scope === "whole"} onClick={() => setScope("whole")}>
-          Whole PR
-        </button>
-      </Segmented>
-      {narrowed && state.diff?.since && (
-        <span className="faint small">
-          From <span className="mono">{state.diff.since.base.slice(0, 7)}</span>, the commit you reviewed, to the head
-        </span>
-      )}
-    </div>
+  const segmented = offered && (
+    <Segmented label="Which changes to show">
+      <button type="button" aria-pressed={scope === "whole"} onClick={() => setScope("whole")}>
+        Whole PR
+      </button>
+      <button type="button" aria-pressed={scope === "since"} onClick={() => setScope("since")}>
+        Since your review
+      </button>
+    </Segmented>
+  );
+  const scopes = offered && <div className="diff-scope">{segmented}</div>;
+  const from = narrowed && state.diff?.since && (
+    <p className="diff-said faint small">
+      From <span className="mono">{state.diff.since.base.slice(0, 7)}</span>, the commit you reviewed, to the head
+    </p>
   );
 
   if (state.error) {
@@ -944,7 +1005,6 @@ export function DiffPane({ load, pr, headSha, since: reviewed, ...view }: DiffPa
   }
   return (
     <>
-      {scopes}
       {state.diff.since?.applied === false && (
         <p className="banner diff-newer" role="status">
           The commit you reviewed isn't in this PR's history any more (it was force-pushed or rebased), so this is the
@@ -969,7 +1029,9 @@ export function DiffPane({ load, pr, headSha, since: reviewed, ...view }: DiffPa
         {...view}
         drafts={drafts}
         onComment={comment}
+        lead={segmented || undefined}
       />
+      {from}
     </>
   );
 }

@@ -1,5 +1,6 @@
-import type { Briefing, RelatedFile, Severity } from "@alden/schema";
+import type { Briefing, RelatedFile } from "@alden/schema";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { cachedDiff } from "../diff";
 import type { BriefingFeedback } from "../feedback";
 import {
   blobUrl,
@@ -8,14 +9,15 @@ import {
   type GuidedStep,
   guidedKey,
   guidedSteps,
+  leaveGuided,
   type PrDiff,
   type PrDiffFile,
   RELATED_LABEL,
-  savedProgress,
   saveProgress,
+  useGuidedProgress,
 } from "../guided";
 import { onScreen, useRecordSeen, useSeenAfter } from "../seen";
-import { eyesItem, FromNoteLine, findingItem, NoteOffer, Verdicts } from "./BriefingView";
+import { eyesItem, FromNoteLine, findingItem, NoteOffer, SEVERITY, Verdicts } from "./BriefingView";
 import { CodeExcerpt } from "./CodeExcerpt";
 import { typing } from "./Comments";
 
@@ -26,58 +28,51 @@ export interface GuidedReviewProps {
   loadDiff?: ((pr: string) => Promise<PrDiff>) | undefined;
   /** Opens a comment on a step's place. Without it, steps have no Comment action. */
   onComment?: ((place: CommentPlace) => void) | undefined;
-  /** "Finish: review your comments" on the last step; leaving guided mode happens either way. */
+  /** "Finish: review your comments" on the last step; leaving the walk-through happens either way. */
   onFinish?: (() => void) | undefined;
-  /** The briefing's own list of places, shown when you're not in guided mode. */
+  /** The brief, shown when you're not walking through. */
   children?: ReactNode;
 }
 
-type DiffState = { state: "idle" | "loading" } | { state: "ok"; diff: PrDiff } | { state: "error"; message: string };
-
-const SEVERITY: Record<Severity, string> = { critical: "critical", high: "high", medium: "med", low: "low", info: "—" };
+export type DiffState =
+  | { state: "idle" | "loading" }
+  | { state: "ok"; diff: PrDiff }
+  | { state: "error"; message: string };
 
 const where = (path: string, line?: number) => `${path}${line ? `:${line}` : ""}`;
 
 /**
- * Guided review: the places that need your eyes one at a time, in Alden's order, then the model's other findings as
- * extra steps. Each step shows why it's there, the code at the place, and the files to look at too. n and p move,
- * Esc leaves, g starts. Where you are is kept while the app is open.
+ * Walk through: the places that need your eyes one at a time, in Alden's order, then the model's other findings as
+ * extra steps. Each step shows why it's there, the code at the place, and the files to look at too. g starts (or
+ * resumes), n and p move, Esc goes back to the brief. Where you are is kept while the app is open, and anything can
+ * start or leave it through `startGuided` and `leaveGuided` (guided.ts).
  */
 export function GuidedReview({ briefing, feedback, loadDiff, onComment, onFinish, children }: GuidedReviewProps) {
   const { steps, core } = useMemo(() => guidedSteps(briefing), [briefing]);
   const key = guidedKey(briefing);
-  const [saved, setSaved] = useState(() => ({ key, ...savedProgress(key) }));
-  // Another PR in the same pane picks up where you left that one.
-  const progress = saved.key === key ? saved : { key, ...savedProgress(key) };
+  const progress = useGuidedProgress(key);
   const step = Math.min(progress.step, Math.max(0, steps.length - 1));
   const active = progress.active && steps.length > 0;
-  const set = (next: { active: boolean; step: number }) => {
-    saveProgress(key, next);
-    setSaved({ key, ...next });
-  };
+  const set = (next: { active: boolean; step: number }) => saveProgress(key, next);
 
+  const root = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const startButton = useRef<HTMLButtonElement>(null);
-  const moved = useRef(false);
-  const go = (to: number) => {
-    moved.current = true;
-    set({ active: true, step: Math.max(0, Math.min(steps.length - 1, to)) });
-  };
+  const go = (to: number) => set({ active: true, step: Math.max(0, Math.min(steps.length - 1, to)) });
   const leave = () => {
-    moved.current = false;
-    set({ active: false, step });
-    // Back to where guided mode started from, so the keyboard isn't lost.
-    requestAnimationFrame(() => startButton.current?.focus());
+    leaveGuided(key);
+    // Back to the brief's Walk through button, so the keyboard isn't lost.
+    requestAnimationFrame(() => root.current?.querySelector<HTMLElement>("[data-walk-start]")?.focus());
   };
   const finish = () => {
     set({ active: false, step: 0 });
     onFinish?.();
   };
-  // Focus follows the step: its heading, so a screen reader reads the new title.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the step changes
+  // Focus follows the step: its heading, so a screen reader reads the new title. Not when the PR opens on a step.
+  const shownAt = useRef(active ? step : -1);
   useEffect(() => {
-    if (!active || !moved.current) return;
-    moved.current = false;
+    const was = shownAt.current;
+    shownAt.current = active ? step : -1;
+    if (!active || was === step) return;
     heading.current?.focus({ preventScroll: true });
     heading.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
   }, [active, step]);
@@ -109,7 +104,7 @@ export function GuidedReview({ briefing, feedback, loadDiff, onComment, onFinish
     return () => window.removeEventListener("keydown", onKey, true);
   }, [steps.length]);
 
-  const diff = useDiff(briefing, active ? loadDiff : undefined);
+  const diff = useBriefingDiff(briefing, active ? loadDiff : undefined);
 
   // A step you've had in front of you for 1.5 s counts as seen: its place, at the head commit the briefing is of. Only
   // for a PR's places (never your local changes), and only steps with a place in the code.
@@ -131,20 +126,7 @@ export function GuidedReview({ briefing, feedback, loadDiff, onComment, onFinish
     },
   );
 
-  if (steps.length === 0) return <>{children}</>;
-  if (!active) {
-    return (
-      <>
-        <div className="guided-start">
-          <button ref={startButton} type="button" className="btn sm" aria-keyshortcuts="g" onClick={() => go(step)}>
-            {step > 0 ? `Resume guided review at step ${step + 1}` : "Start guided review"} <kbd>G</kbd>
-          </button>
-          <span className="faint small">One place at a time, with the code and the files to look at too.</span>
-        </div>
-        {children}
-      </>
-    );
-  }
+  if (!active) return <div ref={root}>{children}</div>;
 
   const current = steps[step] as GuidedStep;
   const extra = step >= core;
@@ -163,68 +145,76 @@ export function GuidedReview({ briefing, feedback, loadDiff, onComment, onFinish
   const fbItem =
     "eyes" in current.item ? eyesItem(current.item.eyes, briefing.checks) : findingItem(current.item.finding);
   const fromNote = "eyes" in current.item ? current.item.eyes.fromNote : current.item.finding.fromNote;
+  // E1, E2… as the brief and the diff number them; the model's extras have no number there.
+  const id = extra ? `M${step - core + 1}` : `E${step + 1}`;
 
   return (
-    <section className="card guided" aria-labelledby="guided-title" aria-roledescription="guided review">
-      <div className="guided-head">
-        <span className="label" aria-live="polite">
-          {extra ? `Extra ${step - core + 1} of ${extras} · from the model` : `Step ${step + 1} of ${core}`}
-        </span>
-        <span className="guided-bar" aria-hidden="true">
-          <span style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
-        </span>
-        <button type="button" className="btn xs quiet" onClick={leave} aria-keyshortcuts="Escape">
-          Leave <kbd>Esc</kbd>
-        </button>
-      </div>
-
-      <h3 className="h3 guided-title" id="guided-title" tabIndex={-1} ref={heading}>
-        {current.title}
-      </h3>
-      <div className="guided-meta">
-        {current.severity && <span className={`sev ${current.severity}`}>{SEVERITY[current.severity]}</span>}
-        {current.checkId && <span className="chip mono">{current.checkId}</span>}
-        {current.source === "llm" && <span className="chip">model</span>}
-        {anchor &&
-          (fileUrl ? (
-            <a className="place" href={fileUrl(anchor.path, anchor.line)} target="_blank" rel="noreferrer">
-              {where(anchor.path, anchor.line)} ↗
-            </a>
-          ) : (
-            <span className="place">{where(anchor.path, anchor.line)}</span>
-          ))}
-      </div>
-      <p className="eye-text">{current.reason}</p>
-      {current.learned && <span className="learned-why">↑ {current.learned}</span>}
-      {fromNote && <FromNoteLine note={fromNote} />}
-
-      {anchor && target.kind === "pr" && loadDiff && (
-        <CodeAt path={anchor.path} excerpt={excerpt} diff={diff} url={fileUrl?.(anchor.path, anchor.line)} />
-      )}
-
-      {current.related.length > 0 && (
-        <div className="guided-related">
-          <h4 className="label">Look at these too</h4>
-          <ul className="visually-plain">
-            {current.related.map((file) => (
-              <RelatedRow
-                key={`${current.key}|${file.path}`}
-                file={file}
-                diffFile={fileOf(file.path)}
-                url={fileUrl?.(file.path, file.line)}
-              />
+    <div ref={root}>
+      <section className="v3-walk" aria-labelledby="guided-title" aria-roledescription="guided review">
+        <div className="v3-walk-top">
+          <span className="v3-walk-count" aria-live="polite">
+            {extra ? `Extra ${step - core + 1} of ${extras} · from the model` : `Step ${step + 1} of ${core}`}
+          </span>
+          <span className="v3-dots" aria-hidden="true">
+            {steps.map((s, i) => (
+              <span key={s.key} className={`${i <= step ? "on" : ""}${i >= core ? " extra" : ""}`} />
             ))}
-          </ul>
+          </span>
+          <span className="v3-walk-loc">
+            {anchor &&
+              (fileUrl ? (
+                <a className="place" href={fileUrl(anchor.path, anchor.line)} target="_blank" rel="noreferrer">
+                  {where(anchor.path, anchor.line)} ↗
+                </a>
+              ) : (
+                <span className="place">{where(anchor.path, anchor.line)}</span>
+              ))}
+          </span>
         </div>
-      )}
 
-      {(feedback || (onComment && anchor)) && (
-        <div className="guided-acts">
-          {feedback && <Verdicts item={fbItem} feedback={feedback} />}
+        <div className="v3-walk-head">
+          <div className="v3-ids">
+            <span className="v3-id">{id}</span>
+            {current.severity && <span className={`v3-sev ${current.severity}`}>{SEVERITY[current.severity]}</span>}
+            {current.checkId && <span className="v3-check-id">{current.checkId}</span>}
+            {current.source === "llm" && <span className="v3-check-id">model</span>}
+            <button type="button" className="v3-quiet-btn" onClick={leave} aria-keyshortcuts="Escape">
+              Back to the brief <kbd>Esc</kbd>
+            </button>
+          </div>
+          <h3 className="v3-walk-why" id="guided-title" tabIndex={-1} ref={heading}>
+            {current.title}
+          </h3>
+          <p className="v3-walk-reason">{current.reason}</p>
+          {current.learned && <span className="learned-why">↑ {current.learned}</span>}
+          {fromNote && <FromNoteLine note={fromNote} />}
+        </div>
+
+        {anchor && target.kind === "pr" && loadDiff && (
+          <CodeAt path={anchor.path} excerpt={excerpt} diff={diff} url={fileUrl?.(anchor.path, anchor.line)} />
+        )}
+
+        {current.related.length > 0 && (
+          <div className="v3-also">
+            <h4 className="v3-label">Look at these too</h4>
+            <ul className="visually-plain">
+              {current.related.map((file) => (
+                <RelatedRow
+                  key={`${current.key}|${file.path}`}
+                  file={file}
+                  diffFile={fileOf(file.path)}
+                  url={fileUrl?.(file.path, file.line)}
+                />
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="v3-walk-acts">
           {onComment && anchor && (
             <button
               type="button"
-              className="btn sm"
+              className="v3-btn"
               title={
                 anchor.line === undefined || (diff.state === "ok" && !excerpt)
                   ? "Not in the PR's diff: it goes in the review body, with a link to the code."
@@ -238,56 +228,61 @@ export function GuidedReview({ briefing, feedback, loadDiff, onComment, onFinish
                 })
               }
             >
-              Comment
+              Comment here
             </button>
           )}
-        </div>
-      )}
-      {feedback && fromNote && <NoteOffer key={current.key} item={fbItem} note={fromNote} feedback={feedback} />}
-
-      <nav className="guided-nav" aria-label="Guided review steps">
-        <button
-          type="button"
-          className="btn sm"
-          disabled={step === 0}
-          onClick={() => go(step - 1)}
-          aria-keyshortcuts="p"
-        >
-          ← Previous <kbd>P</kbd>
-        </button>
-        <span className="guided-next">
-          {(last || lastCore) && (
-            <button type="button" className="btn sm primary" onClick={finish}>
-              {onFinish ? "Finish: review your comments" : "Finish"}
-            </button>
-          )}
-          {!last && (
+          {feedback && <Verdicts item={fbItem} feedback={feedback} />}
+          <nav className="v3-walk-nav" aria-label="Walk-through steps">
             <button
               type="button"
-              className={`btn sm${lastCore ? "" : " primary"}`}
-              onClick={() => go(step + 1)}
-              aria-keyshortcuts="n"
+              className="v3-text-btn"
+              disabled={step === 0}
+              onClick={() => go(step - 1)}
+              aria-keyshortcuts="p"
             >
-              {lastCore ? `Next: ${extras} more from the model` : "Next"} <kbd>N</kbd>
+              Previous <kbd>p</kbd>
             </button>
-          )}
-        </span>
-      </nav>
-    </section>
+            {!last && lastCore && (
+              <button type="button" className="v3-btn" onClick={() => go(step + 1)} aria-keyshortcuts="n">
+                Next: {extras} more from the model <kbd>n</kbd>
+              </button>
+            )}
+            {!last && !lastCore && (
+              <button type="button" className="v3-primary" onClick={() => go(step + 1)} aria-keyshortcuts="n">
+                Next <kbd>n</kbd>
+              </button>
+            )}
+            {(last || lastCore) && (
+              <button type="button" className="v3-primary" onClick={finish}>
+                {onFinish ? "Finish: review your comments" : "Finish"}
+              </button>
+            )}
+          </nav>
+        </div>
+        {feedback && fromNote && <NoteOffer key={current.key} item={fbItem} note={fromNote} feedback={feedback} />}
+      </section>
+    </div>
   );
 }
 
-/** The PR's diff, fetched once guided mode starts. */
-function useDiff(briefing: Briefing, loadDiff: ((pr: string) => Promise<PrDiff>) | undefined): DiffState {
+/**
+ * A PR's diff for the code at its places, from the same cache as the Diff tab (by PR and the briefing's head commit),
+ * so the brief, the walk-through and the diff fetch it once between them. Idle without `loadDiff`.
+ */
+export function useBriefingDiff(
+  briefing: Briefing,
+  loadDiff: ((pr: string) => Promise<PrDiff>) | undefined,
+): DiffState {
   const [state, setState] = useState<DiffState & { for?: string }>({ state: "idle" });
   const target = briefing.target;
   const pr = target.kind === "pr" ? `${target.repo}#${target.number}` : undefined;
-  const id = pr ? `${pr}@${briefing.generatedAt}` : undefined;
+  const headSha = target.kind === "pr" ? target.headSha : undefined;
+  const id = pr ? `${pr}@${headSha ?? briefing.generatedAt}` : undefined;
   useEffect(() => {
     if (!loadDiff || !pr || !id) return;
     let live = true;
     setState((s) => (s.for === id && s.state === "ok" ? s : { state: "loading", for: id }));
-    loadDiff(pr).then(
+    cachedDiff((p) => loadDiff(p ?? pr), pr, headSha).then(
       (diff) => {
         if (live) setState({ state: "ok", diff, for: id });
       },
@@ -299,11 +294,12 @@ function useDiff(briefing: Briefing, loadDiff: ((pr: string) => Promise<PrDiff>)
     return () => {
       live = false;
     };
-  }, [loadDiff, pr, id]);
+  }, [loadDiff, pr, id, headSha]);
   return state.for === id ? state : { state: "idle" };
 }
 
-function CodeAt({
+/** The code at a place: an excerpt when the diff has its line, else why not and a link to it on GitHub. */
+export function CodeAt({
   path,
   excerpt,
   diff,
@@ -322,17 +318,17 @@ function CodeAt({
   );
   if (diff.state === "loading" || diff.state === "idle")
     return (
-      <p className="faint small" role="status">
+      <p className="v3-code-note" role="status">
         Loading the code…
       </p>
     );
   if (diff.state === "error")
     return (
-      <p className="muted small">
+      <p className="v3-code-note">
         Couldn't load the diff: {diff.message} {link}
       </p>
     );
-  return <p className="muted small">This line isn't in the diff. {link}</p>;
+  return <p className="v3-code-note">This line isn't in the diff. {link}</p>;
 }
 
 /** One related file: open its excerpt when it's in the diff, or go to it on GitHub when it isn't. */
@@ -350,27 +346,29 @@ function RelatedRow({
   const excerpt = file.line !== undefined ? excerptAround(diffFile, file.line) : undefined;
   const text = where(file.path, file.line);
   return (
-    <li className="related">
-      <span className="chip">{RELATED_LABEL[file.why]}</span>
-      {excerpt ? (
-        <button
-          type="button"
-          className="link-button place"
-          aria-expanded={open}
-          aria-controls={open ? id : undefined}
-          onClick={() => setOpen((o) => !o)}
-        >
-          {text} {open ? "▾" : "▸"}
-        </button>
-      ) : url ? (
-        <a className="place" href={url} target="_blank" rel="noreferrer">
-          {text} ↗
-        </a>
-      ) : (
-        <span className="place">{text}</span>
-      )}
+    <li className="v3-also-row">
+      <span className="v3-also-kind">{RELATED_LABEL[file.why]}</span>
+      <span className="v3-also-what">
+        {excerpt ? (
+          <button
+            type="button"
+            className="link-button place"
+            aria-expanded={open}
+            aria-controls={open ? id : undefined}
+            onClick={() => setOpen((o) => !o)}
+          >
+            {text} {open ? "▾" : "▸"}
+          </button>
+        ) : url ? (
+          <a className="place" href={url} target="_blank" rel="noreferrer">
+            {text} ↗
+          </a>
+        ) : (
+          <span className="place">{text}</span>
+        )}
+      </span>
       {excerpt && open && (
-        <div id={id} className="related-code">
+        <div id={id} className="v3-also-code">
           <CodeExcerpt path={file.path} excerpt={excerpt} />
         </div>
       )}

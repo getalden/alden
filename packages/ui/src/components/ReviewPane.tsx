@@ -18,7 +18,7 @@ import type { ReviewRun } from "../reviews";
 import { onLinkClick } from "../router";
 import { AldenAssistContext, DraftMyReview, useAssist } from "./AldenAssist";
 import { BriefingAge } from "./BriefingAge";
-import { BriefingView } from "./BriefingView";
+import { BriefingView, severityOf } from "./BriefingView";
 import {
   CommentsDrawer,
   type DrawerFocus,
@@ -293,7 +293,17 @@ function BriefingTabs(props: {
     () =>
       briefing.needsYourEyes.flatMap((item, i) =>
         item.anchor
-          ? [{ path: item.anchor.path, line: item.anchor.line, title: item.title, index: i + 1, checkId: item.checkId }]
+          ? [
+              {
+                path: item.anchor.path,
+                line: item.anchor.line,
+                title: item.title,
+                reason: item.reason,
+                index: i + 1,
+                checkId: item.checkId,
+                severity: severityOf(item, briefing),
+              },
+            ]
           : [],
       ),
     [briefing],

@@ -9,15 +9,16 @@ import type {
   LookHere,
   Severity,
 } from "@alden/schema";
-import { type FormEvent, useContext, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useContext, useEffect, useId, useState } from "react";
 import type { BriefingComments, CommentPlace } from "../drafts";
 import { type BriefingFeedback, noteArea, type Verdict } from "../feedback";
 import { formatUsd, plural, prFileUrl } from "../format";
+import { excerptAround, guidedKey, guidedSteps, startGuided, useGuidedProgress } from "../guided";
 import { onLinkClick, routePath } from "../router";
 import { DraftReady } from "./AldenDrafts";
 import { CommentSlot, placeAttrs, useReviewActions } from "./Comments";
 import { ShowInDiffContext } from "./DiffView";
-import { GuidedReview, type GuidedReviewProps } from "./GuidedReview";
+import { CodeAt, GuidedReview, type GuidedReviewProps, useBriefingDiff } from "./GuidedReview";
 import { Mark } from "./Mark";
 
 const anchorKey = (a: Anchor) => `${a.path}:${a.line ?? ""}`;
@@ -85,7 +86,13 @@ function Place({ anchor, links, arrow = false }: { anchor: Anchor; links: Map<st
   );
 }
 
-const SEVERITY: Record<Severity, string> = { critical: "critical", high: "high", medium: "med", low: "low", info: "—" };
+export const SEVERITY: Record<Severity, string> = {
+  critical: "critical",
+  high: "high",
+  medium: "med",
+  low: "low",
+  info: "—",
+};
 const STATUS: Record<CheckResult["status"], { glyph: string; label: string }> = {
   passed: { glyph: "✓", label: "Passed" },
   flagged: { glyph: "!", label: "Flagged" },
@@ -239,24 +246,30 @@ const NOTES: Record<Verdict, string> = {
   dismiss: "Dismissed for this PR",
 };
 
-/** Useful, not useful, or dismiss. Pressing the chosen one again takes it back. */
+/**
+ * Useful, Not useful, or Dismiss, as quiet words that light up when chosen; pressing the chosen one again takes it
+ * back. Under them, what the reaction taught Alden.
+ */
 export function Verdicts({ item, feedback }: { item: FeedbackItem; feedback: BriefingFeedback }) {
   const current = feedback.verdictOf(item);
-  const button = (verdict: Verdict, label: string, onLabel: string, className = "") => (
+  const button = (verdict: Verdict, label: string) => (
     <button
       type="button"
-      className={`btn sm ${className}${current === verdict ? (verdict === "agree" ? " on" : " on neutral") : ""}`}
+      className={`v3-react${current === verdict ? " on" : ""}`}
       aria-pressed={current === verdict}
-      onClick={() => feedback.toggle(item, verdict)}
+      onClick={(e) => {
+        e.stopPropagation();
+        feedback.toggle(item, verdict);
+      }}
     >
-      {current === verdict ? onLabel : label}
+      {label}
     </button>
   );
   return (
-    <fieldset className="verdicts" aria-label={`Was this worth a look? ${item.title}`}>
-      {button("agree", "Useful", "✓ Useful")}
-      {button("not_needed", "Not useful", "✓ Not useful")}
-      {button("dismiss", "× Dismiss", "Undo", "quiet")}
+    <fieldset className="verdicts v3-reacts" aria-label={`Was this worth a look? ${item.title}`}>
+      {button("agree", "Useful")}
+      {button("not_needed", "Not useful")}
+      {button("dismiss", "Dismiss")}
       {current && (
         <span className="verdict-note" role="status">
           {current === "dismiss" ? NOTES[current] : (feedback.progressOf(item) ?? NOTES[current])}
@@ -399,15 +412,76 @@ function ModelState({ llm, perReviewUsd }: { llm: LlmSection; perReviewUsd?: num
 }
 
 const MATCH: Record<NonNullable<LlmSection["matchesTitle"]>["verdict"], { text: string; tone: string }> = {
-  yes: { text: "✓ Matches its title", tone: "" },
-  partly: { text: "Partly matches its title", tone: "warn" },
-  no: { text: "✕ Doesn't match its title", tone: "bad" },
-  unclear: { text: "No description to compare", tone: "neutral" },
+  yes: { text: "✓ matches its title", tone: "ok" },
+  partly: { text: "partly matches its title", tone: "warn" },
+  no: { text: "✕ doesn't match its title", tone: "bad" },
+  unclear: { text: "no description to compare", tone: "neutral" },
 };
 
+/** A place's severity: its check's, or for one from the model, the finding's. */
+export function severityOf(item: LookHere, briefing: Briefing): Severity | undefined {
+  if (item.source === "llm" && briefing.llm?.status === "ok") {
+    return briefing.llm.findings.find((f) => f.title === item.title)?.severity;
+  }
+  return briefing.checks.find((c) => c.id === item.checkId)?.severity;
+}
+
+/** "retry.py, models.py, worker.py and 3 more." */
+function fileNames(paths: string[]): string {
+  const names = paths.slice(0, 3).map((p) => p.split("/").pop() ?? p);
+  const rest = paths.length - names.length;
+  if (rest > 0) return `${names.join(", ")} and ${rest} more.`;
+  if (names.length <= 1) return `${names.join("")}.`;
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}.`;
+}
+
 /**
- * The briefing, in the order a reviewer reads it: what it does, the few places that need your eyes (and how your
- * feedback shaped them), the model's other notes, every check with evidence, what wasn't checked, the files.
+ * One of the summary rows under the places to look: a label, a count and a line, opening to the whole section.
+ */
+function SummaryRow(props: {
+  label: string;
+  count: number;
+  sum: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <section className={`v3-row${props.open ? " open" : ""}`} aria-label={`${props.label} · ${props.count}`}>
+      <h2 className="v3-row-h">
+        <button
+          type="button"
+          className="v3-row-btn"
+          aria-expanded={props.open}
+          aria-controls={props.open ? id : undefined}
+          onClick={props.onToggle}
+        >
+          <span className="v3-row-label">
+            {props.label} <span className="v3-row-count">{props.count}</span>
+          </span>
+          <span className="v3-row-sum">{props.sum}</span>
+          <span className="v3-row-chev" aria-hidden="true">
+            ›
+          </span>
+        </button>
+      </h2>
+      {props.open && (
+        <div id={id} className="v3-row-body">
+          {props.children}
+        </div>
+      )}
+    </section>
+  );
+}
+
+type Row = "model" | "checks" | "notChecked" | "files";
+
+/**
+ * The brief, read in one direction: what the PR does, the few places that need your eyes (each opening to its code,
+ * Comment and Walk through from here), then the model's other notes, the checks, what wasn't checked and the files as
+ * four rows that open to their full sections, and in one line how your feedback shaped it. When the walk-through is
+ * on (g, or Walk through), it takes the brief's place.
  */
 export function BriefingView({
   briefing,
@@ -424,7 +498,7 @@ export function BriefingView({
   comments?: BriefingComments | undefined;
   /** Opens the Comments drawer's editor on a place; ReviewPane provides it (through context) on a PR. */
   onComment?: ((place: CommentPlace) => void) | undefined;
-  /** Guided review's diff, for the code at each step; its Comment and Finish go to the Comments drawer unless given. */
+  /** The PR's diff, for the code at each place; Comment and Finish go to the Comments drawer unless given. */
   guided?: Pick<GuidedReviewProps, "loadDiff" | "onComment" | "onFinish"> | undefined;
 }) {
   const actions = useReviewActions();
@@ -452,7 +526,15 @@ export function BriefingView({
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(briefing.checks.filter((c) => c.status === "flagged").map((c) => [c.id, true])),
   );
+  // The first place starts open, with its code.
+  const [openEye, setOpenEye] = useState<Record<number, boolean>>({ 0: true });
+  const [rows, setRows] = useState<Partial<Record<Row, boolean>>>({});
+  const toggleRow = (row: Row) => setRows((r) => ({ ...r, [row]: !r[row] }));
   const [showHidden, setShowHidden] = useState(false);
+  const key = guidedKey(briefing);
+  const walk = useGuidedProgress(key);
+  const anyOpen = briefing.needsYourEyes.some((_, i) => openEye[i]);
+  const diff = useBriefingDiff(briefing, anyOpen && target.kind === "pr" ? guided?.loadDiff : undefined);
   const { llm } = briefing;
   const picked = new Set(briefing.needsYourEyes.flatMap((i) => (i.anchor ? [anchorKey(i.anchor)] : [])));
   const moreFindings: LlmFinding[] =
@@ -482,153 +564,223 @@ export function BriefingView({
       `${items.length === 1 ? "1 place is" : `${items.length} places are`} hidden: ${lowerFirst(reason)}.`,
   );
   const memory = briefing.learning?.memory ?? 0;
-  const shaped = shapedBy.length > 0 || hiddenLines.length > 0 || memory > 0;
   const heuristic = new Set(briefing.checks.filter((c) => c.heuristic).map((c) => c.id));
   const quietened = new Map((briefing.learning?.quietened ?? []).map((q) => [q.checkId, q.reason]));
+  const quietTitles = briefing.checks.filter((c) => quietened.has(c.id)).map((c) => c.title);
+  const quietLine =
+    quietTitles.length > 0 ? `${quietTitles.join(", ")} ${quietTitles.length === 1 ? "is" : "are"} quietened.` : "";
+  const memoryLine =
+    memory > 0 ? `The model had ${plural(memory, "of your notes", "of your notes")} for this repo.` : "";
+  const shaped = [...shapedBy, ...hiddenLines, quietLine, memoryLine].filter(Boolean);
   const totalLines = Math.max(...briefing.files.map((f) => f.additions + f.deletions), 1);
+  const places = briefing.needsYourEyes.length;
+  const canWalk = guidedSteps(briefing).steps.length > 0;
 
-  return (
-    <article className="brief-body">
+  // The model also noticed: its first finding in a line, why it's there, and whether a draft is waiting.
+  const firstFinding = moreFindings[0];
+  const draftsReady = moreFindings.filter((f) =>
+    comments?.drafts.some((d) => d.source === "alden" && d.drafted?.title === f.title),
+  ).length;
+  const modelSum = firstFinding
+    ? [
+        firstFinding.fromNote ? `Because of your note on ${firstFinding.fromNote.text}: ` : "",
+        `${lowerFirst(firstFinding.title)}`,
+        moreFindings.length > 1 ? `, and ${moreFindings.length - 1} more` : "",
+        draftsReady > 0 ? `. ${draftsReady === 1 ? "A draft is ready" : `${draftsReady} drafts are ready`}.` : ".",
+      ]
+        .join("")
+        .replace(/^./, (c) => c.toUpperCase())
+    : "";
+  const checksSum = [
+    `${counts.passed} passed`,
+    counts.flagged > 0 ? `${counts.flagged} flagged` : "",
+    counts.skipped > 0 ? `${counts.skipped} skipped` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const brief = (
+    <article className="brief-body v3-brief">
       {llm?.status === "ok" && llm.summary && (
-        <section className="section" aria-labelledby="what-it-does" style={{ gap: 10 }}>
-          <div className="section-head" style={{ justifyContent: "flex-start", gap: 10 }}>
-            <h2 className="label" id="what-it-does">
+        <section className="v3-does" aria-labelledby="what-it-does">
+          <div className="v3-does-head">
+            <h2 className="v3-label" id="what-it-does">
               What it does
             </h2>
             {llm.matchesTitle && (
-              <span className={`pill ${MATCH[llm.matchesTitle.verdict].tone}`} title={llm.matchesTitle.reason}>
+              <span className={`v3-match ${MATCH[llm.matchesTitle.verdict].tone}`} title={llm.matchesTitle.reason}>
                 {MATCH[llm.matchesTitle.verdict].text}
               </span>
             )}
           </div>
-          <p className="summary-text">{llm.summary}</p>
+          <p className="v3-does-text">{llm.summary}</p>
         </section>
       )}
       {llm && llm.status !== "ok" && <ModelState llm={llm} perReviewUsd={perReviewUsd} />}
 
-      <section className="section" aria-labelledby="needs-your-eyes">
-        <div className="section-head">
-          <h2 className="h2" id="needs-your-eyes">
+      <section className="v3-eyes" aria-labelledby="needs-your-eyes">
+        <div className="v3-eyes-head">
+          <h2 className="v3-h" id="needs-your-eyes">
             Needs your eyes
           </h2>
-          <span className="faint small mono">{plural(briefing.needsYourEyes.length, "place")}</span>
+          <span className="v3-count">{plural(places, "place")}</span>
         </div>
-        {shaped && (
-          <div className="shaped">
-            <Mark size={16} />
-            <span className="text">
-              <strong>Shaped by your feedback.</strong> {[...shapedBy, ...hiddenLines].join(" ")}
-              {memory > 0 && ` The model had ${plural(memory, "of your notes", "of your notes")} for this repo.`}
-            </span>
-            <a href={routePath({ view: "memory" })} onClick={onLinkClick({ view: "memory" })}>
-              What Alden knows ↗
-            </a>
-          </div>
-        )}
-        {briefing.needsYourEyes.length === 0 ? (
+        {places === 0 ? (
           <p className="muted">
             {llm?.status === "ok"
               ? "Nothing flagged. Neither the checks nor the model found anything that needs a closer look."
               : "Nothing flagged. The checks below found nothing that needs a closer look."}
           </p>
         ) : (
-          <GuidedReview
-            briefing={briefing}
-            feedback={feedback}
-            loadDiff={guided?.loadDiff}
-            onComment={guided?.onComment ?? onComment}
-            onFinish={guided?.onFinish ?? actions?.onFinish}
-          >
-            <ol className="visually-plain section" style={{ gap: 12 }}>
-              {briefing.needsYourEyes.map((item, i) => {
-                const fbItem = eyesItem(item, briefing.checks);
-                const verdict = feedback?.verdictOf(fbItem);
-                const guess = item.source !== "llm" && item.checkId !== undefined && heuristic.has(item.checkId);
-                return (
-                  <li
-                    key={`${item.title}${item.anchor ? anchorKey(item.anchor) : ""}`}
-                    {...placeOf(item.anchor)}
-                    className={`card eye${guess ? " guess" : ""}${verdict === "agree" ? " agreed" : ""}${verdict === "dismiss" ? " dismissed" : ""}`}
+          <ol className="visually-plain v3-cards">
+            {briefing.needsYourEyes.map((item, i) => {
+              const fbItem = eyesItem(item, briefing.checks);
+              const verdict = feedback?.verdictOf(fbItem);
+              const guess = item.source !== "llm" && item.checkId !== undefined && heuristic.has(item.checkId);
+              const severity = severityOf(item, briefing);
+              const isOpen = !!openEye[i];
+              const bodyId = `${key}-eye-${i}`;
+              const toggle = () => setOpenEye((o) => ({ ...o, [i]: !o[i] }));
+              const anchor = item.anchor;
+              const file =
+                diff.state === "ok" && anchor ? diff.diff.files.find((f) => f.path === anchor.path) : undefined;
+              const excerpt = anchor ? excerptAround(file, anchor.line, 3) : undefined;
+              return (
+                <li
+                  key={`${item.title}${anchor ? anchorKey(anchor) : ""}`}
+                  {...placeOf(anchor)}
+                  className={`v3-card${isOpen ? " open" : ""}${guess ? " guess" : ""}${verdict === "agree" ? " agreed" : ""}${verdict === "dismiss" ? " dismissed" : ""}`}
+                >
+                  {/* biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: a bigger target for the mouse; the +/− button is the control. */}
+                  <div
+                    className="v3-card-head"
+                    onClick={(e) => !(e.target as Element).closest("a, button") && toggle()}
                   >
-                    <span className="eye-n">{i + 1}</span>
-                    <div className="eye-body">
-                      {item.anchor && <Place anchor={item.anchor} links={links} arrow />}
-                      <p className="eye-text">
-                        <strong>{item.title}.</strong> {item.reason}
-                        {item.source === "llm" && (
-                          <span className="chip" style={{ marginLeft: 6 }}>
-                            model
-                          </span>
-                        )}
-                        {item.source === "llm" && <DraftReady title={item.title} comments={comments} />}
-                      </p>
-                      {guess && (
-                        <span className="guess-line">
-                          <span className="q" aria-hidden="true">
-                            ?
-                          </span>
-                          Inferred from the diff, so it can be wrong.
+                    <div className="v3-ids">
+                      <span className="v3-id">E{i + 1}</span>
+                      {severity && <span className={`v3-sev ${severity}`}>{SEVERITY[severity]}</span>}
+                      {anchor && <Place anchor={anchor} links={links} arrow />}
+                      <button
+                        type="button"
+                        className="v3-chev"
+                        aria-expanded={isOpen}
+                        aria-controls={isOpen ? bodyId : undefined}
+                        aria-label={`${isOpen ? "Hide" : "Show"} the code for E${i + 1}`}
+                        onClick={toggle}
+                      >
+                        {isOpen ? "−" : "+"}
+                      </button>
+                    </div>
+                    <p className="v3-why">
+                      <strong>{item.title}.</strong> {item.reason}
+                      {item.source === "llm" && <span className="v3-tag">model</span>}
+                      {item.source === "llm" && <DraftReady title={item.title} comments={comments} />}
+                    </p>
+                    {guess && (
+                      <span className="guess-line">
+                        <span className="q" aria-hidden="true">
+                          ?
                         </span>
+                        Inferred from the diff, so it can be wrong.
+                      </span>
+                    )}
+                    {item.learned && <span className="learned-why">↑ {item.learned}</span>}
+                    {item.fromNote && <FromNoteLine note={item.fromNote} />}
+                  </div>
+                  {isOpen && (
+                    <div id={bodyId} className="v3-card-body">
+                      {anchor && target.kind === "pr" && guided?.loadDiff && (
+                        <div className="v3-card-code">
+                          <CodeAt path={anchor.path} excerpt={excerpt} diff={diff} url={links.get(anchorKey(anchor))} />
+                        </div>
                       )}
-                      {item.learned && <span className="learned-why">↑ {item.learned}</span>}
-                      {item.fromNote && <FromNoteLine note={item.fromNote} />}
-                      {feedback && <Verdicts item={fbItem} feedback={feedback} />}
+                      <div className="v3-card-acts">
+                        {slot(anchor)}
+                        {canWalk && (
+                          <button type="button" className="v3-text-btn" onClick={() => startGuided(key, i)}>
+                            Walk through from here
+                          </button>
+                        )}
+                        {feedback && <Verdicts item={fbItem} feedback={feedback} />}
+                      </div>
                       {feedback && item.fromNote && (
                         <NoteOffer item={fbItem} note={item.fromNote} feedback={feedback} />
                       )}
-                      {slot(item.anchor)}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        {canWalk && (
+          <button
+            type="button"
+            className="v3-walk-start"
+            data-walk-start=""
+            aria-keyshortcuts="g"
+            onClick={() => startGuided(key)}
+          >
+            {walk.step > 0
+              ? `Resume the walk-through at step ${walk.step + 1}`
+              : places > 0
+                ? `Walk through ${places === 1 ? "this place" : `these ${places} places`}`
+                : "Walk through the model's findings"}{" "}
+            <kbd>g</kbd>
+          </button>
+        )}
+      </section>
+
+      <div className="v3-rows">
+        {moreFindings.length > 0 && (
+          <SummaryRow
+            label="The model also noticed"
+            count={moreFindings.length}
+            sum={modelSum}
+            open={!!rows.model}
+            onToggle={() => toggleRow("model")}
+          >
+            <ul className="visually-plain v3-findings">
+              {moreFindings.map((f) => {
+                const verdict = feedback?.verdictOf(findingItem(f));
+                return (
+                  <li
+                    key={`${f.title}${f.anchors.map(anchorKey).join()}`}
+                    className={`finding${verdict === "dismiss" ? " dismissed" : ""}`}
+                  >
+                    <div className="what">
+                      <span>
+                        <strong>{f.title}.</strong> <span className="muted">{f.detail}</span>
+                        <DraftReady title={f.title} comments={comments} />
+                      </span>
+                      {f.fromNote && <FromNoteLine note={f.fromNote} />}
+                      {feedback && f.fromNote && (
+                        <NoteOffer item={findingItem(f)} note={f.fromNote} feedback={feedback} />
+                      )}
+                      {f.anchors.map((a) => (
+                        <Place key={anchorKey(a)} anchor={a} links={links} />
+                      ))}
+                      {slot(f.anchors[0])}
+                    </div>
+                    <div className="acts">
+                      <span className={`v3-sev ${f.severity}`}>{SEVERITY[f.severity]}</span>
+                      {feedback && <SmallVerdicts item={findingItem(f)} feedback={feedback} />}
                     </div>
                   </li>
                 );
               })}
-            </ol>
-          </GuidedReview>
+            </ul>
+            {llm?.status === "ok" && llm.draftsNote && <p className="v3-quiet-line">{llm.draftsNote}</p>}
+          </SummaryRow>
         )}
-      </section>
 
-      {moreFindings.length > 0 && (
-        <section className="section" aria-labelledby="also-noted" style={{ gap: 10 }}>
-          <h2 className="label" id="also-noted">
-            The model also noticed · {moreFindings.length}
-          </h2>
-          <ul className="visually-plain">
-            {moreFindings.map((f) => {
-              const verdict = feedback?.verdictOf(findingItem(f));
-              return (
-                <li
-                  key={`${f.title}${f.anchors.map(anchorKey).join()}`}
-                  className={`finding${verdict === "dismiss" ? " dismissed" : ""}`}
-                >
-                  <div className="what">
-                    <span>
-                      <strong>{f.title}.</strong> <span className="muted">{f.detail}</span>
-                      <DraftReady title={f.title} comments={comments} />
-                    </span>
-                    {f.fromNote && <FromNoteLine note={f.fromNote} />}
-                    {feedback && f.fromNote && (
-                      <NoteOffer item={findingItem(f)} note={f.fromNote} feedback={feedback} />
-                    )}
-                    {f.anchors.map((a) => (
-                      <Place key={anchorKey(a)} anchor={a} links={links} />
-                    ))}
-                    {slot(f.anchors[0])}
-                  </div>
-                  <div className="acts">
-                    <span className={`sev ${f.severity}`}>{SEVERITY[f.severity]}</span>
-                    {feedback && <SmallVerdicts item={findingItem(f)} feedback={feedback} />}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      <section className="section" aria-labelledby="checks">
-        <div className="section-head">
-          <h2 className="h2" id="checks">
-            Checks
-          </h2>
+        <SummaryRow
+          label="Checks"
+          count={briefing.checks.length}
+          sum={`${checksSum}.${quietTitles.length > 0 ? ` ${quietTitles.join(", ")} quietened for this repo.` : ""}`}
+          open={!!rows.checks}
+          onToggle={() => toggleRow("checks")}
+        >
           <span className="checks-count">
             <span className="ok-text">✓ {counts.passed} passed</span>
             <span style={{ color: "var(--warn)" }}>! {counts.flagged} flagged</span>
@@ -639,141 +791,173 @@ export function BriefingView({
               </button>
             )}
           </span>
-        </div>
-        {showHidden && (
-          <ul className="note-box visually-plain" aria-label="Hidden by your feedback">
-            {hidden.map((h) => (
-              <li key={`${h.title}${h.anchor ? anchorKey(h.anchor) : ""}`}>
-                <strong>{h.title}</strong> · {h.reason}
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="card checks">
-          {briefing.checks.map((check) => {
-            const isOpen = !!open[check.id];
-            const status = STATUS[check.status];
-            const canOpen = check.evidence.length > 0 || check.status === "flagged";
-            const quiet = quietened.get(check.id);
-            return (
-              <div key={check.id} className="check">
-                <button
-                  type="button"
-                  className="check-row"
-                  aria-expanded={canOpen ? isOpen : undefined}
-                  disabled={!canOpen}
-                  onClick={() => setOpen((o) => ({ ...o, [check.id]: !o[check.id] }))}
-                >
-                  <span className={`dot ${check.status}`} aria-hidden="true">
-                    {status.glyph}
-                  </span>
-                  <span
-                    className="check-name"
-                    style={{ color: check.status === "skipped" ? "var(--ink2)" : undefined }}
+          {showHidden && (
+            <ul className="note-box visually-plain" aria-label="Hidden by your feedback">
+              {hidden.map((h) => (
+                <li key={`${h.title}${h.anchor ? anchorKey(h.anchor) : ""}`}>
+                  <strong>{h.title}</strong> · {h.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="card checks">
+            {briefing.checks.map((check) => {
+              const isOpen = !!open[check.id];
+              const status = STATUS[check.status];
+              const canOpen = check.evidence.length > 0 || check.status === "flagged";
+              const quiet = quietened.get(check.id);
+              return (
+                <div key={check.id} className="check">
+                  <button
+                    type="button"
+                    className="check-row"
+                    aria-expanded={canOpen ? isOpen : undefined}
+                    disabled={!canOpen}
+                    onClick={() => setOpen((o) => ({ ...o, [check.id]: !o[check.id] }))}
                   >
-                    {check.title}
-                    {check.heuristic && (
-                      <span className="faint" title="Inferred from the diff and the code graph, so it can be wrong">
-                        {" "}
-                        ~
-                      </span>
-                    )}
-                  </span>
-                  <span className={`sev${check.status === "flagged" ? ` ${check.severity}` : ""}`}>
-                    {check.status === "flagged" ? SEVERITY[check.severity] : "—"}
-                  </span>
-                  <span className={`status ${check.status}`} title={quiet ? upperFirst(quiet) : undefined}>
-                    {quiet ? "Quietened" : status.label} {canOpen ? (isOpen ? "▾" : "▸") : ""}
-                  </span>
-                </button>
-                {isOpen && (
-                  <div className="check-detail">
-                    <span className="muted small" style={{ fontSize: 13 }}>
-                      {check.summary}
+                    <span className={`dot ${check.status}`} aria-hidden="true">
+                      {status.glyph}
                     </span>
-                    {quiet && <span className="learned-why">↓ {upperFirst(quiet)}</span>}
-                    {check.evidence.length > 0 && (
-                      <ul className="evidence">
-                        {check.evidence.map((e) => {
-                          const commentable = !!(comments && onComment && e.anchor);
-                          return (
-                            <li
-                              key={`${e.text}${e.anchor ? anchorKey(e.anchor) : ""}`}
-                              {...placeOf(e.anchor)}
-                              className={commentable ? "commentable" : undefined}
-                            >
-                              {e.anchor && <Place anchor={e.anchor} links={links} />}
-                              <span className="text">{e.text}</span>
-                              {slot(e.anchor, true)}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    {check.status === "flagged" && feedback && (
-                      <div className="verdicts">
-                        <span className="faint small">Worth flagging?</span>
-                        <CheckVerdicts check={check} feedback={feedback} />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        {briefing.checks.some((c) => c.heuristic) && (
-          <p className="faint small">~ inferred from the diff and the code graph, so it can be wrong.</p>
+                    <span
+                      className="check-name"
+                      style={{ color: check.status === "skipped" ? "var(--ink2)" : undefined }}
+                    >
+                      {check.title}
+                      {check.heuristic && (
+                        <span className="faint" title="Inferred from the diff and the code graph, so it can be wrong">
+                          {" "}
+                          ~
+                        </span>
+                      )}
+                    </span>
+                    <span className={`sev${check.status === "flagged" ? ` ${check.severity}` : ""}`}>
+                      {check.status === "flagged" ? SEVERITY[check.severity] : "—"}
+                    </span>
+                    <span className={`status ${check.status}`} title={quiet ? upperFirst(quiet) : undefined}>
+                      {quiet ? "Quietened" : status.label} {canOpen ? (isOpen ? "▾" : "▸") : ""}
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="check-detail">
+                      <span className="muted small" style={{ fontSize: 13 }}>
+                        {check.summary}
+                      </span>
+                      {quiet && <span className="learned-why">↓ {upperFirst(quiet)}</span>}
+                      {check.evidence.length > 0 && (
+                        <ul className="evidence">
+                          {check.evidence.map((e) => {
+                            const commentable = !!(comments && onComment && e.anchor);
+                            return (
+                              <li
+                                key={`${e.text}${e.anchor ? anchorKey(e.anchor) : ""}`}
+                                {...placeOf(e.anchor)}
+                                className={commentable ? "commentable" : undefined}
+                              >
+                                {e.anchor && <Place anchor={e.anchor} links={links} />}
+                                <span className="text">{e.text}</span>
+                                {slot(e.anchor, true)}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                      {check.status === "flagged" && feedback && (
+                        <div className="verdicts">
+                          <span className="faint small">Worth flagging?</span>
+                          <CheckVerdicts check={check} feedback={feedback} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {briefing.checks.some((c) => c.heuristic) && (
+            <p className="faint small">~ inferred from the diff and the code graph, so it can be wrong.</p>
+          )}
+        </SummaryRow>
+
+        {briefing.notChecked.length > 0 && (
+          <SummaryRow
+            label="Not checked"
+            count={briefing.notChecked.length}
+            sum={`${briefing.notChecked[0]}${briefing.notChecked.length > 1 ? ` And ${briefing.notChecked.length - 1} more.` : ""}`}
+            open={!!rows.notChecked}
+            onToggle={() => toggleRow("notChecked")}
+          >
+            <ul className="not-checked">
+              {briefing.notChecked.map((n) => (
+                <li key={n}>
+                  <span>{n}</span>
+                </li>
+              ))}
+            </ul>
+          </SummaryRow>
         )}
-      </section>
 
-      {briefing.notChecked.length > 0 && (
-        <section className="section" aria-labelledby="not-checked" style={{ gap: 10 }}>
-          <h2 className="label" id="not-checked">
-            Not checked
-          </h2>
-          <ul className="not-checked">
-            {briefing.notChecked.map((n) => (
-              <li key={n}>
-                <span>{n}</span>
-              </li>
-            ))}
+        <SummaryRow
+          label="Files changed"
+          count={briefing.summary.files}
+          sum={fileNames(briefing.files.map((f) => f.path))}
+          open={!!rows.files}
+          onToggle={() => toggleRow("files")}
+        >
+          <ul className="card files">
+            {briefing.files.map((f) => {
+              const total = f.additions + f.deletions;
+              const scale = Math.min(1, total / Math.min(totalLines, 60)) * 100;
+              return (
+                <li key={f.path} className="file">
+                  <span className="path" title={f.previousPath ? `${f.path}, moved from ${f.previousPath}` : f.path}>
+                    <Place anchor={{ path: f.path }} links={links} />
+                    {f.previousPath && <span className="moved faint small">moved from {f.previousPath}</span>}
+                  </span>
+                  <span>
+                    <span className="add">+{f.additions}</span> <span className="del">−{f.deletions}</span>
+                  </span>
+                  <span className="bar" aria-hidden="true">
+                    <span className="a" style={{ width: `${total ? (f.additions / total) * scale : 0}%` }} />
+                    <span className="d" style={{ width: `${total ? (f.deletions / total) * scale : 0}%` }} />
+                  </span>
+                </li>
+              );
+            })}
           </ul>
-        </section>
-      )}
+        </SummaryRow>
+      </div>
 
-      <section className="section" aria-labelledby="files" style={{ gap: 10 }}>
-        <h2 className="label" id="files">
-          Files changed · {briefing.summary.files}
-        </h2>
-        <ul className="card files">
-          {briefing.files.map((f) => {
-            const total = f.additions + f.deletions;
-            const scale = Math.min(1, total / Math.min(totalLines, 60)) * 100;
-            return (
-              <li key={f.path} className="file">
-                <span className="path" title={f.previousPath ? `${f.path}, moved from ${f.previousPath}` : f.path}>
-                  <Place anchor={{ path: f.path }} links={links} />
-                  {f.previousPath && <span className="moved faint small">moved from {f.previousPath}</span>}
-                </span>
-                <span>
-                  <span className="add">+{f.additions}</span> <span className="del">−{f.deletions}</span>
-                </span>
-                <span className="bar" aria-hidden="true">
-                  <span className="a" style={{ width: `${total ? (f.additions / total) * scale : 0}%` }} />
-                  <span className="d" style={{ width: `${total ? (f.deletions / total) * scale : 0}%` }} />
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      {shaped.length > 0 && (
+        <p className="v3-shaped">
+          <span className="v3-shaped-mark" aria-hidden="true">
+            ◦
+          </span>
+          <span>
+            Shaped by your feedback: {shaped.join(" ")}{" "}
+            <a href={routePath({ view: "memory" })} onClick={onLinkClick({ view: "memory" })}>
+              What Alden knows
+            </a>
+          </span>
+        </p>
+      )}
 
       <Footer briefing={briefing} perReviewUsd={perReviewUsd} />
 
       {feedback?.error && <p className="banner error">{feedback.error}</p>}
       {feedback && <MissedForm feedback={feedback} />}
     </article>
+  );
+
+  return (
+    <GuidedReview
+      briefing={briefing}
+      feedback={feedback}
+      loadDiff={guided?.loadDiff}
+      onComment={guided?.onComment ?? onComment}
+      onFinish={guided?.onFinish ?? actions?.onFinish}
+    >
+      {brief}
+    </GuidedReview>
   );
 }
 

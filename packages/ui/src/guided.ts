@@ -10,6 +10,7 @@ import type {
   RelatedFile,
   Severity,
 } from "@alden/schema";
+import { useSyncExternalStore } from "react";
 
 /** A PR's diff as `GET /api/diff` returns it (from @alden/schema). */
 export type { PrDiff, PrDiffFile, PrDiffHunk, PrDiffLine };
@@ -49,7 +50,10 @@ const anchorKey = (a: Anchor | undefined) => (a ? `${a.path}:${a.line ?? ""}` : 
  */
 export function guidedSteps(briefing: Briefing): { steps: GuidedStep[]; core: number } {
   const steps: GuidedStep[] = briefing.needsYourEyes.map((item, i) => {
-    const severity = briefing.checks.find((c) => c.id === item.checkId)?.severity;
+    const severity =
+      item.source === "llm" && briefing.llm?.status === "ok"
+        ? briefing.llm.findings.find((f) => f.title === item.title)?.severity
+        : briefing.checks.find((c) => c.id === item.checkId)?.severity;
     return {
       key: `eye:${i}:${item.title}:${anchorKey(item.anchor)}`,
       kind: "place",
@@ -133,19 +137,56 @@ export const RELATED_LABEL: Record<RelatedFile["why"], string> = {
 
 /** Where you are in a PR's guided review, kept while the app is open so leaving the PR and coming back resumes. */
 const progress = new Map<string, { active: boolean; step: number }>();
+const IDLE = { active: false, step: 0 };
+const listeners = new Set<() => void>();
+const changed = () => {
+  for (const listener of listeners) listener();
+};
 
 export const guidedKey = (briefing: Briefing) =>
   briefing.target.kind === "pr" ? `${briefing.target.repo}#${briefing.target.number}`.toLowerCase() : "local";
 
 export function savedProgress(key: string): { active: boolean; step: number } {
-  return progress.get(key) ?? { active: false, step: 0 };
+  return progress.get(key) ?? IDLE;
 }
 
 export function saveProgress(key: string, state: { active: boolean; step: number }): void {
   progress.set(key, state);
+  changed();
+}
+
+/** Walk through a PR's places, from `step` (where you were, without one). */
+export function startGuided(key: string, step?: number): void {
+  saveProgress(key, { active: true, step: step ?? savedProgress(key).step });
+}
+
+/** Back to the brief, keeping the step for next time. */
+export function leaveGuided(key: string): void {
+  const now = savedProgress(key);
+  if (now.active) saveProgress(key, { active: false, step: now.step });
+}
+
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+/**
+ * Whether a PR's walk-through is on and at which step: for the walk-through itself, the brief's Walk through
+ * buttons, and anything else that switches between Brief and Walk through.
+ */
+export function useGuidedProgress(key: string): { active: boolean; step: number } {
+  return useSyncExternalStore(
+    subscribe,
+    () => savedProgress(key),
+    () => savedProgress(key),
+  );
 }
 
 /** For tests. */
 export function forgetProgress(): void {
   progress.clear();
+  changed();
 }

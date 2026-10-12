@@ -4,8 +4,9 @@ const MARK = { add: "+", del: "−", ctx: " " } as const;
 const SPOKEN = { add: "added", del: "removed", ctx: "unchanged" } as const;
 
 /**
- * A few lines of a diff around a place: old and new line numbers, + and − marks, and the place's own line picked out.
- * Guided review shows one at each step and beside each related file in the diff.
+ * A few lines of a diff around a place: each line's number (the new file's, or the old one's for a removed line), a
+ * quiet + or −, and the place's own line picked out. The brief's places show one when open, the walk-through one at
+ * each step and beside each related file in the diff.
  */
 export function CodeExcerpt({ path, excerpt }: { path: string; excerpt: Excerpt }) {
   const numbers = excerpt.lines.flatMap((l) => l.newLine ?? l.oldLine ?? []);
@@ -26,19 +27,16 @@ export function CodeExcerpt({ path, excerpt }: { path: string; excerpt: Excerpt 
                 aria-current={focused ? "location" : undefined}
               >
                 <td className="ex-n" aria-hidden="true">
-                  {line.oldLine ?? ""}
+                  {line.newLine ?? line.oldLine ?? ""}
                 </td>
-                <td className="ex-n" aria-hidden="true">
-                  {line.newLine ?? ""}
+                <td className="ex-m" aria-hidden="true">
+                  {MARK[line.kind]}
                 </td>
                 <td className="ex-code">
                   <span className="visually-hidden">
                     {SPOKEN[line.kind]} line {line.newLine ?? line.oldLine}:{" "}
                   </span>
-                  <span className="ex-m" aria-hidden="true">
-                    {MARK[line.kind]}
-                  </span>
-                  {line.text}
+                  {line.text || " "}
                 </td>
               </tr>
             );

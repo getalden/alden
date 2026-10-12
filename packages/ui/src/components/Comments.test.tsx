@@ -458,6 +458,7 @@ describe("commenting on a place", () => {
   it("opens the drawer's editor on a place in Needs your eyes, saves with Ctrl+Enter, and gives focus back", async () => {
     const { state } = await setup([], [], false);
     // The place in Needs your eyes and the check's evidence line; the whole-file evidence has its own.
+    fireEvent.click(screen.getByRole("button", { name: /^Checks/ }));
     const buttons = screen.getAllByRole("button", { name: "Comment on src/api.ts, line 9" });
     expect(buttons).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Comment on src/web.ts" })).toBeTruthy();
@@ -486,6 +487,7 @@ describe("commenting on a place", () => {
 
   it("cancels with Escape and keeps nothing, leaving the drawer open", async () => {
     const { state } = await setup();
+    fireEvent.click(screen.getByRole("button", { name: /^Checks/ }));
     const button = screen.getAllByRole("button", { name: "Comment on src/api.ts, line 9" })[1] as HTMLElement;
     fireEvent.click(button);
     const area = screen.getByRole("textbox", { name: "Comment on src/api.ts, line 9" });
@@ -595,6 +597,7 @@ describe("notes linking to code outside the diff", () => {
 
   it("comments on a whole file as a note in the review body, linking to it", async () => {
     const { state } = await setup([], [], false);
+    fireEvent.click(screen.getByRole("button", { name: /^Checks/ }));
     fireEvent.click(screen.getByRole("button", { name: "Comment on src/web.ts" }));
     const aside = drawer() as HTMLElement;
     expect(within(aside).getByRole("heading", { name: "Comment on src/web.ts, the whole file" })).toBeTruthy();
@@ -678,6 +681,7 @@ describe("notes linking to code outside the diff", () => {
     };
     render(<Harness api={fake.api} b={withFindings} />);
     await waitFor(() => expect(fake.state.calls).toContain(`GET ${PR}`));
+    fireEvent.click(screen.getByRole("button", { name: /^The model also noticed/ }));
     const noticed = screen.getByRole("region", { name: "The model also noticed · 1" });
     fireEvent.click(within(noticed).getByRole("button", { name: "Comment on py/orders/tasks.py, line 5" }));
     expect(
@@ -708,6 +712,13 @@ describe("notes linking to code outside the diff", () => {
       llm: { status: "ok", findings: [finding], droppedFindings: 0, omittedFiles: [] },
     };
     render(<Harness api={fake.api} b={withDraft} />);
+    // The row says so, and so does the finding once it's open.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^The model also noticed/ }).textContent).toContain(
+        "A draft is ready.",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^The model also noticed/ }));
     const noticed = screen.getByRole("region", { name: "The model also noticed · 1" });
     await waitFor(() => expect(within(noticed).getByText("Draft ready")).toBeTruthy());
   });
