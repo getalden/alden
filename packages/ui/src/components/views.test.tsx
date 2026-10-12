@@ -427,8 +427,10 @@ describe("BriefingView", () => {
     const { container } = render(<BriefingView briefing={briefing} perReviewUsd={0.5} />);
     expect(screen.getByText("Adds a currency to charge().")).toBeTruthy();
     expect(screen.getByText("Caller of changed code in src/api.ts.")).toBeTruthy();
-    // Flagged checks start open, passed ones closed; a click toggles.
-    const rows = screen.getAllByRole("button", { expanded: true });
+    // The checks fold to one row with a line; opened, flagged checks start open, passed ones closed; a click toggles.
+    expect(screen.getByRole("button", { name: /^Checks/ }).textContent).toContain("1 passed, 1 flagged.");
+    fireEvent.click(screen.getByRole("button", { name: /^Checks/ }));
+    const rows = [...container.querySelectorAll<HTMLElement>('.check-row[aria-expanded="true"]')];
     expect(rows.map((r) => r.textContent)).toEqual([expect.stringContaining("Callers outside the diff")]);
     expect(screen.getByText("calls charge (signature changed)")).toBeTruthy();
     fireEvent.click(rows[0] as HTMLElement);
@@ -446,11 +448,26 @@ describe("BriefingView", () => {
     });
   });
 
+  it("folds the rest into rows with a line each, opening to the whole section", () => {
+    render(<BriefingView briefing={briefing} />);
+    const files = screen.getByRole("button", { name: /^Files changed/ });
+    expect(files.textContent).toContain("charge.ts.");
+    expect(files.getAttribute("aria-expanded")).toBe("false");
+    const notChecked = screen.getByRole("button", { name: /^Not checked/ });
+    expect(notChecked.textContent).toContain("Whether the change does what its title says");
+    fireEvent.click(notChecked);
+    expect(notChecked.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      within(screen.getByRole("region", { name: "Not checked · 1" })).getAllByText(/Whether the change/),
+    ).toHaveLength(2);
+  });
+
   it("says where a moved file came from", () => {
     const files = [
       { ...briefing.files[0], path: "src/lib/charge.ts", previousPath: "src/charge.ts", status: "renamed" as const },
     ];
     render(<BriefingView briefing={{ ...briefing, files: files as Briefing["files"] }} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Files changed/ }));
     expect(screen.getByText("moved from src/charge.ts")).toBeTruthy();
   });
 
@@ -460,6 +477,7 @@ describe("BriefingView", () => {
       ...briefing.checks,
     ];
     const { container } = render(<BriefingView briefing={{ ...briefing, checks }} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Checks/ }));
     expect(container.querySelector(".sev.critical")?.textContent).toBe("critical");
     expect(container.querySelector(".sev.high")?.textContent).toBe("high");
   });
@@ -493,12 +511,13 @@ describe("what learning changed in a briefing", () => {
     };
     const { container } = render(<BriefingView briefing={learned} />);
     expect(screen.getByText(/↑ You usually mark API change flags useful/)).toBeTruthy();
-    const shaped = container.querySelector(".shaped")?.textContent ?? "";
-    expect(shaped).toContain("Shaped by your feedback.");
+    const shaped = container.querySelector(".v3-shaped")?.textContent ?? "";
+    expect(shaped).toContain("Shaped by your feedback: ");
     expect(shaped).toContain("#1 is here because you usually mark API change flags useful (4 of 4).");
     expect(shaped).toContain("2 places are hidden: you usually mark untested-change flags not useful (3 of 3).");
     expect(shaped).toContain("1 place is hidden: you dismissed it on 2026-09-27.");
     expect(shaped).toContain("The model had 2 of your notes for this repo.");
+    fireEvent.click(screen.getByRole("button", { name: /^Checks/ }));
     fireEvent.click(screen.getByRole("button", { name: /3 hidden by your feedback/ }));
     expect(screen.getByText("Config change in .env")).toBeTruthy();
     expect(groupHidden(learned.learning?.hidden ?? []).map((g) => g.items.length)).toEqual([2, 1]);
@@ -512,6 +531,10 @@ describe("what learning changed in a briefing", () => {
         briefing={{ ...briefing, learning: { hidden: [], quietened: [{ checkId: flagged.id, reason }], memory: 0 } }}
       />,
     );
+    expect(screen.getByRole("button", { name: /^Checks/ }).textContent).toContain(
+      "Callers outside the diff quietened for this repo.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Checks/ }));
     expect(
       screen.getByTitle("Quietened by your feedback: you usually mark API change flags not useful (3 of 3)"),
     ).toBeTruthy();
@@ -671,11 +694,12 @@ describe("feedback in a briefing", () => {
     const { rerender } = render(<BriefingView briefing={briefing} feedback={feedback} />);
     fireEvent.click(screen.getByRole("button", { name: "Useful" }));
     rerender(<BriefingView briefing={briefing} feedback={feedback} />);
-    expect(screen.getByRole("button", { name: "✓ Useful" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Useful" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText("Noted. Alden will look for more like this.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "✓ Useful" }));
-    fireEvent.click(screen.getByRole("button", { name: "× Dismiss" }));
-    // A flagged check takes its own verdict ("worth flagging?").
+    fireEvent.click(screen.getByRole("button", { name: "Useful" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    // A flagged check takes its own verdict ("worth flagging?"), under Checks.
+    fireEvent.click(screen.getByRole("button", { name: /^Checks/ }));
     fireEvent.click(screen.getByRole("button", { name: "↓ Not useful" }));
     rerender(<BriefingView briefing={briefing} feedback={feedback} />);
     // Each reaction says how close it brought a lesson.

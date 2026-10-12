@@ -878,27 +878,17 @@ const api: UiApi = {
 };
 
 const ui = await startUiServer({ api, staticDir: join(ROOT, "packages/ui/dist"), port, token: "demo" });
-await fakeMissingRoutes(ui);
+fakeMissingRoutes(ui);
 console.log(`Alden demo UI at ${ui.url}  (build the UI first: pnpm --filter @alden/ui build)`);
 
 /**
- * The Tune popover's routes (the model picker, the tone, Ask), faked here for as long as the server has none of its
- * own: each is asked once at startup, and only a 404 is answered here. Nothing calls a model.
+ * The Tune popover's routes (the model picker, the tone, Ask), faked here while the demo's API has no method for
+ * them. Nothing calls a model.
  */
-async function fakeMissingRoutes(server: typeof ui) {
-  const missing = async (method: string, path: string) =>
-    (
-      await fetch(`http://127.0.0.1:${server.port}${path}`, {
-        method,
-        headers: { "X-Alden-Token": "demo", "Content-Type": "application/json" },
-        ...(method === "GET" ? {} : { body: "{}" }),
-      })
-    ).status === 404;
-  const fake = {
-    models: await missing("GET", "/api/models"),
-    tone: await missing("GET", "/api/tone"),
-    ask: await missing("POST", "/api/ask"),
-  };
+function fakeMissingRoutes(server: typeof ui) {
+  // A route the demo's API doesn't implement: the server would fail on it, so it's answered here.
+  const missing = (name: string) => typeof (api as unknown as Record<string, unknown>)[name] !== "function";
+  const fake = { models: missing("models"), tone: missing("tone"), ask: missing("ask") };
   if (!fake.models && !fake.tone && !fake.ask) return;
   let current = { provider: "anthropic", model: "claude-sonnet-5" };
   const groups = () => [
@@ -930,12 +920,6 @@ async function fakeMissingRoutes(server: typeof ui) {
       available: true,
       items: [{ id: "llama3.2:3b", note: "offline" }],
     },
-  ];
-  const tones = [
-    { id: "terse", label: "Terse", hint: "one line, no reasoning" },
-    { id: "concise", label: "Concise", hint: "the default for this repo" },
-    { id: "detailed", label: "Detailed", hint: "why, impact and a fix" },
-    { id: "teaching", label: "Teaching", hint: "for newer teammates" },
   ];
   const toneByRepo = new Map<string, string>();
   const body = async (req: import("node:http").IncomingMessage) => {
@@ -971,13 +955,17 @@ async function fakeMissingRoutes(server: typeof ui) {
       }
       if (route === "GET /api/tone") {
         const repo = url.searchParams.get("repo");
-        return json(res, 200, { tone: toneByRepo.get(repo ?? "") ?? "concise", tones, repo });
+        const own = toneByRepo.get(repo ?? "");
+        return json(res, 200, { tone: own ?? "concise", source: own ? "repo" : "default" });
       }
       if (route === "PUT /api/tone") {
         const { tone, repo } = await body(req);
-        if (typeof tone !== "string") return json(res, 400, { error: "Send { tone, repo? }." });
-        toneByRepo.set(typeof repo === "string" ? repo : "", tone);
-        return json(res, 200, { tone, tones, repo: repo ?? null });
+        const key = typeof repo === "string" ? repo : "";
+        if (tone === null) toneByRepo.delete(key);
+        else if (typeof tone === "string") toneByRepo.set(key, tone);
+        else return json(res, 400, { error: "Send { tone, repo? }." });
+        const own = toneByRepo.get(key);
+        return json(res, 200, { tone: own ?? "concise", source: own ? "repo" : "default" });
       }
       const { pr, question } = await body(req);
       res.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8" });

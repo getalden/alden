@@ -253,7 +253,7 @@ try {
   await shot("guided-dark", {
     path: "/pr/cli/cli/10513",
     brief: true,
-    steps: `await s.key("s"); await s.click("2Walk through"); await s.sleep(800);`,
+    steps: `await s.key("s"); await s.key("g"); await s.sleep(800);`,
   });
   // The Tune popover from the model line, with a question asked (the demo's answer is canned; no model is called).
   await shot("tune-dark", {

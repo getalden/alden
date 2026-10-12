@@ -102,7 +102,7 @@ describe("the diff's logic", () => {
 describe("DiffView", () => {
   it("shows each file with its counts, renames, notices, line numbers and hunks", () => {
     const { container } = render(<DiffView diff={diff} prUrl="https://github.com/acme/api/pull/1" />);
-    expect(screen.getByText(/^4 files/)).toBeTruthy();
+    expect(screen.getByText(/^file \d+ of 4$/)).toBeTruthy();
     const charge = screen.getByRole("region", { name: "src/charge.ts" });
     expect(within(charge).getByText("+3")).toBeTruthy();
     expect(within(charge).getByText("−1")).toBeTruthy();
@@ -167,7 +167,7 @@ describe("DiffView", () => {
     expect(onComment).toHaveBeenCalledTimes(5);
   });
 
-  it("marks places and drafts in the gutter, and shows their text on click", () => {
+  it("shows places and drafts under their lines, folds a place, and sums them up in the file's header", () => {
     const { container } = render(
       <DiffView
         diff={diff}
@@ -181,16 +181,24 @@ describe("DiffView", () => {
         ]}
       />,
     );
+    // Under its line, a card for each place and each draft, saying who it's from.
     const place = screen.getByRole("button", { name: "Place E1: Logs the amount in cents" });
-    expect(place.closest("tr")?.getAttribute("data-row")).toBe("0:0:3");
+    expect(place.closest("tr")?.previousElementSibling?.getAttribute("data-row")).toBe("0:0:3");
+    const card = place.closest(".v3-dcard") as HTMLElement;
+    expect(card.textContent).toContain("Logs the amount in cents");
+    // Its label folds it to one line.
+    expect(place.getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(place);
-    expect(container.querySelector(".diff-note")?.textContent).toContain("Logs the amount in cents");
-    const comments = screen.getByRole("button", { name: "2 comments on this line" });
-    expect(comments.getAttribute("title")).toContain("You: Keep this?");
-    fireEvent.click(comments);
-    const notes = [...container.querySelectorAll(".diff-note")].map((n) => n.textContent).join(" ");
+    expect(place.getAttribute("aria-expanded")).toBe("false");
+    expect(card.querySelector(".v3-dcard-body")).toBeNull();
+    const notes = container.querySelector('[data-notes-for="0:0:4"]')?.textContent ?? "";
+    expect(notes).toContain("you · draft");
     expect(notes).toContain("Keep this?");
-    expect(notes).toContain("Claude · outdated");
+    expect(notes).toContain("Claude Code · outdated");
+    expect(notes).toContain("Agreed.");
+    // The file's header sums them up.
+    const head = within(screen.getByRole("region", { name: "src/charge.ts" })).getByRole("banner");
+    expect(head.querySelector(".diff-file-meta")?.textContent).toBe("E1 · 2 drafts");
     // A place on a whole file sits in its header.
     expect(within(screen.getByRole("region", { name: "logo.png" })).getByText("E2")).toBeTruthy();
   });
@@ -241,12 +249,19 @@ describe("DiffView", () => {
   });
 
   it("renders rows only as they near the screen", () => {
-    const observers: { callback: IntersectionObserverCallback; targets: Element[] }[] = [];
+    const observers: {
+      callback: IntersectionObserverCallback;
+      targets: Element[];
+      options?: IntersectionObserverInit | undefined;
+    }[] = [];
     vi.stubGlobal(
       "IntersectionObserver",
       class {
         targets: Element[] = [];
-        constructor(readonly callback: IntersectionObserverCallback) {
+        constructor(
+          readonly callback: IntersectionObserverCallback,
+          readonly options?: IntersectionObserverInit,
+        ) {
           observers.push(this);
         }
         observe(el: Element) {
@@ -263,7 +278,8 @@ describe("DiffView", () => {
     const { container } = render(<DiffView diff={big} />);
     expect(container.querySelectorAll("tr.dl")).toHaveLength(0);
     expect(container.querySelectorAll("tr.diff-placeholder")).toHaveLength(3);
-    const first = observers[0];
+    // The first run of rows (the file's own observer only says which file is on screen).
+    const first = observers.find((o) => o.options?.rootMargin === "800px 0px");
     act(() =>
       first?.callback(
         [{ isIntersecting: true, target: first.targets[0] } as unknown as IntersectionObserverEntry],
@@ -283,10 +299,10 @@ describe("DiffPane", () => {
     const load = vi.fn(async () => diff);
     const first = render(<DiffPane load={load} pr="acme/api#1" headSha="h1" />);
     expect(screen.getByText("Loading the diff…")).toBeTruthy();
-    await screen.findByText(/^4 files/);
+    await screen.findByText(/^file \d+ of 4$/);
     first.unmount();
     render(<DiffPane load={load} pr="acme/api#1" headSha="h1" />);
-    await screen.findByText(/^4 files/);
+    await screen.findByText(/^file \d+ of 4$/);
     expect(load).toHaveBeenCalledTimes(1);
     expect(load).toHaveBeenCalledWith("acme/api#1");
     expect(screen.queryByText(/new commits since this briefing/)).toBeNull();
@@ -320,27 +336,27 @@ describe("DiffPane since your review", () => {
   it("starts on the changes since the commit you reviewed, and switches to the whole PR", async () => {
     const load = loader(narrow);
     render(<DiffPane load={load} pr="acme/api#1" headSha="h1" since="abc1234def" />);
-    await screen.findByText(/^1 file/);
+    await screen.findByText(/^file \d+ of 1$/);
     expect(load).toHaveBeenLastCalledWith("acme/api#1", "abc1234def");
     expect(screen.getByRole("button", { name: "Since your review" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText("abc1234")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Whole PR" }));
-    await screen.findByText(/^4 files/);
+    await screen.findByText(/^file \d+ of 4$/);
     expect(load).toHaveBeenLastCalledWith("acme/api#1");
     // Back again: from the cache.
     fireEvent.click(screen.getByRole("button", { name: "Since your review" }));
-    await screen.findByText(/^1 file/);
+    await screen.findByText(/^file \d+ of 1$/);
     expect(load).toHaveBeenCalledTimes(2);
   });
 
   it("offers nothing on a PR you haven't reviewed, or on local changes", async () => {
     render(<DiffPane load={loader(narrow)} pr="acme/api#1" headSha="h1" />);
-    await screen.findByText(/^4 files/);
+    await screen.findByText(/^file \d+ of 4$/);
     expect(screen.queryByRole("button", { name: "Whole PR" })).toBeNull();
     cleanup();
     render(<DiffPane load={loader(narrow)} since="abc1234def" />);
-    await screen.findByText(/^4 files/);
+    await screen.findByText(/^file \d+ of 4$/);
     expect(screen.queryByRole("button", { name: "Whole PR" })).toBeNull();
   });
 
@@ -354,7 +370,7 @@ describe("DiffPane since your review", () => {
       />,
     );
     await screen.findByText(/isn't in this PR's history any more/);
-    expect(screen.getByText(/^4 files/)).toBeTruthy();
+    expect(screen.getByText(/^file \d+ of 4$/)).toBeTruthy();
     cleanup();
     clearDiffCache();
     render(<DiffPane load={loader({ ...narrow, files: [] })} pr="acme/api#1" headSha="h1" since="abc1234def" />);
@@ -378,8 +394,9 @@ describe("DiffPane since your review", () => {
         onComment={onComment}
       />,
     );
-    await screen.findByText(/^1 file/);
-    expect(screen.getAllByRole("button", { name: "1 comment on this line" })).toHaveLength(1);
+    await screen.findByText(/^file \d+ of 1$/);
+    expect(screen.getByText("Log the currency too")).toBeTruthy();
+    expect(screen.queryByText("Why was this removed?")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Comment on removed line 2" }));
     expect(onComment).not.toHaveBeenCalled();
     expect(screen.getByText("To comment on a removed line, switch to Whole PR.")).toBeTruthy();
@@ -447,7 +464,7 @@ describe("the reading steps: Brief, Walk through, Diff", () => {
     expect(load).not.toHaveBeenCalled();
     fireEvent.keyDown(window, { key: "d" });
     expect(diffTab.getAttribute("aria-selected")).toBe("true");
-    await screen.findByText(/^4 files/);
+    await screen.findByText(/^file \d+ of 4$/);
     expect(window.sessionStorage.getItem("alden.briefingTab")).toBe("diff");
     expect(screen.getByRole("button", { name: "Place E1: Logs cents" })).toBeTruthy();
     fireEvent.click(briefTab);
@@ -466,7 +483,7 @@ describe("the reading steps: Brief, Walk through, Diff", () => {
     // A new pane in the same window opens on the Diff tab.
     render(pane(load));
     expect(screen.getByRole("tab", { name: /^Diff/ }).getAttribute("aria-selected")).toBe("true");
-    await screen.findByText(/^4 files/);
+    await screen.findByText(/^file \d+ of 4$/);
     expect(load).toHaveBeenCalledTimes(1);
   });
 
@@ -485,7 +502,7 @@ describe("the reading steps: Brief, Walk through, Diff", () => {
 
     // g on the Diff tab walks through on the briefing.
     fireEvent.click(screen.getByRole("tab", { name: /^Diff/ }));
-    await screen.findByText(/^4 files/);
+    await screen.findByText(/^file \d+ of 4$/);
     act(() => void fireEvent.keyDown(document.body, { key: "g" }));
     await screen.findByText("Step 1 of 1");
     expect(screen.getByRole("tab", { name: /^Walk through/ }).getAttribute("aria-selected")).toBe("true");
@@ -579,7 +596,7 @@ describe("what you saw in the diff", () => {
         <DiffPane load={async () => diff} places={places} />
       </SeenContext.Provider>,
     );
-    await screen.findByText(/^4 files/);
+    await screen.findByText(/^file \d+ of 4$/);
     renderRows();
     expect(observers.some((o) => o.options?.threshold === 1)).toBe(false);
     local.unmount();
@@ -590,7 +607,7 @@ describe("what you saw in the diff", () => {
         <DiffPane load={async () => diff} pr="acme/api#1" headSha="h0" places={places} />
       </SeenContext.Provider>,
     );
-    await screen.findByText(/^4 files/);
+    await screen.findByText(/^file \d+ of 4$/);
     vi.useFakeTimers();
     renderRows();
     fire(markerObserver(screen.getByRole("button", { name: "Place E1: Logs cents" })), true);

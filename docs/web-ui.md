@@ -135,21 +135,34 @@ Pick a PR, then **Brief me** (or `b`). Alden fetches the PR, finds the callers o
 and asks the model, showing each stage as it goes. `Esc` stops it. A briefing keeps running if you look at another PR,
 and it's there when you come back.
 
-The briefing follows the CLI's order. See [Briefings and checks](checks.md) for what's in it.
+The briefing reads in one direction: what the PR does, the few places to look, then everything else folded away.
+See [Briefings and checks](checks.md) for what's in it.
 
-- **Needs your eyes**: the few places to look first (3 unless you change it in Settings), each with its file and line,
-  the reason, and the check that raised it. A place's `file:line` opens the [Diff](#the-diff-tab) at that line;
-  **GitHub ↗** beside it opens the PR's "Files changed" on GitHub.
-- **Checks**: every check Alden ran, with its evidence, and what it couldn't check.
-- **Callers outside the diff**, from the [code graph](code-graph.md).
-- **What the model says**, when it was asked: what the change does, whether it matches its title, and its findings.
+- **What it does**, when the model was asked: one paragraph, and whether it matches its title ("✓ matches its
+  title", "partly matches its title", "✕ doesn't match its title").
+- **Needs your eyes · 3 places**: the places to look first (3 unless you change it in Settings), as cards numbered
+  **E1**, **E2**… with how severe each is, its `file:line` and why it's there. The first is open. An open card shows
+  the code at the place with its line picked out, then **Comment** (the Comments drawer's editor at that place),
+  **Walk through from here** (the [walk-through](#walk-through) at that step), and **Useful**, **Not useful** and
+  **Dismiss** with what your reaction taught Alden. `+` and `−` open and close a card. A place's `file:line` opens the
+  [Diff](#the-diff-tab) at that line; **GitHub ↗** beside it opens the PR's "Files changed" on GitHub.
+- **Walk through these 3 places** (or `g`) starts the walk-through.
+- Four rows, each with a count and a line, that open to the whole section:
+  - **The model also noticed**: its other findings, with **Comment** and "Draft ready" when Alden drafted a comment.
+    The row's line says when one is "Because of your note on …" and when a draft is ready. When there are no drafts,
+    the reason ("No drafts: …") is under the findings and in the footer.
+  - **Checks**: every check Alden ran, with its evidence ("7 passed, 1 flagged, 2 skipped. … quietened for this repo.").
+    Flagged checks start open. Places hidden by your feedback are listed here too.
+  - **Not checked**: what Alden couldn't check.
+  - **Files changed**: every file with its `+` and `−` counts.
 
 Each place, finding and flagged check has **Useful** and **Not useful**, which teach Alden what you look for, and
 **Dismiss**, which hides one place on this PR. A model finding raised because of one of your notes says "Because of
 your note: …". Useful on it confirms the note; after Not useful, it offers **Stop applying this note to app/api?**
 (**Stop applying**, then **Undo**) and **Edit the note**, and without either nothing changes. See
 [Findings from your notes](memory.md#findings-from-your-notes). **You missed something** tells Alden what it should have flagged.
-"Shaped by your feedback" says what your feedback changed in this briefing.
+One line under the rows, "Shaped by your feedback: …", says what your feedback changed in this briefing, with
+**What Alden knows**.
 
 ### Tune: model, tone, effort, callers and cap
 
@@ -220,16 +233,20 @@ Once a PR is briefed, **3 Diff** (or `d`) shows the code itself, so you don't ha
   large for GitHub to send (with a link to it on GitHub).
 - Lines are unified, with the old and new line numbers. Each file opens and closes from its header, or `f`;
   **Collapse all** folds them all.
-- Alden's places to look are marked **E1**, **E2**… at their lines (a place on a whole file sits in its header). `]`
-  and `[` go to the next and previous place.
-- Your comments show as a ✎ badge at their lines. Hover one for its text, or click it to open the text under the line.
+- Above the files, "file 2 of 6" says which file you're reading.
+- Each file's header has its path, its `+` and `−` counts, and what's marked in it: "E1 · 1 draft".
+- Lines show their old and new numbers and a `+` or `−`. Alden's places to look sit under their lines as cards,
+  "E1 · high" and why (a place on a whole file is named in its header); click the label to fold one. `]` and `[` go to
+  the next and previous place.
+- Your comments sit under their lines too, each saying who it's from first: "you · draft", "Claude Code · outdated",
+  and Alden's drafts you haven't kept dashed, "Alden · suggested".
 - On a PR, **+** beside a line starts a comment on it in the Comments drawer. Shift-click a second line, or drag, for
   a range on the same side of one hunk.
 - On a PR, the review threads already on it show under their lines: who's in each and how many comments, open
   unless resolved. **Reply** opens that thread's Reply box in the Comments drawer. See
   [Replying in a thread](comments.md#replying-in-a-thread).
 
-A marker that's been on screen for 1.5 seconds counts as a place you saw, which Alden learns from when you send your
+A place's card that's been on screen for 1.5 seconds counts as a place you saw, which Alden learns from when you send your
 review: see [Places you saw](memory.md#places-you-saw).
 
 For a PR, the diff is the PR's latest push. If that's newer than the briefing, a line above the diff says so, since
@@ -237,8 +254,9 @@ places may have moved. For **My changes**, it's your uncommitted changes, as the
 
 ### Since your review
 
-On a PR you reviewed before, the Diff tab opens on **Since your review**: only what changed from the commit you last
-reviewed to the PR's head, so a second look starts where your first one stopped. **Whole PR** shows everything.
+On a PR you reviewed before, the Diff tab has **Whole PR | Since your review** above the files, and opens on **Since
+your review**: only what changed from the commit you last reviewed to the PR's head, so a second look starts where your
+first one stopped. **Whole PR** shows everything.
 
 - Places to look and your comments still show at their lines when the narrower diff has them. The old side is the
   commit you reviewed rather than the PR's base, so comments on removed lines show, and are written, in **Whole PR**.
@@ -252,28 +270,30 @@ Large diffs stay quick: rows render as you scroll to them, and files over 400 li
 **Show**. Alden keeps a PR's diff per push while `alden ui` runs, so opening it again is instant. The tab you were on
 is remembered until you close the window.
 
-## Guided review
+## Walk through
 
-![Guided review, step 1 of 3: a public API change in git/client.go, with the code at that place](../site/src/assets/screens/guided-dark.png)
+![Walk through, step 1 of 3: a public API change in git/client.go, with the code at that place](../site/src/assets/screens/guided-dark.png)
 
-When a briefing has places that need your eyes, **2 Walk through** in the PR's header, **Start guided review**, or
-`g` (from the Diff too) takes them one at a time, in
-Alden's order. Each step shows:
+When a briefing has places that need your eyes, **2 Walk through** in the PR's header, **Walk through these 3 places**, or `g` (from the Diff too) takes them one at a time, in
+Alden's order, in place of the brief. **Walk through from here** on a place's card starts at that place. Each step
+shows:
 
-- "Step 2 of 4", the place's title, and why it's there: its reason, the check, and how severe.
-- The code at that place, a few lines either side, from the PR's diff.
-- **Look at these too**: the files worth opening beside it, from the [code graph](code-graph.md#related-files). Other
-  callers of the changed code, tests that use it or import its file, and files that import it, each with its line. A
-  file in the diff opens its lines in place; the rest link to the file on GitHub at the PR's head.
-- **Useful**, **Not useful** and **Dismiss**, as in the briefing, and **Comment**, which opens the Comments drawer's
-  editor at that place.
+- "Step 2 of 4" with a dot for each step, and the place's `file:line` (a link to it on GitHub at the PR's head).
+- Its number and how severe it is ("E2 · high"), the check, its title, and why it's there.
+- The code at that place, a few lines either side, from the PR's diff, with its line picked out.
+- **Look at these too**: the files worth opening beside it, from the [code graph](code-graph.md#related-files), one
+  row each with what it is (caller, test, imports it) and where. A file in the diff opens its lines in place; the rest
+  link to the file on GitHub at the PR's head.
+- **Comment here**, which opens the Comments drawer's editor at that place, and **Useful**, **Not useful** and
+  **Dismiss**, as in the brief.
 
-After Alden's places, the model's other findings that point at code follow as extra steps, with **Comment** too. A
+After Alden's places, the model's other findings that point at code follow as extra steps, with **Comment here** too. A
 step from one of your notes says "Because of your note: …" and has the same offer after Not useful.
 
-`n` and `p` move between steps. `Esc` leaves, and **Resume guided review at step 3** takes you back there while the
-window is open. The last step offers **Finish: review your comments**, which opens the drawer at the review body.
-For **My changes**, guided review shows the places and their files to look at, without the code.
+**Previous** (`p`) and **Next** (`n`) move between steps. `Esc`, or **Back to the brief**, goes back, and **Resume the
+walk-through at step 3** takes you back there while the window is open. The last step offers **Finish: review your
+comments**, which opens the drawer at the review body. For **My changes**, the walk-through shows the places and their
+files to look at, without the code.
 
 On a PR, a step that's been in front of you for 1.5 seconds counts as a place you saw, which Alden learns from when you
 send your review: see [Places you saw](memory.md#places-you-saw). Nothing about it leaves your machine.
@@ -325,7 +345,7 @@ it's a full-width sheet instead, with no rail.
 There's one editor, always in the drawer. It opens from:
 
 - **Comment** on a place in "Needs your eyes", on a flagged check's evidence line, on something the model also
-  noticed, or on a step of guided review. `c` does the same for the place you're on.
+  noticed, or on a step of the walk-through. `c` does the same for the place you're on.
 - **+** beside a line in the Diff tab, or a range picked there.
 - **Comment on a line…** in the drawer: pick a changed file and give a line (`12`) or a range (`4–9`). A removed
   file's line is on the old side.
@@ -404,7 +424,7 @@ refuses, the summary shows why and keeps your drafts.
 ## My changes
 
 **My changes** briefs your uncommitted changes (staged, unstaged and untracked) in the clone `alden ui` started in,
-before you open a PR. It has the same toolbar, Diff tab and guided review as a PR, without comments.
+before you open a PR. It has the same toolbar, Diff tab and walk-through as a PR, without comments.
 
 ## Memory
 
@@ -487,12 +507,12 @@ Keys never fire while you're typing in a text box.
 | `d` | Switch between the briefing and its diff (3 Diff) |
 | `]` `[` | In the Diff tab: next and previous place to look (E1, E2…) |
 | `f` | In the Diff tab: open or close the file you're in |
-| `g` | Walk through the places (guided review), or resume it at the step you left |
-| `n` `p` | Next and previous step in guided review |
+| `g` | Walk through the places that need your eyes, or resume at the step you left |
+| `n` `p` | Next and previous step of the walk-through |
 | `s` | Open the Comments drawer, or fold it to its rail |
 | `c` | Comment on the place you're on (a place in "Needs your eyes", an evidence line); elsewhere, open "Comment on a line…" |
 | `⌘↵` / `Ctrl+↵` | Save the comment you're writing |
-| `Esc` | Cancel the comment you're writing, or leave the send summary; leave guided review; close the Comments drawer; stop a running briefing; in a narrow window, back to the queue |
+| `Esc` | Cancel the comment you're writing, or leave the send summary; go back from the walk-through to the brief; close the Comments drawer; stop a running briefing; in a narrow window, back to the queue |
 
 ## Security
 

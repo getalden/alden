@@ -8,19 +8,18 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import type { Api, ReviewRequest } from "../api";
 import { cachedDiff } from "../diff";
 import { type BriefingComments, type CommentPlace, useDrawerOpen } from "../drafts";
 import type { BriefingFeedback } from "../feedback";
-import { guidedKey, guidedSteps, savedProgress, subscribeProgress } from "../guided";
+import { guidedKey, guidedSteps, leaveGuided, startGuided, useGuidedProgress } from "../guided";
 import { useActiveTime } from "../review-time";
 import type { ReviewRun } from "../reviews";
 import { onLinkClick } from "../router";
 import { AldenAssistContext, DraftMyReview, useAssist } from "./AldenAssist";
 import { BriefingAge } from "./BriefingAge";
-import { BriefingView } from "./BriefingView";
+import { BriefingView, severityOf } from "./BriefingView";
 import {
   CommentsDrawer,
   type DrawerFocus,
@@ -253,14 +252,6 @@ function useBriefingTab(): [BriefingTab, (tab: BriefingTab) => void] {
 export type ReadingStep = "brief" | "walk" | "diff";
 
 /**
- * Guided review keeps its own state and listens for its keys (g starts it, Esc leaves it). Until it takes the step as
- * a prop, the header drives it the way the keyboard does, and hears where it is through `subscribeProgress`.
- */
-function pressKey(key: string) {
-  document.body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-}
-
-/**
  * Where you are in a briefing (Brief, Walk through, Diff) and the way between them. d switches between the briefing
  * and the diff; g walks through (guided review's own key); a place's file:line in the briefing opens the diff there.
  */
@@ -270,7 +261,8 @@ function useReadingSteps(briefing: Briefing | undefined) {
   const [diffSeen, setDiffSeen] = useState(tab === "diff");
   const [focus, setFocus] = useState<{ path: string; line?: number | undefined }>();
   const key = briefing ? guidedKey(briefing) : undefined;
-  const walking = useSyncExternalStore(subscribeProgress, () => (key ? savedProgress(key).active : false));
+  // The walk-through's own store (guided.ts): the header and the briefing switch it the same way.
+  const walking = useGuidedProgress(key ?? "").active && key !== undefined;
   const walkable = useMemo(
     () => (briefing ? briefing.needsYourEyes.length > 0 && guidedSteps(briefing).steps.length > 0 : false),
     [briefing],
@@ -310,10 +302,11 @@ function useReadingSteps(briefing: Briefing | undefined) {
     (next: ReadingStep) => {
       if (next === "diff") return choose("diff");
       choose("briefing");
-      if (next === "walk" && !walking && walkable) pressKey("g");
-      if (next === "brief" && walking) pressKey("Escape");
+      if (!key) return;
+      if (next === "walk" && !walking && walkable) startGuided(key);
+      if (next === "brief" && walking) leaveGuided(key);
     },
-    [choose, walking, walkable],
+    [choose, key, walking, walkable],
   );
   return { tab, step, go, walkable, diffSeen, focus, showInDiff };
 }
@@ -388,7 +381,17 @@ function BriefingPanels(props: {
     () =>
       briefing.needsYourEyes.flatMap((item, i) =>
         item.anchor
-          ? [{ path: item.anchor.path, line: item.anchor.line, title: item.title, index: i + 1, checkId: item.checkId }]
+          ? [
+              {
+                path: item.anchor.path,
+                line: item.anchor.line,
+                title: item.title,
+                reason: item.reason,
+                index: i + 1,
+                checkId: item.checkId,
+                severity: severityOf(item, briefing),
+              },
+            ]
           : [],
       ),
     [briefing],
