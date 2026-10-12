@@ -7,7 +7,7 @@ Alden runs on your machine. There is no Alden server, and nothing is sent to Ald
 
 | Goes to | What | When |
 | --- | --- | --- |
-| GitHub | API requests with your token: review requests, PR details, diffs, CI status, CODEOWNERS. Git fetches of PRs for the code graph. | `alden queue`, `alden review <pr>`, `alden stats`, `alden ui`, the desktop app, `alden mcp` |
+| GitHub | API requests with your token: review requests, PR details, diffs, CI status, CODEOWNERS, and the review threads of PRs you reviewed (for [follow-ups](desktop.md#follow-ups-on-prs-you-reviewed), read only). Git fetches of PRs for the code graph. | `alden queue`, `alden review <pr>`, `alden stats`, `alden ui`, the desktop app, `alden mcp` |
 | GitHub, only when you send | The review you send: its body, comments and verdict, exactly as shown before you confirmed. Alden posts only what you send. | The UI's Send button, `alden send` |
 | PostHog (EU), only if you said yes | Anonymous usage stats: see [Usage stats](telemetry.md) | After each command; every minute while `alden ui` runs |
 | Your model provider | The PR's title and description, the diff, a few lines around callers outside the diff, and your [notes](memory.md#your-notes) for the repo. | `alden review`, unless `--no-llm` |
@@ -33,13 +33,17 @@ API data by default.
 ## What stays on your machine
 
 Feedback, the PRs you open and what Alden learns from them stay in `~/.alden/alden.db` ([Learning and
-memory](memory.md)). So do the comments you're drafting, until you send or delete them; they're never in usage stats
-or the feedback export ([Comments and sending a review](comments.md)). So do the [places you
+memory](memory.md)). So do the comments you're drafting, and the ones Alden drafted for you from its model's
+findings, until you send or delete them; they're never in usage stats (which count keeps, edits and drops, never
+text) or the feedback export ([Comments and sending a review](comments.md)). So do the [places you
 saw](memory.md#places-you-saw) in guided review and the Diff tab: which of Alden's places (check, file and line) were
 in front of you for 1.5 seconds, kept 90 days. They're never in usage stats or the feedback export either, and
 **Learn from my reviews** off (`learning.fromReviews`) stops Alden noting them. So does where each line comment you sent
 went (file, line, and a suggestion's code, never the comment's text, kept 30 days), to ask GitHub later whether it was
-applied or resolved ([After you send](comments.md#after-you-send)). So do your notes, what you've spent on models, usage stats waiting to be sent (only if you said
+applied or resolved ([After you send](comments.md#after-you-send)). So do the [follow-ups](desktop.md#follow-ups-on-prs-you-reviewed)
+on PRs you reviewed: each of your threads as last seen (resolved, outdated, its newest comment's id, never the text),
+and one line per piece of news ("Ana replied to your comment on src/pay.ts:40"), kept 30 days, plus any PR's own
+notification level. So do your notes, what you've spent on models, usage stats waiting to be sent (only if you said
 yes), and this install's anonymous id and the salt for repo hashes. Checkouts of PRs for the code graph are in
 `~/.alden/worktrees`. See [Files Alden keeps](configuration.md#files-alden-keeps). Your GitHub token is stored in the
 OS keychain, or, where there's no keychain, in a file only your user can read. `alden auth logout` removes it. So is an

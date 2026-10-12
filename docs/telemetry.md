@@ -36,7 +36,8 @@ dropped.
 | `feedback_given` | Useful, not useful or dismiss; on a place, finding or check; which of Alden's checks |
 | `missed_reported` | That you reported a miss, and whether you said where (not what) |
 | `reaction_given`, `pr_opened`, `memory_changed` | The reaction; the opened PR's rank; add, edit, forget, pause… |
-| `draft_changed` | That a comment was drafted, edited or discarded; by you or Claude Code; on a line or a general note. Never its text |
+| `draft_changed` | That a comment was drafted, edited, discarded or (one of Alden's) kept; by you, Claude Code or Alden; on a line or a general note. Never its text |
+| `draft_assisted` | That a comment or reply you saved was drafted with Alden ("Draft with Alden"), whether it's a reply or on a line, and whether you changed Alden's text first. Never the text |
 | `review_sent` | Comment, approve or request changes; how many line comments and general notes, how many drafted by you and by Claude Code; whether there was a body; how many flagged places it didn't comment near |
 | `review_signals` | What a review you sent taught Alden, as counts by kind: comments requesting changes, suggestions and comments near flags, flags approved past without a word, comments where Alden flagged nothing; or (`source: "outcome"`) how many suggestions authors applied and comments they resolved since the last check. Never which check, file or line |
 | `stats_viewed` | A salted repo hash, how many PRs, whether there's a before and after, and median time to first review and cycle time before and after |

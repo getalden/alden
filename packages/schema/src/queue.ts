@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FollowUpSummarySchema } from "./follow-ups.js";
 import { ScoreLineSchema } from "./rank.js";
 
 /**
@@ -7,7 +8,11 @@ import { ScoreLineSchema } from "./rank.js";
  */
 export const QUEUE_SCHEMA_VERSION = 1;
 
-export const CiStateSchema = z.enum(["success", "failure", "pending", "none"]);
+/**
+ * CI on a PR's latest commit. `cancelled`: nothing failed, but a run was cancelled and didn't run again, so CI didn't
+ * finish; it isn't the author's to fix, so it's never "failing".
+ */
+export const CiStateSchema = z.enum(["success", "failure", "pending", "cancelled", "none"]);
 
 export const MajorBumpSchema = z.object({
   name: z.string().describe("the package, as its manifest names it"),
@@ -40,7 +45,17 @@ export const PullRequestFactsSchema = z.object({
   ci: CiStateSchema,
   mergeable: z.enum(["mergeable", "conflicting", "unknown"]),
   reviews: z.array(
-    z.object({ author: z.string().nullable(), state: z.string(), submittedAt: z.iso.datetime().nullable() }),
+    z.object({
+      author: z.string().nullable(),
+      state: z.string(),
+      submittedAt: z.iso.datetime().nullable(),
+      commit: z
+        .string()
+        .optional()
+        .describe(
+          "the head commit the review was submitted on; absent in queues fetched before Alden read it, and when GitHub no longer has it",
+        ),
+    }),
   ),
   request: z.object({
     direct: z.boolean().describe("the viewer was asked by name"),
@@ -81,6 +96,9 @@ export const RankedPullRequestSchema = z.object({
   reasons: z.array(z.string()).describe("short human reasons, heaviest first"),
   waitingHours: z.number().describe("hours since the viewer was asked, or since the PR opened"),
   waitingOnAuthor: z.boolean().describe("CI is failing, so the author has to act before a review is worth it"),
+  followUp: FollowUpSummarySchema.optional().describe(
+    "you reviewed this PR before: what's happened since, and whether a re-review was requested",
+  ),
 });
 
 export const RankedQueueSchema = z.object({

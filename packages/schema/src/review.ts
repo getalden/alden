@@ -62,7 +62,25 @@ export const ReviewDraftSchema = z
     linkTo: DraftLinkSchema.optional().describe(
       "on a general note: the line (or lines, or file) it's about, outside the PR's diff. It posts in the review body with a link to that code at `headSha`, the PR's head when it was written. Absent on an inline comment and a plain note",
     ),
-    source: z.enum(["you", "claude"]).describe("who wrote it: you, or Claude Code drafting for you"),
+    source: z
+      .enum(["you", "claude", "alden"])
+      .describe(
+        "who wrote it: you, Claude Code drafting for you, or Alden drafting from its model's finding (until you keep or edit it, when it becomes yours)",
+      ),
+    drafted: z
+      .object({
+        checkId: z.string().describe('the check of the finding it was drafted from: "model" for the model\'s own'),
+        title: z.string().describe("the finding's title"),
+      })
+      .optional()
+      .describe("on a comment Alden drafted: the finding it came from. Kept after you keep or edit it, for learning"),
+    inReplyTo: z
+      .string()
+      .optional()
+      .describe(
+        "a reply: the review thread's GraphQL node id. A reply has no path or line of its own; it posts in that thread with the review",
+      ),
+    resolve: z.boolean().optional().describe("on a reply: resolve the thread once the review is sent"),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
     state: z
@@ -71,10 +89,17 @@ export const ReviewDraftSchema = z
         "outdated: the PR moved on and the line couldn't be found again, so it can't be sent until it's placed",
       ),
   })
-  .refine((d) => d.body.trim() !== "" || d.suggestion !== undefined, {
-    message: "a comment needs some text, unless it's a suggestion",
+  .refine((d) => d.body.trim() !== "" || d.suggestion !== undefined || (d.inReplyTo !== undefined && d.resolve), {
+    message: "a comment needs some text, unless it's a suggestion (or a reply that only resolves its thread)",
     path: ["body"],
   })
+  .refine(
+    (d) => d.inReplyTo === undefined || (d.path === undefined && d.linkTo === undefined && d.suggestion === undefined),
+    {
+      message: "a reply posts in its thread: it has no path, link or suggestion of its own",
+      path: ["inReplyTo"],
+    },
+  )
   .refine((d) => d.linkTo === undefined || d.path === undefined, {
     message: "a linked note goes in the review body: it has linkTo, not a path of its own",
     path: ["linkTo"],
@@ -85,8 +110,16 @@ export const ReviewEventSchema = z.enum(["COMMENT", "APPROVE", "REQUEST_CHANGES"
 
 export const SendReviewResultSchema = z.object({
   url: z.string().describe("the review on GitHub"),
-  posted: z.number().int().min(0).describe("comments posted: inline ones and general notes"),
+  posted: z.number().int().min(0).describe("comments posted: inline ones, general notes and replies"),
   review: ReviewEventSchema,
+  replies: z.number().int().min(0).optional().describe("of `posted`, replies in existing review threads"),
+  resolved: z.number().int().min(0).optional().describe("threads resolved after the review was submitted"),
+  notResolved: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "threads you asked to resolve that GitHub wouldn't resolve, one line each saying which and why; the review itself posted",
+    ),
   learning: z
     .array(z.string())
     .optional()

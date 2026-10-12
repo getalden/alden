@@ -11,8 +11,8 @@ import { type GenerateResult, LlmError, type LlmProvider } from "../../llm/provi
 import { closeStores } from "../../store/db.js";
 import { buildBriefing } from "../briefing.js";
 import { mergeLookHere } from "./merge.js";
-import type { LlmOutput } from "./prompt.js";
-import { addModelReview } from "./run.js";
+import { type LlmOutput, LlmOutputSchema, LlmOutputWithDraftsSchema, SYSTEM_PROMPT, systemPrompt } from "./prompt.js";
+import { addModelReview, DRAFTS_OFF_NOTE, INJECTED_DRAFTS_NOTE, NONE_DRAFTED_NOTE, NONE_TO_DRAFT_NOTE } from "./run.js";
 
 const FIXTURES = join(import.meta.dirname, "../../github/__fixtures__");
 const config = AldenConfigSchema.parse({});
@@ -430,6 +430,185 @@ describe("addModelReview on a real PR", () => {
     });
     const result = await addModelReview(briefing, { provider: model({}).provider, config, ledger, files });
     expect(result.llm).toMatchObject({ status: "over_budget", note: expect.stringMatching(/nearly used up/) });
+  });
+});
+
+describe("drafted comments in the model's answer", () => {
+  // Line 191 is an added line: `export function fetchCatalog(…)`.
+  const path = "public/app/features/explore/SignalExplorer/data/metricResourceClient.ts";
+
+  /** A stand-in model that records the system prompt and output schema it was sent. */
+  function drafting(output: LlmOutput) {
+    const requests: { system: string; schema: unknown }[] = [];
+    const provider: LlmProvider = {
+      provider: "anthropic",
+      model: "claude-sonnet-5",
+      countInputTokens: async () => 10_000,
+      generate: async <T>(request: { system: string; schema: unknown }) => {
+        requests.push({ system: request.system, schema: request.schema });
+        return {
+          output,
+          usage: { inputTokens: 10_000, outputTokens: 2_000, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          stopReason: "end",
+          model: "claude-sonnet-5",
+        } as GenerateResult<T>;
+      },
+    };
+    return { provider, requests };
+  }
+  const answer: LlmOutput = {
+    summary: "s",
+    matchesTitle: { verdict: "yes", reason: "r" },
+    findings: [
+      {
+        title: "Callers break",
+        detail: "d",
+        severity: "high",
+        anchors: [{ path, line: 191 }],
+        topic: "api",
+        draft: { body: "fetchCatalog now returns a Catalog: check the callers in SignalExplorer." },
+      },
+      {
+        title: "Naming nit",
+        detail: "d",
+        severity: "low",
+        anchors: [{ path, line: 191 }],
+        draft: { body: "Rename this." },
+      },
+    ],
+  };
+
+  it("asks for drafts on a PR when drafts.auto is on, and keeps the ones that check out", async () => {
+    const { briefing, files } = recorded("grafana", 133736);
+    const { provider, requests } = drafting(answer);
+    const result = await addModelReview(briefing, {
+      provider,
+      config,
+      ledger: new SpendLedger(join(dir, "a.db")),
+      files,
+    });
+    expect(requests[0]?.system).toBe(systemPrompt(true));
+    expect(requests[0]?.system.startsWith(SYSTEM_PROMPT)).toBe(true);
+    expect(requests[0]?.schema).toBe(LlmOutputWithDraftsSchema);
+    expect(result.llm?.findings.map((f) => f.draft)).toEqual([
+      { body: "fetchCatalog now returns a Catalog: check the callers in SignalExplorer." },
+      undefined, // low severity: no draft
+    ]);
+    expect(result.llm?.draftsNote).toBeUndefined();
+    expect(BriefingSchema.safeParse(JSON.parse(JSON.stringify(result))).error).toBeUndefined();
+  });
+
+  it("drops the draft of a finding your feedback quietened", async () => {
+    const { briefing, files } = recorded("grafana", 133736);
+    const { provider } = drafting({
+      ...answer,
+      findings: [
+        {
+          title: "No test for fetchCatalog",
+          detail: "d",
+          severity: "medium",
+          anchors: [{ path, line: 191 }],
+          topic: "tests",
+          draft: { body: "Add a test for fetchCatalog." },
+        },
+      ],
+    });
+    const verdict = (number: number) => ({
+      schemaVersion: 1 as const,
+      id: `v${number}`,
+      at: "2026-09-20T12:00:00.000Z",
+      kind: "verdict" as const,
+      target: { kind: "pr" as const, repo: "acme/shop", number },
+      briefingAt: "2026-09-20T12:00:00.000Z",
+      item: { source: "check" as const, checkId: "tests.missing", title: "t", placement: "eyes" as const },
+      verdict: "not_needed" as const,
+    });
+    const learning = learn({ repo: "acme/shop", feedback: [1, 2, 3].map(verdict), opens: [], memory: [] });
+    const result = await addModelReview(briefing, {
+      provider,
+      config,
+      ledger: new SpendLedger(join(dir, "a.db")),
+      files,
+      learning,
+    });
+    expect(result.llm?.findings).toEqual([expect.not.objectContaining({ draft: expect.anything() })]);
+  });
+
+  it("asks exactly as before, and keeps no draft, when drafts.auto is off", async () => {
+    const { briefing, files } = recorded("grafana", 133736);
+    const { provider, requests } = drafting(answer);
+    const off = AldenConfigSchema.parse({ drafts: { auto: false } });
+    const result = await addModelReview(briefing, {
+      provider,
+      config: off,
+      ledger: new SpendLedger(join(dir, "a.db")),
+      files,
+    });
+    expect(requests[0]?.system).toBe(SYSTEM_PROMPT);
+    expect(requests[0]?.schema).toBe(LlmOutputSchema);
+    expect(result.llm?.findings.some((f) => f.draft)).toBe(false);
+    expect(result.llm?.draftsNote).toBe(DRAFTS_OFF_NOTE);
+  });
+
+  it("asks for no drafts on local changes", async () => {
+    const { briefing, files } = recorded("grafana", 133736);
+    const { provider, requests } = drafting(answer);
+    const local = { ...briefing, target: { kind: "local" as const, repoRoot: "/x", branch: null } };
+    const result = await addModelReview(local, { provider, config, ledger: new SpendLedger(join(dir, "a.db")), files });
+    expect(requests[0]?.system).toBe(SYSTEM_PROMPT);
+    expect(result.llm?.draftsNote).toBeUndefined();
+  });
+
+  it("says why a PR got no drafts when none of the model's findings is one Alden drafts for", async () => {
+    const { briefing, files } = recorded("grafana", 133736);
+    const run = async (findings: LlmOutput["findings"]) =>
+      (
+        await addModelReview(briefing, {
+          provider: drafting({ ...answer, findings }).provider,
+          config,
+          ledger: new SpendLedger(join(dir, "a.db")),
+          files,
+        })
+      ).llm?.draftsNote;
+    // A medium finding on a whole file and a low one (a check's critical place isn't the model's): nothing to draft.
+    const wholeFile = { title: "Whole file", detail: "d", severity: "medium" as const, anchors: [{ path }] };
+    const low = { title: "Nit", detail: "d", severity: "low" as const, anchors: [{ path, line: 191 }] };
+    expect(await run([wholeFile, { ...low, draft: { body: "Rename this." } }])).toBe(NONE_TO_DRAFT_NOTE);
+    expect(await run([])).toBe(NONE_TO_DRAFT_NOTE);
+    // One that could have a draft, but the model wrote none.
+    expect(await run([{ ...low, severity: "high" }])).toBe(NONE_DRAFTED_NOTE);
+    expect(NONE_TO_DRAFT_NOTE).toBe(
+      "No drafts: Alden drafts comments for the model's medium and high findings on changed lines, and this briefing had none.",
+    );
+  });
+
+  it("drafts nothing for a PR with text aimed at AI reviewers, and says why", async () => {
+    const { briefing, files } = recorded("grafana", 133736);
+    const { provider, requests } = drafting(answer);
+    const injected = {
+      ...briefing,
+      checks: [
+        ...briefing.checks,
+        {
+          id: "injection.ai",
+          title: "Text aimed at AI reviewers",
+          status: "flagged" as const,
+          severity: "high" as const,
+          summary: "s",
+          evidence: [],
+          heuristic: true,
+        },
+      ],
+    };
+    const result = await addModelReview(injected, {
+      provider,
+      config,
+      ledger: new SpendLedger(join(dir, "a.db")),
+      files,
+    });
+    expect(requests[0]?.system).toBe(SYSTEM_PROMPT);
+    expect(result.llm?.findings.some((f) => f.draft)).toBe(false);
+    expect(result.llm?.draftsNote).toBe(INJECTED_DRAFTS_NOTE);
   });
 });
 

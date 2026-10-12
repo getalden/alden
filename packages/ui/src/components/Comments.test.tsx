@@ -151,10 +151,22 @@ function fakeApi(start: ReviewDraft[] = [], unaddressed: Unaddressed[] = []) {
       state.drafts = state.drafts.filter((d) => d.id !== id);
       return { ok: true as const };
     },
+    keepDrafts: async (which: { ids: string[] } | { pr: string }) => {
+      state.calls.push(`KEEP ${JSON.stringify(which)}`);
+      const kept: ReviewDraft[] = [];
+      state.drafts = state.drafts.map((d) => {
+        if (d.source !== "alden" || ("ids" in which && !which.ids.includes(d.id))) return d;
+        const mine = { ...d, source: "you" as const };
+        kept.push(mine);
+        return mine;
+      });
+      return { kept };
+    },
     sendReview: async (review: { pr: string; event: ReviewEvent; body?: string }): Promise<SendReviewResult> => {
       state.calls.push(`SEND ${JSON.stringify(review)}`);
       if (state.sendError) throw new ApiError(422, state.sendError);
-      const posted = state.drafts.filter((d) => d.path).length;
+      // Like the server: Alden's drafts you didn't keep don't post.
+      const posted = state.drafts.filter((d) => d.path && d.source !== "alden").length;
       state.drafts = [];
       return {
         url: "https://github.com/acme/api/pull/1#pullrequestreview-9",
@@ -512,6 +524,33 @@ describe("notes linking to code outside the diff", () => {
       within(drawer() as HTMLElement).getByRole("heading", { name: "Comment on py/orders/tasks.py, line 5" }),
     ).toBeTruthy();
   });
+
+  it('says "Draft ready" on a finding Alden drafted a comment for, until you keep or drop it', async () => {
+    const fake = fakeApi([
+      draft("a", {
+        path: "py/orders/tasks.py",
+        line: 5,
+        side: "RIGHT",
+        source: "alden",
+        drafted: { checkId: "model", title: "Retry loops" },
+        body: "Stop retrying after five tries.",
+      }),
+    ]);
+    const finding = {
+      title: "Retry loops",
+      detail: "It never stops.",
+      severity: "medium" as const,
+      anchors: [{ path: "py/orders/tasks.py", line: 5 }],
+      draft: { body: "Stop retrying after five tries." },
+    };
+    const withDraft: Briefing = {
+      ...briefing,
+      llm: { status: "ok", findings: [finding], droppedFindings: 0, omittedFiles: [] },
+    };
+    render(<Harness api={fake.api} b={withDraft} />);
+    const noticed = screen.getByRole("region", { name: "The model also noticed · 1" });
+    await waitFor(() => expect(within(noticed).getByText("Draft ready")).toBeTruthy());
+  });
 });
 
 describe("comment keys", () => {
@@ -646,6 +685,66 @@ describe("sending from the drawer", () => {
       ),
     );
     expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Comments" }));
+  });
+
+  it("labels Alden's drafts with Keep, Edit and Drop, and sends only the ones you kept", async () => {
+    const drafted = { checkId: "model", title: "Rounding" };
+    const { state } = await setup([
+      draft("a", { path: "src/charge.ts", line: 3, side: "RIGHT", source: "alden", drafted, body: "Round to cents." }),
+      draft("bb", { path: "src/charge.ts", line: 9, side: "RIGHT", source: "alden", drafted, body: "Check the cap." }),
+      draft("ccc", { path: "src/charge.ts", line: 20, side: "RIGHT", source: "alden", drafted, body: "Log less." }),
+      draft("dddd", { body: "Thanks!" }),
+    ]);
+    expect(screen.getAllByText("Drafted by Alden")).toHaveLength(3);
+    const bar = screen.getByRole("region", { name: "Alden's drafts" });
+    expect(bar.textContent).toContain("Alden drafted 3 comments");
+    expect(bar.textContent).toContain("3 drafts by Alden not kept won't be sent.");
+    // Untouched, they don't count toward what's sent.
+    expect(screen.getByRole("button", { name: "Send review · 1 comment" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep comment on src/charge.ts, line 3" }));
+    await waitFor(() => expect(state.calls).toContain(`KEEP ${JSON.stringify({ ids: ["a"] })}`));
+    await waitFor(() => expect(screen.getAllByText("Drafted by Alden")).toHaveLength(2));
+    expect(screen.getByRole("button", { name: "Send review · 2 comments" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit comment on src/charge.ts, line 9" }));
+    const edit = screen.getByRole("textbox", { name: "Edit comment on src/charge.ts, line 9" });
+    fireEvent.change(edit, { target: { value: "Check the daily cap." } });
+    fireEvent.keyDown(edit, { key: "Enter", metaKey: true });
+    await waitFor(() => expect(state.calls).toContain(`PATCH bb {"body":"Check the daily cap."}`));
+
+    fireEvent.click(screen.getByRole("button", { name: "Drop comment on src/charge.ts, line 20" }));
+    await waitFor(() => expect(state.calls).toContain("DELETE ccc"));
+    await waitFor(() => expect(screen.queryByText("Log less.")).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Send review/ }));
+    const summary = await screen.findByRole("region", { name: "Send this review to acme/api#1?" });
+    expect(within(summary).getByText("Round to cents.")).toBeTruthy();
+  });
+
+  it("keeps or drops all of Alden's drafts at once", async () => {
+    const drafted = { checkId: "model", title: "Rounding" };
+    const { state } = await setup([
+      draft("a", { path: "src/charge.ts", line: 3, side: "RIGHT", source: "alden", drafted, body: "Round to cents." }),
+      draft("bb", { path: "src/charge.ts", line: 9, side: "RIGHT", source: "alden", drafted, body: "Check the cap." }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    await waitFor(() => expect(state.calls).toContain(`KEEP ${JSON.stringify({ pr: PR })}`));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Alden's drafts" })).toBeNull());
+    expect(screen.getByRole("button", { name: "Send review · 2 comments" })).toBeTruthy();
+  });
+
+  it("drops all of Alden's drafts, leaving yours", async () => {
+    const drafted = { checkId: "model", title: "Rounding" };
+    const { state } = await setup([
+      draft("a", { path: "src/charge.ts", line: 3, side: "RIGHT", source: "alden", drafted, body: "Round to cents." }),
+      draft("bb", { body: "Thanks!" }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Drop all" }));
+    await waitFor(() => expect(state.calls).toContain("DELETE a"));
+    expect(state.calls).not.toContain("DELETE bb");
+    await waitFor(() => expect(screen.queryByText("Round to cents.")).toBeNull());
+    expect(screen.getByText("Thanks!")).toBeTruthy();
   });
 
   it("shows exactly what will post, lists what you didn't comment on before Approve, then says it was sent", async () => {

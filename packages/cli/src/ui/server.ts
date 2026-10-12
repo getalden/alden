@@ -3,22 +3,25 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
-import type { RankChange, ReviewStage } from "@alden/core";
+import { COMMIT_SHA, type RankChange, type ReviewStage } from "@alden/core";
 import {
   type Briefing,
   BriefingSchema,
   type BriefingTarget,
   BriefingTargetSchema,
+  FollowUpLevelSchema,
   type LocalSetupEvent,
   type PrDiff,
   type RankRule,
   type ReviewDraft,
   type ReviewDrafts,
+  type ReviewThreads,
   type ReviewEvent as ReviewVerdict,
   type SendReviewResult,
 } from "@alden/schema";
 import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
 import { stripControlDeep } from "../render/style.js";
+import type { FollowUpsApi } from "./follow-ups.js";
 import type { ModelSetupApi, SetupPage } from "./model-setup.js";
 import type { RankingApi } from "./rank.js";
 
@@ -67,6 +70,8 @@ export interface UiApi {
   setModelKey(key: string | null): Promise<unknown>;
   /** "Set up a model": what's available, testing and storing a key, a local model through Ollama (see model-setup.ts). */
   modelSetup: ModelSetupApi;
+  /** Follow-ups on PRs you reviewed, for the desktop app's notifications, and each PR's own level (see follow-ups.ts). */
+  followUps: FollowUpsApi;
   /** Settings → Ranking: your weights and rules (`[queue.rank]`), `background.prepare`, and a preview (see rank.ts). */
   ranking: RankingApi;
   /** The local clone PR briefings on `repo` ("owner/name") find callers in, or null when there's none. */
@@ -116,6 +121,22 @@ export interface UiApi {
   editDraft(id: string, change: DraftChange): Promise<ReviewDraft>;
   deleteDraft(id: string): Promise<{ ok: true }>;
   /**
+   * Keeps Alden's drafts, by id or every one on a PR: each becomes yours and is sent with the review. Untouched, they
+   * never are. Dropping one is `deleteDraft`.
+   */
+  keepDrafts(input: { ids?: string[]; pr?: string }): Promise<{ kept: ReviewDraft[] }>;
+  /**
+   * "Draft my review": one model call that drafts Alden's comments (Keep, Edit or Drop, never sent untouched) for the
+   * places to look and the model's findings in the PR's latest briefing, at its current head, that have no comment of
+   * yours near them. Within your budget caps; never on a PR with text aimed at AI reviewers.
+   */
+  draftReview(input: { pr: string }): Promise<DraftReviewAnswer>;
+  /**
+   * "Draft with Alden": the text of one comment (on a line, or a general note) or a reply in a thread, from the code
+   * there or from what you've written so far (`text`). One small model call; it saves nothing. `signal` stops it.
+   */
+  suggestText(input: SuggestTextInput, signal?: AbortSignal): Promise<{ text: string; costUsd: number | null }>;
+  /**
    * Sends the PR's drafts to GitHub as one review, and deletes them once it's posted. The only call that writes to
    * GitHub: it runs on your click or command, never in the background, and Claude Code has no tool for it.
    */
@@ -123,8 +144,15 @@ export interface UiApi {
   /**
    * The Diff tab: a PR's diff at its current head ("owner/repo#12", a URL or a queue number), or without one the local
    * changes a briefing of them covers. A PR's diff is kept per head commit, so opening it again costs one request.
+   * `since` (a commit: the head you last reviewed) narrows a PR's diff to what changed from it to the head, or says
+   * it couldn't (`since.applied` false) and gives the whole PR.
    */
-  diff(pr?: string): Promise<PrDiff>;
+  diff(pr?: string, since?: string): Promise<PrDiff>;
+  /**
+   * A PR's review threads ("owner/repo#12", a URL or a queue number): the conversation already on it, each comment marked
+   * when it's yours. Read only; kept briefly per PR, `refresh` asks GitHub again.
+   */
+  threads(pr: string, refresh?: boolean): Promise<ReviewThreads>;
   /**
    * The flagged places you saw in a PR at a head commit (a guided step, a marker in the Diff tab), so a review that
    * passes them without a word can teach Alden. Kept on this machine only; nothing is recorded while
@@ -190,6 +218,37 @@ export interface DraftInput {
   side?: "RIGHT" | "LEFT";
   body: string;
   suggestion?: string;
+  /**
+   * A reply in a review thread already on the PR (its node id) instead: no place or suggestion of its own. `resolve`
+   * resolves the thread once the review is sent; with it, `body` may be empty.
+   */
+  inReplyTo?: string;
+  resolve?: boolean;
+  /** Its text came from "Draft with Alden": counted (never the text) as an assisted comment, edited or not. */
+  assisted?: { edited: boolean };
+}
+
+/** What "Draft my review" did: drafts made, places skipped for a comment already near them, and what it cost. */
+export interface DraftReviewAnswer {
+  made: number;
+  skipped: number;
+  /** Places the model was asked about: 0 when every place already had a comment, and nothing was asked. */
+  asked: number;
+  /** null when no call was made, or the model has no known price. */
+  costUsd: number | null;
+  drafts: ReviewDraft[];
+}
+
+/** What "Draft with Alden" is for: a line (or file), a thread (a reply), or neither (a general note). */
+export interface SuggestTextInput {
+  pr: string;
+  path?: string;
+  line?: number;
+  startLine?: number;
+  side?: "RIGHT" | "LEFT";
+  threadId?: string;
+  /** What you've written so far: what you mean, to make into a clear comment. */
+  text?: string;
 }
 
 /**
@@ -199,10 +258,14 @@ export interface DraftInput {
 export interface DraftChange {
   body?: string;
   suggestion?: string | null;
+  /** On a reply: whether it resolves its thread. */
+  resolve?: boolean;
   path?: string;
   line?: number;
   startLine?: number;
   side?: "RIGHT" | "LEFT";
+  /** The new text came from "Draft with Alden" (see `DraftInput.assisted`). */
+  assisted?: { edited: boolean };
 }
 
 export type MemoryChange =
@@ -350,6 +413,40 @@ function placeFrom(
   };
 }
 
+/** Whether a request asks to resolve a reply's thread: true or false, or nothing. */
+function resolveFrom(body: Record<string, unknown>): boolean | undefined {
+  if (body.resolve === undefined) return undefined;
+  if (typeof body.resolve !== "boolean") throw new ApiError(400, "resolve is true or false.");
+  return body.resolve;
+}
+
+/** Whether a draft's text came from "Draft with Alden": `{ edited }`, or nothing. */
+function assistedFrom(body: Record<string, unknown>): { assisted?: { edited: boolean } } {
+  const { assisted } = body;
+  if (assisted === undefined) return {};
+  if (
+    typeof assisted !== "object" ||
+    assisted === null ||
+    typeof (assisted as { edited?: unknown }).edited !== "boolean"
+  ) {
+    throw new ApiError(400, "assisted is { edited: true | false }: whether you changed Alden's text before saving.");
+  }
+  return { assisted: { edited: (assisted as { edited: boolean }).edited } };
+}
+
+/** A reply from a request: the thread's node id (`inReplyTo`) and `resolve`; undefined when it isn't a reply. */
+function replyFrom(body: Record<string, unknown>): { inReplyTo: string; resolve?: boolean } | undefined {
+  const resolve = resolveFrom(body);
+  if (body.inReplyTo === undefined) {
+    if (resolve !== undefined) throw new ApiError(400, "resolve goes with inReplyTo: only a reply resolves a thread.");
+    return undefined;
+  }
+  if (typeof body.inReplyTo !== "string" || !/^[\w=-]{1,200}$/.test(body.inReplyTo)) {
+    throw new ApiError(400, "inReplyTo is a review thread's id, as GET /api/threads lists it.");
+  }
+  return { inReplyTo: body.inReplyTo, ...(resolve !== undefined ? { resolve } : {}) };
+}
+
 /** A suggestion from a request: replacement code (a string, empty to delete the lines), or nothing. */
 function suggestionFrom(body: Record<string, unknown>, removable: boolean): { suggestion?: string | null } {
   if (body.suggestion === undefined) return {};
@@ -452,13 +549,14 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       const body = await readJsonBody(req);
       const place = placeFrom(body);
       const suggestion = suggestionFrom(body, true);
+      const resolve = resolveFrom(body);
       if (
         (body.body !== undefined && typeof body.body !== "string") ||
-        (body.body === undefined && body.suggestion === undefined && !place)
+        (body.body === undefined && body.suggestion === undefined && !place && resolve === undefined)
       ) {
         throw new ApiError(
           400,
-          "Send { body?, suggestion? }, or { path, line?, side?, startLine? } to place it on a line again.",
+          "Send { body?, suggestion? }, or { path, line?, side?, startLine? } to place it on a line again, or { resolve } on a reply.",
         );
       }
       send(
@@ -468,6 +566,8 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
           ...(typeof body.body === "string" ? { body: body.body } : {}),
           ...suggestion,
           ...place,
+          ...(resolve !== undefined ? { resolve } : {}),
+          ...assistedFrom(body),
         }),
       );
       return;
@@ -661,6 +761,37 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         );
         return;
       }
+      case "GET /api/follow-ups":
+        send(res, 200, await api.followUps.check());
+        return;
+      case "POST /api/follow-ups/ack": {
+        const body = await readJsonBody(req);
+        const { events } = body;
+        if (!Array.isArray(events) || events.length > 500 || !events.every((e) => typeof e === "string")) {
+          throw new ApiError(400, "Send { events: [id, …] }, the ids a notification covered.");
+        }
+        send(res, 200, await api.followUps.ack(events as string[]));
+        return;
+      }
+      case "GET /api/watch":
+      case "PUT /api/watch": {
+        const pr = url.searchParams.get("pr")?.trim();
+        if (!pr) throw new ApiError(400, "Send ?pr=owner/repo%2312.");
+        if (req.method === "GET") {
+          send(res, 200, await api.followUps.watch(pr));
+          return;
+        }
+        const body = await readJsonBody(req);
+        const level = body.level === null ? null : FollowUpLevelSchema.safeParse(body.level).data;
+        if (level === undefined) {
+          throw new ApiError(
+            400,
+            "Send { level: off | rereview | your-turn | every-reply }, or { level: null } for the default.",
+          );
+        }
+        send(res, 200, await api.followUps.setWatch(pr, level));
+        return;
+      }
       case "GET /api/clone": {
         const repo = url.searchParams.get("repo");
         if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new ApiError(400, "Send ?repo=owner/name.");
@@ -688,15 +819,48 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         send(res, 200, await api.drafts(pr));
         return;
       }
+      case "GET /api/threads": {
+        const pr = url.searchParams.get("pr")?.trim();
+        if (!pr) throw new ApiError(400, "Send ?pr=owner/repo%2312.");
+        // Comments in threads are other people's text: `send` strips control sequences from every string.
+        send(res, 200, await api.threads(pr, url.searchParams.get("refresh") === "1"));
+        return;
+      }
       case "GET /api/diff": {
         const pr = url.searchParams.get("pr")?.trim();
+        const since = url.searchParams.get("since")?.trim() || undefined;
+        if (since !== undefined && (!pr || !COMMIT_SHA.test(since))) {
+          throw new ApiError(400, "Send ?pr=owner/repo%2312&since=<commit sha>.");
+        }
         // Paths and lines are the PR author's text: `send` strips control sequences from every string.
-        send(res, 200, await api.diff(pr || undefined));
+        send(res, 200, await api.diff(pr || undefined, since));
         return;
       }
       case "POST /api/drafts": {
         const body = await readJsonBody(req);
         const { suggestion } = suggestionFrom(body, false);
+        const reply = replyFrom(body);
+        if (reply) {
+          if (typeof body.pr !== "string" || (body.body !== undefined && typeof body.body !== "string")) {
+            throw new ApiError(400, "Send { pr, inReplyTo, body, resolve? }: a reply in a review thread.");
+          }
+          send(
+            res,
+            200,
+            await api.addDraft(
+              {
+                pr: body.pr,
+                body: typeof body.body === "string" ? body.body : "",
+                ...placeFrom(body),
+                ...(typeof suggestion === "string" ? { suggestion } : {}),
+                ...reply,
+                ...assistedFrom(body),
+              },
+              "you",
+            ),
+          );
+          return;
+        }
         if (
           typeof body.pr !== "string" ||
           (typeof body.body !== "string" && !(body.body === undefined && suggestion !== undefined))
@@ -716,9 +880,73 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
               body: typeof body.body === "string" ? body.body : "",
               ...placeFrom(body),
               ...(typeof suggestion === "string" ? { suggestion } : {}),
+              ...assistedFrom(body),
             },
             "you",
           ),
+        );
+        return;
+      }
+      case "POST /api/drafts/alden": {
+        const body = await readJsonBody(req);
+        if (typeof body.pr !== "string" || !body.pr.trim()) throw new ApiError(400, "Send { pr: owner/repo#12 }.");
+        send(res, 200, await api.draftReview({ pr: body.pr.trim() }));
+        return;
+      }
+      case "POST /api/drafts/suggest-text": {
+        const body = await readJsonBody(req);
+        const usage =
+          "Send { pr, text? } with { path, line?, side?, startLine? } for a comment on code, or { threadId } for a reply.";
+        if (
+          typeof body.pr !== "string" ||
+          !body.pr.trim() ||
+          (body.text !== undefined && typeof body.text !== "string")
+        ) {
+          throw new ApiError(400, usage);
+        }
+        const place = placeFrom(body);
+        const threadId = body.threadId;
+        if (threadId !== undefined && (typeof threadId !== "string" || !/^[\w=-]{1,200}$/.test(threadId) || place)) {
+          throw new ApiError(400, usage);
+        }
+        // Closing the request (Cancel in the UI) stops it: before the call, nothing is asked; after, the answer is dropped.
+        const stop = new AbortController();
+        res.on("close", () => {
+          if (!res.writableFinished) stop.abort();
+        });
+        send(
+          res,
+          200,
+          await api.suggestText(
+            {
+              pr: body.pr.trim(),
+              ...place,
+              ...(typeof threadId === "string" ? { threadId } : {}),
+              ...(typeof body.text === "string" ? { text: body.text.slice(0, 65_536) } : {}),
+            },
+            stop.signal,
+          ),
+        );
+        return;
+      }
+      case "POST /api/drafts/keep": {
+        const body = await readJsonBody(req);
+        const ids = Array.isArray(body.ids) ? body.ids : undefined;
+        const validIds = ids?.every((id) => typeof id === "string" && /^[\w-]{1,64}$/.test(id)) && ids.length <= 100;
+        if (
+          (ids !== undefined && !validIds) ||
+          (body.pr !== undefined && typeof body.pr !== "string") ||
+          (!ids && !body.pr)
+        ) {
+          throw new ApiError(400, "Send { ids: [draft ids] } or { pr: owner/repo#12 } to keep Alden's drafts there.");
+        }
+        send(
+          res,
+          200,
+          await api.keepDrafts({
+            ...(ids ? { ids: ids as string[] } : {}),
+            ...(typeof body.pr === "string" ? { pr: body.pr } : {}),
+          }),
         );
         return;
       }

@@ -51,6 +51,10 @@ export const ciCheck: Check = {
         };
       case "pending":
         return skipped("CI is still running on the latest commit.");
+      case "cancelled":
+        return skipped(
+          "CI was cancelled on the latest commit before it finished: nothing failed, but it didn't all run.",
+        );
       default:
         return skipped("No CI ran on this PR, so nothing has built or tested it.");
     }

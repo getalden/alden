@@ -23,9 +23,15 @@ import {
   type ReviewEvent,
   reviewBody,
   type SendReviewResult,
+  toSend,
+  unkept,
   whereText,
 } from "../drafts";
 import { plural } from "../format";
+import { type AssistTarget, DraftMyReview, DraftWithAlden } from "./AldenAssist";
+import { AldenDraftActs, AldenDraftsBar, AldenLabel } from "./AldenDrafts";
+import { Conversation, type ReplyFocus, ReplySummary } from "./Conversation";
+import { DraftText } from "./DraftText";
 import { Segmented } from "./Segmented";
 
 /**
@@ -62,6 +68,8 @@ export type Editing =
 export interface ReviewActions {
   onComment(place: CommentPlace): void;
   onFinish(): void;
+  /** Opens the drawer at a review thread's Reply box (by the thread's id): the Diff tab's Reply. */
+  onReply?(threadId: string): void;
 }
 
 export const ReviewActionsContext = createContext<ReviewActions | undefined>(undefined);
@@ -191,7 +199,10 @@ export function CommentEditor(props: {
   /** Something to know before saving: where it will post, when that isn't where you'd expect. */
   notice?: string | undefined;
   suggest?: Suggest | undefined;
-  onSave: (body: string, suggestion: string | undefined) => Promise<void>;
+  /** Where "Draft with Alden" writes for, when it's offered here (and a model is set up). */
+  assist?: AssistTarget | undefined;
+  /** `assisted`: the text came from "Draft with Alden", and whether you changed it before saving. */
+  onSave: (body: string, suggestion: string | undefined, assisted?: { edited: boolean }) => Promise<void>;
   onCancel: () => void;
 }) {
   const [text, setText] = useState(props.initial ?? "");
@@ -199,6 +210,8 @@ export function CommentEditor(props: {
   const [code, setCode] = useState(props.suggest?.initial ?? props.suggest?.lineText ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
+  /** What "Draft with Alden" put in the box, until Undo. */
+  const [assisted, setAssisted] = useState<string>();
   const area = useRef<HTMLTextAreaElement>(null);
   const codeArea = useRef<HTMLTextAreaElement>(null);
   const toggled = useRef(false);
@@ -222,7 +235,11 @@ export function CommentEditor(props: {
     setSaving(true);
     setError(undefined);
     try {
-      await props.onSave(text.trim(), withSuggestion ? code : undefined);
+      await props.onSave(
+        text.trim(),
+        withSuggestion ? code : undefined,
+        assisted !== undefined ? { edited: text.trim() !== assisted.trim() } : undefined,
+      );
     } catch (e) {
       setError(messageOf(e));
       setSaving(false);
@@ -264,6 +281,17 @@ export function CommentEditor(props: {
         onChange={(e) => setText(e.target.value)}
         onKeyDown={saveKeys}
       />
+      {props.assist && (
+        <DraftWithAlden
+          target={props.assist}
+          text={text}
+          onText={(next) => {
+            setText(next);
+            area.current?.focus();
+          }}
+          onAssisted={setAssisted}
+        />
+      )}
       {props.suggest && (
         <div className="suggest">
           <button
@@ -327,6 +355,7 @@ export function CommentEditor(props: {
 
 /** "from Claude" on drafts Claude Code added, so you read them before they go out under your name. */
 function Source({ draft }: { draft: ReviewDraft }) {
+  if (draft.source === "alden") return <AldenLabel draft={draft} />;
   return draft.source === "claude" ? <span className="chip from-claude">from Claude</span> : null;
 }
 
@@ -456,9 +485,13 @@ function LineForm(props: {
           </label>
         </div>
       }
+      assist={path ? { path, side, ...lines } : undefined}
       onCancel={props.onCancel}
-      onSave={(body, suggestion) =>
-        props.onSave(lineDraft({ path, side, ...(lines as { line: number; startLine?: number }) }, body, suggestion))
+      onSave={(body, suggestion, assisted) =>
+        props.onSave({
+          ...lineDraft({ path, side, ...(lines as { line: number; startLine?: number }) }, body, suggestion),
+          ...(assisted ? { assisted } : {}),
+        })
       }
     />
   );
@@ -552,7 +585,7 @@ function DraftRow(props: {
         />
       ) : (
         <>
-          {draft.body && <p className="draft-body excerpt">{draft.body}</p>}
+          {draft.body && <DraftText text={draft.body} />}
           {draft.suggestion !== undefined && <SuggestionBlock code={draft.suggestion} />}
         </>
       )}
@@ -588,6 +621,15 @@ function DraftRow(props: {
                 Keep
               </button>
             </>
+          ) : draft.source === "alden" && !outdated ? (
+            <AldenDraftActs
+              draft={draft}
+              what={what}
+              comments={comments}
+              editButton={editButton}
+              onEdit={() => setEditing(true)}
+              onDropped={props.onDeleted}
+            />
           ) : (
             <>
               {outdated ? (
@@ -633,9 +675,12 @@ function Confirm(props: {
   const [error, setError] = useState<string>();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus(), []);
-  const body = reviewBody(comments.body, comments.drafts);
-  const inline = comments.drafts.filter((d) => d.path);
-  const blocked = cannotSend(comments.event, comments.body, comments.drafts);
+  const toPost = toSend(comments.drafts);
+  const body = reviewBody(comments.body, toPost);
+  const inline = toPost.filter((d) => d.path);
+  const replies = toPost.filter((d) => d.inReplyTo && d.body.trim()).length;
+  const blocked = cannotSend(comments.event, comments.body, toPost);
+  const left = unkept(comments.drafts).length;
   const verdict = verdictOf(comments.event);
 
   async function send() {
@@ -665,8 +710,13 @@ function Confirm(props: {
       </h3>
       <p className="muted small">
         It posts on GitHub under your name, as one review: <strong>{verdict.label}</strong>
-        {inline.length > 0 ? `, with ${plural(inline.length, "comment")} on lines` : ""}.
+        {inline.length > 0 ? `, with ${plural(inline.length, "comment")} on lines` : ""}
+        {replies > 0
+          ? `${inline.length > 0 ? " and" : ", with"} ${plural(replies, "reply", "replies")} in threads`
+          : ""}
+        .
       </p>
+      {left > 0 && <p className="muted small">{plural(left, "draft")} by Alden not kept won't be sent.</p>}
       {comments.event === "APPROVE" && comments.unaddressed.length > 0 && (
         <div className="banner">
           <strong>Alden flagged {plural(comments.unaddressed.length, "place")} you didn't comment on.</strong> Approve
@@ -703,6 +753,7 @@ function Confirm(props: {
           </ul>
         </div>
       )}
+      <ReplySummary drafts={toPost} threads={comments.threads?.threads} heading="Replies in threads" />
       {(error ?? blocked) && (
         <p className="banner error" role="alert">
           {error ?? blocked}
@@ -721,7 +772,7 @@ function Confirm(props: {
 }
 
 /** Where focus goes when the drawer is asked to show something: its heading, or the review body (`onFinish`). */
-export type DrawerFocus = { to: "head" | "finish"; n: number };
+export type DrawerFocus = { to: "head" | "finish"; n: number } | ({ to: "reply" } & ReplyFocus);
 
 /**
  * The Comments drawer, beside the briefing (a full-width sheet in narrow windows): the drafts by where they'll post
@@ -772,7 +823,8 @@ export function CommentsDrawer(props: {
   const { focus } = props;
   // biome-ignore lint/correctness/useExhaustiveDependencies: only when asked again
   useEffect(() => {
-    if (!focus || !open) return;
+    // A thread's Reply box takes its own focus (see Conversation).
+    if (!focus || !open || focus.to === "reply") return;
     if (focus.to === "finish" && bodyField.current) {
       bodyField.current.scrollIntoView?.({ block: "nearest" });
       bodyField.current.focus();
@@ -802,9 +854,11 @@ export function CommentsDrawer(props: {
     comments.drafts.filter((d) => d.path),
     fileOrder,
   ).flatMap((g) => g.drafts);
-  const notes = comments.drafts.filter((d) => !d.path);
+  const notes = comments.drafts.filter((d) => !d.path && !d.inReplyTo);
   const count = comments.drafts.length;
-  const blocked = cannotSend(comments.event, comments.body, comments.drafts);
+  // Alden's drafts you haven't kept stay behind when you send.
+  const sendCount = toSend(comments.drafts).length;
+  const blocked = cannotSend(comments.event, comments.body, toSend(comments.drafts));
   const closeForm = (back: RefObject<HTMLElement | null>) => {
     restore.current = back;
     onEditing(undefined);
@@ -865,10 +919,17 @@ export function CommentsDrawer(props: {
         {sent && (
           <p className="banner ok" role="status" tabIndex={-1} ref={sentLine}>
             <strong>Sent to GitHub.</strong> You {verdictOf(sent.review).past}
-            {sent.posted > 0 ? ` with ${plural(sent.posted, "comment")}` : ""}.{" "}
+            {sent.posted > 0 ? ` with ${plural(sent.posted, "comment")}` : ""}
+            {sent.resolved ? `, and resolved ${plural(sent.resolved, "thread")}` : ""}.{" "}
             <a href={sent.url} target="_blank" rel="noreferrer">
               See the review ↗
             </a>
+          </p>
+        )}
+        {sent?.notResolved && sent.notResolved.length > 0 && (
+          <p className="banner" role="status">
+            The review posted, but GitHub wouldn't resolve {plural(sent.notResolved.length, "thread")}:{" "}
+            {sent.notResolved.join("; ")}. Resolve {sent.notResolved.length === 1 ? "it" : "them"} on GitHub.
           </p>
         )}
         {sent?.learning && sent.learning.length > 0 && (
@@ -913,9 +974,13 @@ export function CommentsDrawer(props: {
                         }
                       : undefined
                   }
+                  assist={editing.place}
                   onCancel={() => closeForm(props.returnFocus)}
-                  onSave={async (body, suggestion) => {
-                    await comments.add(lineDraft(editing.place, body, suggestion));
+                  onSave={async (body, suggestion, assisted) => {
+                    await comments.add({
+                      ...lineDraft(editing.place, body, suggestion),
+                      ...(assisted ? { assisted } : {}),
+                    });
                     if (editing.replaces) await comments.remove(editing.replaces);
                     closeForm(props.returnFocus);
                   }}
@@ -946,9 +1011,10 @@ export function CommentsDrawer(props: {
                 <CommentEditor
                   label="General note"
                   initial={editing.initial}
+                  assist={{ note: true }}
                   onCancel={() => closeForm(noteButton)}
-                  onSave={async (body) => {
-                    await comments.add({ body });
+                  onSave={async (body, _suggestion, assisted) => {
+                    await comments.add({ body, ...(assisted ? { assisted } : {}) });
                     if (editing.replaces) await comments.remove(editing.replaces);
                     closeForm(noteButton);
                   }}
@@ -964,6 +1030,7 @@ export function CommentsDrawer(props: {
               </p>
             ) : (
               <>
+                <AldenDraftsBar comments={comments} />
                 {onLines.length > 0 && (
                   <section className="drawer-group" aria-labelledby="drafts-on-lines">
                     <h3 className="label" id="drafts-on-lines">
@@ -985,6 +1052,11 @@ export function CommentsDrawer(props: {
                     <ul className="visually-plain card drafts">{notes.map(row)}</ul>
                   </section>
                 )}
+                <ReplySummary
+                  drafts={comments.drafts}
+                  threads={comments.threads?.threads}
+                  heading="Replies in threads"
+                />
               </>
             )}
 
@@ -1014,6 +1086,7 @@ export function CommentsDrawer(props: {
                     Comment on a line…
                   </button>
                 )}
+                <DraftMyReview from="drawer" />
               </div>
             )}
 
@@ -1028,6 +1101,7 @@ export function CommentsDrawer(props: {
                 onChange={(e) => comments.setBody(e.target.value)}
               />
             </label>
+            <Conversation comments={comments} focus={focus?.to === "reply" ? focus : undefined} />
           </>
         )}
       </div>
@@ -1060,12 +1134,12 @@ export function CommentsDrawer(props: {
               setConfirming(true);
             }}
           >
-            {count > 0 ? `Send review · ${plural(count, "comment")}` : "Send review"}
+            {sendCount > 0 ? `Send review · ${plural(sendCount, "comment")}` : "Send review"}
           </button>
           {formOpen ? (
             <p className="faint small">Save or cancel the comment you're writing first.</p>
           ) : (
-            blocked && count + comments.body.trim().length > 0 && <p className="faint small">{blocked}</p>
+            blocked && sendCount + comments.body.trim().length > 0 && <p className="faint small">{blocked}</p>
           )}
         </div>
       )}

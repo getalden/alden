@@ -6,7 +6,9 @@ pending review, and send them to GitHub as **one review** that
 comments, approves or requests changes.
 
 Alden posts only what you send. Nothing goes to GitHub until you press Send in the UI or confirm `alden send` in a
-terminal: never in the background, never from a model, never from Claude Code.
+terminal: never in the background, never from a model, never from Claude Code. That includes
+[replies and resolves](#replying-in-a-thread) in threads already on the PR: they go with your review, never on their
+own.
 
 ## Writing comments
 
@@ -107,6 +109,67 @@ From Claude Code, ask Claude to draft a comment or suggest a change and it uses 
 yours, marked "drafted by Claude Code", and post as you only when you send them. There is no tool for sending. See
 [Alden in your AI coding tool](mcp.md).
 
+## Replying in a thread
+
+A PR you come back to already has a conversation: the review threads on its lines, yours and other people's. Alden
+shows them, and lets you answer one, or resolve it, as part of the review you send. A reply is a draft like any
+comment: kept on your machine, and posted only with Send.
+
+In the UI, the Comments drawer's **Conversation** lists the PR's threads, yours (threads you started or replied in)
+first and open ones before resolved ones, which are folded away. Each shows its comments, a **Reply** box and
+**Resolve when sent**. The Diff tab shows each thread under its line (folded once resolved), with **Reply**, which opens
+that thread's box in the drawer. An outdated thread (its code has changed since) has no line in today's diff, so it's
+only in the drawer.
+
+In a terminal:
+
+```sh
+alden comment acme/shop#7 --threads                                  # the threads, with short ids
+alden comment acme/shop#7 --reply q9aZ1Lw "Fixed in 3f2c."           # reply in a thread, by its id
+alden comment acme/shop#7 --reply src/pay.ts:40 "Fixed." --resolve   # by its line, and resolve it
+alden comment acme/shop#7 --resolve src/pay.ts:40                    # resolve it, saying nothing
+```
+
+A thread is named by the short id `--threads` shows, or by `file:line`: its line at the PR's head, or the line it was
+started on when it's outdated. When several threads are on that line, an open one is picked before a resolved one, and
+when that's still more than one, Alden asks for an id.
+
+- **One reply per thread.** A second `--reply` in the same thread changes the text of the first, and `--resolve` alone
+  ticks Resolve on it. Delete one with `--delete <id>`, like any comment.
+- **Resolve with nothing to say** is a reply with no text: it resolves the thread and posts nothing in it.
+- **A reply has no line of its own.** It's tied to its thread, not to the diff, so it doesn't move or go outdated when
+  the PR moves, and it takes no suggestion.
+- Alden checks the thread is on the PR, and that GitHub lets you reply there (and resolve it, when you tick Resolve:
+  resolving takes write access to the repo, or being the PR's author) when you write the reply, and again when you
+  send.
+- From Claude Code, `alden_draft_comment` drafts a reply with `in_reply_to` (the thread's `file:line` or id). It can't
+  resolve a thread: that's yours to tick.
+
+The drawer, its summary before Send and `alden send` say where each reply goes: "Reply in thread on src/pay.ts:40",
+"…, and resolve it", or "Resolve the thread on src/pay.ts:40". Replies are never part of the review's body.
+
+### How a review with replies is sent
+
+A review without replies or resolves is sent as it always was, in one request (see [Sending](#sending)). With them,
+GitHub needs a few, and Alden makes them in an order where nothing half-posts:
+
+1. The review is started as **pending**, with your line comments and body: `POST /repos/{owner}/{repo}/pulls/{n}/reviews`
+   without a verdict. A pending review is visible only to you.
+2. Each reply is added to that pending review (GraphQL `addPullRequestReviewThreadReply`).
+3. The review is **submitted** with your verdict (`submitPullRequestReview`). Only now does anyone see any of it.
+4. Each thread you ticked is resolved (`resolveReviewThread`), after the review is submitted and never before. A
+   thread that's already resolved is left alone.
+
+If step 2 or 3 fails, Alden deletes the pending review it started (and the replies in it), so nothing posts, and says
+which step GitHub refused, e.g. "GitHub refused your reply in the thread on src/pay.ts:40". Your drafts stay. If it
+can't delete the pending review either, it says so: discard it on the PR's page on GitHub before sending again.
+
+If a resolve fails in step 4, the review has already posted and can't be taken back: Alden says which thread wasn't
+resolved and why ("The review posted, but GitHub wouldn't resolve 1 thread"), and you can resolve it on GitHub.
+
+A review of only replies works as a plain comment review. With nothing to post at all (a plain comment, no body, and
+only resolves), there is no review: Alden just resolves the threads.
+
 ## When the PR moves
 
 A comment is written against the PR's head commit. When the author pushes, Alden brings your comments along the next
@@ -129,6 +192,94 @@ Alden only compares lines it can see in the diff. It doesn't follow a line that 
 whose text changed, even trivially: those are outdated, on purpose. A comment Alden guessed the place of would post
 somewhere you didn't choose.
 
+## Alden's drafts
+
+When a model briefs a PR (your own Anthropic key, a cloud provider or a local model: any of them, on every plan), it
+also drafts a comment for its findings worth one. Alden makes them drafts in the Comments drawer, marked **Drafted by
+Alden**, and the briefing marks each finding it drafted for **Draft ready**. They're suggestions, nothing more:
+
+- **At most five per PR**, most severe first: only medium and high findings, each on the first line it points at, and
+  only on a changed line GitHub takes a comment on. A finding your feedback quietened or dismissed gets none, and none
+  goes where a comment (yours, Claude Code's or Alden's) is already within three lines, nor within three lines of a
+  review thread already on the PR (an outdated one by the line it started on): something was said there already,
+  perhaps the same comment you sent last time.
+- **A suggested change** comes with one only when the fix is a small, certain replacement of that line. Alden checks it
+  the way it checks yours: it must change the line, apply to it, and be a few lines at most.
+- **Keep**, **Edit** or **Drop** each in the drawer, or **Keep all** / **Drop all** at its top. Keeping or editing one
+  makes it yours (it's then sent like anything you wrote); dropping deletes it.
+- **Untouched, it's never sent.** Send posts your comments and the ones you kept; the drawer says "2 drafts by Alden not
+  kept won't be sent", and they're cleared once the review is sent. A draft never approves anything: the verdict is
+  always yours.
+- **Briefing the PR again** replaces Alden's untouched drafts with new ones, and never touches one you kept or edited.
+- **A PR with text aimed at AI reviewers** (the [injection check](checks.md)) gets no drafts, and the briefing says why:
+  its author may have steered the model, and a draft is text you'd send under your name.
+
+When a model briefing of a PR has no drafts, its footer (and `alden review`, under the model's line) says why in one
+line: none of the model's findings was a medium or high one on a changed line ("No drafts: Alden drafts comments for
+the model's medium and high findings on changed lines, and this briefing had none."), the model wrote no comment for
+the ones that were, the PR has text aimed at AI reviewers, or drafting is off.
+
+In a terminal, `alden review` says "Alden drafted 3 comments — see them with `alden comment acme/shop#7`", where
+they're marked "drafted by Alden, not kept". `alden comment acme/shop#7 --keep <id>` (or `--keep all`) keeps them,
+`--delete <id>` drops one, and `alden send` leaves the ones you didn't keep behind and says so.
+
+Keep, edit and drop teach Alden too, for the finding's check: keeping or editing one counts once as a comment near
+that place (sending it later doesn't count it again), and dropping one counts a little the other way, like approving
+past a place you saw (0.2, never for secrets or text aimed at AI reviewers, and never enough alone to quieten a check).
+Nothing is learned while `learning.fromReviews` is off. Usage stats count keeps, edits and drops, never the text. Drafts
+you ask for with [Draft my review](#draft-my-review) are the same.
+
+To turn drafting off, switch off **Draft comments for me** in Settings, or `alden config set drafts.auto false`. The
+model is then asked exactly what it was asked before. See [Models](models.md#drafted-comments) for what the model is
+asked and what it costs.
+
+## Drafting with Alden on demand
+
+The briefing's drafts follow strict rules, so a place can end up with none: Alden's own checks (a destructive
+migration, a changed signature's callers) don't draft, nor does a finding without a line. When you want Alden's words
+anyway, ask. Both need a model set up (without one, the drawer offers **Set up a model**), make one model call within
+your [budget caps](models.md#budgets) and say what it cost, and never run on a PR with text aimed at AI reviewers
+(they say why, in the briefing's words).
+
+### Draft my review
+
+**Draft my review**, beside **Comments** in the briefing and in the Comments drawer, asks the model in one call for a
+comment on each of the PR's places to look ("Needs your eyes", which includes Alden's checks) and on the model's
+medium and high findings, whatever the briefing drafted or didn't:
+
+- **From the briefing you're looking at.** It drafts from the PR's latest briefing, which must be of its latest push:
+  brief it (again) first otherwise.
+- **Only where there's no word yet.** A place with a draft near it (anyone's, within three lines, as the warning before
+  Approve counts it) or a comment of yours already on GitHub near it is skipped, and Alden says how many. When every
+  place has one, nothing is asked and nothing is spent.
+- **At most eight drafts**, each on the place's line when GitHub takes a comment there, otherwise a general note linking
+  to the line or file (a [linked note](#comments-on-code-outside-the-diff)), or a plain general note for a place with
+  no code (one about the PR's title, say). A suggested change comes only on an added line, checked like the briefing's.
+- **They're Alden's drafts**, exactly like the briefing's: marked **Drafted by Alden**, kept, edited or dropped the same
+  way, teaching Alden the same way, never sent untouched, never an approval. A new model briefing of the PR (with `drafts.auto`
+  on) replaces the ones you didn't touch.
+
+It says what happened: "Alden drafted 3 comments ($0.02): keep, edit or drop each in Comments. Skipped 2 places with a
+comment or draft near them already.", or that there was nothing new to draft, or why it couldn't (no briefing of the
+latest push, a budget stop, the model failing). In a terminal: `alden comment <pr> --draft`, after `alden review <pr>`.
+
+### Draft with Alden
+
+Every comment box (a place's comment, a line you pick with **Comment on a line…**, a general note) and every thread's
+Reply box has **Draft with Alden**. It asks the model for one comment on that code (or a reply that answers the
+thread) and puts it in the box for you to edit:
+
+- **An empty box** takes Alden's text at once; **Undo** empties it again.
+- **Text you've written** is what you mean: Alden makes it a clear review comment saying the same thing, and shows its
+  version beside yours. **Use it** puts it in the box (Undo puts yours back); **Keep mine** leaves yours.
+- **Cancel** stops it while it's drafting. If the model was already asked, the call is still recorded in your spend and
+  its answer is dropped.
+- **It saves and sends nothing.** What you save is your comment, like anything you write: it counts toward learning as
+  yours. Usage stats count that it was drafted with Alden, and whether you changed it, never the text.
+
+It's one small call at low effort, using what's at that line (the diff around it, what Alden flagged there, your notes
+for the repo, and for a reply the thread so far).
+
 ## Sending
 
 ```sh
@@ -138,12 +289,14 @@ alden send acme/shop#7 --approve -m "Thanks, looks good."
 
 Before anything posts, Alden shows the whole review: the body (your `-m` text, then the general notes, a linked note
 with its link), each comment
-with its file and line (or lines), each suggestion as old lines and new ones, who drafted it, and the verdict. Before an approval it also lists the places Alden flagged in
+with its file and line (or lines), each suggestion as old lines and new ones, each reply with its thread and whether it
+resolves it, who drafted it, and the verdict. Before an approval it also lists the places Alden flagged in
 its latest briefing of this PR that none of your comments is near (within three lines, on the same file). Then it asks.
 `--yes` skips the question; without a terminal to ask on and without `--yes`, it refuses.
 
 It sends one request, `POST /repos/{owner}/{repo}/pulls/{n}/reviews`, at the PR's current head commit, with exactly
-what you wrote. Alden adds nothing to it but a suggestion's ` ```suggestion ` block and a linked note's link (and its
+what you wrote (with replies or resolves, a few: see
+[How a review with replies is sent](#how-a-review-with-replies-is-sent)). Alden adds nothing to it but a suggestion's ` ```suggestion ` block and a linked note's link (and its
 "Suggested change" block): no signature, no footer. A comment
 on several lines goes as `start_line` and `start_side` to `line` and `side`.
 
@@ -153,8 +306,9 @@ Alden won't send, and says why, when:
 - the PR got new commits since you last looked, which moved comments: look them over and send again,
 - a comment's line isn't in the diff, or its range no longer fits in one hunk (it names which),
 - the code a suggestion replaces isn't the code it was written against,
-- there's nothing to say: a plain comment review needs a comment or a body, and requesting changes needs a body or a
-  general note.
+- there's nothing to say: a plain comment review needs a comment, a reply, a resolve or a body, and requesting changes
+  needs a body or a general note,
+- a reply's thread is gone, or GitHub won't let you reply there or resolve it (it names which).
 
 On success, the PR's comments are deleted from Alden (they're on GitHub now) and Alden prints the review's link. If
 GitHub refuses, nothing is deleted.

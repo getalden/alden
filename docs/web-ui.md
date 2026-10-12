@@ -59,6 +59,10 @@ shows the PR's title, repo and author, how long it has waited on you, its size a
 it does. A reason marked ↑ or ↓ comes from your own feedback, and "↑ your rule: payments/ first" from a rule you set
 (see [Ranking](#ranking)). See [The review queue](queue.md) for how ranking works.
 
+A PR you reviewed before says so under its title: **Re-review** when you've been asked again since, then when you last
+reviewed ("Re-review · reviewed 2 days ago"). Once something has happened to your comments the line counts it too
+("3 of your 5 comments resolved"). See [Re-reviews](queue.md#re-reviews).
+
 When you open the page, the last queue shows at once (up to a day old), marked "As of 3 min ago, refreshing…" until
 the current one arrives. `r`, or the refresh button, fetches it again. A PR you've opened shows "2 drafts" while it has
 comments waiting to be sent.
@@ -77,7 +81,7 @@ Alden fetches your whole queue (up to the 1,000 PRs a GitHub search returns), so
 - **Filters** are the row of menus under the search: repo, author (you, people, bots or AI agents, as
   [Bots and AI agents](queue.md#bots-and-ai-agents) tells them apart), how you were asked (you directly, your
   teams, or one team), assignee (you, unassigned, or someone), label, drafts (hide them, or only drafts; shown when the queue has any), CI
-  (passing, failing, running, none) and age (opened today, this week, or before). They combine. A filter that's on is
+  (passing, failing, running, none; cancelled CI is none of the first three) and age (opened today, this week, or before). They combine. A filter that's on is
   highlighted with its value, and the count says "3 of 33" with **Clear filters**.
 - **Sort**: Alden's rank (the default), open longest, waiting longest on you, recently updated, or smallest first for
   quick wins. It sorts inside each lane, and dismissed PRs stay at the bottom. Each row keeps its number from Alden's
@@ -183,12 +187,28 @@ Once a PR is briefed, **Diff** (or `d`) shows the code itself, so you don't have
 - Your comments show as a ✎ badge at their lines. Hover one for its text, or click it to open the text under the line.
 - On a PR, **+** beside a line starts a comment on it in the Comments drawer. Shift-click a second line, or drag, for
   a range on the same side of one hunk.
+- On a PR, the review threads already on it show under their lines: who's in each and how many comments, open
+  unless resolved. **Reply** opens that thread's Reply box in the Comments drawer. See
+  [Replying in a thread](comments.md#replying-in-a-thread).
 
 A marker that's been on screen for 1.5 seconds counts as a place you saw, which Alden learns from when you send your
 review: see [Places you saw](memory.md#places-you-saw).
 
 For a PR, the diff is the PR's latest push. If that's newer than the briefing, a line above the diff says so, since
 places may have moved. For **My changes**, it's your uncommitted changes, as the briefing read them.
+
+### Since your review
+
+On a PR you reviewed before, the Diff tab opens on **Since your review**: only what changed from the commit you last
+reviewed to the PR's head, so a second look starts where your first one stopped. **Whole PR** shows everything.
+
+- Places to look and your comments still show at their lines when the narrower diff has them. The old side is the
+  commit you reviewed rather than the PR's base, so comments on removed lines show, and are written, in **Whole PR**.
+- If the commit you reviewed isn't in the PR's history any more (a force-push or rebase), the tab shows the whole PR
+  and says so. If nothing has been pushed since, it says that instead.
+- If the author merged the base branch in since your review, its changes are part of "since" too.
+- It's one GitHub request (the compare API, which lists up to 300 files), kept like the whole diff while `alden ui`
+  runs.
 
 Large diffs stay quick: rows render as you scroll to them, and files over 400 lines of diff start collapsed, with
 **Show**. Alden keeps a PR's diff per push while `alden ui` runs, so opening it again is instant. The tab you were on
@@ -236,7 +256,11 @@ this machine until you send them to acme/shop#412 on GitHub, as one review." It 
 - **In the review body**: your general notes, which follow what you write in the body. A linked note says "links to
   py/orders/tasks.py, line 5"; hovering it names the commit its link shows, the PR's head when you wrote it.
 
-Below them are **Add a general note**, **Comment on a line…** and the review body. At the bottom, always in view, are
+- **Replies in threads**: where each reply goes, "Reply in thread on src/pay.ts:40, and resolve it".
+
+Below them are **Add a general note**, **Comment on a line…**, the review body, and the PR's **Conversation**: its
+review threads, yours first and open ones first, each with **Reply** and **Resolve when sent**. A reply or a resolve
+is a draft like any other, sent with your review (see [Replying in a thread](comments.md#replying-in-a-thread)). At the bottom, always in view, are
 the verdict (**Comment**, **Approve** or **Request changes**) and **Send review · 3 comments**.
 
 The drawer stays open or closed as you left it in this window, and starts open when the window is wide enough for it
@@ -273,6 +297,26 @@ In the Diff tab, a linked note shows at its line, or on its file, when the diff 
 
 Drafts that Claude Code added (through [the plugin or `alden mcp`](claude-code.md)) are marked **from Claude**, so you
 read them before they go out under your name. Claude can draft comments, but never send them.
+
+Drafts Alden made from its model's findings are marked **Drafted by Alden**, with **Keep**, **Edit** and **Drop**, and
+**Keep all** / **Drop all** at the top of the drawer. Until you keep or edit one, it isn't sent: the drawer says how
+many won't be, and **Send review** counts only what will post. The briefing marks a finding with one **Draft ready**.
+See [Alden's drafts](comments.md#aldens-drafts).
+
+### Drafting with Alden
+
+With a model set up, **Draft my review** (beside **Comments**, and in the drawer once the PR is briefed) asks the
+model, in one call within your caps, to draft comments for the places to look and the model's findings that have no
+comment near them yet. While it runs it says "Drafting…"; then it opens the drawer on the new drafts and says how many
+it made, what the call cost and how many places it skipped, or why it couldn't. Without a model, the drawer offers
+**Set up a model** instead.
+
+Each comment and reply box has **Draft with Alden**: it fills an empty box with the model's text for you to edit
+(**Undo** empties it), or, when you've written something, shows Alden's version of it with **Use it** and **Keep
+mine**. **Cancel** stops it while it's drafting. It saves nothing: you save, and the comment is yours.
+
+On a PR with text aimed at AI reviewers, neither drafts: **Draft my review** says why, and the boxes say "Alden won't
+draft here". See [Drafting with Alden on demand](comments.md#drafting-with-alden-on-demand).
 
 A draft written before the PR's latest commits is marked **Outdated** when its lines changed. **Rewrite** puts it in a
 new comment on the current code (check the line), or delete it. The review won't send until you've done one or the
@@ -321,6 +365,7 @@ Settings change your user config, like `alden config set`; a repo's `.alden.toml
 - **Your feedback**: how often you found Alden's places useful, and **Export redacted feedback**.
 - **Learning**: **Learn from my reviews** (on by default). Off, Alden stops noting which places you saw and learns only
   from Useful and Not useful. See [Places you saw](memory.md#places-you-saw).
+- **Drafts**: **Draft comments for me** (on by default, `drafts.auto`). Off, a model briefing drafts no comments.
 - **Your queue on this machine**: which organisations and repos the queue covers, and what to leave out. The queue
   says when it's narrowed.
 - **Ranking**: see below.
@@ -337,7 +382,8 @@ The desktop app adds **Command line tool**, **While you're away** and **Notifica
 
 **Ranking** sets [how the queue ranks](queue.md#your-ranking):
 
-- **Weights**: a slider per signal, from off (0) to ×3 here, ×1 by default. **Reset** puts them all back.
+- **Weights**: a slider per signal, from off (0) to ×3 here, ×1 by default, **Re-reviews** included. **Reset** puts
+  them all back.
 - **Rules**: add, edit, delete and reorder them. Each takes any of a path, label, author, repo, base branch and title,
   and puts PRs first or last, or boosts or lowers them. A rule's reason shows on the queue's rows, marked as yours
   ("↑ your rule: payments/ first").

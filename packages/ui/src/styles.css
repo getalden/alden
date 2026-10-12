@@ -800,6 +800,18 @@ textarea.input {
 .learned-line.down {
   color: var(--ink2);
 }
+/* A PR you reviewed before: "Re-review" and when you last reviewed. */
+.followup-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font: 500 12px / 1.4 var(--font-ui);
+  color: var(--ink2);
+}
+.chip.rereview {
+  color: var(--warn);
+  background: var(--warn-soft);
+}
 .reactions {
   position: relative;
   z-index: 1;
@@ -944,6 +956,19 @@ textarea.input {
   font: 500 12px var(--font-mono);
   color: var(--ink3);
   overflow-wrap: anywhere;
+}
+/* The bell on a PR: its notification level, at the end of the line above the title. */
+.watch-bell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--ink3);
+}
+@media print {
+  .watch-bell {
+    display: none;
+  }
 }
 .brief-title {
   font: 500 28px / 1.2 var(--font-ui);
@@ -2204,6 +2229,19 @@ details > summary {
   color: var(--acc);
   background: var(--acc-soft);
 }
+/* Alden's drafts: suggestions until you keep or edit them, so they read apart from your own. */
+.chip.from-alden {
+  color: var(--warn);
+  background: var(--warn-soft);
+  flex: none;
+}
+.alden-drafts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--warn-soft);
+}
 /* The PR pane: the briefing (it scrolls) and, beside it, the Comments drawer. */
 .review-pane {
   flex: 1;
@@ -2334,13 +2372,22 @@ details > summary {
   font: 600 12px / 1.4 var(--font-mono);
   color: var(--ink);
 }
-/* The start of a long comment; Edit shows all of it. */
+/* The start of a long comment; Show all (see DraftText) shows all of it. */
 .draft-body.excerpt {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   line-clamp: 4;
   overflow: hidden;
+}
+.draft-body.excerpt.open {
+  display: block;
+  -webkit-line-clamp: none;
+  line-clamp: none;
+  overflow: visible;
+}
+.draft-more {
+  align-self: flex-start;
 }
 .draft-suggestion {
   display: flex;
@@ -2484,6 +2531,9 @@ details > summary {
 }
 .pr-row.selected .chip.ready {
   background: var(--ok-soft);
+}
+.pr-row.selected .chip.rereview {
+  background: var(--warn-soft);
 }
 .mem-item.gone .text {
   text-decoration: line-through;
@@ -3022,6 +3072,12 @@ details > summary {
 .banner.diff-newer {
   margin: 0;
 }
+.diff-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
 .diff-scroll {
   overflow-x: auto;
 }
@@ -3216,4 +3272,86 @@ details > summary {
   .briefing-panel[hidden] {
     display: block;
   }
+}
+
+/* The conversation already on a PR: its review threads in the drawer, and at their lines in the Diff tab. */
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+.thread:first-child {
+  border-top: 0;
+}
+.thread.resolved {
+  background: var(--sunk);
+}
+.thread-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.thread-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.thread-author {
+  font: 600 12px / 1.4 var(--font-ui);
+  color: var(--ink2);
+}
+.thread-body {
+  margin: 0;
+  font: 13px / 1.5 var(--font-ui);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.thread-reply-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 8px;
+  border-left: 2px solid var(--line);
+}
+.thread-resolve {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.diff-table tr.diff-thread-row td {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.diff-thread {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.diff-thread.resolved .diff-thread-toggle {
+  color: var(--ink2);
+}
+/* Drafting with Alden: "Draft with Alden" under a comment box, and what "Draft my review" says it did. */
+.assist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.assist-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.assist-line {
+  align-self: center;
+  overflow-wrap: anywhere;
 }

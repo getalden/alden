@@ -137,7 +137,8 @@ export function reviewSignals(input: {
     }
   }
   for (const draft of about) {
-    if (input.places.some((place) => isNear(draft, place))) continue;
+    // A comment Alden drafted from a finding was about a place it flagged, even one that didn't make the places to look.
+    if (draft.drafted || input.places.some((place) => isNear(draft, place))) continue;
     out.push({ ...base, ...(whereOf(draft) as { path: string }), signal: "miss", weight: SIGNAL_WEIGHTS.miss });
   }
   return out;

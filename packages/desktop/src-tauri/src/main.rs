@@ -5,7 +5,8 @@
 //! PR callers come from any clone Alden knows), shows its UI in the window, and polls the local API for the
 //! menu bar: how many PRs wait on you, the top three, and a notification when someone has waited three days. While
 //! you're away from the Mac, it asks the server to brief the top PRs ahead of time and says when one is ready (with the
-//! system's notification sound unless `notifications.sound` is off). Closing
+//! system's notification sound unless `notifications.sound` is off). After you review a PR, it tells you about replies,
+//! resolves and re-review requests at the level you chose (`notifications.followUps`, or the PR's own). Closing
 //! the window keeps Alden in the menu bar; Quit stops it and the server with it (the server also exits on its own when
 //! this app's end of its stdin closes, so a crash can't leave it running).
 
@@ -49,7 +50,14 @@ struct AppState {
     preparing: Mutex<bool>,
     /// You just chose a folder: the window's next link says so, and the UI shows that repo's PRs.
     chose_folder: Mutex<bool>,
+    /// Follow-up events shown this run, by id: never shown twice, even when acknowledging them failed.
+    follow_ups_shown: Mutex<HashSet<String>>,
+    /// Follow-up events shown but not yet acknowledged: the next poll tries again.
+    follow_ups_unacked: Mutex<HashSet<String>>,
 }
+
+/// The most event ids one `POST /api/follow-ups/ack` takes.
+const ACK_LIMIT: usize = 500;
 
 #[derive(Deserialize)]
 struct PrepareResult {
@@ -76,6 +84,26 @@ struct PreparedPr {
     pr: String,
     title: String,
     places: u32,
+}
+
+/// `GET /api/follow-ups`: one notification per PR you reviewed with news, already filtered by its level.
+#[derive(Deserialize)]
+struct FollowUps {
+    notifications: Vec<FollowUp>,
+    /// `notifications.sound`, as for "Briefing ready". An older server doesn't say: it plays.
+    #[serde(default = "yes")]
+    sound: bool,
+}
+
+#[derive(Deserialize)]
+struct FollowUp {
+    /// "owner/repo#123".
+    pr: String,
+    title: String,
+    /// e.g. "2 replies, 1 resolved" or "Ana asked you to review again".
+    text: String,
+    /// The event ids it covers, acknowledged once shown so they're never shown again.
+    events: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -384,6 +412,100 @@ async fn poll(app: &AppHandle) {
             .title(format!("{who} has waited {}", wait(row.waiting_hours)))
             .body(format!("{} · {} #{}", row.pr.title, row.pr.repo, row.pr.number))
             .show();
+    }
+
+    // After the queue, which tells the server about re-review requests.
+    follow_ups(app, &base, &token).await;
+}
+
+/// Asks the server what happened on the PRs you reviewed (it reads GitHub only for PRs that changed, at most once a
+/// minute), shows one notification per PR with news, then acknowledges every event shown so the server never returns
+/// it again. Each event is shown at most once a run, whatever the server says; ids whose acknowledgement failed are
+/// sent again next poll. Tauri's notifications can't act on a click on every platform, so a click brings Alden
+/// forward rather than opening the PR; the notification names it.
+async fn follow_ups(app: &AppHandle, base: &str, token: &str) {
+    let state = app.state::<AppState>();
+    // Shown before but not acknowledged: first, so the check below doesn't return them again.
+    let pending: Vec<String> = state.follow_ups_unacked.lock().unwrap().iter().cloned().collect();
+    ack_follow_ups(app, base, token, pending).await;
+
+    let response = reqwest::Client::new()
+        .get(format!("{base}/api/follow-ups"))
+        .header("X-Alden-Token", token)
+        // A check reads the threads of each PR that changed, a few at a time.
+        .timeout(Duration::from_secs(120))
+        .send()
+        .await;
+    let found = match response {
+        Ok(res) if res.status().is_success() => res.json::<FollowUps>().await.ok(),
+        _ => None,
+    };
+    let Some(found) = found else { return };
+    let (to_show, to_ack) = {
+        let shown = state.follow_ups_shown.lock().unwrap();
+        plan_follow_ups(found.notifications, &shown)
+    };
+    for note in &to_show {
+        let mut builder = app.notification().builder().title(follow_up_title(note)).body(clip(&note.text, 120));
+        if found.sound {
+            builder = builder.sound(DEFAULT_SOUND);
+        }
+        let _ = builder.show();
+    }
+    state.follow_ups_shown.lock().unwrap().extend(to_ack.iter().cloned());
+    state.follow_ups_unacked.lock().unwrap().extend(to_ack.iter().cloned());
+    ack_follow_ups(app, base, token, to_ack).await;
+}
+
+/// Which notifications to show, and which event ids to acknowledge: a notification with at least one event not shown
+/// yet this run is shown; events already shown (the server returned them because an acknowledgement failed) are only
+/// acknowledged.
+fn plan_follow_ups(notes: Vec<FollowUp>, shown: &HashSet<String>) -> (Vec<FollowUp>, Vec<String>) {
+    let mut to_show = Vec::new();
+    let mut to_ack = Vec::new();
+    for note in notes {
+        let fresh = note.events.iter().any(|id| !shown.contains(id));
+        to_ack.extend(note.events.iter().cloned());
+        if fresh {
+            to_show.push(note);
+        }
+    }
+    (to_show, to_ack)
+}
+
+/// Event ids in batches the ack route takes.
+fn ack_chunks(ids: &[String]) -> Vec<Vec<String>> {
+    ids.chunks(ACK_LIMIT).map(|chunk| chunk.to_vec()).collect()
+}
+
+/// Acknowledges events, a batch at a time; what the server confirms is no longer retried.
+async fn ack_follow_ups(app: &AppHandle, base: &str, token: &str, ids: Vec<String>) {
+    for chunk in ack_chunks(&ids) {
+        let acked = reqwest::Client::new()
+            .post(format!("{base}/api/follow-ups/ack"))
+            .header("X-Alden-Token", token)
+            .json(&serde_json::json!({ "events": chunk }))
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await
+            .is_ok_and(|res| res.status().is_success());
+        if acked {
+            let state = app.state::<AppState>();
+            let mut unacked = state.follow_ups_unacked.lock().unwrap();
+            for id in &chunk {
+                unacked.remove(id);
+            }
+        }
+    }
+}
+
+/// The PR's title, or "owner/repo#123" when it has none.
+fn follow_up_title(note: &FollowUp) -> String {
+    let title = note.title.trim();
+    if title.is_empty() {
+        note.pr.clone()
+    } else {
+        clip(title, 80)
     }
 }
 
@@ -704,6 +826,50 @@ mod tests {
         assert_eq!((pr.pr.as_str(), pr.places), ("a/b#1", 2));
         let none: PrepareResult = serde_json::from_str(r#"{"prepared":null,"reason":"off"}"#).unwrap();
         assert!(none.prepared.is_none());
+    }
+
+    fn note(pr: &str, events: &[&str]) -> FollowUp {
+        FollowUp {
+            pr: pr.into(),
+            title: String::new(),
+            text: "news".into(),
+            events: events.iter().map(|e| e.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn shows_each_follow_up_event_once_and_acknowledges_what_comes_back() {
+        let shown: HashSet<String> = ["e1".to_string(), "e2".to_string()].into();
+        let (to_show, to_ack) = plan_follow_ups(
+            vec![note("a/b#1", &["e1", "e2"]), note("a/b#2", &["e2", "e3"]), note("a/b#3", &["e4"])],
+            &shown,
+        );
+        // a/b#1 was shown but its acknowledgement failed: acknowledged again, not shown again.
+        assert_eq!(to_show.iter().map(|n| n.pr.as_str()).collect::<Vec<_>>(), vec!["a/b#2", "a/b#3"]);
+        assert_eq!(to_ack, vec!["e1", "e2", "e2", "e3", "e4"]);
+    }
+
+    #[test]
+    fn acknowledges_in_batches_the_route_takes() {
+        let ids: Vec<String> = (0..1_201).map(|i| format!("e{i}")).collect();
+        let chunks = ack_chunks(&ids);
+        assert_eq!(chunks.iter().map(Vec::len).collect::<Vec<_>>(), vec![500, 500, 201]);
+        assert!(ack_chunks(&[]).is_empty());
+    }
+
+    #[test]
+    fn reads_follow_ups_and_names_each_by_its_pr() {
+        let found: FollowUps = serde_json::from_str(
+            r#"{"notifications":[{"pr":"a/b#1","title":"Fix it","url":"u","text":"2 replies","events":["e1","e2"]},
+            {"pr":"a/b#2","title":" ","url":"u","text":"Ana asked you to review again","events":["e3"]}],"sound":false}"#,
+        )
+        .unwrap();
+        assert!(!found.sound);
+        assert_eq!(follow_up_title(&found.notifications[0]), "Fix it");
+        assert_eq!(follow_up_title(&found.notifications[1]), "a/b#2");
+        assert_eq!(found.notifications[0].events, vec!["e1", "e2"]);
+        let older: FollowUps = serde_json::from_str(r#"{"notifications":[]}"#).unwrap();
+        assert!(older.sound);
     }
 
     #[test]

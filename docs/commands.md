@@ -138,6 +138,10 @@ Checks only, no model · briefed 2026-10-06 09:30 UTC by Alden
 
 ```sh
 alden comment <pr> [file:line[-endLine]] "text" [--suggest "code" | --suggest-file <path> | --suggest -]
+alden comment <pr> --threads
+alden comment <pr> --reply <thread> "text" [--resolve]
+alden comment <pr> --resolve <thread>
+alden comment <pr> --draft
 ```
 
 Writes a comment on a PR, kept in Alden until you send it with `alden send`. With `file:line`, it's on that line of
@@ -153,8 +157,13 @@ text, lists the PR's comments, ranges and suggestions (old lines and new) shown,
 | `--left` | The line numbers are in the old file: a comment on removed lines. Not with a suggestion. |
 | `--suggest <code>` | Suggests replacement code for the line(s), exactly as they should read. `-` reads it from stdin; `""` deletes the lines. See [Suggesting changes](comments.md#suggesting-changes). |
 | `--suggest-file <path>` | Suggests the replacement code in this file. From a file or stdin, one trailing newline is dropped. |
-| `--delete <id>` | Deletes a comment, by the id the list shows. |
-| `--json` | Print the comments (or the new one) as JSON. Schema: `packages/schema/json/review-draft.v1.json`. |
+| `--delete <id>` | Deletes a comment (or a reply), by the id the list shows. On one of [Alden's drafts](comments.md#aldens-drafts), drops it. |
+| `--keep <id>` | Keeps one of Alden's drafts (or `all` of them on the PR), making it yours so it's sent with your review. |
+| `--draft` | Asks the model, in one call within your caps, to draft comments for the places in the PR's latest briefing (from `alden review`, of its latest push) that have no comment or draft near them, and says how many it drafted, what it cost and how many places it skipped. They're [Alden's drafts](comments.md#aldens-drafts): keep them with `--keep`. Needs a model; never on a PR with text aimed at AI reviewers. See [Draft my review](comments.md#draft-my-review). |
+| `--threads` | Lists the PR's review threads, yours first and open ones first, each with a short id and every comment. |
+| `--reply <thread>` | Replies in a review thread already on the PR, by its short id or `file:line`, with your review. One reply per thread: again changes its text. See [Replying in a thread](comments.md#replying-in-a-thread). |
+| `--resolve [thread]` | With `--reply`, resolves the thread once your review is sent. Alone, names the thread to resolve, saying nothing. |
+| `--json` | Print the comments (or the new one, or with `--threads` the threads) as JSON. Schema: `packages/schema/json/review-draft.v1.json`. |
 
 ## alden send
 
@@ -163,14 +172,37 @@ alden send <pr> --comment | --approve | --request-changes [-m body]
 ```
 
 Sends the PR's comments to GitHub as one review. First it shows exactly what will post (the body, then each comment
-with its file and line or lines, each suggestion as the lines it replaces and the lines it suggests, and before an approval the places Alden flagged that you didn't comment on), then asks. Nothing
-else in Alden posts to GitHub. See [Comments and sending a review](comments.md#sending).
+with its file and line or lines, each suggestion as the lines it replaces and the lines it suggests, each reply in its
+thread and whether it resolves it, and before an approval the places Alden flagged that you didn't comment on), then
+asks. Replies post into the review before it's submitted; threads are resolved after (see
+[How a review with replies is sent](comments.md#how-a-review-with-replies-is-sent)). Nothing
+else in Alden posts to GitHub. Alden's drafts you haven't kept aren't sent, and it says how many; like every draft on the PR, they're cleared once the review is sent. See [Comments and sending a review](comments.md#sending).
 
 | Flag | What it does |
 | --- | --- |
 | `--comment`, `--approve`, `--request-changes` | What the review does. Exactly one. |
 | `-m, --message <body>` | The review's body. General notes follow it. |
 | `-y, --yes` | Send without asking. Without a terminal to ask on, Alden won't send unless you pass it. |
+
+## alden watch
+
+```sh
+alden watch [pr] [--off | --rereview | --your-turn | --every-reply | --default]
+```
+
+How much the desktop app tells you about a PR after you review it: its own level, overriding
+`notifications.followUps` until the PR is merged or closed. With a level, sets it; `--default` puts the PR back on the
+global level; with neither, says which level applies. Without a PR, lists the PRs with their own level. `pr` takes the
+same forms as `alden review`. See [Follow-ups on PRs you reviewed](desktop.md#follow-ups-on-prs-you-reviewed).
+
+| Flag | What it does |
+| --- | --- |
+| `--off` | No notifications about this PR. |
+| `--rereview` | Only when you're asked to review it again. |
+| `--your-turn` | A re-review, or when every comment you left is resolved or answered. |
+| `--every-reply` | Each reply, resolve and re-review, and a push that makes one of your comments outdated. |
+| `--default` | Back to the global level. |
+| `--json` | Print the PR's level (`{ pr, override?, level }`), or the global level and the list, as JSON. |
 
 ## alden ui
 

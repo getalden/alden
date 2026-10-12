@@ -49,6 +49,23 @@ describe("toFacts", () => {
     expect(PULL_REQUEST_FIELDS).toContain("assignees(first: 10) { nodes { login } }");
   });
 
+  it("reads the commit each review was on, and none from a fixture recorded before Alden asked for it", () => {
+    const raw = pr("hugo", 15387);
+    raw.reviews = {
+      nodes: [
+        { author: { login: "bep" }, state: "COMMENTED", submittedAt: "2026-09-01T10:00:00Z" },
+        { author: { login: "bep" }, state: "APPROVED", submittedAt: "2026-09-02T10:00:00Z", commit: { oid: "abc123" } },
+        { author: { login: "bep" }, state: "DISMISSED", submittedAt: "2026-09-03T10:00:00Z", commit: null },
+      ],
+    };
+    const reviews = toFacts(raw, outsider).reviews;
+    expect(reviews.map((r) => r.commit)).toEqual([undefined, "abc123", undefined]);
+    expect(reviews[0]).not.toHaveProperty("commit");
+    expect(PULL_REQUEST_FIELDS).toContain(
+      "reviews(last: 20) { nodes { author { login } state submittedAt commit { oid } } }",
+    );
+  });
+
   it("maps CI rollups", () => {
     // Real CI results change between recordings, so set each rollup explicitly.
     const withRollup = (state: string | null) => {
@@ -62,6 +79,41 @@ describe("toFacts", () => {
     expect(withRollup("PENDING")).toBe("pending");
     expect(withRollup("EXPECTED")).toBe("pending");
     expect(withRollup(null)).toBe("none");
+  });
+
+  it("doesn't call CI failing when the only runs that didn't pass were cancelled", () => {
+    const run = (name: string, conclusion: string | null, status = "COMPLETED") => ({
+      __typename: "CheckRun" as const,
+      name,
+      status,
+      conclusion,
+    });
+    const status = (context: string, state: string) => ({ __typename: "StatusContext" as const, context, state });
+    const ci = (nodes: unknown[], hasNextPage = false) => {
+      const raw = pr("hugo", 15387);
+      raw.commits = {
+        nodes: [
+          { commit: { statusCheckRollup: { state: "FAILURE", contexts: { pageInfo: { hasNextPage }, nodes } } } },
+        ],
+      } as RawPullRequest["commits"];
+      return toFacts(raw, outsider).ci;
+    };
+    // GitHub's rollup counts a cancelled run as a failure; skipped and neutral ones pass.
+    expect(ci([run("test", "SUCCESS"), run("lint", "CANCELLED"), run("e2e", "SKIPPED"), run("x", "NEUTRAL")])).toBe(
+      "cancelled",
+    );
+    // A cancelled run of a check that ran again counts as that run.
+    expect(ci([run("test", "CANCELLED"), run("test", "SUCCESS")])).toBe("success");
+    expect(ci([run("test", "CANCELLED"), run("test", null, "IN_PROGRESS")])).toBe("pending");
+    expect(ci([run("test", "CANCELLED"), run("test", "FAILURE")])).toBe("failure");
+    // Anything else failing is a failure, cancelled runs or not; then anything running is pending.
+    expect(ci([run("lint", "CANCELLED"), run("test", "TIMED_OUT")])).toBe("failure");
+    expect(ci([run("lint", "CANCELLED"), status("ci/legacy", "ERROR")])).toBe("failure");
+    expect(ci([run("lint", "CANCELLED"), status("ci/legacy", "PENDING")])).toBe("pending");
+    // Not every run is there to read, or none is: GitHub's word stands.
+    expect(ci([run("lint", "CANCELLED")], true)).toBe("failure");
+    expect(ci([])).toBe("failure");
+    expect(PULL_REQUEST_FIELDS).toContain("... on CheckRun { name status conclusion }");
   });
 
   it("spots a direct request and when it was made, ignoring login case", () => {

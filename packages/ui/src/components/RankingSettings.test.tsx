@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { RankingState, RankPreview, RankRule, RankWeight } from "@alden/schema";
+import { RANK_WEIGHTS, type RankingState, type RankPreview, type RankRule, type RankWeight } from "@alden/schema";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Api, RankChange } from "../api";
@@ -76,6 +76,13 @@ describe("RankingSettings", () => {
     expect(screen.getByText(/Of 8 in Needs you/)).toBeTruthy();
     // The background keeps the top three briefed: both shown rows are in it.
     expect(screen.getAllByText(/· briefed in the background/)).toHaveLength(2);
+  });
+
+  it("has a slider for every weight the ranking takes, re-reviews included", async () => {
+    expect(WEIGHTS.map((w) => w.name).sort()).toEqual([...RANK_WEIGHTS].sort());
+    show(fakeApi(state({ weights: { rereview: 0 } })));
+    await screen.findByText("Weights");
+    expect(slider("Re-reviews").value).toBe("0");
   });
 
   it("re-ranks the preview as a weight moves, before anything is saved, and resets to the defaults", async () => {

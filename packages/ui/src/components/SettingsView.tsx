@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import type { Api, Session, SpendReport } from "../api";
 import { formatUsd, plural } from "../format";
 import { applyTheme, readTheme, type Theme } from "../theme";
+import { DraftSettings } from "./DraftSettings";
 import { LearningSettings } from "./LearningSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { RankingSettings } from "./RankingSettings";
@@ -236,6 +237,8 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
 
           <LearningSettings api={api} on={session.learning?.fromReviews ?? true} onSaved={onSaved} />
 
+          <DraftSettings api={api} on={session.drafts?.auto ?? true} onSaved={onSaved} />
+
           <QueueScopeSettings api={api} initial={session.queueScope} onSaved={onSaved} />
 
           <RankingSettings api={api} desktop={session.desktop === true} onSaved={onSaved} />
@@ -249,7 +252,12 @@ export function SettingsView({ api, session, onSaved }: { api: Api; session: Ses
           )}
 
           {session.desktop && (
-            <NotificationSettings api={api} sound={session.notifications?.sound ?? true} onSaved={onSaved} />
+            <NotificationSettings
+              api={api}
+              sound={session.notifications?.sound ?? true}
+              followUps={session.notifications?.followUps}
+              onSaved={onSaved}
+            />
           )}
 
           <TelemetrySettings api={api} />

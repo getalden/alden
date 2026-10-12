@@ -4,28 +4,38 @@ import { join, sep } from "node:path";
 import {
   addNote,
   backgroundModelAllowed,
+  briefingForDrafting,
   cachedReviewQueue,
   checkFreshness,
   checkLinkTarget,
   checkModelKey,
   checkProgress,
+  checkThread,
   cloneAt,
   createGitHubClient,
   DiffCache,
+  type DiffFile,
+  DraftingError,
+  draftReview,
+  dropAldenDrafts,
   type Effort,
   editNote,
   FeedbackLog,
+  fetchPullRequest,
   fetchPullRequestState,
   fetchReviewQueue,
+  fetchReviewThreads,
   fetchViewer,
   findClone,
   forget,
   forgetAll,
   JsonCache,
+  keepAldenDrafts,
   loadConfig,
   loadLearning,
   localDiffView,
   MODEL_ALIASES,
+  makeAldenDrafts,
   memoryItems,
   memoryRepos,
   modelKeyStore,
@@ -44,6 +54,7 @@ import {
   reactionProgress,
   recordReaction,
   recordSeen,
+  rememberForDrafting,
   resolveModel,
   resolveModelKey,
   resolveToken,
@@ -57,9 +68,11 @@ import {
   seenPlaces,
   selectProvider,
   sendReview,
+  sentComments,
   setConfigValue,
   setLearning,
   setTelemetryConsent,
+  suggestCommentText,
   supportsEffort,
   telemetryBlocked,
   telemetryConsent,
@@ -71,7 +84,15 @@ import {
   type WithModel,
   whyNoToken,
 } from "@alden/core";
-import type { Briefing, BriefingFreshness, BriefingTarget, DraftLink, RankedQueue, ReviewDraft } from "@alden/schema";
+import type {
+  Briefing,
+  BriefingFreshness,
+  BriefingTarget,
+  DraftLink,
+  RankedQueue,
+  ReviewDraft,
+  ReviewThreads,
+} from "@alden/schema";
 import { LAST_QUEUE_KEY, type LastQueue, openInBrowser } from "../commands/open.js";
 import { spendReport } from "../commands/spend.js";
 import { loadRepoStats } from "../commands/stats.js";
@@ -80,12 +101,16 @@ import { learningFor, learningForQueue, noteOpened } from "../learning.js";
 import { checkSentOutcomes } from "../outcomes.js";
 import { parsePrRef } from "../pr-ref.js";
 import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
+import { createFollowUpsApi } from "./follow-ups.js";
 import { createModelSetupApi } from "./model-setup.js";
 import { createRankingApi } from "./rank.js";
 import { ApiError, type DraftInput, type ReviewRequest, type UiApi } from "./server.js";
 import { cliStatus, createSignIn, gitHubCliSignedIn, installCli } from "./setup.js";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+/** How long a PR's review threads are kept: the drawer, the Diff tab and a reply's check then share one read. */
+export const THREADS_TTL_MS = 30_000;
 
 /** The GitHub repos the directory `alden ui` started in points at: where PR reviews can find callers. */
 export function repoOf(cwd: string): Promise<{ root: string; repos: string[] } | undefined> {
@@ -224,6 +249,45 @@ export function createUiApi(options: {
     }
   };
   const drafts = new ReviewDrafts();
+  /** PRs' review threads as last read, by PR: each answer carries the head it's of. Dropped once a review is sent. */
+  const threadsRead = new Map<string, { at: number; threads: ReviewThreads }>();
+  /** Your login, for marking your comments in threads: asked once per sign-in. */
+  let viewer: { token: string; login: string } | undefined;
+  const threadsOf = async (ref: { repo: string; number: number; name: string }, refresh = false) => {
+    const key = ref.name.toLowerCase();
+    const hit = threadsRead.get(key);
+    if (!refresh && hit && Date.now() - hit.at < THREADS_TTL_MS) return hit.threads;
+    const resolved = await signedIn();
+    const client = createGitHubClient(resolved.token);
+    let found: ReviewThreads | undefined;
+    try {
+      if (viewer?.token !== resolved.token) {
+        const { data } = await client.request("GET /user");
+        viewer = { token: resolved.token, login: data.login };
+      }
+      found = await fetchReviewThreads(client, ref.repo, ref.number, viewer.login);
+    } catch (error) {
+      throw new ApiError(502, describeGitHubError(error, resolved.source));
+    }
+    if (!found) throw new ApiError(404, `${ref.name} isn't on GitHub, or your sign-in can't see it.`);
+    threadsRead.set(key, { at: Date.now(), threads: found });
+    return found;
+  };
+  /** Checks a reply's thread is on the PR and GitHub lets you reply there (with text) and resolve it (when ticked). */
+  const checkReplyThread = async (
+    ref: { repo: string; number: number; name: string },
+    threadId: string,
+    want: { reply: boolean; resolve: boolean },
+  ) => {
+    const threads = await threadsOf(ref);
+    try {
+      checkThread(threads, threadId, want);
+    } catch (error) {
+      throw new ApiError(422, (error as Error).message);
+    }
+    return threads;
+  };
+  const followUps = createFollowUpsApi({ cwd: options.cwd, signedIn, prRef: prOf });
   /**
    * Where a comment on `path` goes: inline when GitHub takes it on the diff, otherwise a note in the review body
    * linking to the code at the PR's head, once GitHub confirms the file (and line) are there to link to.
@@ -280,6 +344,14 @@ export function createUiApi(options: {
     }
   };
 
+  /** A drafting failure as the UI shows it, with what the call cost when one was made. */
+  const draftingProblem = (error: unknown): unknown => {
+    if (!(error instanceof DraftingError)) return error;
+    const cost = error.usd !== undefined && error.usd > 0 ? ` That call cost $${error.usd.toFixed(4)}.` : "";
+    const status = error.kind === "failed" || error.kind === "refused" ? 502 : 409;
+    return new ApiError(status, `${error.message}${cost}`);
+  };
+
   const api: UiApi = {
     async session() {
       const config = await loadConfig(options.cwd);
@@ -310,8 +382,9 @@ export function createUiApi(options: {
         eyes: config.review.eyes,
         ...(options.desktop ? { cli: cliStatus() } : {}),
         background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
-        notifications: { sound: config.notifications.sound },
+        notifications: { sound: config.notifications.sound, followUps: config.notifications.followUps },
         learning: { fromReviews: config.learning.fromReviews },
+        drafts: { auto: config.drafts.auto },
         repo: (await repoOf(options.cwd)) ?? null,
         user,
         model: {
@@ -352,7 +425,8 @@ export function createUiApi(options: {
           (await shared(JSON.stringify([scope.repos, scope.orgs, scope.ignore, refresh]), () =>
             fetchReviewQueue(client, { ...scope, refresh }),
           ));
-        const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
+        // Rows you reviewed before get their thread counts from the last follow-up check.
+        const ranked = followUps.noteQueue(rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue)));
         void track("queue_ranked", queueEvent(ranked));
         // What came of the comments you sent lately, after the queue is in: at most a request per PR per day.
         if (!cached) {
@@ -405,6 +479,8 @@ export function createUiApi(options: {
     },
 
     modelSetup: createModelSetupApi({ cwd: options.cwd }),
+
+    followUps,
 
     ranking: createRankingApi({
       cwd: options.cwd,
@@ -693,12 +769,17 @@ export function createUiApi(options: {
       const list = drafts.list(ref.name);
       return {
         drafts: list.map(publicDraft),
-        unaddressed: unaddressedPlaces(drafts.briefed(ref.name)?.places ?? [], list),
+        // Alden's drafts you haven't kept won't be sent, so they don't count as a word on the place they're on.
+        unaddressed: unaddressedPlaces(
+          drafts.briefed(ref.name)?.places ?? [],
+          list.filter((d) => d.source !== "alden"),
+        ),
       };
     },
 
     async addDraft(input: DraftInput, source: ReviewDraft["source"] = "you") {
       const ref = await prOf(input.pr);
+      if (input.inReplyTo !== undefined) return addReply(ref, input, input.inReplyTo, source);
       const { headSha, files, client } = await followPr(ref);
       let spot: { place: Placement } | { linkTo: DraftLink } | undefined;
       if (input.path !== undefined || input.line !== undefined) {
@@ -717,6 +798,9 @@ export function createUiApi(options: {
           ...(input.suggestion !== undefined ? { suggestion: input.suggestion } : {}),
         });
         void track("draft_changed", { action: "add", source, inline: inline(draft) });
+        if (input.assisted) {
+          void track("draft_assisted", { reply: false, inline: inline(draft), edited: input.assisted.edited });
+        }
         return publicDraft(draft);
       } catch (error) {
         throw new ApiError(400, (error as Error).message);
@@ -726,6 +810,8 @@ export function createUiApi(options: {
     async editDraft(id, change) {
       const draft = drafts.get(id);
       if (!draft) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
+      if (draft.inReplyTo !== undefined) return editReply(draft, change);
+      if (change.resolve !== undefined) throw new ApiError(400, "Only a reply in a thread resolves it.");
       let place: (Placement & { headSha: string }) | undefined;
       let linkTo: (DraftLink & { headSha: string }) | undefined;
       if (change.path !== undefined || change.line !== undefined) {
@@ -751,14 +837,138 @@ export function createUiApi(options: {
       }
       if (!edited) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
       void track("draft_changed", { action: "edit", source: edited.source, inline: inline(edited) });
+      if (change.assisted) {
+        void track("draft_assisted", { reply: false, inline: inline(edited), edited: change.assisted.edited });
+      }
+      // Editing one of Alden's drafts makes it yours, as keeping it does.
+      if (edited.source === "alden" && (change.body !== undefined || change.suggestion !== undefined)) {
+        const learn = (await loadConfig(options.cwd)).learning.fromReviews;
+        const { kept } = await keepAldenDrafts({ ids: [id] }, { learn });
+        return publicDraft(kept[0] ?? edited);
+      }
       return publicDraft(edited);
     },
 
     async deleteDraft(id) {
+      // Dropping one of Alden's drafts teaches a little (see `dropAldenDrafts`); anything else is just deleted.
+      if (drafts.get(id)?.source === "alden") {
+        const learn = (await loadConfig(options.cwd)).learning.fromReviews;
+        const [dropped] = (await dropAldenDrafts([id], { learn })).dropped;
+        if (dropped) {
+          void track("draft_changed", { action: "discard", source: "alden", inline: inline(dropped) });
+          return { ok: true };
+        }
+      }
       const deleted = drafts.delete(id);
       if (!deleted) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
       void track("draft_changed", { action: "discard", source: deleted.source, inline: inline(deleted) });
       return { ok: true };
+    },
+
+    async keepDrafts({ ids, pr }) {
+      const which = { ...(ids ? { ids } : {}), ...(pr ? { pr: (await prOf(pr)).name } : {}) };
+      const learn = (await loadConfig(options.cwd)).learning.fromReviews;
+      const { kept } = await keepAldenDrafts(which, { learn });
+      for (const draft of kept) void track("draft_changed", { action: "keep", source: "alden", inline: inline(draft) });
+      return { kept: kept.map(publicDraft) };
+    },
+
+    async draftReview({ pr }) {
+      const ref = await prOf(pr);
+      const config = await loadConfig(options.cwd);
+      const choice = await selectProvider(config);
+      if (!choice.ok) throw new ApiError(409, choice.reason);
+      const briefing = await briefingForDrafting(ref.name);
+      if (!briefing) {
+        throw new ApiError(409, `Brief ${ref.name} first: Alden drafts from the briefing's places to look.`);
+      }
+      const { headSha, files, client } = await followPr(ref);
+      if (briefing.target.kind !== "pr" || briefing.target.headSha !== headSha) {
+        throw new ApiError(409, `${ref.name} has new commits since its briefing: brief it again, then draft.`);
+      }
+      // Where you've already commented on GitHub counts as a word on a place, as a draft does.
+      const sent = await threadsOf(ref).then(
+        (read) => sentComments(read.threads),
+        () => [],
+      );
+      const detail = await fetchPullRequest(client, ref.repo, ref.number).catch(() => undefined);
+      try {
+        const result = await draftReview({
+          briefing,
+          files,
+          headSha,
+          description: detail?.body,
+          learning: await learningFor(ref.repo),
+          sent,
+          provider: choice.provider,
+          config,
+          ledger: new SpendLedger(),
+          checkLink: (link) => checkLinkTarget(client, ref.repo, headSha, link),
+        });
+        for (const d of result.made) void track("draft_changed", { action: "add", source: "alden", inline: inline(d) });
+        return {
+          made: result.made.length,
+          skipped: result.skipped,
+          asked: result.asked,
+          costUsd: result.usd ?? null,
+          drafts: result.made.map(publicDraft),
+        };
+      } catch (error) {
+        throw draftingProblem(error);
+      }
+    },
+
+    async suggestText(input, signal) {
+      const ref = await prOf(input.pr);
+      const config = await loadConfig(options.cwd);
+      const choice = await selectProvider(config);
+      if (!choice.ok) throw new ApiError(409, choice.reason);
+      const { headSha, files, client, source } = await followPr(ref);
+      let thread: ReviewThreads["threads"][number] | undefined;
+      if (input.threadId !== undefined) {
+        thread = (await threadsOf(ref)).threads.find((t) => t.id === input.threadId);
+        if (!thread) throw new ApiError(404, "That thread isn't on the PR any more. Read the conversation again.");
+      }
+      let detail: Awaited<ReturnType<typeof fetchPullRequest>>;
+      try {
+        detail = await fetchPullRequest(client, ref.repo, ref.number);
+      } catch (error) {
+        throw new ApiError(502, describeGitHubError(error, source));
+      }
+      // The briefing you're looking at, when it's of this head: what Alden flagged near the line.
+      const saved = await briefingForDrafting(ref.name);
+      const briefing = saved?.target.kind === "pr" && saved.target.headSha === headSha ? saved : undefined;
+      const at =
+        input.path !== undefined
+          ? { path: input.path, line: input.line, startLine: input.startLine, side: input.side }
+          : undefined;
+      try {
+        const result = await suggestCommentText({
+          target: {
+            kind: "pr",
+            repo: ref.repo,
+            number: ref.number,
+            url: detail.url,
+            title: detail.title,
+            author: detail.author?.login ?? null,
+            baseRef: detail.baseRefName,
+            headRef: detail.headRefName,
+            headSha,
+          },
+          description: detail.body,
+          files,
+          learning: await learningFor(ref.repo),
+          briefing,
+          for: { ...(thread ? { thread } : at ? { at } : {}), ...(input.text?.trim() ? { text: input.text } : {}) },
+          provider: choice.provider,
+          config,
+          ledger: new SpendLedger(),
+          ...(signal ? { signal } : {}),
+        });
+        return { text: result.text, costUsd: result.usd ?? null };
+      } catch (error) {
+        throw draftingProblem(error);
+      }
     },
 
     async sendReview({ pr, event, body }) {
@@ -787,10 +997,15 @@ export function createUiApi(options: {
         if (Object.values(counts.signals).some((n) => n > 0)) {
           void track("review_signals", { source: "review", ...counts.signals });
         }
+        // The threads changed: your replies, and what you resolved.
+        threadsRead.delete(ref.name.toLowerCase());
         return {
           url: sent.url,
           posted: sent.posted,
           review: sent.review,
+          ...(sent.replies !== undefined ? { replies: sent.replies } : {}),
+          ...(sent.resolved !== undefined ? { resolved: sent.resolved } : {}),
+          ...(sent.notResolved ? { notResolved: sent.notResolved } : {}),
           ...(sent.learning ? { learning: sent.learning } : {}),
         };
       } catch (error) {
@@ -802,7 +1017,11 @@ export function createUiApi(options: {
       }
     },
 
-    async diff(pr) {
+    async threads(pr, refresh = false) {
+      return threadsOf(await prOf(pr), refresh);
+    },
+
+    async diff(pr, since) {
       if (pr === undefined) {
         try {
           return await localDiffView(options.cwd);
@@ -813,7 +1032,7 @@ export function createUiApi(options: {
       const ref = await prOf(pr);
       const resolved = await signedIn();
       try {
-        return await pullRequestDiffView(createGitHubClient(resolved.token), ref.repo, ref.number, diffs);
+        return await pullRequestDiffView(createGitHubClient(resolved.token), ref.repo, ref.number, diffs, since);
       } catch (error) {
         throw new ApiError(502, describeGitHubError(error, resolved.source));
       }
@@ -840,6 +1059,78 @@ export function createUiApi(options: {
     },
   };
 
+  /**
+   * A reply in a review thread, sent with the review: on a thread that's on the PR, where GitHub lets you reply (and
+   * resolve, when ticked). No place of its own, so no diff to read.
+   */
+  async function addReply(
+    ref: { repo: string; number: number; name: string },
+    input: DraftInput,
+    threadId: string,
+    source: ReviewDraft["source"],
+  ): Promise<ReviewDraft> {
+    if (
+      input.path !== undefined ||
+      input.line !== undefined ||
+      input.startLine !== undefined ||
+      input.side !== undefined ||
+      input.suggestion !== undefined
+    ) {
+      throw new ApiError(400, "A reply posts in its thread: leave out path, line, side and suggestion.");
+    }
+    const resolve = input.resolve === true;
+    const threads = await checkReplyThread(ref, threadId, { reply: input.body.trim() !== "", resolve });
+    try {
+      const draft = drafts.addReply({
+        pr: ref.name,
+        headSha: threads.headSha,
+        threadId,
+        body: input.body,
+        resolve,
+        source,
+      });
+      void track("draft_changed", { action: "add", source, inline: false });
+      if (input.assisted) void track("draft_assisted", { reply: true, inline: false, edited: input.assisted.edited });
+      return publicDraft(draft);
+    } catch (error) {
+      throw new ApiError(400, (error as Error).message);
+    }
+  }
+
+  /** A reply's text, or whether it resolves its thread; checked against the thread when it asks for more. */
+  async function editReply(
+    draft: ReturnType<ReviewDrafts["get"]> & {},
+    change: Parameters<UiApi["editDraft"]>[1],
+  ): Promise<ReviewDraft> {
+    if (
+      change.path !== undefined ||
+      change.line !== undefined ||
+      change.startLine !== undefined ||
+      change.suggestion !== undefined
+    ) {
+      throw new ApiError(400, "A reply posts in its thread: it can't go on a line or carry a suggestion.");
+    }
+    const body = change.body ?? draft.body;
+    const resolve = change.resolve ?? draft.resolve === true;
+    const more = (body.trim() !== "" && draft.body.trim() === "") || (resolve && draft.resolve !== true);
+    if (more) {
+      await checkReplyThread(await prOf(draft.pr), draft.inReplyTo as string, { reply: body.trim() !== "", resolve });
+    }
+    let edited: ReturnType<ReviewDrafts["editReply"]>;
+    try {
+      edited = drafts.editReply(draft.id, {
+        ...(change.body !== undefined ? { body: change.body } : {}),
+        ...(change.resolve !== undefined ? { resolve: change.resolve } : {}),
+      });
+    } catch (error) {
+      throw new ApiError(400, (error as Error).message);
+    }
+    if (!edited) throw new ApiError(404, `No draft ${draft.id}. It may have been sent or deleted.`);
+    void track("draft_changed", { action: "edit", source: edited.source, inline: false });
+    if (change.assisted) void track("draft_assisted", { reply: true, inline: false, edited: change.assisted.edited });
+    return publicDraft(edited);
+  }
+
   /** One review, for the UI or (background) for the desktop app ahead of time, which isn't you opening the PR. */
   async function runReview(
     request: ReviewRequest,
@@ -862,6 +1153,7 @@ export function createUiApi(options: {
     const graph = { enabled: request.graph !== false, cwd: options.cwd, onStage };
 
     let briefing: Briefing;
+    let diff: DiffFile[] | undefined;
     if (request.pr === undefined) {
       const learning = await learningFor((await repoOf(options.cwd))?.repos[0]);
       briefing = await reviewLocalChanges(config, options.cwd, model, {
@@ -882,6 +1174,9 @@ export function createUiApi(options: {
         briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model, {
           ...graph,
           ...(learning ? { learning } : {}),
+          onDiff: (files) => {
+            diff = files;
+          },
         });
       } catch (error) {
         throw new ApiError(502, describeGitHubError(error, resolved.source));
@@ -893,6 +1188,24 @@ export function createUiApi(options: {
       drafts.rememberBriefing(briefing);
     } catch {
       // the database is locked or damaged: the review still stands
+    }
+    // What "Draft my review" and "Draft with Alden" draft from.
+    await rememberForDrafting(briefing);
+    // Comments drafted from the model's findings, for you to keep, edit or drop: never sent on their own. Not beside
+    // a review thread already on the PR; drafted as before when the threads can't be read.
+    try {
+      const { target } = briefing;
+      const threads =
+        target.kind === "pr" && config.drafts.auto && briefing.llm?.status === "ok"
+          ? (await threadsOf({ ...target, name: prName(target.repo, target.number) }).catch(() => undefined))?.threads
+          : undefined;
+      const { made } = makeAldenDrafts(briefing, diff, {
+        enabled: config.drafts.auto,
+        ...(threads ? { threads } : {}),
+      });
+      for (const draft of made) void track("draft_changed", { action: "add", source: "alden", inline: inline(draft) });
+    } catch {
+      // the review stands without drafts
     }
     // `alden stats` splits before and after at the first use on each repo (a background briefing counts when read).
     const usedOn = briefing.target.kind === "pr" ? briefing.target.repo : (await repoOf(options.cwd))?.repos[0];

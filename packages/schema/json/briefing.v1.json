@@ -526,6 +526,24 @@
                   "text"
                 ],
                 "additionalProperties": false
+              },
+              "draft": {
+                "description": "a comment the model drafted for it, checked against the diff: only on medium and high findings on a changed line, when `drafts.auto` is on",
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string",
+                    "description": "the comment, in plain direct words"
+                  },
+                  "suggestion": {
+                    "description": "replacement code for the anchored line, only when the fix is a small, certain replacement",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "body"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -559,6 +577,10 @@
         "usd": {
           "description": "what the call cost at list price, when known",
           "type": "number"
+        },
+        "draftsNote": {
+          "description": "why a PR's model briefing has no drafted comments, in one line: drafting is off (`drafts.auto`), text in the PR aimed at AI reviewers, or no finding Alden drafts for",
+          "type": "string"
         }
       },
       "required": [

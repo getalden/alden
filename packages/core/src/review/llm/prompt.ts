@@ -35,7 +35,37 @@ export const LlmOutputSchema = z.object({
     .describe("Everything a reviewer should know about, including low-confidence concerns."),
 });
 
-export type LlmOutput = z.infer<typeof LlmOutputSchema>;
+/** A comment the model drafts for one finding, when Alden asks for drafts (see `DRAFTS_PROMPT`). */
+const LlmDraftSchema = z.object({
+  body: z
+    .string()
+    .describe("The review comment, to the author, in one to three plain sentences: what's wrong and what to do."),
+  suggestion: z
+    .string()
+    .optional()
+    .describe(
+      "Only when the fix is a small, certain replacement of the anchored line: its full new text, with indentation.",
+    ),
+});
+
+/**
+ * The same answer with a drafted comment on findings, asked for only when `drafts.auto` is on, so the output shape
+ * (and the prompt cache) of a review without drafts stays exactly as it was.
+ */
+export const LlmOutputWithDraftsSchema = LlmOutputSchema.extend({
+  findings: z
+    .array(
+      LlmOutputSchema.shape.findings.element.extend({
+        draft: LlmDraftSchema.optional().describe(
+          "Only for medium or high findings whose first anchor is an added line: the comment for that line.",
+        ),
+      }),
+    )
+    .describe(LlmOutputSchema.shape.findings.description ?? ""),
+});
+
+/** What the model returns, with or without drafts: a draft is optional either way. */
+export type LlmOutput = z.infer<typeof LlmOutputWithDraftsSchema>;
 
 /**
  * Stable across reviews so it can be cached. Written for Claude Sonnet 5, which follows instructions literally: it
@@ -56,6 +86,17 @@ Sometimes you also receive notes from the reviewer about what they care about in
 Alden replaces likely secrets with placeholders such as [redacted GitHub token, ghp_…(40 chars)] before you see the change. The real value is in the code; judge the code as if it were there, and don't report the placeholder itself.
 
 Judge whether the change does what its title and description say: "yes", "partly", "no", or "unclear" when there is no meaningful description. Write plainly, with no preamble and no praise.`;
+
+/**
+ * Appended to `SYSTEM_PROMPT` when `drafts.auto` is on, so a review without drafts sends the same system prompt as
+ * before (and keeps its cache). Drafts are asked for only where Alden can use them, which keeps the extra output small:
+ * medium and high findings on an added line, the only places Alden drafts a comment.
+ */
+export const DRAFTS_PROMPT = `The reviewer also wants comments drafted for them. For each medium or high severity finding whose first anchor is an added line (marked +), add a draft: the review comment a careful reviewer would leave on that line, written to the change's author in one to three plain sentences saying what is wrong and what to do. No preamble, no praise, no hedging, no sign-off, and never mention being an AI. Add a suggestion only when the fix is a small, certain replacement of that one line: its full new text, with its indentation, a few lines at most, and nothing else; never put a redaction placeholder in it. Leave the draft out for low severity findings, findings without a line, and findings on unchanged lines. The reviewer keeps, edits or drops each draft before anything is sent.`;
+
+/** The system prompt for a review, with the drafting section when Alden asks for drafts. */
+export const systemPrompt = (drafts: boolean): string =>
+  drafts ? `${SYSTEM_PROMPT}\n\n${DRAFTS_PROMPT}` : SYSTEM_PROMPT;
 
 /** Rough token cost of text: about 3 characters per token for code. Real counts come from the provider. */
 const tokens = (text: string) => Math.ceil(text.length / 3);
@@ -86,7 +127,8 @@ function priority(file: DiffFile, flaggedPaths: Set<string>): number {
   return 4;
 }
 
-function describeChecks(checks: CheckResult[]): string {
+/** Alden's check results as the model reads them: status, severity, summary, and each flagged check's evidence. */
+export function describeChecks(checks: CheckResult[]): string {
   return checks
     .map((c) => {
       const evidence = c.status === "flagged" ? c.evidence.map((e) => `\n    - ${e.text}`).join("") : "";
@@ -130,6 +172,8 @@ export interface PromptInput {
    * learned from their feedback. At most 12, each cut to 300 chars.
    */
   reviewerNotes?: (string | PromptNote)[];
+  /** Ask for a drafted comment on qualifying findings (`drafts.auto`): adds `DRAFTS_PROMPT` to the system prompt. */
+  drafts?: boolean;
 }
 
 const MAX_NOTES = 12;
@@ -172,7 +216,8 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
     .map((file, index) => ({ file, index, rank: priority(file, flagged) }))
     .sort((a, b) => a.rank - b.rank || a.index - b.index);
 
-  let used = tokens(SYSTEM_PROMPT) + tokens(preamble) + 200; // 200 for the omitted-files note
+  const system = systemPrompt(input.drafts === true);
+  let used = tokens(system) + tokens(preamble) + 200; // 200 for the omitted-files note
   const included: DiffFile[] = [];
   // Lockfiles are skipped on purpose (the dependency check reads them), so they aren't "omitted for budget".
   const omitted: string[] = [];
@@ -200,7 +245,7 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
   // Everything here goes to the model provider, so secrets in the diff, description or callers never do.
   const user = redactSecrets(`${preamble}\n\n${inOrder.map(renderFileDiff).join("\n\n")}${omittedNote}${callers}`);
   return {
-    system: SYSTEM_PROMPT,
+    system,
     user: user.text,
     includedFiles: inOrder.map((f) => f.path),
     omittedFiles: omitted,

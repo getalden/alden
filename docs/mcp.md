@@ -42,7 +42,7 @@ Sign in to GitHub first (`alden auth login`); the tools say so if you haven't.
 | `alden_missed` | Records something Alden should have flagged. | `note` (up to 2,000 characters), `path`, `line`, `pr` (the latest briefing) |
 | `alden_memory` | What Alden knows about you in a repo. | `repo` (this clone's `origin`) |
 | `alden_remember` | Adds a note to it ("Money is in cents, never floats"). | `text` (up to 500 characters), `repo` (this clone's `origin`) |
-| `alden_draft_comment` | Drafts a review comment for you, on a line or lines of the PR's diff or as a general note, or a suggested change you can apply on GitHub. On code outside the diff (a line GitHub won't take an inline comment on, or a whole file) it drafts a linked note, a general note in the review body that links to that code, and tells the assistant so. It isn't posted: you review it and send it from the UI or with `alden send`. | `pr`, `path` and `line` (none: a general note; `path` alone: a note linking to the whole file), `start_line` (for several lines, in one hunk), `side` `RIGHT` or `LEFT` (RIGHT), `body` (optional with a suggestion), `suggestion` (replacement code for the line(s), new side only; empty deletes them; in a linked note, code to copy) |
+| `alden_draft_comment` | Drafts a review comment for you, on a line or lines of the PR's diff or as a general note, or a suggested change you can apply on GitHub. On code outside the diff (a line GitHub won't take an inline comment on, or a whole file) it drafts a linked note, a general note in the review body that links to that code, and tells the assistant so. With `in_reply_to`, it drafts a reply in a review thread already on the PR instead. It isn't posted: you review it and send it from the UI or with `alden send`. | `pr`, `path` and `line` (none: a general note; `path` alone: a note linking to the whole file), `start_line` (for several lines, in one hunk), `side` `RIGHT` or `LEFT` (RIGHT), `body` (optional with a suggestion), `suggestion` (replacement code for the line(s), new side only; empty deletes them; in a linked note, code to copy), `in_reply_to` (a thread's `file:line` or id from `alden comment <pr> --threads`; not with `path`, `line` or `suggestion`) |
 
 Each place in a briefing lists the files to look at too, when the code graph ran: callers of the changed code, tests
 that use it, and files importing it, each with its line (see [Related files](code-graph.md#related-files)).
@@ -52,8 +52,10 @@ for wherever you review. It's told to record only what you said, never its own o
 
 Ask it to write a comment, or to suggest a change, and it drafts one in Alden with `alden_draft_comment`, marked as drafted by Claude Code
 (or whichever tool you use). Asked to comment on a caller outside the diff, it gets a
-[linked note](comments.md#comments-on-code-outside-the-diff) back, and the tool's answer says so. Alden posts only what you send from the UI or terminal: the assistant can draft
-comments, you review and send. There is deliberately no tool to send, approve or request changes. See
+[linked note](comments.md#comments-on-code-outside-the-diff) back, and the tool's answer says so. Asked to answer a comment on the PR, it drafts a reply in that thread (`in_reply_to`), which
+goes with your review like any draft. Alden posts only what you send from the UI or terminal: the assistant can draft
+comments and replies, you review and send. There is deliberately no tool to send, approve, request changes or resolve a
+thread. See
 [Comments and sending a review](comments.md).
 
 ## The model

@@ -41,13 +41,15 @@ repo's `.alden.toml` can't set it, so a repo can't make you spend. They're kept 
 there to that tool's model provider, under your agreement with it. Everything that came from a PR is labelled as
 written by its author, and the tool is told to treat it as data, never instructions. A PR can still try prompt
 injection on an assistant that has tools of its own, so keep your tool asking before it runs commands. The MCP tools
-write only to Alden's own database and post nothing to GitHub: `alden_draft_comment` drafts a comment, and there is no
-tool that sends one. See [Alden in your AI coding tool](mcp.md#safety).
+write only to Alden's own database and post nothing to GitHub: `alden_draft_comment` drafts a comment or a reply, and
+there is no tool that sends one or resolves a thread. See [Alden in your AI coding tool](mcp.md#safety).
 
 **Posting to GitHub.** Alden posts only what you send: one review, from the UI's Send button or `alden send` after you
-confirm what it shows, made of exactly the comments and body you see (Alden adds nothing). Nothing sends in the
-background, from a model, or from an AI coding tool, and a prompt injected through a PR can at most draft a comment you
-then read before sending. The request is never retried automatically, so a timeout can't post a review twice. It needs
+confirm what it shows, made of exactly the comments, replies and body you see (Alden adds nothing), and the threads you
+ticked to resolve. Nothing sends in the background, from a model, or from an AI coding tool, and a prompt injected
+through a PR can at most draft a comment you then read before sending. No request is retried automatically, so a
+timeout can't post a review twice. A review with replies takes a few requests (a pending review, the replies, the
+submit, then the resolves); if one fails before the submit, Alden deletes the pending review, so nothing half-posts. It needs
 no scope Alden didn't already ask for (`repo`). Drafts stay in the local database until you send or delete them. See
 [Comments and sending a review](comments.md).
 

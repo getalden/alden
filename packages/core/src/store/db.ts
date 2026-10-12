@@ -161,6 +161,37 @@ const MIGRATIONS: ((store: AldenStore) => void)[] = [
       CREATE TABLE outcome_checks (pr_key TEXT PRIMARY KEY, checked_at TEXT NOT NULL, head_sha TEXT, closed INTEGER NOT NULL DEFAULT 0);
     `);
   },
+  (store) => {
+    store.exec(`
+      -- Replies and resolves ride a review: in_reply_to is the thread's node id, resolve whether to resolve it once
+      -- sent. drafted is JSON ({ checkId, title }) on a comment Alden drafted from a finding.
+      ALTER TABLE drafts ADD COLUMN in_reply_to TEXT;
+      ALTER TABLE drafts ADD COLUMN resolve INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE drafts ADD COLUMN drafted TEXT;
+      -- Your notification level for one PR, overriding notifications.followUps until the PR is merged or closed.
+      CREATE TABLE pr_watch (pr_key TEXT PRIMARY KEY, repo TEXT NOT NULL, number INTEGER NOT NULL, level TEXT NOT NULL, set_at TEXT NOT NULL);
+      -- PRs you reviewed, as last seen: when GitHub said it changed, and the state that check found (JSON), so the next
+      -- check knows what's new.
+      CREATE TABLE follow_ups (
+        pr_key TEXT PRIMARY KEY,
+        repo TEXT NOT NULL,
+        number INTEGER NOT NULL,
+        checked_at TEXT NOT NULL,
+        updated_at TEXT,
+        state TEXT NOT NULL
+      );
+      -- What happened on them, once each. notified once the desktop app has shown it (or it was below the PR's level).
+      CREATE TABLE follow_up_events (
+        id TEXT PRIMARY KEY,
+        pr_key TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        at TEXT NOT NULL,
+        event TEXT NOT NULL,
+        notified INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX follow_up_events_pending ON follow_up_events (notified, at);
+    `);
+  },
 ];
 
 /** How many schema changes there are: the database's `user_version` once it's up to date. */

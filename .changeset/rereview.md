@@ -1,0 +1,5 @@
+---
+"alden": minor
+---
+
+See when you're asked for a second review, and read only what changed since your first. A PR you reviewed and were asked to review again is a re-review: it gets a small bump in Needs you (the new `rereview` weight under `[queue.rank]`, 2 points at 1, 0 ignores it, also a slider in Settings → Ranking and a line in `alden queue --explain`), leads its reasons with "Re-review: you were asked again", and says so on the row: "Re-review · reviewed 2 days ago" in the web UI, `[Re-review]` and "reviewed 2d ago" in `alden queue`. `--json` carries a `followUp` on every PR you reviewed before, with when you reviewed and the commit you reviewed. In the briefing, the Diff tab opens on **Since your review**, the changes from the commit you last reviewed to the PR's head, with **Whole PR** beside it; when that commit was force-pushed away it shows the whole PR and says so. Alden reads all of this from what the queue already fetches, plus one compare request when you open the diff.
