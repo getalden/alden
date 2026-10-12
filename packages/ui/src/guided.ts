@@ -143,9 +143,20 @@ export function savedProgress(key: string): { active: boolean; step: number } {
 
 export function saveProgress(key: string, state: { active: boolean; step: number }): void {
   progress.set(key, state);
+  for (const listener of listeners) listener();
+}
+
+/** Who hears about guided review starting, moving and ending: the PR header's reading steps. */
+const listeners = new Set<() => void>();
+
+/** For `useSyncExternalStore`: calls `listener` whenever any PR's guided progress changes. */
+export function subscribeProgress(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 /** For tests. */
 export function forgetProgress(): void {
   progress.clear();
+  for (const listener of listeners) listener();
 }

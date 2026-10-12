@@ -3,8 +3,8 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { type Api, ApiError, type CloneInfo, type Session } from "./api";
 import { MemoryView } from "./components/MemoryView";
 import { ModelSetupDialog } from "./components/ModelSetup";
-import { isLearnedReason, prKey, QueueView, type Reaction, unseen, useNavigatedQueue } from "./components/QueueView";
-import { type Choices, initialChoices, ReviewOptions, toRequest } from "./components/ReviewOptions";
+import { prKey, QueueView, type Reaction, unseen, useNavigatedQueue } from "./components/QueueView";
+import { type Choices, initialChoices, toRequest } from "./components/ReviewOptions";
 import { ReviewPane } from "./components/ReviewPane";
 import { SettingsView } from "./components/SettingsView";
 import { SignInCard } from "./components/SignIn";
@@ -12,10 +12,11 @@ import { StateCard } from "./components/StateCard";
 import { StatsView } from "./components/StatsView";
 import { TelemetryCard } from "./components/TelemetryCard";
 import { TopBar } from "./components/TopBar";
+import { Tune } from "./components/Tune";
 import { WatchBell } from "./components/WatchBell";
 import { useDrafts } from "./drafts";
 import { useFeedback } from "./feedback";
-import { fetchedAgo, waitingSince } from "./format";
+import { fetchedAgo, plural } from "./format";
 import { useQueueCollapsed, useQueueNav } from "./queue-prefs";
 import { useReviewTimeReporter } from "./review-time";
 import { useReviews } from "./reviews";
@@ -254,7 +255,15 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
   return (
     <SeenContext.Provider value={session?.learning?.fromReviews === false ? undefined : seen?.record}>
       <div className="app">
-        <TopBar session={session} route={route} queueCount={queueCount} />
+        <TopBar
+          session={session}
+          route={route}
+          api={api}
+          onSignedOut={() => {
+            loadSession();
+            loadQueue(true);
+          }}
+        />
         {route.view === "queue" && (
           <div className={`workspace${current ? " has-detail" : ""}`}>
             <aside className={`side${collapsed ? " collapsed" : ""}`} aria-label="Your review queue">
@@ -342,6 +351,7 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
                   cloneOf={api.clone}
                   freshness={api.freshness}
                   onSetUpModel={() => setSettingUpModel(true)}
+                  onSessionChange={loadSession}
                   openThread={
                     openThread?.pr === `${current.repo}#${current.number}`
                       ? { threadId: openThread.threadId, n: openThread.n }
@@ -377,30 +387,34 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
             </aside>
             <main className="main-pane">
               <ReviewPane
-                crumbs={<span>{session?.repo?.root ?? "no repo"}</span>}
-                title={`Your uncommitted changes${session?.repo?.repos[0] ? ` in ${session.repo.repos[0].split("/")[1]}` : ""}`}
-                why={
-                  reviews.runs.local?.briefing
-                    ? {
-                        label: "Since your last commit",
-                        items: [
-                          `${reviews.runs.local.briefing.summary.files} files`,
-                          `+${reviews.runs.local.briefing.summary.additions} −${reviews.runs.local.briefing.summary.deletions}`,
-                        ],
-                      }
-                    : undefined
+                crumbs={
+                  <>
+                    <span>{session?.repo?.root ?? "no repo"}</span>
+                    {reviews.runs.local?.briefing && (
+                      <span>
+                        {"\u00a0· since your last commit · "}
+                        {plural(reviews.runs.local.briefing.summary.files, "file")} ·{" "}
+                        <span className="add">+{reviews.runs.local.briefing.summary.additions}</span>{" "}
+                        <span className="del">−{reviews.runs.local.briefing.summary.deletions}</span>
+                      </span>
+                    )}
+                  </>
                 }
+                title={`Your uncommitted changes${session?.repo?.repos[0] ? ` in ${session.repo.repos[0].split("/")[1]}` : ""}`}
                 run={reviews.runs.local}
                 feedbackFor={feedbackFor}
                 request={toRequest(choicesNow, session)}
                 onStart={(request) => reviews.start("local", request)}
                 onCancel={() => reviews.cancel("local")}
                 controls={
-                  <ReviewOptions
+                  <Tune
                     session={session}
                     choices={choicesNow}
-                    onChange={setChoices}
+                    onChoices={setChoices}
+                    api={api}
+                    repo={session?.repo?.repos[0]}
                     onSetUpModel={() => setSettingUpModel(true)}
+                    onSessionChange={loadSession}
                   />
                 }
                 emptyHint="Review your uncommitted changes (staged, unstaged and untracked) before you open a PR."
@@ -497,6 +511,8 @@ function PrPane(props: {
   draftsApi?: Api | undefined;
   onDraftCount?: (key: string, count: number) => void;
   onSetUpModel?: () => void;
+  /** After the Tune popover saved a change to the config: read the session again. */
+  onSessionChange?: () => void;
   /** Whether a briefing still matches its PR on GitHub. */
   freshness?: ((target: BriefingTarget) => Promise<BriefingFreshness>) | undefined;
   /** A review thread to open the Comments drawer's Conversation on: where the news you opened the PR for is. */
@@ -545,6 +561,26 @@ function PrPane(props: {
     };
   }, [cloneOf, prRef.repo]);
   const elsewhere = clone?.path && clone.path !== session?.repo?.root ? clone.path : undefined;
+  // The mono line over the title: from the briefing once there is one, else from the queue row.
+  const briefed = reviews.runs[key]?.briefing;
+  const meta =
+    briefed?.target.kind === "pr"
+      ? {
+          author: briefed.target.author ?? "ghost",
+          base: briefed.target.baseRef,
+          files: briefed.summary.files,
+          additions: briefed.summary.additions,
+          deletions: briefed.summary.deletions,
+        }
+      : pr
+        ? {
+            author: pr.author ?? "ghost",
+            base: pr.baseRef,
+            files: pr.changedFiles,
+            additions: pr.additions,
+            deletions: pr.deletions,
+          }
+        : undefined;
   const noClone = props.choices.graph && session && clone !== undefined && clone.path === null;
   return (
     <ReviewPane
@@ -554,30 +590,22 @@ function PrPane(props: {
             href={pr?.url ?? props.turn?.url ?? `https://github.com/${prRef.repo}/pull/${prRef.number}`}
             target="_blank"
             rel="noreferrer"
+            title="Open on GitHub"
           >
-            {prRef.repo} #{prRef.number} ↗
+            {prRef.repo} #{prRef.number}
           </a>
-          {pr && (
+          {meta && (
             <span>
-              {pr.author ?? "ghost"}:{pr.headRef} → {pr.baseRef}
+              {"\u00a0· "}
+              {meta.author} → {meta.base}
+              {meta.files !== undefined && ` · ${plural(meta.files, "file")}`} ·{" "}
+              <span className="add">+{meta.additions}</span> <span className="del">−{meta.deletions}</span>
             </span>
           )}
           {props.draftsApi && <WatchBell api={props.draftsApi} pr={key} global={session?.notifications?.followUps} />}
         </>
       }
       title={pr?.title ?? props.turn?.title ?? key}
-      why={
-        row
-          ? {
-              label: "In your queue because",
-              // The wait reads the same as on the queue row: one time, since you were asked.
-              items: row.reasons
-                .filter((r) => !isLearnedReason(r))
-                .map((r) => (/^waiting \d/.test(r) ? `waiting ${waitingSince(row)}` : r))
-                .map((r) => r.charAt(0).toUpperCase() + r.slice(1)),
-            }
-          : undefined
-      }
       backToQueue
       notice={
         noClone ? (
@@ -597,11 +625,15 @@ function PrPane(props: {
       onStart={(request) => reviews.start(key, request)}
       onCancel={() => reviews.cancel(key)}
       controls={
-        <ReviewOptions
+        <Tune
           session={session}
           choices={props.choices}
-          onChange={props.onChoices}
+          onChoices={props.onChoices}
+          api={props.draftsApi}
+          pr={key}
+          repo={prRef.repo}
           onSetUpModel={props.onSetUpModel}
+          onSessionChange={props.onSessionChange}
         />
       }
       emptyHint="Alden fetches the PR, finds who calls the code it changes (from a clone of the repo), runs its checks, and asks the model if one is set up."

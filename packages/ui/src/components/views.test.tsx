@@ -69,7 +69,7 @@ const queue: RankedQueue = {
 const noop = () => {};
 
 describe("QueueView", () => {
-  it("shows both lanes, numbered in order, with reasons that aren't already on the row", () => {
+  it("shows the groups in order, two lines a row, and why only on the selected row", () => {
     const { container } = render(
       <QueueView
         queue={{
@@ -94,19 +94,27 @@ describe("QueueView", () => {
         .getByRole("link")
         .getAttribute("aria-current"),
     ).toBe("true");
-    expect(within(rows[0] as HTMLElement).getByText("01")).toBeTruthy();
+    // Title and wait, then CI, repo, author and flags in one mono line.
+    expect((rows[0] as HTMLElement).querySelector(".row-top")?.textContent).toBe("PR 13d");
+    expect((rows[0] as HTMLElement).querySelector(".row-meta")?.textContent).toBe("✓CI passingacme/api #1 · sam");
     expect(within(rows[0] as HTMLElement).getByText("touches migrations/")).toBeTruthy();
-    // The wait has its own place, and a learned reason its own line, so neither is repeated as a chip.
+    // The wait has its own place, and a learned reason its own line, so neither is repeated.
     expect(within(rows[0] as HTMLElement).queryByText("waiting 3d")).toBeNull();
     expect(
-      within(rows[0] as HTMLElement).getByText("ranked higher: you usually open PRs touching db/ first"),
+      within(rows[0] as HTMLElement).getByText("ranked higher: you usually open PRs touching db/ first", {
+        exact: false,
+      }),
     ).toBeTruthy();
-    expect(within(rows[1] as HTMLElement).getByText("CI failing: ping @sam")).toBeTruthy();
-    expect(within(rows[2] as HTMLElement).getByText(/docs only/)).toBeTruthy();
-    expect(screen.getByText("Needs you · 2")).toBeTruthy();
+    // Rows that aren't selected keep to their two lines.
+    expect((rows[1] as HTMLElement).querySelector(".row-open")).toBeNull();
+    expect(within(rows[1] as HTMLElement).getByText("✕").className).toBe("ci-glyph failure");
+    expect(within(rows[1] as HTMLElement).getByText("ping @sam").title).toBe("CI failing: ping the author");
+    expect(within(rows[2] as HTMLElement).getByText("docs only")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Ranked for you 2" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Fast-track 1" })).toBeTruthy();
   });
 
-  it("labels a re-review, says when you reviewed, and counts your comments once something happened to them", () => {
+  it("flags a re-review, and on the selected row says when you reviewed and what happened to your comments", () => {
     const now = Date.parse("2026-09-30T10:00:00Z");
     const followUp = {
       pr: "acme/api#1",
@@ -129,18 +137,18 @@ describe("QueueView", () => {
         error={undefined}
         loading={false}
         onRefresh={noop}
-        selected={undefined}
+        selected="acme/api#1"
         now={now}
       />,
     );
     const [again, before] = [...container.querySelectorAll("[data-pr]")] as HTMLElement[];
-    expect(within(again as HTMLElement).getByText("Re-review").className).toBe("chip rereview");
-    expect(within(again as HTMLElement).getByText("reviewed 2 days ago")).toBeTruthy();
-    // The label says it, so the reason isn't a chip as well.
-    expect(within(again as HTMLElement).queryByText("Re-review: you were asked again")).toBeNull();
-    // Reviewed, but not asked again: when, without the label.
-    expect(within(before as HTMLElement).queryByText("Re-review")).toBeNull();
-    expect(within(before as HTMLElement).getByText("Reviewed 2 days ago")).toBeTruthy();
+    expect(within(again as HTMLElement).getByText("re-review").className).toBe("flag warn");
+    expect(within(again as HTMLElement).getByText("Reviewed 2 days ago")).toBeTruthy();
+    // The flag says it, so the reason isn't repeated.
+    expect(within(again as HTMLElement).queryByText(/you were asked again/)).toBeNull();
+    // Reviewed, but not asked again: no flag; when shows once the row is selected.
+    expect(within(before as HTMLElement).queryByText("re-review")).toBeNull();
+    expect(within(before as HTMLElement).queryByText("Reviewed 2 days ago")).toBeNull();
 
     rerender(
       <QueueView
@@ -151,11 +159,11 @@ describe("QueueView", () => {
         error={undefined}
         loading={false}
         onRefresh={noop}
-        selected={undefined}
+        selected="acme/api#1"
         now={now}
       />,
     );
-    expect(screen.getByText("reviewed 2 days ago · 3 of your 5 comments resolved · 1 reply to you")).toBeTruthy();
+    expect(screen.getByText("Reviewed 2 days ago · 3 of your 5 comments resolved · 1 reply to you")).toBeTruthy();
   });
 
   it("puts Your turn above Needs you, and news on a queue row, until you've opened the PR here", () => {
@@ -189,21 +197,26 @@ describe("QueueView", () => {
     const props = { error: undefined, loading: false, onRefresh: noop, now };
     const { container, rerender } = render(<QueueView {...props} queue={withNews} selected={undefined} />);
     const headings = screen.getAllByRole("heading").map((h) => h.textContent);
-    expect(headings.slice(0, 2)).toEqual(["Your turn · 1", "Needs you · 1"]);
+    expect(headings.slice(0, 2)).toEqual(["Your turn 1", "Ranked for you 1"]);
     const [first, second] = [...container.querySelectorAll("[data-pr]")] as HTMLElement[];
-    expect(first?.getAttribute("href")).toBe("/pr/acme/shop/12");
-    expect(first?.textContent).toContain("Ana replied to 2 of your comments · 1 resolved");
-    expect(first?.textContent).toContain("3h ago");
-    // The re-review stays in Needs you, with its news on the row instead of the counts.
-    expect(within(second as HTMLElement).getByText("Re-review")).toBeTruthy();
-    expect(within(second as HTMLElement).getByText("reviewed 2 days ago")).toBeTruthy();
-    expect(within(second as HTMLElement).getByText("New").className).toBe("chip new");
-    expect(within(second as HTMLElement).getByText("Bo replied to your comment")).toBeTruthy();
+    expect(
+      within(first as HTMLElement)
+        .getByRole("link")
+        .getAttribute("href"),
+    ).toBe("/pr/acme/shop/12");
+    // The news is the row's reason, in teal under it.
+    expect(within(first as HTMLElement).getByText("Ana replied to 2 of your comments · 1 resolved").className).toBe(
+      "row-why",
+    );
+    expect((first as HTMLElement).querySelector(".row-age")?.textContent).toBe("3h");
+    // The re-review stays ranked, with its news under the row the same way.
+    expect(within(second as HTMLElement).getByText("re-review")).toBeTruthy();
+    expect(within(second as HTMLElement).getByText("Bo replied to your comment").className).toBe("row-why");
 
     // Opened here: the open one stays put, the other's news is gone.
     const seen = new Set(["e1", "e2"]);
     rerender(<QueueView {...props} queue={withNews} selected="acme/shop#12" seen={seen} />);
-    expect(screen.getByText("Your turn · 1")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Your turn 1" })).toBeTruthy();
     expect(screen.queryByText("Bo replied to your comment")).toBeNull();
     rerender(<QueueView {...props} queue={withNews} selected={undefined} seen={seen} />);
     expect(screen.queryByText(/Your turn/)).toBeNull();
@@ -226,8 +239,8 @@ describe("QueueView", () => {
       />,
     );
     // Only the selected row shows the buttons.
-    expect(screen.getAllByRole("button", { name: "↑ Useful" })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "× Dismiss" }));
+    expect(screen.getAllByRole("button", { name: "Useful" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(reactions).toEqual(["acme/api#1:dismiss"]);
     rerender(
       <QueueView
@@ -288,11 +301,12 @@ describe("QueueView", () => {
         selected={undefined}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
     const options = within(screen.getByRole("combobox", { name: "Repository" })).getAllByRole("option");
-    expect(options.map((o) => o.textContent)).toEqual(["Repo", "acme/api", "acme/web", "zeta/old"]);
+    expect(options.map((o) => o.textContent)).toEqual(["Any", "acme/api", "acme/web", "zeta/old"]);
   });
 
-  it("shows an old queue's age while the current one loads, and nothing for a fresh one", () => {
+  it("says how old the queue is, and refreshing while the current one loads", () => {
     const props = {
       error: undefined,
       onRefresh: noop,
@@ -301,11 +315,11 @@ describe("QueueView", () => {
     const { rerender } = render(
       <QueueView {...props} queue={queue} loading now={Date.parse(queue.fetchedAt) + 3 * 60_000} />,
     );
-    expect(screen.getByText("As of 3 min ago, refreshing…")).toBeTruthy();
+    expect(screen.getByText("as of 3 min ago, refreshing…")).toBeTruthy();
     rerender(<QueueView {...props} queue={queue} loading={false} now={Date.parse(queue.fetchedAt) + 2 * 3_600_000} />);
-    expect(screen.getByText("As of 2h ago")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "as of 2h ago" })).toBeTruthy();
     rerender(<QueueView {...props} queue={queue} loading={false} now={Date.parse(queue.fetchedAt) + 20_000} />);
-    expect(screen.queryByText(/^As of/)).toBeNull();
+    expect(screen.getByRole("button", { name: "as of just now" })).toBeTruthy();
   });
 
   it("gives one waiting time, saying what it counts from", () => {

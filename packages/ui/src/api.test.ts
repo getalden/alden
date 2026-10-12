@@ -130,3 +130,37 @@ describe("Api.recordSeen", () => {
     expect(new Headers(sent?.init.headers).get("X-Alden-Token")).toBe("tok");
   });
 });
+
+describe("Api.ask", () => {
+  it("hears the answer as it streams, and resolves with all of it, the cost and the model", async () => {
+    const lines = [
+      JSON.stringify({ type: "delta", text: "The retry " }),
+      JSON.stringify({ type: "delta", text: "has no ceiling." }),
+      JSON.stringify({ type: "done", costUsd: 0.0042, model: "claude-sonnet-5" }),
+    ].join("\n");
+    const heard: string[] = [];
+    const api = new Api("t", streaming([lines.slice(0, 17), `${lines.slice(17)}\n`]));
+    await expect(api.ask({ pr: "a/b#1", question: "Why?" }, (text) => heard.push(text))).resolves.toEqual({
+      text: "The retry has no ceiling.",
+      costUsd: 0.0042,
+      model: "claude-sonnet-5",
+    });
+    expect(heard).toEqual(["The retry ", "The retry has no ceiling."]);
+  });
+
+  it("throws the model's error with its status, and the server's when the request fails", async () => {
+    const failed = new Api(
+      "t",
+      streaming([`${JSON.stringify({ type: "error", message: "Over the cap", status: 402 })}\n`]),
+    );
+    await expect(failed.ask({ pr: "a/b#1", question: "Why?" }, () => {})).rejects.toMatchObject({
+      status: 402,
+      message: "Over the cap",
+    });
+    const missing = new Api(
+      "t",
+      async () => new Response(JSON.stringify({ error: "No such endpoint" }), { status: 404 }),
+    );
+    await expect(missing.ask({ pr: "a/b#1", question: "Why?" }, () => {})).rejects.toMatchObject({ status: 404 });
+  });
+});

@@ -219,6 +219,52 @@ export interface SuggestTextRequest {
   text?: string;
 }
 
+/** One model in the Tune popover's picker, with a word on what it's good for ("fast", "deepest", "offline"). */
+export interface ModelItem {
+  id: string;
+  note?: string | undefined;
+}
+
+/** The models one provider offers, and how Alden reaches it ("your key", "Ollama"); `available`: set up and usable. */
+export interface ModelGroup {
+  provider: string;
+  label: string;
+  via: string;
+  available: boolean;
+  items: ModelItem[];
+}
+
+/** `GET /api/models`: the model briefings use now, and every model Alden could use, by provider. */
+export interface ModelsState {
+  current: { provider: string; model: string } | null;
+  groups: ModelGroup[];
+}
+
+/** One way Alden writes the comments it drafts. */
+export interface ToneOption {
+  id: string;
+  label: string;
+  hint?: string | undefined;
+}
+
+/** `GET /api/tone`: how Alden writes in a repo (or by default), and the tones there are. */
+export interface ToneState {
+  tone: string;
+  tones?: ToneOption[] | undefined;
+  repo?: string | null | undefined;
+}
+
+/** A line of `POST /api/ask`'s answer: some text, then how it ended. */
+export type AskEvent =
+  | { type: "delta"; text: string }
+  | { type: "done"; costUsd: number | null; model: string }
+  | { type: "error"; message: string; status?: number };
+
+/** What signing out left: where Alden still finds a GitHub sign-in (the GitHub CLI's, an env var), or null. */
+export interface SignOutResult {
+  remaining: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -339,6 +385,48 @@ export class Api {
     }
     throw new ApiError(500, "Setting up the local model ended without saying how it went.");
   }
+
+  /** Every model Alden could use, by provider, and the current one. A 404 means this Alden predates the route. */
+  models = () => this.request<ModelsState>("/api/models");
+
+  /** Makes a model the one briefings use (saved to your config). */
+  setModel = (choice: { provider: string; model: string }) =>
+    this.request<ModelsState>("/api/models", { method: "PUT", body: JSON.stringify(choice) });
+
+  /** How Alden writes in a repo ("owner/repo"), or its default without one. */
+  tone = (repo?: string) => this.request<ToneState>(`/api/tone${repo ? `?repo=${encodeURIComponent(repo)}` : ""}`);
+
+  setTone = (tone: string, repo?: string) =>
+    this.request<ToneState>("/api/tone", { method: "PUT", body: JSON.stringify({ tone, ...(repo ? { repo } : {}) }) });
+
+  /**
+   * Asks the model a question about a PR ("owner/repo#12"); `onText` hears the answer as it comes. Resolves with the
+   * whole answer, what it cost and which model answered.
+   */
+  async ask(
+    input: { pr: string; question: string },
+    onText: (text: string) => void,
+    signal?: AbortSignal,
+  ): Promise<{ text: string; costUsd: number | null; model: string }> {
+    const res = await this.fetcher("/api/ask", {
+      method: "POST",
+      headers: { "X-Alden-Token": this.token, "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      ...(signal ? { signal } : {}),
+    });
+    let text = "";
+    for await (const event of ndjson<AskEvent>(res)) {
+      if (event.type === "delta") {
+        text += event.text;
+        onText(text);
+      } else if (event.type === "done") return { text, costUsd: event.costUsd, model: event.model };
+      else if (event.type === "error") throw new ApiError(event.status ?? 500, event.message);
+    }
+    throw new ApiError(500, "The answer ended without saying how it went.");
+  }
+
+  /** Removes the GitHub sign-in Alden stored. The GitHub CLI's, or a token in the environment, stays. */
+  signOut = () => this.request<SignOutResult>("/api/auth/sign-out", { method: "POST" });
 
   clone = (repo: string) => this.request<CloneInfo>(`/api/clone?repo=${encodeURIComponent(repo)}`);
 

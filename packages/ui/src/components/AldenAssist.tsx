@@ -167,7 +167,7 @@ export function DraftMyReview({ from }: { from: "toolbar" | "drawer" }) {
     <>
       <button
         type="button"
-        className={from === "toolbar" ? "btn" : "btn sm quiet"}
+        className={from === "toolbar" ? "btn primary" : "btn sm quiet"}
         aria-disabled={assist.blocked !== undefined || review.busy}
         title="Asks your model, in one call within your caps, to draft comments for the places to look that have none near them. Nothing is sent: you keep, edit or drop each."
         onClick={() => {

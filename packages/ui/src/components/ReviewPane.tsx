@@ -8,11 +8,13 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type { Api, ReviewRequest } from "../api";
 import { cachedDiff } from "../diff";
 import { type BriefingComments, type CommentPlace, useDrawerOpen } from "../drafts";
 import type { BriefingFeedback } from "../feedback";
+import { guidedKey, guidedSteps, savedProgress, subscribeProgress } from "../guided";
 import { useActiveTime } from "../review-time";
 import type { ReviewRun } from "../reviews";
 import { onLinkClick } from "../router";
@@ -93,13 +95,12 @@ function Progress({ run, onCancel }: { run: ReviewRun; onCancel: () => void }) {
 }
 
 interface ReviewPaneProps {
-  /** The line above the title: a link to the PR, its branches. */
+  /** The mono line above the title: "repo #n · author → base · N files · +a −d". */
   crumbs: ReactNode;
   title: string;
-  /** Why it's in your queue (or what changed), as chips after a label. */
-  why?: { label: string; items: string[] } | undefined;
   run: ReviewRun | undefined;
-  controls: ReactNode;
+  /** The end of the age line, before Export: the model line, which opens the Tune popover. */
+  controls?: ReactNode;
   onStart: (request: ReviewRequest) => void;
   onCancel: () => void;
   request: ReviewRequest;
@@ -248,21 +249,32 @@ function useBriefingTab(): [BriefingTab, (tab: BriefingTab) => void] {
   return [tab, choose];
 }
 
-/** The briefing and its Diff tab: d switches between them, and a place's file:line in the briefing opens the diff there. */
-function BriefingTabs(props: {
-  briefing: Briefing;
-  loadDiff: (pr?: string, since?: string) => Promise<PrDiff>;
-  reviewedHead?: string | undefined;
-  onComment?: ((place: CommentPlace) => void) | undefined;
-  comments?: BriefingComments | undefined;
-  children: ReactNode;
-}) {
-  const { briefing } = props;
+/** The three steps of reading a PR, in order: the briefing, one place at a time, then the code. */
+export type ReadingStep = "brief" | "walk" | "diff";
+
+/**
+ * Guided review keeps its own state and listens for its keys (g starts it, Esc leaves it). Until it takes the step as
+ * a prop, the header drives it the way the keyboard does, and hears where it is through `subscribeProgress`.
+ */
+function pressKey(key: string) {
+  document.body.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+}
+
+/**
+ * Where you are in a briefing (Brief, Walk through, Diff) and the way between them. d switches between the briefing
+ * and the diff; g walks through (guided review's own key); a place's file:line in the briefing opens the diff there.
+ */
+function useReadingSteps(briefing: Briefing | undefined) {
   const [tab, setTab] = useBriefingTab();
-  const id = useId();
   // The Diff tab loads the first time it's opened, then stays, so switching back is instant.
   const [diffSeen, setDiffSeen] = useState(tab === "diff");
   const [focus, setFocus] = useState<{ path: string; line?: number | undefined }>();
+  const key = briefing ? guidedKey(briefing) : undefined;
+  const walking = useSyncExternalStore(subscribeProgress, () => (key ? savedProgress(key).active : false));
+  const walkable = useMemo(
+    () => (briefing ? briefing.needsYourEyes.length > 0 && guidedSteps(briefing).steps.length > 0 : false),
+    [briefing],
+  );
   const choose = useCallback(
     (next: BriefingTab) => {
       if (next === "diff") setDiffSeen(true);
@@ -270,7 +282,14 @@ function BriefingTabs(props: {
     },
     [setTab],
   );
+  // g pressed on the Diff tab starts the walk on the briefing.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the walk starts
   useEffect(() => {
+    if (walking && tab === "diff") choose("briefing");
+  }, [walking]);
+  const enabled = briefing !== undefined;
+  useEffect(() => {
+    if (!enabled) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "d" || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
       event.preventDefault();
@@ -278,7 +297,7 @@ function BriefingTabs(props: {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tab, choose]);
+  }, [enabled, tab, choose]);
   const showInDiff = useCallback(
     (place: { path: string; line?: number | undefined }) => {
       choose("diff");
@@ -286,7 +305,83 @@ function BriefingTabs(props: {
     },
     [choose],
   );
+  const step: ReadingStep = tab === "diff" ? "diff" : walking ? "walk" : "brief";
+  const go = useCallback(
+    (next: ReadingStep) => {
+      if (next === "diff") return choose("diff");
+      choose("briefing");
+      if (next === "walk" && !walking && walkable) pressKey("g");
+      if (next === "brief" && walking) pressKey("Escape");
+    },
+    [choose, walking, walkable],
+  );
+  return { tab, step, go, walkable, diffSeen, focus, showInDiff };
+}
 
+const STEP_LABELS: { step: ReadingStep; n: string; label: string; key?: string }[] = [
+  { step: "brief", n: "1", label: "Brief" },
+  { step: "walk", n: "2", label: "Walk through", key: "g" },
+  { step: "diff", n: "3", label: "Diff", key: "d" },
+];
+
+/** "1 Brief · 2 Walk through g · 3 Diff d": the numbered steps of one read, as tabs. */
+function ReadingSteps(props: {
+  id: string;
+  step: ReadingStep;
+  onStep: (step: ReadingStep) => void;
+  walkable: boolean;
+  diff: boolean;
+}) {
+  const steps = STEP_LABELS.filter((s) => s.step !== "diff" || props.diff);
+  const onKey = (event: ReactKeyboardEvent) => {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    const usable = steps.filter((s) => s.step !== "walk" || props.walkable);
+    const at = usable.findIndex((s) => s.step === props.step);
+    const next = usable[(at + (event.key === "ArrowRight" ? 1 : -1) + usable.length) % usable.length];
+    if (!next) return;
+    props.onStep(next.step);
+    document.getElementById(`${props.id}step-${next.step}`)?.focus();
+    event.preventDefault();
+  };
+  return (
+    <div className="steps-control" role="tablist" aria-label="Reading step" onKeyDown={onKey}>
+      {steps.map((s) => (
+        <button
+          key={s.step}
+          type="button"
+          role="tab"
+          id={`${props.id}step-${s.step}`}
+          aria-selected={props.step === s.step}
+          aria-controls={s.step === "diff" ? `${props.id}panel-diff` : `${props.id}panel-briefing`}
+          aria-keyshortcuts={s.key}
+          tabIndex={props.step === s.step ? 0 : -1}
+          disabled={s.step === "walk" && !props.walkable}
+          title={s.step === "walk" && !props.walkable ? "Nothing flagged to walk through" : undefined}
+          onClick={() => props.onStep(s.step)}
+        >
+          <span className="step-n" aria-hidden="true">
+            {s.n}
+          </span>
+          {s.label}
+          {s.key && <kbd>{s.key}</kbd>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The briefing and its diff, one shown at a time; the header's reading steps choose which. */
+function BriefingPanels(props: {
+  id: string;
+  briefing: Briefing;
+  reading: ReturnType<typeof useReadingSteps>;
+  loadDiff: (pr?: string, since?: string) => Promise<PrDiff>;
+  reviewedHead?: string | undefined;
+  onComment?: ((place: CommentPlace) => void) | undefined;
+  comments?: BriefingComments | undefined;
+  children: ReactNode;
+}) {
+  const { briefing, reading, id } = props;
   const target = briefing.target;
   const pr = target.kind === "pr" ? `${target.repo}#${target.number}` : undefined;
   const places = useMemo<DiffPlace[]>(
@@ -307,56 +402,23 @@ function BriefingTabs(props: {
       ),
     [all],
   );
-  const onTabKey = (event: ReactKeyboardEvent) => {
-    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
-      const next = tab === "diff" ? "briefing" : "diff";
-      choose(next);
-      document.getElementById(`${id}tab-${next}`)?.focus();
-      event.preventDefault();
-    }
-  };
-
   return (
     <>
-      <div className="pane-tabs" role="tablist" aria-label="Briefing or diff" onKeyDown={onTabKey}>
-        <button
-          type="button"
-          role="tab"
-          id={`${id}tab-briefing`}
-          aria-selected={tab === "briefing"}
-          aria-controls={`${id}panel-briefing`}
-          tabIndex={tab === "briefing" ? 0 : -1}
-          onClick={() => choose("briefing")}
-        >
-          Briefing
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id={`${id}tab-diff`}
-          aria-selected={tab === "diff"}
-          aria-controls={`${id}panel-diff`}
-          tabIndex={tab === "diff" ? 0 : -1}
-          onClick={() => choose("diff")}
-        >
-          Diff <kbd>D</kbd>
-        </button>
-      </div>
       <div
         role="tabpanel"
         id={`${id}panel-briefing`}
-        aria-labelledby={`${id}tab-briefing`}
-        hidden={tab !== "briefing"}
+        aria-labelledby={`${id}step-${reading.step === "walk" ? "walk" : "brief"}`}
+        hidden={reading.tab !== "briefing"}
         className="briefing-panel"
       >
-        <ShowInDiffContext.Provider value={showInDiff}>{props.children}</ShowInDiffContext.Provider>
+        <ShowInDiffContext.Provider value={reading.showInDiff}>{props.children}</ShowInDiffContext.Provider>
       </div>
-      {diffSeen && (
+      {reading.diffSeen && (
         <div
           role="tabpanel"
           id={`${id}panel-diff`}
-          aria-labelledby={`${id}tab-diff`}
-          hidden={tab !== "diff"}
+          aria-labelledby={`${id}step-diff`}
+          hidden={reading.tab !== "diff"}
           className="diff-panel"
         >
           <DiffThreadsProvider comments={props.comments} pr={pr}>
@@ -368,7 +430,7 @@ function BriefingTabs(props: {
               prUrl={target.kind === "pr" ? target.url : undefined}
               places={places}
               drafts={drafts}
-              focus={focus}
+              focus={reading.focus}
               onComment={props.onComment}
             />
           </DiffThreadsProvider>
@@ -449,12 +511,25 @@ export function ReviewPane(props: ReviewPaneProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [run?.running, props.onCancel]);
 
+  const id = useId();
+  const briefing = run?.briefing && !run.running ? run.briefing : undefined;
+  const reading = useReadingSteps(briefing);
+  const view = briefing ? (
+    <BriefingView
+      briefing={briefing}
+      feedback={props.feedbackFor?.(briefing)}
+      perReviewUsd={props.perReviewUsd}
+      comments={props.comments}
+      guided={props.guided}
+    />
+  ) : null;
+
   const pane = (
     <ReviewActionsContext.Provider value={drawer.actions}>
       <div className={`review-pane${comments && drawer.open ? " drawer-open" : ""}`}>
         <section className="review-main" aria-labelledby="review-title">
-          <header className="brief-head">
-            <div className="crumbs">
+          <header className="pr-head">
+            <div className="pr-meta">
               {props.backToQueue && (
                 <a className="back-link" href="/" onClick={onLinkClick({ view: "queue" })}>
                   ← Queue
@@ -462,136 +537,158 @@ export function ReviewPane(props: ReviewPaneProps) {
               )}
               {props.crumbs}
             </div>
-            <h1 className="brief-title" id="review-title">
+            <h1 className="pr-title" id="review-title">
               {props.title}
             </h1>
-            {props.why && props.why.items.length > 0 && (
-              <div className="why">
-                <span className="why-label">{props.why.label}</span>
-                {props.why.items.map((w) => (
-                  <span key={w} className="chip">
-                    {w}
-                  </span>
-                ))}
+            <div className="pr-actions" role="toolbar" aria-label="Review options">
+              {briefing && (
+                <ReadingSteps
+                  id={id}
+                  step={reading.step}
+                  onStep={reading.go}
+                  walkable={reading.walkable}
+                  diff={props.loadDiff !== undefined}
+                />
+              )}
+              <div className="pr-actions-end">
+                {comments && (
+                  <button
+                    ref={drawer.toggleButton}
+                    type="button"
+                    className={`ghost-btn drawer-toggle${drawer.open ? " on" : ""}`}
+                    aria-expanded={drawer.open}
+                    aria-controls="comments-drawer"
+                    aria-keyshortcuts="s"
+                    title={drawer.open ? "Hide your comments  s" : "Show your comments  s"}
+                    onClick={drawer.toggle}
+                  >
+                    Comments
+                    {count > 0 && (
+                      <>
+                        <span className="visually-hidden"> · </span>
+                        <span className="count">{count}</span>
+                      </>
+                    )}{" "}
+                    <kbd>S</kbd>
+                  </button>
+                )}
+                {comments && !run?.running && <DraftMyReview from="toolbar" />}
               </div>
-            )}
-            {run?.briefing && !run.running && run.briefing.target.kind === "pr" && (
-              <BriefingAge
-                briefing={run.briefing}
-                check={props.freshness}
-                onRebrief={() => props.onStart(props.request)}
-              />
-            )}
-          </header>
-          <div className="toolbar" role="toolbar" aria-label="Review options">
-            {run?.running ? (
-              <button type="button" className="btn" onClick={props.onCancel}>
-                Stop <kbd>Esc</kbd>
-              </button>
-            ) : (
-              <button type="button" className="btn primary" onClick={() => props.onStart(props.request)}>
-                {run?.briefing ? "Brief again" : "Brief me"} <kbd>B</kbd>
-              </button>
-            )}
-            {props.controls}
-            {run?.briefing && !run.running && props.exportWith && (
-              <ExportMenu briefing={run.briefing} {...props.exportWith} />
-            )}
-            {comments && (
-              <button
-                ref={drawer.toggleButton}
-                type="button"
-                className={`btn drawer-toggle${drawer.open ? " on neutral" : ""}`}
-                aria-expanded={drawer.open}
-                aria-controls="comments-drawer"
-                aria-keyshortcuts="s"
-                title={drawer.open ? "Hide your comments  s" : "Show your comments  s"}
-                onClick={drawer.toggle}
-              >
-                {count > 0 ? `Comments · ${count}` : "Comments"} <kbd>S</kbd>
-              </button>
-            )}
-            {comments && !run?.running && <DraftMyReview from="toolbar" />}
-          </div>
-          {props.notice && (
-            <div className="notice note-box">
-              <span className="q" aria-hidden="true">
-                ?
-              </span>
-              <span className="text">{props.notice}</span>
             </div>
-          )}
-
-          {run?.running && <Progress run={run} onCancel={props.onCancel} />}
-          {run && !run.running && run.error && (
-            <StateCard
-              tone={run.error === "Stopped." ? "dashed" : "warn"}
-              glyph={run.error === "Stopped." ? "–" : "!"}
-              title={run.error === "Stopped." ? "Stopped" : "The briefing didn't finish"}
-              body={run.error === "Stopped." ? "Nothing was kept. Brief again when you're ready." : run.error}
-              action={
-                <button type="button" className="btn primary" onClick={() => props.onStart(props.request)}>
-                  {run.error === "Stopped." ? "Brief me" : "Retry now"}
-                </button>
-              }
-              alternative={
-                run.error !== "Stopped." ? (
+            <div className="age-line">
+              {run?.running ? (
+                <span role="status">briefing now…</span>
+              ) : briefing ? (
+                <>
+                  <BriefingAge briefing={briefing} check={props.freshness} />
                   <button
                     type="button"
-                    className="btn quiet"
-                    onClick={() => navigator.clipboard?.writeText(run.error ?? "")}
+                    className="age-link"
+                    aria-keyshortcuts="b"
+                    onClick={() => props.onStart(props.request)}
                   >
-                    Copy error
+                    Brief again <kbd>B</kbd>
                   </button>
-                ) : undefined
-              }
-            />
-          )}
-          {run?.briefing && !run.running && run.prepared && (
-            <div className="notice note-box">
-              <span className="q" aria-hidden="true">
-                ✓
-              </span>
-              <span className="text">
-                Prepared while you were away, at{" "}
-                {new Date(run.prepared).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                {run.briefing.llm?.status === "ok" ? ", with the model" : ", checks only"}. Brief again for a fresh one.
+                </>
+              ) : (
+                <>
+                  <span>{run?.error ? "the last briefing didn't finish" : "not briefed yet"}</span>
+                  <button
+                    type="button"
+                    className="age-link"
+                    aria-keyshortcuts="b"
+                    onClick={() => props.onStart(props.request)}
+                  >
+                    Brief me <kbd>B</kbd>
+                  </button>
+                </>
+              )}
+              <span className="age-end">
+                {props.controls}
+                {briefing && props.exportWith && <ExportMenu briefing={briefing} {...props.exportWith} />}
               </span>
             </div>
-          )}
-          {run?.briefing &&
-            !run.running &&
-            (props.loadDiff ? (
-              <BriefingTabs
-                briefing={run.briefing}
-                loadDiff={props.loadDiff}
-                reviewedHead={props.reviewedHead}
-                onComment={drawer.actions?.onComment}
-                comments={props.comments}
-              >
-                <BriefingView
-                  briefing={run.briefing}
-                  feedback={props.feedbackFor?.(run.briefing)}
-                  perReviewUsd={props.perReviewUsd}
-                  comments={props.comments}
-                  guided={props.guided}
-                />
-              </BriefingTabs>
-            ) : (
-              <BriefingView
-                briefing={run.briefing}
-                feedback={props.feedbackFor?.(run.briefing)}
-                perReviewUsd={props.perReviewUsd}
-                comments={props.comments}
-                guided={props.guided}
+          </header>
+          <div className="review-scroll">
+            {props.notice && (
+              <div className="notice note-box">
+                <span className="q" aria-hidden="true">
+                  ?
+                </span>
+                <span className="text">{props.notice}</span>
+              </div>
+            )}
+
+            {run?.running && <Progress run={run} onCancel={props.onCancel} />}
+            {run && !run.running && run.error && (
+              <StateCard
+                tone={run.error === "Stopped." ? "dashed" : "warn"}
+                glyph={run.error === "Stopped." ? "–" : "!"}
+                title={run.error === "Stopped." ? "Stopped" : "The briefing didn't finish"}
+                body={run.error === "Stopped." ? "Nothing was kept. Brief again when you're ready." : run.error}
+                action={
+                  <button type="button" className="btn primary" onClick={() => props.onStart(props.request)}>
+                    {run.error === "Stopped." ? "Brief me" : "Retry now"}
+                  </button>
+                }
+                alternative={
+                  run.error !== "Stopped." ? (
+                    <button
+                      type="button"
+                      className="btn quiet"
+                      onClick={() => navigator.clipboard?.writeText(run.error ?? "")}
+                    >
+                      Copy error
+                    </button>
+                  ) : undefined
+                }
               />
-            ))}
-          {!run && (
-            <p className="muted" style={{ padding: "28px 32px", maxWidth: 640 }}>
-              {props.emptyHint}
-            </p>
-          )}
-          {props.children}
+            )}
+            {briefing && run?.prepared && (
+              <div className="notice note-box">
+                <span className="q" aria-hidden="true">
+                  ✓
+                </span>
+                <span className="text">
+                  Prepared while you were away, at{" "}
+                  {new Date(run.prepared).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  {briefing.llm?.status === "ok" ? ", with the model" : ", checks only"}. Brief again for a fresh one.
+                </span>
+              </div>
+            )}
+            {briefing &&
+              (props.loadDiff ? (
+                <BriefingPanels
+                  id={id}
+                  briefing={briefing}
+                  reading={reading}
+                  loadDiff={props.loadDiff}
+                  reviewedHead={props.reviewedHead}
+                  onComment={drawer.actions?.onComment}
+                  comments={props.comments}
+                >
+                  {view}
+                </BriefingPanels>
+              ) : (
+                <div
+                  role="tabpanel"
+                  id={`${id}panel-briefing`}
+                  aria-labelledby={`${id}step-${reading.step === "walk" ? "walk" : "brief"}`}
+                  className="briefing-panel"
+                >
+                  {view}
+                </div>
+              ))}
+            {!run && (
+              <div className="brief-empty">
+                <p className="muted">{props.emptyHint}</p>
+                <button type="button" className="btn primary" onClick={() => props.onStart(props.request)}>
+                  Brief me <kbd>B</kbd>
+                </button>
+              </div>
+            )}
+            {props.children}
+          </div>
         </section>
         {comments && (
           <CommentsDrawer

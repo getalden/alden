@@ -3,6 +3,7 @@ import type { Briefing, PrDiff } from "@alden/schema";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearDiffCache, commentPlace, placeMarkers, placeOrder, rangeRows } from "../diff";
+import { forgetProgress } from "../guided";
 import { SeenContext } from "../seen";
 import { DiffPane, DiffView } from "./DiffView";
 import { ReviewPane } from "./ReviewPane";
@@ -10,6 +11,7 @@ import { ReviewPane } from "./ReviewPane";
 afterEach(() => {
   cleanup();
   clearDiffCache();
+  forgetProgress();
   window.sessionStorage.clear();
   vi.unstubAllGlobals();
 });
@@ -433,13 +435,14 @@ function pane(loadDiff?: (pr?: string) => Promise<PrDiff>) {
   );
 }
 
-describe("the Briefing and Diff tabs", () => {
+describe("the reading steps: Brief, Walk through, Diff", () => {
   it("switch with a click or d, are remembered for the window, and a place opens the diff there", async () => {
     const load = vi.fn(async () => diff);
     const { container, unmount } = render(pane(load));
-    const briefingTab = screen.getByRole("tab", { name: "Briefing" });
-    const diffTab = screen.getByRole("tab", { name: /Diff/ });
-    expect(briefingTab.getAttribute("aria-selected")).toBe("true");
+    const briefTab = screen.getByRole("tab", { name: "Brief" });
+    const diffTab = screen.getByRole("tab", { name: /^Diff/ });
+    expect(screen.getByRole("tablist", { name: "Reading step" }).textContent).toBe("1Brief2Walk throughg3Diffd");
+    expect(briefTab.getAttribute("aria-selected")).toBe("true");
     // The diff loads the first time its tab opens.
     expect(load).not.toHaveBeenCalled();
     fireEvent.keyDown(window, { key: "d" });
@@ -447,7 +450,7 @@ describe("the Briefing and Diff tabs", () => {
     await screen.findByText(/^4 files/);
     expect(window.sessionStorage.getItem("alden.briefingTab")).toBe("diff");
     expect(screen.getByRole("button", { name: "Place E1: Logs cents" })).toBeTruthy();
-    fireEvent.click(briefingTab);
+    fireEvent.click(briefTab);
     expect((container.querySelector(".briefing-panel") as HTMLElement).hidden).toBe(false);
     expect((container.querySelector(".diff-panel") as HTMLElement).hidden).toBe(true);
 
@@ -462,14 +465,37 @@ describe("the Briefing and Diff tabs", () => {
 
     // A new pane in the same window opens on the Diff tab.
     render(pane(load));
-    expect(screen.getByRole("tab", { name: /Diff/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /^Diff/ }).getAttribute("aria-selected")).toBe("true");
     await screen.findByText(/^4 files/);
     expect(load).toHaveBeenCalledTimes(1);
   });
 
-  it("aren't there without a way to load the diff", () => {
+  it("walk through the places from the header, from g on the Diff tab, and back to the brief", async () => {
+    const load = vi.fn(async () => diff);
+    render(pane(load));
+    const walk = screen.getByRole("tab", { name: /^Walk through/ });
+    fireEvent.click(walk);
+    await screen.findByText("Step 1 of 1");
+    expect(walk.getAttribute("aria-selected")).toBe("true");
+
+    // Brief leaves the walk; the briefing's list of places is back.
+    fireEvent.click(screen.getByRole("tab", { name: "Brief" }));
+    await waitFor(() => expect(screen.queryByText("Step 1 of 1")).toBeNull());
+    expect(screen.getByRole("tab", { name: "Brief" }).getAttribute("aria-selected")).toBe("true");
+
+    // g on the Diff tab walks through on the briefing.
+    fireEvent.click(screen.getByRole("tab", { name: /^Diff/ }));
+    await screen.findByText(/^4 files/);
+    act(() => void fireEvent.keyDown(document.body, { key: "g" }));
+    await screen.findByText("Step 1 of 1");
+    expect(screen.getByRole("tab", { name: /^Walk through/ }).getAttribute("aria-selected")).toBe("true");
+    expect((document.querySelector(".briefing-panel") as HTMLElement).hidden).toBe(false);
+  });
+
+  it("have no Diff without a way to load the diff", () => {
     render(pane());
-    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByRole("tab", { name: /Diff/ })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Brief" })).toBeTruthy();
     expect(screen.getByText("Logs cents.")).toBeTruthy();
   });
 });
