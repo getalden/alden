@@ -141,6 +141,7 @@ alden comment <pr> [file:line[-endLine]] "text" [--suggest "code" | --suggest-fi
 alden comment <pr> --threads
 alden comment <pr> --reply <thread> "text" [--resolve]
 alden comment <pr> --resolve <thread>
+alden comment <pr> --draft
 ```
 
 Writes a comment on a PR, kept in Alden until you send it with `alden send`. With `file:line`, it's on that line of
@@ -158,6 +159,7 @@ text, lists the PR's comments, ranges and suggestions (old lines and new) shown,
 | `--suggest-file <path>` | Suggests the replacement code in this file. From a file or stdin, one trailing newline is dropped. |
 | `--delete <id>` | Deletes a comment (or a reply), by the id the list shows. On one of [Alden's drafts](comments.md#aldens-drafts), drops it. |
 | `--keep <id>` | Keeps one of Alden's drafts (or `all` of them on the PR), making it yours so it's sent with your review. |
+| `--draft` | Asks the model, in one call within your caps, to draft comments for the places in the PR's latest briefing (from `alden review`, of its latest push) that have no comment or draft near them, and says how many it drafted, what it cost and how many places it skipped. They're [Alden's drafts](comments.md#aldens-drafts): keep them with `--keep`. Needs a model; never on a PR with text aimed at AI reviewers. See [Draft my review](comments.md#draft-my-review). |
 | `--threads` | Lists the PR's review threads, yours first and open ones first, each with a short id and every comment. |
 | `--reply <thread>` | Replies in a review thread already on the PR, by its short id or `file:line`, with your review. One reply per thread: again changes its text. See [Replying in a thread](comments.md#replying-in-a-thread). |
 | `--resolve [thread]` | With `--reply`, resolves the thread once your review is sent. Alone, names the thread to resolve, saying nothing. |

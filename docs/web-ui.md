@@ -303,6 +303,21 @@ Drafts Alden made from its model's findings are marked **Drafted by Alden**, wit
 many won't be, and **Send review** counts only what will post. The briefing marks a finding with one **Draft ready**.
 See [Alden's drafts](comments.md#aldens-drafts).
 
+### Drafting with Alden
+
+With a model set up, **Draft my review** (beside **Comments**, and in the drawer once the PR is briefed) asks the
+model, in one call within your caps, to draft comments for the places to look and the model's findings that have no
+comment near them yet. While it runs it says "Drafting…"; then it opens the drawer on the new drafts and says how many
+it made, what the call cost and how many places it skipped, or why it couldn't. Without a model, the drawer offers
+**Set up a model** instead.
+
+Each comment and reply box has **Draft with Alden**: it fills an empty box with the model's text for you to edit
+(**Undo** empties it), or, when you've written something, shows Alden's version of it with **Use it** and **Keep
+mine**. **Cancel** stops it while it's drafting. It saves nothing: you save, and the comment is yours.
+
+On a PR with text aimed at AI reviewers, neither drafts: **Draft my review** says why, and the boxes say "Alden won't
+draft here". See [Drafting with Alden on demand](comments.md#drafting-with-alden-on-demand).
+
 A draft written before the PR's latest commits is marked **Outdated** when its lines changed. **Rewrite** puts it in a
 new comment on the current code (check the line), or delete it. The review won't send until you've done one or the
 other.
