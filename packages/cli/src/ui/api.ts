@@ -1235,7 +1235,8 @@ export function createUiApi(options: {
       } catch (error) {
         throw new ApiError(502, describeGitHubError(error, resolved.source));
       }
-      if (!background && briefing.target.kind === "pr") noteOpened(last?.rows, briefing.target.url, "ui");
+      if (!background && briefing.target.kind === "pr")
+        noteOpened(last?.rows, briefing.target.url, request.opened ?? "ui");
     }
     // Its places to look, for "you didn't comment on…" before a review is sent, and learning from comments.
     try {

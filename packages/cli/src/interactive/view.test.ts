@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { briefing, draft, queue } from "./__fixtures__/fake.js";
+import { briefing, draft, queue, queueWithYourTurn } from "./__fixtures__/fake.js";
 import { keyFrom } from "./keys.js";
 import { type Event, initialState, type State, update } from "./state.js";
 import { view } from "./view.js";
@@ -57,6 +57,31 @@ describe("the screens at 80 columns", () => {
             dependency patch bump
 
 
+
+       j/k move  / search  enter brief  o open  r refresh  q quit"
+    `);
+  });
+
+  it("shows Your turn first, as alden queue prints it, with its row selectable", () => {
+    const state = play(start(80, 14), { type: "queue-loaded", queue: queueWithYourTurn });
+    const at = Date.parse("2026-10-12T10:00:00Z");
+    expect(
+      view(state, { color: false, now: at })
+        .map((l) => l.trimEnd())
+        .join("\n"),
+    ).toMatchInlineSnapshot(`
+      " Alden  Your review queue · 5 PRs
+        Your turn (1)
+      ›   acme/api#3  Cache the price list                                    2h ago
+            @sam replied to your comment
+            alden open <pr> or alden review <pr> opens one, and it leaves Your turn.
+
+        Needs you (3)
+        #   PR           Title                 Author            Waiting  Size      CI
+        1.  acme/api#12  Charge cards in cen…  @sam              26h      +120/-10  pass
+            touches payments
+        2.  acme/web#7   Fix the login redir…  @lee              26h      +10/-2    pass
+            blocks 2 PRs
 
        j/k move  / search  enter brief  o open  r refresh  q quit"
     `);
