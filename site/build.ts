@@ -16,13 +16,56 @@ const ROOT = join(import.meta.dirname, "..");
 const SRC = join(import.meta.dirname, "src");
 const OUT = join(import.meta.dirname, "dist");
 const DOCS = join(ROOT, "docs");
-const GITHUB = "https://github.com/getalden/alden/blob/main";
+const REPO = "https://github.com/getalden/alden";
+const GITHUB = `${REPO}/blob/main`;
 const DISCORD = "https://discord.gg/ZtXFX7sxTu";
+
+/**
+ * The open-source switch, for launch day: `ALDEN_OPEN_SOURCE=1 pnpm site:build` says Alden is open source and links its
+ * repo from the home page and every page's header and footer. Without it the site says "open source after the beta",
+ * exactly as today. Each swap is exact text in src/index.html, and the build stops if one is missing, with or without
+ * the flag, so a copy change can't quietly turn the switch into a no-op.
+ */
+const OPEN_SOURCE = process.env.ALDEN_OPEN_SOURCE === "1";
+// In the header it gives way on a phone, where the footer still has it.
+const GITHUB_LINK = (label: "nav" | "footer") =>
+  `<a href="${REPO}" rel="noopener" data-label="${label}"${label === "nav" ? ' class="wide-only"' : ""}>GitHub</a>`;
+const HOME_SWAPS: [today: string, openSource: string][] = [
+  [
+    "open beta · open source after the beta · macOS, Linux and Windows",
+    "open beta · open source, Apache-2.0 · macOS, Linux and Windows",
+  ],
+  [
+    "<dd>Open source when the beta ends. The single-developer app stays free.</dd>",
+    `<dd>Open source under Apache-2.0: <a href="${REPO}" rel="noopener">the code is on GitHub</a>. The single-developer app stays free.</dd>`,
+  ],
+  [
+    `<a href="${DISCORD}" rel="noopener">Discord</a>`,
+    `${GITHUB_LINK("nav")}\n          <a href="${DISCORD}" rel="noopener">Discord</a>`,
+  ],
+  [
+    `><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a`,
+    `>${GITHUB_LINK("footer").slice(0, -1)}\n        ><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a`,
+  ],
+];
 
 rmSync(OUT, { recursive: true, force: true });
 // benchmarks.html and cloud.html are the bodies of /benchmarks/ and /cloud/, wrapped in the page below.
 const BODIES = ["benchmarks.html", "cloud.html"];
 cpSync(SRC, OUT, { recursive: true, filter: (path) => !BODIES.some((body) => path.endsWith(body)) });
+{
+  const file = join(OUT, "index.html");
+  let home = readFileSync(file, "utf8");
+  for (const [today, openSource] of HOME_SWAPS) {
+    if (!home.includes(today)) {
+      throw new Error(
+        `The open-source switch looks for "${today}" in src/index.html: update HOME_SWAPS in site/build.ts.`,
+      );
+    }
+    if (OPEN_SOURCE) home = home.replace(today, openSource);
+  }
+  writeFileSync(file, home);
+}
 mkdirSync(join(OUT, "assets/fonts"), { recursive: true });
 for (const font of ["Geist-Variable.woff2", "GeistMono-Variable.woff2", "OFL.txt"]) {
   cpSync(join(ROOT, "packages/ui/src/fonts", font), join(OUT, "assets/fonts", font));
@@ -88,7 +131,7 @@ const header = `<header class="top">
     <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect x=".5" y=".5" width="31" height="31" rx="8" fill="#101B20" stroke="#263c44"/><path d="M8 24 L16 8 L24 24" fill="none" stroke="#14B8A6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="24" r="2" fill="#5EEAD4"/><circle cx="16" cy="8" r="2" fill="#5EEAD4"/><circle cx="24" cy="24" r="2" fill="#5EEAD4"/><circle cx="16" cy="19" r="2.4" fill="#F0FDFA"/></svg>
     <span>alden</span>
   </a>
-  <nav><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="${DISCORD}" rel="noopener">Discord</a><a class="btn small" href="/docs/getting-started/" data-track="install" data-label="nav">Install</a></nav>
+  <nav><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a>${OPEN_SOURCE ? GITHUB_LINK("nav") : ""}<a href="${DISCORD}" rel="noopener">Discord</a><a class="btn small" href="/docs/getting-started/" data-track="install" data-label="nav">Install</a></nav>
 </header>`;
 
 function page(title: string, description: string, body: string): string {
@@ -106,7 +149,7 @@ function page(title: string, description: string, body: string): string {
 <body>
 ${header}
 ${body}
-<footer class="foot"><span class="word">alden</span><span>This site counts page views, no cookies.</span><span class="links"><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="/cloud/">Alden Cloud</a><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a><a href="mailto:beta@getalden.dev" data-track="contact" data-label="footer">beta@getalden.dev</a><a href="/docs/privacy/#this-website">Privacy</a><span>getalden.dev</span></span></footer>
+<footer class="foot"><span class="word">alden</span><span>This site counts page views, no cookies.</span><span class="links"><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="/cloud/">Alden Cloud</a>${OPEN_SOURCE ? GITHUB_LINK("footer") : ""}<a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a><a href="mailto:beta@getalden.dev" data-track="contact" data-label="footer">beta@getalden.dev</a><a href="/docs/privacy/#this-website">Privacy</a><span>getalden.dev</span></span></footer>
 <script src="/site.js" defer></script>
 </body>
 </html>
@@ -177,4 +220,6 @@ writeFileSync(
 if (!existsSync(join(OUT, "assets/screens/briefing-dark.png"))) {
   throw new Error("site/src/assets/screens is missing its screenshots. Run `pnpm screenshots`.");
 }
-console.log(`Built ${files.length} docs pages, the benchmarks, Alden Cloud and the home page into site/dist.`);
+console.log(
+  `Built ${files.length} docs pages, the benchmarks, Alden Cloud and the home page into site/dist${OPEN_SOURCE ? ", saying Alden is open source (ALDEN_OPEN_SOURCE=1)" : ""}.`,
+);

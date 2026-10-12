@@ -42,6 +42,25 @@ If the project ever has to be recreated: `cd site && pnpm dlx wrangler@4 pages p
 `_headers` sets a strict Content-Security-Policy: everything is served from the site itself, and the only other host
 a page may talk to is PostHog's EU ingest (`connect-src https://eu.i.posthog.com`), for the page view counts.
 
+## Open source, on launch day
+
+Until launch the site says Alden is "open source after the beta". One switch changes that, at build time:
+
+```sh
+pnpm site:build                       # today: "open source after the beta", no GitHub links
+ALDEN_OPEN_SOURCE=1 pnpm site:build   # launch day: "open source, Apache-2.0" and links to github.com/getalden/alden
+ALDEN_OPEN_SOURCE=1 pnpm site:deploy  # what RELEASING.md's "Launch day" runs, once the repo is public
+```
+
+`HOME_SWAPS` in `build.ts` lists each change to `src/index.html` as exact text, today's and launch day's: the hero's
+kicker, the "source" line under 03 / yours, and a GitHub link in the header and the footer. The docs, benchmarks and
+Alden Cloud pages get the same header and footer link. Without the flag the built home page is `src/index.html` as is,
+and the build stops if any of today's texts can't be found, with or without the flag, so editing that copy means
+updating `HOME_SWAPS` too. The README's own "Open source" section waits on the branch `launch/open-source`.
+
+After launch, make the open-source wording the page's own text and remove the switch, so a deploy without the flag
+can't bring the old wording back.
+
 ## Page view counts
 
 `site.js` counts page views and clicks on install, copy and Discord links (`data-track` on a link or button names it;
