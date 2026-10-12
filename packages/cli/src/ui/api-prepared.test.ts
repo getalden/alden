@@ -133,7 +133,8 @@ describe("background briefings and staleness", () => {
     github.freshness.push({ state: "pr_changed", commits: 2 });
     expect(await api.prepareNext()).toMatchObject({ prepared: { pr: key } });
     expect([github.checks, github.reviews]).toEqual([2, 2]);
-  });
+    // Three briefings in a row: milliseconds here, but shared CI runners have taken over 7 s.
+  }, 20_000);
 
   it("falls back to the last queue's update time when GitHub can't be asked", async () => {
     const api = createUiApi({ version: "test", cwd: home, desktop: true });

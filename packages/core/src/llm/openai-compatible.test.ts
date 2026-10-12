@@ -165,7 +165,8 @@ describe("platforms", () => {
       expect(typeof client.messages.stream).toBe("function");
       expect(typeof client.messages.countTokens).toBe("function");
     },
-    15_000,
+    // Google's auth library can still reach out while it starts; shared CI runners have taken over 15 s.
+    30_000,
   );
 });
 
