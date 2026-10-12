@@ -380,14 +380,14 @@ function onQueueKey(state: State, key: Key, now: number): Step {
   if (is(key, "G", "end")) return move(rows.length - 1);
   const row = rows[q.selected];
   if (!row) return [state, []];
-  const pr = `${row.item.pr.repo}#${row.item.pr.number}`;
-  if (is(key, "o")) return [ask(state, `Opening ${row.item.pr.url}`), [{ type: "open", url: row.item.pr.url }]];
+  const { pr, url } = row;
+  if (is(key, "o")) return [ask(state, `Opening ${url}`), [{ type: "open", url }]];
   if (is(key, "enter", "l", "right")) {
     const id = state.nextId;
     const briefing: BriefingState = {
       id,
       pr,
-      url: row.item.pr.url,
+      url,
       llm: false,
       busy: { label: `Checking ${pr}…`, startedAt: now },
       cursor: 0,

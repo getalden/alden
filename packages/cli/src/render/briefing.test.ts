@@ -431,3 +431,42 @@ describe("untrusted text", () => {
     expect(out).not.toContain("]52;");
   });
 });
+
+describe("narrow terminals", () => {
+  it("finishes at any width, however narrow (COLUMNS=5 can't hang alden review)", () => {
+    const b = briefing({
+      checks: [
+        check({
+          id: "signatures.changed",
+          title: "Changed public signatures",
+          status: "flagged",
+          severity: "high",
+          heuristic: false,
+          summary: "rank() changed and is still called.",
+          evidence: [
+            {
+              text: "changed: rank(queue: string[]) → rank(queue: string[], now: number)",
+              anchor: { path: "src/a.ts" },
+            },
+            { text: "src/cli.ts:2 calls rank (signature changed)", anchor: { path: "src/cli.ts", line: 2 } },
+          ],
+        }),
+      ],
+      needsYourEyes: [
+        {
+          title: "rank() changed",
+          reason: "Still called from src/cli.ts.",
+          source: "check",
+          checkId: "signatures.changed",
+        },
+      ],
+    });
+    for (const width of [1, 5, 10]) {
+      const out = plain(b, width);
+      // Every word is still there, broken across lines.
+      const words = out.replace(/\s+/g, "");
+      expect(words).toContain("Changedpublicsignatures");
+      expect(words).toContain("rank(queue:string[],now:number)");
+    }
+  });
+});

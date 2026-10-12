@@ -1,21 +1,4 @@
-import {
-  type AldenStore,
-  createGitHubClient,
-  fetchReviewQueue,
-  fillFollowUpCounts,
-  followUpRows,
-  JsonCache,
-  loadConfig,
-  openStore,
-  queueEvent,
-  queueRows,
-  queueScope,
-  rankQueue,
-  refreshFollowUps,
-  resolveToken,
-  track,
-  withYourTurn,
-} from "@alden/core";
+import { createGitHubClient, JsonCache, loadConfig, queueRows, resolveToken } from "@alden/core";
 import {
   activeFilterCount,
   isQueueSort,
@@ -27,17 +10,13 @@ import {
 } from "@alden/schema";
 import type { Command } from "commander";
 import { describeGitHubError } from "../github-errors.js";
-import { learningForQueue } from "../learning.js";
 import { nextLine, queueNext, wantsNext } from "../next.js";
-import { checkSentOutcomes } from "../outcomes.js";
 import { startProgress } from "../progress.js";
+import { loadRankedQueue, QueueFetchError } from "../queue-load.js";
 import { renderQueue, shouldColor } from "../render/queue.js";
 import { LAST_QUEUE_KEY, type LastQueue } from "./open.js";
 
 const collect = (value: string, previous: string[]) => [...previous, value];
-
-/** How long the queue waits for the follow-up check before it shows what's stored (the check still finishes). */
-const FOLLOW_UP_WAIT_MS = 8_000;
 
 interface QueueCommandOptions {
   json?: boolean;
@@ -124,53 +103,23 @@ export function registerQueueCommand(program: Command): void {
       const cache = new JsonCache();
       // On stderr, and only on a terminal: scripts read stdout.
       const progress = startProgress("Asking GitHub who you are…");
-      const client = createGitHubClient(resolved.token);
-      let queue: Awaited<ReturnType<typeof fetchReviewQueue>>;
+      let ranked: RankedQueue;
       try {
-        queue = await fetchReviewQueue(client, {
-          includeDrafts: options.includeDrafts ?? config.queue.includeDrafts,
-          limit,
+        ranked = await loadRankedQueue(createGitHubClient(resolved.token), config, {
           cache,
+          limit,
           refresh: options.refresh ?? false,
-          ...queueScope(config, { repos: options.repo, orgs: options.org }),
-          onProgress: (step) => progress.update(`${step}…`),
+          ...(options.includeDrafts !== undefined ? { includeDrafts: options.includeDrafts } : {}),
+          repos: options.repo,
+          orgs: options.org,
+          onProgress: (label) => progress.update(label),
         });
       } catch (error) {
         progress.stop();
-        program.error(describeGitHubError(error, resolved.source));
+        if (error instanceof QueueFetchError) program.error(describeGitHubError(error.cause, resolved.source));
+        throw error;
       }
-      // Once the queue is in: what came of the comments you sent lately (at most a request per PR per day), in the
-      // background. Its errors are its own.
-      void Promise.resolve()
-        .then(() => checkSentOutcomes(client, openStore()))
-        .catch(() => {});
-      progress.update("Seeing what needs your eyes…");
-      let ranked: ReturnType<typeof rankQueue>;
-      try {
-        ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
-        // What happened on the PRs you reviewed: the follow-up check the desktop app runs, with its limits (only PRs
-        // GitHub says changed, at most once a minute). Never fails the queue: what's stored still shows.
-        let store: AldenStore | undefined;
-        try {
-          store = openStore();
-        } catch {
-          // the database is locked or damaged: the queue still stands
-        }
-        if (store) {
-          const global = config.notifications.followUps;
-          progress.update("Checking the PRs you reviewed…");
-          await refreshFollowUps(client, store, { global, queue: followUpRows(ranked), waitMs: FOLLOW_UP_WAIT_MS });
-          try {
-            const scope = queueScope(config, { repos: options.repo, orgs: options.org });
-            ranked = withYourTurn(store, fillFollowUpCounts(store, ranked), { global, scope });
-          } catch {
-            // as above
-          }
-        }
-      } finally {
-        progress.stop();
-      }
-      await track("queue_ranked", queueEvent(ranked));
+      progress.stop();
 
       // `alden open 3` opens the third row shown; learning still sees the whole queue in Alden's order.
       const { queue: shown, note } = narrowQueue(ranked, options, Date.now());

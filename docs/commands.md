@@ -22,8 +22,10 @@ It opens only when both standard input and output are a terminal, outside CI (`C
 always has. It needs you signed in (`alden auth login`), and respects `NO_COLOR`. 80 by 24 or bigger works best; a
 smaller terminal cuts long lines, and one too small to use says so. It redraws when you resize it.
 
-The queue screen is `alden queue`'s table: Your turn (when you have one), Needs you and Fast-track, ranked. While it
-loads it says what it's doing, as `alden queue` does. A briefing is `alden review`'s, without the model until you
+The queue screen is `alden queue`'s table: Your turn first (when you have one), then Needs you and Fast-track, ranked.
+While it loads it says what it's doing, and checks the PRs you reviewed for follow-ups, as `alden queue` does.
+Briefing or opening a PR from Your turn marks what happened as seen, as `alden review` and `alden open` do, and a
+briefing opened here starts its [time to review](#time-to-review) as one opened in the terminal. A briefing is `alden review`'s, without the model until you
 press `m`: then it says which model and what a review may cost against your caps, and runs only on `y`, saying what
 it cost. `u` and `n` record feedback as `alden ui` does (the same mark again takes it back), and say how close a lesson
 is. `c` writes a draft comment as `alden comment` does: on the place's file and line, or a general note when the

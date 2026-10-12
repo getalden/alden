@@ -1,4 +1,10 @@
-import { type Briefing, matchesSearch, type RankedPullRequest, type RankedQueue } from "@alden/schema";
+import {
+  type Briefing,
+  matchesSearch,
+  type RankedPullRequest,
+  type RankedQueue,
+  type YourTurnItem,
+} from "@alden/schema";
 import { aldenNotKept, renderDrafts, renderSendSummary } from "../commands/comment.js";
 import { renderBriefing } from "../render/briefing.js";
 import { renderQueue } from "../render/queue.js";
@@ -19,27 +25,42 @@ const BRIEFING_MAX = 120;
 
 export const bodyHeight = (height: number) => Math.max(1, height - CHROME);
 
-/** The "Your turn" group, when the queue has one (newer queues do); empty otherwise. */
-export function yourTurnOf(queue: RankedQueue): RankedPullRequest[] {
-  const lane = (queue as RankedQueue & { yourTurn?: unknown }).yourTurn;
-  return Array.isArray(lane) ? (lane as RankedPullRequest[]) : [];
+/** The "Your turn" group: PRs you reviewed where something happened you haven't seen. */
+export const yourTurnOf = (queue: RankedQueue): YourTurnItem[] => queue.yourTurn ?? [];
+
+/** Every word in a Your turn PR's title or repo, or its #number, as `--search` matches a queue row. */
+function matchesYourTurn(item: YourTurnItem, search: string): boolean {
+  const text = `${item.title}\n${item.repo}`.toLowerCase();
+  return search
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => {
+      const number = /^#?(\d+)$/.exec(word);
+      if (number && item.number === Number(number[1])) return true;
+      return !word.startsWith("#") && text.includes(word);
+    });
 }
 
 /** The queue with only the PRs whose title, repo, #number, author or branch has every word, as `--search` keeps. */
 export function searchQueue(queue: RankedQueue, search: string): RankedQueue {
   if (!search.trim()) return queue;
   const keep = (rows: RankedPullRequest[]) => rows.filter((row) => matchesSearch(row.pr, search));
-  const yourTurn = (queue as RankedQueue & { yourTurn?: unknown }).yourTurn;
   return {
     ...queue,
     needsYou: keep(queue.needsYou),
     fastTrack: keep(queue.fastTrack),
-    ...(Array.isArray(yourTurn) ? { yourTurn: keep(yourTurn as RankedPullRequest[]) } : {}),
+    ...(queue.yourTurn ? { yourTurn: queue.yourTurn.filter((item) => matchesYourTurn(item, search)) } : {}),
   };
 }
 
 export interface QueueRow {
-  item: RankedPullRequest;
+  /** "owner/repo#12" */
+  pr: string;
+  url: string;
+  /** A Your turn row: opening it marks what happened as seen. */
+  yourTurn: boolean;
   /** Its first and last line in `lines`. */
   start: number;
   end: number;
@@ -50,38 +71,70 @@ export interface QueueLayout {
   rows: QueueRow[];
 }
 
-/** "acme/api#12" or the repo cut short, "acme/really-long-…#12", as the table shows a PR. */
-const showsPr = (line: string, item: RankedPullRequest) =>
-  new RegExp(`#${item.pr.number}(\\s|$)`).test(line) &&
-  (line.includes(`${item.pr.repo}#`) || line.includes(`…#${item.pr.number}`));
+/** Whether a line shows this PR: "acme/api#12", or the repo cut short, "acme/really-long-…#12". */
+const showsPr = (line: string, repo: string, number: number) =>
+  new RegExp(`#${number}(\\s|$)`).test(line) && (line.includes(`${repo}#`) || line.includes(`…#${number}`));
 
 /**
- * The queue as `alden queue` prints it, and where each PR's row is: a row starts "N." and its dim reason line follows.
- * N counts through the groups in the order they're shown.
+ * The queue as `alden queue` prints it, and where each PR's row is. Your turn comes first, unnumbered: a row is its
+ * PR, then an indented line saying what happened. Then the ranked rows, "N." with N counting through Needs you and
+ * Fast-track, each with its dim reason line.
  */
-export function queueLayout(queue: RankedQueue, search: string, width: number, color: boolean): QueueLayout {
+export function queueLayout(
+  queue: RankedQueue,
+  search: string,
+  width: number,
+  color: boolean,
+  /** The time Your turn's "2h ago" counts back from. */
+  now?: number,
+): QueueLayout {
   const shown = searchQueue(queue, search);
-  const items = [...yourTurnOf(shown), ...shown.needsYou, ...shown.fastTrack];
+  const ranked = [...shown.needsYou, ...shown.fastTrack];
+  const yourTurn = yourTurnOf(shown);
   const all = yourTurnOf(queue).length + queue.needsYou.length + queue.fastTrack.length;
-  if (items.length === 0 && all > 0) {
+  if (ranked.length + yourTurn.length === 0 && all > 0) {
     return { lines: [`No PRs match "${search.trim()}". Esc clears the search.`], rows: [] };
   }
   const render = (withColor: boolean) =>
-    renderQueue(shown, { width: queueWidth(width), color: withColor })
+    renderQueue(shown, { width: queueWidth(width), color: withColor, ...(now !== undefined ? { now } : {}) })
       .trimEnd()
       .split("\n");
   const lines = render(color);
   const plain = color ? render(false) : lines;
   const rows: QueueRow[] = [];
+  const extent = (i: number, indent: string) => {
+    let end = i;
+    while (plain[end + 1]?.startsWith(indent) && !plain[end + 1]?.trim().startsWith("alden open <pr>")) end++;
+    return end;
+  };
+  // Your turn: from its heading, each "  owner/repo#12  Title  2h ago" in order.
+  const heading = plain.findIndex((line) => line.startsWith("Your turn ("));
+  if (heading >= 0) {
+    let next = 0;
+    for (let i = heading + 1; i < plain.length && next < yourTurn.length; i++) {
+      const item = yourTurn[next] as YourTurnItem;
+      const line = plain[i] as string;
+      if (!/^ {2}\S/.test(line) || !showsPr(line, item.repo, item.number)) continue;
+      rows.push({ pr: item.pr, url: item.url, yourTurn: true, start: i, end: extent(i, "    ") });
+      next++;
+    }
+  }
   plain.forEach((line, i) => {
     const rank = /^(\d+)\.\s/.exec(line);
     if (!rank) return;
-    const byRank = items[Number(rank[1]) - 1];
-    const item = byRank && showsPr(line, byRank) ? byRank : items.find((candidate) => showsPr(line, candidate));
+    const byRank = ranked[Number(rank[1]) - 1];
+    const item =
+      byRank && showsPr(line, byRank.pr.repo, byRank.pr.number)
+        ? byRank
+        : ranked.find((r) => showsPr(line, r.pr.repo, r.pr.number));
     if (!item) return;
-    let end = i;
-    while (plain[end + 1]?.startsWith(" ")) end++;
-    rows.push({ item, start: i, end });
+    rows.push({
+      pr: `${item.pr.repo}#${item.pr.number}`,
+      url: item.pr.url,
+      yourTurn: false,
+      start: i,
+      end: extent(i, " "),
+    });
   });
   return { lines, rows };
 }

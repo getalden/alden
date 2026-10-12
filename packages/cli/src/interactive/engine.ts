@@ -1,17 +1,11 @@
 import {
   createGitHubClient,
-  fetchReviewQueue,
   JsonCache,
   loadConfig,
-  openStore,
-  queueEvent,
   queueRows,
-  queueScope,
-  rankQueue,
   resolveToken,
   SpendLedger,
   selectProvider,
-  track,
 } from "@alden/core";
 import type {
   Briefing,
@@ -23,10 +17,10 @@ import type {
   SendReviewResult,
   UnaddressedPlace,
 } from "@alden/schema";
-import { LAST_QUEUE_KEY, type LastQueue, openInBrowser } from "../commands/open.js";
+import { LAST_QUEUE_KEY, type LastQueue, noteFollowUpsSeen, openInBrowser } from "../commands/open.js";
 import { describeGitHubError } from "../github-errors.js";
-import { learningForQueue, noteOpened } from "../learning.js";
-import { checkSentOutcomes } from "../outcomes.js";
+import { noteOpened } from "../learning.js";
+import { loadRankedQueue, QueueFetchError } from "../queue-load.js";
 import { createUiApi } from "../ui/api.js";
 import type { DraftInput } from "../ui/server.js";
 
@@ -78,26 +72,18 @@ export function createEngine(options: { version: string; cwd: string }): Engine 
       const resolved = await resolveToken();
       if (!resolved) throw new Error("Not signed in. Run `alden auth login`.");
       const config = await loadConfig();
-      const client = createGitHubClient(resolved.token);
-      let queue: Awaited<ReturnType<typeof fetchReviewQueue>>;
+      let ranked: RankedQueue;
       try {
-        queue = await fetchReviewQueue(client, {
-          includeDrafts: config.queue.includeDrafts,
-          limit: QUEUE_LIMIT,
+        ranked = await loadRankedQueue(createGitHubClient(resolved.token), config, {
           cache,
+          limit: QUEUE_LIMIT,
           refresh,
-          ...queueScope(config),
-          onProgress: (step) => onProgress(`${step}…`),
+          onProgress,
         });
       } catch (error) {
-        throw new Error(describeGitHubError(error, resolved.source));
+        if (error instanceof QueueFetchError) throw new Error(describeGitHubError(error.cause, resolved.source));
+        throw error;
       }
-      void Promise.resolve()
-        .then(() => checkSentOutcomes(client, openStore()))
-        .catch(() => {});
-      onProgress("Seeing what needs your eyes…");
-      const ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
-      await track("queue_ranked", queueEvent(ranked));
       // So `alden review 3` and `alden open 3` mean the rows shown here, as after `alden queue`.
       const last: LastQueue = {
         urls: [...ranked.needsYou, ...ranked.fastTrack].map((r) => r.pr.url),
@@ -108,7 +94,13 @@ export function createEngine(options: { version: string; cwd: string }): Engine 
       return ranked;
     },
 
-    brief: (pr, llm, onProgress) => api.review({ pr, llm, graph: true }, (_stage, label) => onProgress(label)),
+    async brief(pr, llm, onProgress) {
+      // Opened from the terminal, as `alden review <pr>`: the review session (time to review) opens as the CLI's.
+      const briefing = await api.review({ pr, llm, graph: true, opened: "cli" }, (_stage, label) => onProgress(label));
+      // What happened since your review is seen, and the PR leaves Your turn, as `alden review` does.
+      if (briefing.target.kind === "pr") noteFollowUpsSeen(briefing.target.repo, briefing.target.number);
+      return briefing;
+    },
 
     async model() {
       const config = await loadConfig();
@@ -144,6 +136,9 @@ export function createEngine(options: { version: string; cwd: string }): Engine 
       if (!url.startsWith("https://")) return;
       openInBrowser(url, "");
       noteOpened(lastRows, url, "cli");
+      // As `alden open`: what happened since your review is seen.
+      const ref = /github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/.exec(url);
+      if (ref) noteFollowUpsSeen(ref[1] as string, Number(ref[2]));
     },
   };
 }
