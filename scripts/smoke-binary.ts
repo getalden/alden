@@ -4,7 +4,7 @@
  * Its version, a local review of a throwaway repo (diff, checks and the code graph with the embedded grammars, no
  * model), the local database, and `alden ui` serving the embedded UI. Uses a throwaway ALDEN_HOME and never touches the keychain.
  */
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -37,6 +37,10 @@ const check = (name: string, ok: boolean, detail = "") => {
 try {
   const version = run(["--version"]).trim();
   check("version", version === expectedVersion, version);
+
+  // `alden` alone outside a terminal (here, a pipe) prints help as before; in a terminal it opens the interactive view.
+  const bare = spawnSync(binary, [], { cwd: repo, env, encoding: "utf8", timeout: 30_000, stdio: "pipe" });
+  check("alden alone in a pipe prints help", /Usage: alden/.test(bare.stdout + bare.stderr) && bare.status === 1);
 
   // A repo where a changed function signature is still called from another file.
   git("init", "-q", "-b", "main");

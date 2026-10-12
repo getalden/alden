@@ -17,6 +17,8 @@ import { registerSpendCommand } from "./commands/spend.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerUiCommand } from "./commands/ui.js";
 import { registerWatchCommand } from "./commands/watch.js";
+import { wantsInteractive } from "./interactive/app.js";
+import { runInteractiveCommand } from "./interactive/command.js";
 import { instrument, registerTelemetryCommand } from "./telemetry.js";
 import { updateNotice } from "./version.js";
 
@@ -57,6 +59,13 @@ if (args.length === 1 && (args[0] === "--version" || args[0] === "-V")) {
   const notice = await updateNotice(pkg.version);
   if (notice) console.error(notice);
   process.exit(0);
+}
+
+// `alden` alone, in a terminal: the interactive view. Piped, in CI or on a dumb terminal it prints help, as before.
+if (args.length === 0 && wantsInteractive(process.stdin, process.stdout)) {
+  await noteClone(process.cwd());
+  await runInteractiveCommand(program, pkg.version);
+  process.exit();
 }
 
 await program.parseAsync();
