@@ -18,6 +18,7 @@ import {
   type DiffFile,
   DraftingError,
   draftReview,
+  draftsAtHead,
   dropAldenDrafts,
   type Effort,
   editNote,
@@ -778,10 +779,11 @@ export function createUiApi(options: {
     async drafts(pr) {
       const ref = await prOf(pr);
       // Brought to the PR's current head when GitHub can be reached; as they were otherwise (signed out, offline).
-      await followPr(ref).catch(() => undefined);
+      const head = await followPr(ref).catch(() => undefined);
       const list = drafts.list(ref.name);
       return {
-        drafts: list.map(publicDraft),
+        // An outdated draft says where its code went, for "Move to new lines".
+        drafts: head ? draftsAtHead(list, head.headSha, head.files) : list.map(publicDraft),
         // Alden's drafts you haven't kept won't be sent, so they don't count as a word on the place they're on.
         unaddressed: unaddressedPlaces(
           drafts.briefed(ref.name)?.places ?? [],
@@ -994,7 +996,8 @@ export function createUiApi(options: {
         const sent = await sendReview(
           createGitHubClient(resolved.token),
           openStore(),
-          { repo: ref.repo, number: ref.number, event, ...(body !== undefined ? { body } : {}) },
+          // The summary before Send counts outdated drafts as left out: they stay, to move or delete.
+          { repo: ref.repo, number: ref.number, event, ...(body !== undefined ? { body } : {}), leaveOutdated: true },
           new Date(),
           // What you saw in guided review and the Diff tab, so approving past a place you saw counts as a silent pass.
           {
