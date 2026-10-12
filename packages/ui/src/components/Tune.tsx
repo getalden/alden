@@ -12,6 +12,7 @@ import { type Api, ApiError, type Session } from "../api";
 import { formatUsd } from "../format";
 import { navigate } from "../router";
 import { API_KEYS_ID } from "./ApiKeySettings";
+import { Markdown } from "./Markdown";
 import { type Choices, effortSupported, Switch } from "./ReviewOptions";
 
 type TuneApi = Pick<Api, "models" | "pickModel" | "tone" | "setTone" | "ask" | "setConfig">;
@@ -647,7 +648,7 @@ function Ask({ api, pr }: { api: TuneApi; pr: string }) {
       {answer && (
         <div className="ask-answer" aria-live="polite" aria-busy={answer.state === "asking"}>
           <span className="ask-q">{answer.question}</span>
-          {answer.text && <p className="ask-text">{answer.text}</p>}
+          {answer.text && <Markdown className="ask-text" text={answer.text} />}
           {answer.state === "error" && (
             <p className={answer.message === "Stopped." ? "faint" : "error-text"} role="alert">
               {answer.message}

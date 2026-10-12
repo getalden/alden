@@ -20,6 +20,7 @@ import { CommentSlot, placeAttrs, useReviewActions } from "./Comments";
 import { ShowInDiffContext } from "./DiffView";
 import { CodeAt, GuidedReview, type GuidedReviewProps, useBriefingDiff } from "./GuidedReview";
 import { Mark } from "./Mark";
+import { inline } from "./Markdown";
 
 const anchorKey = (a: Anchor) => `${a.path}:${a.line ?? ""}`;
 
@@ -613,7 +614,7 @@ export function BriefingView({
               </span>
             )}
           </div>
-          <p className="v3-does-text">{llm.summary}</p>
+          <p className="v3-does-text">{inline(llm.summary, "does")}</p>
         </section>
       )}
       {llm && llm.status !== "ok" && <ModelState llm={llm} perReviewUsd={perReviewUsd} />}
@@ -750,7 +751,7 @@ export function BriefingView({
                   >
                     <div className="what">
                       <span>
-                        <strong>{f.title}.</strong> <span className="muted">{f.detail}</span>
+                        <strong>{f.title}.</strong> <span className="muted">{inline(f.detail, f.title)}</span>
                         <DraftReady title={f.title} comments={comments} />
                       </span>
                       {f.fromNote && <FromNoteLine note={f.fromNote} />}

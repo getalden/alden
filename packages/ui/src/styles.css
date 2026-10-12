@@ -1758,7 +1758,6 @@ ol + .queue-group {
 .ask-text {
   font: 13.5px / 1.55 var(--font-ui);
   color: var(--ink);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .ask-foot {
@@ -5800,3 +5799,46 @@ button.v3-dcard-head:focus-visible {
   }
 }
 /* biome-ignore-end lint/style/noDescendingSpecificity: end of the v3 reading section. */
+
+/* biome-ignore-start lint/style/noDescendingSpecificity: Markdown inside answers and model text, on top of the rules above. */
+/* ---- Markdown from a model (Ask's answers): text, lists, code, quiet headings -------------------------------------- */
+
+.md > * {
+  margin: 0;
+}
+.md > * + * {
+  margin-top: 8px;
+}
+.md ul,
+.md ol {
+  padding-left: 20px;
+}
+.md li + li {
+  margin-top: 4px;
+}
+.md .md-h {
+  font-weight: 600;
+}
+.md code {
+  font: 0.92em var(--font-mono);
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--sunk);
+}
+.md pre {
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  overflow-x: auto;
+}
+.md pre code {
+  padding: 0;
+  background: none;
+  white-space: pre;
+}
+.v3-does-text code,
+.muted code {
+  font: 0.92em var(--font-mono);
+}
+/* biome-ignore-end lint/style/noDescendingSpecificity: end of the Markdown section. */
