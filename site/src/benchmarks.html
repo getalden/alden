@@ -166,6 +166,25 @@
       <strong>In PHP, Python and TypeScript, the model flagged every file that later broke</strong> (13 of 13). Go is the
       weak spot: one GitHub CLI fix touched 11 files, and the briefing flagged 6.
     </p>
+    <p>
+      <strong>Go, checks only, in the 0.9 development build (12 October 2026).</strong> 0.9 follows more of how Go code
+      calls itself: through interfaces, embedded structs, functions passed as values, and package-internal helpers.
+      Re-running the recorded PRs with the checks alone and no model gives the same Go figures as 0.8.0. This run has no
+      clones of the four Go repositories, so the code graph, where that work is, doesn't run on them, and every file
+      these fixes changed was already in the original PR's diff.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Go, checks only (no model, no clones)</th><th class="n">Files</th><th class="n">Flagged</th>
+          <th class="n">In Needs your eyes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>0.8.0</td><td class="n">16</td><td class="n">1</td><td class="n">1</td></tr>
+        <tr><td>0.9 development build</td><td class="n">16</td><td class="n">1</td><td class="n">1</td></tr>
+      </tbody>
+    </table>
 
     <h3 id="results-precision">3.3 No invented locations</h3>
     <p>
