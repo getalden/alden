@@ -27,6 +27,7 @@ Or download the desktop app's .dmg or a standalone binary for macOS, Linux or Wi
 
 ```sh
 alden auth login   # reuses your GitHub CLI sign-in if you have one
+alden              # the interactive view: queue, briefings, feedback and sending, on one screen
 alden queue        # the PRs waiting on your review, ranked
 alden open 1       # open the top one in your browser
 
