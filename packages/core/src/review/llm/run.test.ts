@@ -478,7 +478,9 @@ describe("drafted comments in the model's answer", () => {
     ],
   };
 
-  it("asks for drafts on a PR when drafts.auto is on, and keeps the ones that check out", async () => {
+  it("asks for drafts on a PR by default once a model is set up, and keeps the ones that check out", async () => {
+    // Nothing configured: drafts.auto is on.
+    expect(config.drafts.auto).toBe(true);
     const { briefing, files } = recorded("grafana", 133736);
     const { provider, requests } = drafting(answer);
     const result = await addModelReview(briefing, {

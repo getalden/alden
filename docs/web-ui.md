@@ -269,7 +269,8 @@ this machine until you send them to acme/shop#412 on GitHub, as one review." It 
 - **Replies in threads**: where each reply goes, "Reply in thread on src/pay.ts:40, and resolve it".
 
 Below them are **Add a general note**, **Comment on a line…**, the review body, and the PR's **Conversation**: its
-review threads, yours first and open ones first, each with **Reply** and **Resolve when sent**. A reply or a resolve
+review threads, yours first and open ones first, each with **Reply** and, on a thread you started, **Resolve when
+sent** (someone else's says "ana's to resolve"). A reply or a resolve
 is a draft like any other, sent with your review (see [Replying in a thread](comments.md#replying-in-a-thread)). At the bottom, always in view, are
 the verdict (**Comment**, **Approve** or **Request changes**) and **Send review · 3 comments**.
 
@@ -375,7 +376,8 @@ Settings change your user config, like `alden config set`; a repo's `.alden.toml
 - **Your feedback**: how often you found Alden's places useful, and **Export redacted feedback**.
 - **Learning**: **Learn from my reviews** (on by default). Off, Alden stops noting which places you saw and learns only
   from Useful and Not useful. See [Places you saw](memory.md#places-you-saw).
-- **Drafts**: **Draft comments for me** (on by default, `drafts.auto`). Off, a model briefing drafts no comments.
+- **Drafts**: **Draft comments for me** (on by default, `drafts.auto`: once you set up a model, its briefings draft
+  with nothing more to switch on). Off, a model briefing drafts no comments.
 - **Your queue on this machine**: which organisations and repos the queue covers, and what to leave out. The queue
   says when it's narrowed.
 - **Ranking**: see below.

@@ -52,6 +52,7 @@ vi.mock("@alden/core", async (original) => ({
                 body: "Cents?",
                 createdAt: "2026-10-01T10:00:00Z",
                 url: "https://github.com/acme/shop/pull/7#discussion_r1",
+                viewerDidAuthor: login === "me",
               },
             ],
           },
@@ -125,7 +126,12 @@ describe("threads and replies through the UI's API", () => {
       resolve: true,
     });
     expect(resolveOnly).toMatchObject({ body: "", resolve: true });
-    expect((await api.editDraft(reply.id, { resolve: true })).resolve).toBe(true);
+    // Ana started the other thread: you may reply there, but resolving it is hers to do.
+    await expect(api.editDraft(reply.id, { resolve: true })).rejects.toMatchObject({
+      status: 422,
+      message:
+        "Alden resolves only threads you started, and @ana started the one on src/pay.ts:3: reply instead, and leave resolving it to them.",
+    });
     await expect(api.editDraft(reply.id, { line: 2, path: "src/pay.ts" })).rejects.toMatchObject({ status: 400 });
     await expect(api.addDraft({ pr: "acme/shop#7", inReplyTo: "PRRT_nope", body: "Hm" })).rejects.toMatchObject({
       status: 422,
@@ -148,13 +154,12 @@ describe("threads and replies through the UI's API", () => {
       posted: 2,
       review: "COMMENT",
       replies: 1,
-      resolved: 2,
+      resolved: 1,
     });
     expect(github.writes).toEqual([
       "review pending",
       "addPullRequestReviewThreadReply PRRT_kwDOBBB2222",
       "submitPullRequestReview COMMENT",
-      "resolveReviewThread PRRT_kwDOBBB2222",
       "resolveReviewThread PRRT_kwDOAAA1111",
     ]);
     expect((await api.drafts("acme/shop#7")).drafts).toEqual([]);
@@ -164,9 +169,9 @@ describe("threads and replies through the UI's API", () => {
     github.canResolve = false;
     const api = createUiApi({ version: "test", cwd: home });
     await expect(
-      api.addDraft({ pr: "acme/shop#7", inReplyTo: "PRRT_kwDOBBB2222", body: "", resolve: true }),
+      api.addDraft({ pr: "acme/shop#7", inReplyTo: "PRRT_kwDOAAA1111", body: "", resolve: true }),
     ).rejects.toMatchObject({ status: 422, message: expect.stringMatching(/won't let you resolve/) });
-    const reply = await api.addDraft({ pr: "acme/shop#7", inReplyTo: "PRRT_kwDOBBB2222", body: "Ok" });
+    const reply = await api.addDraft({ pr: "acme/shop#7", inReplyTo: "PRRT_kwDOAAA1111", body: "Ok" });
     await expect(api.editDraft(reply.id, { resolve: true })).rejects.toMatchObject({ status: 422 });
   });
 });

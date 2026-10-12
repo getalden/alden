@@ -307,8 +307,10 @@ export function renderThreads(pr: string, untrusted: ReviewThread[], color: bool
     }
     out.push("");
   }
-  out.push(`Reply: alden comment ${pr} --reply <id or file:line> "Your reply" [--resolve]`);
-  out.push(`Resolve: alden comment ${pr} --resolve <id or file:line>. Both go with your review when you send it.`);
+  out.push(`Reply (any thread): alden comment ${pr} --reply <id or file:line> "Your reply" [--resolve]`);
+  out.push(
+    `Resolve (threads started by you): alden comment ${pr} --resolve <id or file:line>. Both go with your review when you send it.`,
+  );
   return `${out.join("\n")}\n`;
 }
 

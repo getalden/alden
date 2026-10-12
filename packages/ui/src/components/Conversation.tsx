@@ -199,7 +199,15 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
               Discard
             </button>
           )}
-          {!thread.isResolved && (
+          {!thread.isResolved && !thread.startedByYou && (
+            <span
+              className="small faint thread-resolve"
+              title="Alden resolves only threads you started, so you never close someone else's question for them."
+            >
+              {thread.comments[0]?.author ? `${thread.comments[0].author}'s to resolve` : "Not yours to resolve"}
+            </span>
+          )}
+          {!thread.isResolved && thread.startedByYou && (
             <label
               className="small thread-resolve"
               title={

@@ -174,9 +174,16 @@ describe("the conversation in the Comments drawer", () => {
     expect(conversation().textContent).toContain("Why log cents?");
     fireEvent.click(within(conversation()).getByRole("button", { name: "Show 1 resolved thread" }));
     expect(within(conversation()).getByText("Resolved")).toBeTruthy();
-    // GitHub won't let you resolve that one: the tick is there, but off.
+    // Only the thread you started has Resolve; the others are theirs to resolve.
     const ticks = within(conversation()).getAllByRole("checkbox", { name: "Resolve when sent" }) as HTMLInputElement[];
-    expect(ticks.map((t) => t.disabled)).toEqual([false, false, true]);
+    expect(ticks.map((t) => t.disabled)).toEqual([false]);
+    expect(within(conversation()).getAllByText("ana's to resolve")).toHaveLength(2);
+  });
+
+  it("offers Resolve on a thread you started only where GitHub lets you", async () => {
+    await setup([], [thread("T_mine", { startedByYou: true, viewerCanResolve: false })]);
+    const tick = within(conversation()).getByRole("checkbox", { name: "Resolve when sent" }) as HTMLInputElement;
+    expect(tick.disabled).toBe(true);
   });
 
   it("drafts a reply and a resolve, says where each will post, and sends them with the review", async () => {
@@ -194,23 +201,24 @@ describe("the conversation in the Comments drawer", () => {
     await waitFor(() =>
       expect(state.calls).toContain(`PATCH r0 ${JSON.stringify({ body: "Fixed in 3f2c.", resolve: true })}`),
     );
-    // Resolve alone, on another thread: a reply with nothing to say.
-    fireEvent.click(within(conversation()).getAllByRole("checkbox", { name: "Resolve when sent" })[1] as HTMLElement);
+    // A reply in Ana's thread, which is hers to resolve.
+    fireEvent.click(within(conversation()).getByRole("button", { name: "Reply in the thread on src/charge.ts:3" }));
+    const theirs = within(conversation()).getByRole("textbox", { name: "Reply in the thread on src/charge.ts:3" });
+    fireEvent.change(theirs, { target: { value: "Agreed." } });
+    fireEvent.keyDown(theirs, { key: "Enter", ctrlKey: true });
     await waitFor(() =>
-      expect(state.calls).toContain(
-        `POST ${JSON.stringify({ pr: PR, inReplyTo: "T_others", body: "", resolve: true })}`,
-      ),
+      expect(state.calls).toContain(`POST ${JSON.stringify({ pr: PR, inReplyTo: "T_others", body: "Agreed." })}`),
     );
 
     const replies = await within(drawer()).findByRole("region", { name: "Replies in threads · 2" });
     expect(replies.textContent).toContain("Reply in thread on src/charge.ts:40, and resolve it");
-    expect(replies.textContent).toContain("Resolve the thread on src/charge.ts:3");
+    expect(replies.textContent).toContain("Reply in thread on src/charge.ts:3");
     // Not in the review body.
     expect(within(drawer()).queryByRole("region", { name: /In the review body/ })).toBeNull();
 
     fireEvent.click(within(drawer()).getByRole("button", { name: "Send review · 2 comments" }));
     const summary = await screen.findByRole("region", { name: "Send this review to acme/api#1?" });
-    expect(summary.textContent).toContain(", with 1 reply in threads");
+    expect(summary.textContent).toContain(", with 2 replies in threads");
     expect(summary.textContent).toContain("Reply in thread on src/charge.ts:40, and resolve it");
     fireEvent.click(within(summary).getByRole("button", { name: "Send to GitHub" }));
     const sent = await within(drawer()).findByRole("status");
@@ -230,13 +238,9 @@ describe("the conversation in the Comments drawer", () => {
     expect((box as HTMLTextAreaElement).value).toBe("");
     fireEvent.change(box, { target: { value: "nevermind all good on this one." } });
     fireEvent.click(within(conversation()).getByRole("button", { name: "Save reply" }));
-    const tick = () => within(conversation()).getAllByRole("checkbox", { name: "Resolve when sent" })[1] as HTMLElement;
     await waitFor(() => expect(conversation().textContent).toContain("Your reply · posts with your review"));
-    fireEvent.click(tick());
-    await waitFor(() => expect(state.calls.some((c) => c.startsWith("PATCH"))).toBe(true));
     expect(state.calls.filter((c) => !c.startsWith("THREADS"))).toEqual([
       `POST ${JSON.stringify({ pr: PR, inReplyTo: "T_others", body: "nevermind all good on this one." })}`,
-      `PATCH r0 ${JSON.stringify({ body: "nevermind all good on this one.", resolve: true })}`,
     ]);
     fireEvent.click(
       within(conversation()).getByRole("button", { name: "Edit your reply in the thread on src/charge.ts:3" }),

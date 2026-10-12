@@ -112,12 +112,20 @@ yours, marked "drafted by Claude Code", and post as you only when you send them.
 ## Replying in a thread
 
 A PR you come back to already has a conversation: the review threads on its lines, yours and other people's. Alden
-shows them, and lets you answer one, or resolve it, as part of the review you send. A reply is a draft like any
-comment: kept on your machine, and posted only with Send.
+shows them, and lets you answer any of them, or resolve one you started, as part of the review you send. A reply is
+a draft like any comment: kept on your machine, and posted only with Send.
+
+- **Reply anywhere you can see.** Any thread GitHub lets you reply in, yours or someone else's.
+- **Resolve only your own.** Alden resolves only threads you started (the first comment is yours). GitHub lets anyone
+  with write access resolve any thread, but closing someone else's question is theirs to do: a thread someone else
+  started says "ana's to resolve" in the drawer instead of **Resolve when sent**, and `--resolve` on one says "Alden
+  resolves only threads you started, and @ana started the one on src/pay.ts:40: reply instead, and leave resolving it
+  to them." Resolve it on GitHub if you really mean to.
 
 In the UI, the Comments drawer's **Conversation** lists the PR's threads, yours (threads you started or replied in)
-first and open ones before resolved ones, which are folded away. Each shows its comments, a **Reply** box and
-**Resolve when sent**. The Diff tab shows each thread under its line (folded once resolved), with **Reply**, which opens
+first and open ones before resolved ones, which are folded away. Each shows its comments, a **Reply** box and, on a
+thread you started, **Resolve when sent**. Opened from the queue's [Your turn](queue.md#your-turn), the Conversation
+opens on the thread the news is in. The Diff tab shows each thread under its line (folded once resolved), with **Reply**, which opens
 that thread's box in the drawer. An outdated thread (its code has changed since) has no line in today's diff, so it's
 only in the drawer.
 
@@ -139,9 +147,9 @@ when that's still more than one, Alden asks for an id.
 - **Resolve with nothing to say** is a reply with no text: it resolves the thread and posts nothing in it.
 - **A reply has no line of its own.** It's tied to its thread, not to the diff, so it doesn't move or go outdated when
   the PR moves, and it takes no suggestion.
-- Alden checks the thread is on the PR, and that GitHub lets you reply there (and resolve it, when you tick Resolve:
-  resolving takes write access to the repo, or being the PR's author) when you write the reply, and again when you
-  send.
+- Alden checks the thread is on the PR, and that GitHub lets you reply there (and, when you tick Resolve, that you
+  started it and GitHub lets you resolve it: that takes write access to the repo, or being the PR's author) when you
+  write the reply, and again when you send.
 - From Claude Code, `alden_draft_comment` drafts a reply with `in_reply_to` (the thread's `file:line` or id). It can't
   resolve a thread: that's yours to tick.
 
@@ -229,7 +237,8 @@ past a place you saw (0.2, never for secrets or text aimed at AI reviewers, and 
 Nothing is learned while `learning.fromReviews` is off. Usage stats count keeps, edits and drops, never the text. Drafts
 you ask for with [Draft my review](#draft-my-review) are the same.
 
-To turn drafting off, switch off **Draft comments for me** in Settings, or `alden config set drafts.auto false`. The
+Drafting is on by default: once a model is set up, every model briefing of a PR drafts, with nothing more to switch
+on. To turn it off, switch off **Draft comments for me** in Settings, or `alden config set drafts.auto false`. The
 model is then asked exactly what it was asked before. See [Models](models.md#drafted-comments) for what the model is
 asked and what it costs.
 

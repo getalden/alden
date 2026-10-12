@@ -170,8 +170,8 @@ text, lists the PR's comments, ranges and suggestions (old lines and new) shown,
 | `--keep <id>` | Keeps one of Alden's drafts (or `all` of them on the PR), making it yours so it's sent with your review. |
 | `--draft` | Asks the model, in one call within your caps, to draft comments for the places in the PR's latest briefing (from `alden review`, of its latest push) that have no comment or draft near them, and says how many it drafted, what it cost and how many places it skipped. They're [Alden's drafts](comments.md#aldens-drafts): keep them with `--keep`. Needs a model; never on a PR with text aimed at AI reviewers. See [Draft my review](comments.md#draft-my-review). |
 | `--threads` | Lists the PR's review threads, yours first and open ones first, each with a short id and every comment. |
-| `--reply <thread>` | Replies in a review thread already on the PR, by its short id or `file:line`, with your review. One reply per thread: again changes its text. See [Replying in a thread](comments.md#replying-in-a-thread). |
-| `--resolve [thread]` | With `--reply`, resolves the thread once your review is sent. Alone, names the thread to resolve, saying nothing. |
+| `--reply <thread>` | Replies in a review thread already on the PR (any thread you can reply in, yours or not), by its short id or `file:line`, with your review. One reply per thread: again changes its text. See [Replying in a thread](comments.md#replying-in-a-thread). |
+| `--resolve [thread]` | With `--reply`, resolves the thread once your review is sent. Alone, names the thread to resolve, saying nothing. Only a thread you started: on someone else's, Alden says so and suggests a reply. |
 | `--json` | Print the comments (or the new one, or with `--threads` the threads) as JSON. Schema: `packages/schema/json/review-draft.v1.json`. |
 
 ## alden send
