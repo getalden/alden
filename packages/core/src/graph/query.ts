@@ -723,7 +723,10 @@ export class CodeGraph {
         ? phpMethodNames(symbol, this.isEloquent(symbol.path, lookFor))
         : { calls: new Set([symbol.name]), properties: new Set<string>() };
 
+    // Go: an unexported name (lowercase) is usable only in its own package, whatever another package imports.
+    const packageOnly = isGo && !/^\p{Lu}/u.test(symbol.name);
     for (const [path, symbols] of this.files) {
+      if (packageOnly && !this.samePackage(path, symbol.path)) continue;
       // Names in this file that mean the symbol (or its class): named imports and namespace objects.
       const names = new Set<string>();
       const namespaces = new Set<string>();

@@ -518,15 +518,24 @@ function callersOutcome({ files, graph, graphUnavailable }: ReviewContext): Chec
     }
   }
 
-  // Callers in code before callers in tests, across symbols, so the capped evidence keeps the ones that matter; sure
-  // matches before name-only ones.
+  // The evidence is capped, so order it to show as many places as it can: callers in code before callers in tests,
+  // sure matches before name-only ones, and one caller per file before a second from the same file. Breaking callers
+  // come before ones a behaviour change reaches within each of those.
   const nameOnly = (e: Evidence) => e.text.endsWith("name match only");
-  const codeFirst = (list: Evidence[]) =>
-    list.sort(
-      (a, b) => Number(isTestEvidence(a)) - Number(isTestEvidence(b)) || Number(nameOnly(a)) - Number(nameOnly(b)),
-    );
-  codeFirst(breaking);
-  codeFirst(reaching);
+  const spread = (list: Evidence[]) => {
+    const tier = (e: Evidence) => Number(isTestEvidence(e)) * 2 + Number(nameOnly(e));
+    const byTier = list.map((e, i) => ({ e, i })).sort((a, b) => tier(a.e) - tier(b.e) || a.i - b.i);
+    const seen = new Set<string>();
+    const repeat = new Map<Evidence, boolean>();
+    for (const { e } of byTier) {
+      const path = e.anchor?.path ?? "";
+      repeat.set(e, seen.has(path));
+      seen.add(path);
+    }
+    return byTier
+      .sort((a, b) => tier(a.e) - tier(b.e) || Number(repeat.get(a.e)) - Number(repeat.get(b.e)) || a.i - b.i)
+      .map(({ e }) => e);
+  };
 
   const incomplete = graph.complete ? "" : " The index was cut short, so there may be more.";
   const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -536,7 +545,7 @@ function callersOutcome({ files, graph, graphUnavailable }: ReviewContext): Chec
       status: "flagged",
       severity: sure ? "high" : "medium",
       summary: `${goneModules.length > 0 ? `${breakingSymbols} moved, removed or re-signed ${breakingSymbols === 1 ? "file or symbol" : "files or symbols"} still used from` : `${count(breakingSymbols, `removed or re-signed ${internal ? "" : "public "}symbol`)} still called from`} ${count(breaking.length, "place")} this PR didn't change. Check each caller still works.${incomplete}`,
-      evidence: capped([...breaking, ...reaching]),
+      evidence: capped(spread([...breaking, ...reaching])),
     };
   }
   if (reaching.length > 0) {
@@ -544,7 +553,7 @@ function callersOutcome({ files, graph, graphUnavailable }: ReviewContext): Chec
       status: "flagged",
       severity: "low",
       summary: `${count(reachingSymbols, `changed ${internal ? "" : "public "}symbol`)} called from ${count(reaching.length, "place")} outside the diff${uncertain > 0 ? ` (${uncertain} by name only)` : ""}. Behaviour changes reach them.${incomplete}`,
-      evidence: capped(reaching),
+      evidence: capped(spread(reaching)),
     };
   }
   return passed(`Changed public code has no callers outside the diff.${incomplete}`);
