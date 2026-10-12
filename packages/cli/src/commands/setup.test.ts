@@ -79,6 +79,29 @@ describe("alden setup", () => {
     expect(text().trim().endsWith(CLOUD_LINE)).toBe(true);
   });
 
+  it("takes an OpenAI key the same way, and says so", async () => {
+    const openai = `sk-proj-${"o".repeat(48)}`;
+    const { io, text } = script(["1"], [openai]);
+    const { steps: s } = steps({
+      setUpKey: async () => ({ ok: true, provider: "openai", key: { source: "alden", where: "the OpenAI key" } }),
+    });
+    expect(await runSetup(io, s)).toBe(true);
+    expect(text()).toContain("https://platform.openai.com/api-keys");
+    expect(text()).toContain("an OpenAI key");
+    expect(text()).not.toContain(openai);
+  });
+
+  it("describes an OpenAI model in use", () => {
+    const plan = setupPlan(
+      state({
+        current: { provider: "openai", model: "gpt-6.1-sol", available: true, reason: null },
+        openaiKey: { source: "env", where: "OPENAI_API_KEY" },
+      }),
+    );
+    expect(plan).toContain("Now: gpt-6.1-sol via OpenAI, using OPENAI_API_KEY.");
+    expect(plan).toContain("Anthropic's (https://console.anthropic.com/settings/keys) or OpenAI's");
+  });
+
   it("offers another try for a refused key, and to store unchecked when Anthropic can't be reached", async () => {
     const results: KeyTestResult[] = [
       { ok: false, reason: "invalid", message: "Anthropic didn't accept that key." },

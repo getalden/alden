@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
+
+import type { ModelChoices } from "@alden/schema";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, type ModelsState, type Session } from "../api";
+import { ApiError, type Session } from "../api";
 import type { Choices } from "./ReviewOptions";
 import { fallbackModels, modelLine, Tune } from "./Tune";
 
@@ -23,7 +25,7 @@ const session = {
   budget: { perReviewUsd: 0.5, dailyUsd: 5, spentToday: 1.84 },
 } as unknown as Session;
 
-const MODELS: ModelsState = {
+const MODELS: ModelChoices = {
   current: { provider: "anthropic", model: "claude-sonnet-5" },
   groups: [
     {
@@ -37,17 +39,23 @@ const MODELS: ModelsState = {
       ],
     },
     { provider: "openai", label: "OpenAI", via: "no key", available: false, items: [{ id: "gpt-5", note: "deep" }] },
-    { provider: "ollama", label: "Local", via: "Ollama", available: true, items: [{ id: "qwen2.5-coder:32b" }] },
+    {
+      provider: "ollama",
+      label: "Local",
+      via: "Ollama",
+      available: true,
+      items: [{ id: "qwen2.5-coder:32b", note: "offline" }],
+    },
   ],
 };
 
 function fakeApi(overrides: Record<string, unknown> = {}) {
   return {
     models: vi.fn(async () => MODELS),
-    setModel: vi.fn(async (choice: { provider: string; model: string }) => ({ ...MODELS, current: choice })),
-    tone: vi.fn(async (repo?: string) => ({ tone: "concise", repo: repo ?? null })),
-    setTone: vi.fn(async (tone: string) => ({ tone })),
-    ask: vi.fn(async () => ({ text: "", costUsd: null as number | null, model: "" })),
+    pickModel: vi.fn(async (choice: ModelChoices["current"]) => ({ ...MODELS, current: choice })),
+    tone: vi.fn(async (_repo?: string) => ({ tone: "concise", source: "default" })),
+    setTone: vi.fn(async (tone: string | null) => ({ tone, source: "repo" })),
+    ask: vi.fn(async () => ({ costUsd: null as number | null, model: "" })),
     setConfig: vi.fn(async () => ({})),
     ...overrides,
   };
@@ -120,7 +128,7 @@ describe("Tune", () => {
     expect((within(list).getByRole("menuitemradio", { name: /gpt-5/ }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(within(list).getByRole("menuitemradio", { name: /claude-opus-5/ }));
     await waitFor(() => expect(onSessionChange).toHaveBeenCalledTimes(1));
-    expect(api.setModel).toHaveBeenCalledWith({ provider: "anthropic", model: "claude-opus-5" });
+    expect(api.pickModel).toHaveBeenCalledWith({ provider: "anthropic", model: "claude-opus-5" });
     expect(screen.getByRole("button", { name: "opus-5 · medium ▾" })).toBeTruthy();
 
     // Checks only turns the model off for this window.
@@ -139,7 +147,7 @@ describe("Tune", () => {
     open();
     fireEvent.click(await screen.findByRole("button", { name: "Model: sonnet-5" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: /^haiku-4-5/ }));
-    expect(api.setModel).not.toHaveBeenCalled();
+    expect(api.pickModel).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "haiku-4-5 ▾" })).toBeTruthy();
   });
 
@@ -190,11 +198,13 @@ describe("Tune", () => {
   });
 
   it("asks the model about the PR, streams the answer in, and says what it cost", async () => {
-    let finish: (value: { text: string; costUsd: number | null; model: string }) => void = () => {};
+    let finish: (value: { costUsd: number | null; model: string }) => void = () => {};
+    let write: (text: string) => void = () => {};
     const ask = vi.fn(
       (_: { pr: string; question: string }, onText: (text: string) => void) =>
-        new Promise<{ text: string; costUsd: number | null; model: string }>((resolve) => {
+        new Promise<{ costUsd: number | null; model: string }>((resolve) => {
           onText("The retry ");
+          write = onText;
           finish = resolve;
         }),
     );
@@ -211,7 +221,10 @@ describe("Tune", () => {
     expect(screen.getByText("Is the backoff capped?")).toBeTruthy();
     await screen.findByText("The retry");
     expect(screen.getByText("answering…")).toBeTruthy();
-    await act(async () => finish({ text: "The retry has no ceiling.", costUsd: 0.0042, model: "claude-sonnet-5" }));
+    await act(async () => {
+      write("has no ceiling.");
+      finish({ costUsd: 0.0042, model: "claude-sonnet-5" });
+    });
     expect(screen.getByText("The retry has no ceiling.")).toBeTruthy();
     expect(screen.getByText("sonnet-5 · $0.0042")).toBeTruthy();
 

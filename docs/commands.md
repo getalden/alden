@@ -64,11 +64,13 @@ reading the version aren't affected. It asks npm at most once a day; `alden conf
 
 Sets up a model in about a minute. In a terminal it asks which of three you want:
 
-1. **Paste an Anthropic API key.** It links to where you create one, reads it without showing it, checks it with one
-   tiny request (Claude Haiku, one output token: a fraction of a cent), and stores it as `alden auth model` does. A key
-   Anthropic refuses isn't stored, and it says why: mistyped or deleted, no credit, or no permission. When Anthropic
-   can't be reached, it offers to store the key unchecked. If your config used another provider, Claude becomes the
-   model again.
+1. **Paste an API key**, Anthropic's or OpenAI's: Alden tells them apart (sk-ant-… is Anthropic's, any other sk-…
+   OpenAI's; Claude.ai sign-in tokens and admin keys are refused). It links to where you create each, reads the key
+   without showing it, checks it with one tiny request to its provider (Claude Haiku for one output token, or
+   gpt-6-luna for a few: a fraction of a cent), and stores it as `alden auth model` does. A key the provider refuses
+   isn't stored, and it says why: mistyped or deleted, no credit, or no permission. When the provider can't be reached,
+   it offers to store the key unchecked. Its provider then becomes the model (an OpenAI key picks `gpt-6.1-sol` unless
+   you'd chosen an OpenAI model).
 2. **Use a local model.** Looks for Ollama (at `OLLAMA_HOST`, or `http://localhost:11434`), lists what it has pulled,
    and recommends a model for your machine's memory (see [Models](models.md#local-and-openai-compatible-models-openai-compatible)).
    Choosing one it hasn't pulled downloads it with progress; then it sets `model.provider`, `model.name` and, when
@@ -80,17 +82,17 @@ with 0. In a terminal, it exits with 1 when no model was set up (except for chec
 
 ## alden auth
 
-Sign in to GitHub, and store your Anthropic API key.
+Sign in to GitHub, and store your Anthropic or OpenAI API key.
 
 | Command | What it does |
 | --- | --- |
 | `alden auth login` | Uses the GitHub CLI's sign-in if there is one. Otherwise signs you in with a code in your browser and stores the token. |
 | `alden auth login --device` | Signs in with a one-time code, even if the GitHub CLI is signed in. Press Enter to open the GitHub page for it. |
 | `alden auth login --with-token` | Reads a token from standard input, e.g. `echo $TOKEN \| alden auth login --with-token`. |
-| `alden auth status` | Shows the account Alden is using, where the token comes from, and its scopes; and where the Anthropic key comes from (never the key). Signed out, it says whether the keychain refused to answer. |
+| `alden auth status` | Shows the account Alden is using, where the token comes from, and its scopes; and where the model's key comes from (never the key). Signed out, it says whether the keychain refused to answer. |
 | `alden auth logout` | Removes the token Alden stored. Doesn't touch the GitHub CLI's sign-in. |
-| `alden auth model` | Asks for your Anthropic API key without showing it (or reads it from standard input, e.g. `pbpaste \| alden auth model`), checks it looks like an API key, and stores it in the OS keychain. The desktop app, `alden ui` and `alden mcp` use it too. `alden setup` does the same after checking the key works. |
-| `alden auth model --remove` | Removes the key Alden stored. |
+| `alden auth model` | Asks for your Anthropic or OpenAI API key without showing it (or reads it from standard input, e.g. `pbpaste \| alden auth model`), tells which it is from its shape, and stores it in the OS keychain under its provider's name. The desktop app, `alden ui` and `alden mcp` use it too. If the provider you use has no key, the pasted key's provider becomes the model; otherwise it says how to switch. `alden setup` does the same after checking the key works. |
+| `alden auth model --remove` | Removes the keys Alden stored, both unless `--provider anthropic` or `--provider openai` says which. |
 
 Alden looks for a token in this order:
 
@@ -198,7 +200,7 @@ alden comment <pr> [file:line[-endLine]] "text" [--suggest "code" | --suggest-fi
 alden comment <pr> --threads
 alden comment <pr> --reply <thread> "text" [--resolve]
 alden comment <pr> --resolve <thread>
-alden comment <pr> --draft
+alden comment <pr> --draft [--tone terse|concise|detailed|teaching]
 ```
 
 Writes a comment on a PR, kept in Alden until you send it with `alden send`. With `file:line`, it's on that line of
@@ -217,10 +219,25 @@ text, lists the PR's comments, ranges and suggestions (old lines and new) shown,
 | `--delete <id>` | Deletes a comment (or a reply), by the id the list shows. On one of [Alden's drafts](comments.md#aldens-drafts), drops it. |
 | `--keep <id>` | Keeps one of Alden's drafts (or `all` of them on the PR), making it yours so it's sent with your review. |
 | `--draft` | Asks the model, in one call within your caps, to draft comments for the places in the PR's latest briefing (from `alden review`, of its latest push) that have no comment or draft near them, and says how many it drafted, what it cost and how many places it skipped. They're [Alden's drafts](comments.md#aldens-drafts): keep them with `--keep`. Needs a model; never on a PR with text aimed at AI reviewers. See [Draft my review](comments.md#draft-my-review). |
+| `--tone <tone>` | With `--draft`: how Alden writes this time, `terse`, `concise`, `detailed` or `teaching`, instead of the repo's tone (its own on this machine, else `drafts.tone`). See [The tone of drafts](models.md#the-tone-of-drafts). |
 | `--threads` | Lists the PR's review threads, yours first and open ones first, each with a short id and every comment. |
 | `--reply <thread>` | Replies in a review thread already on the PR (any thread you can reply in, yours or not), by its short id or `file:line`, with your review. One reply per thread: again changes its text. See [Replying in a thread](comments.md#replying-in-a-thread). |
 | `--resolve [thread]` | With `--reply`, resolves the thread once your review is sent. Alone, names the thread to resolve, saying nothing. Only a thread you started: on someone else's, Alden says so and suggests a reply. |
 | `--json` | Print the comments (or the new one, or with `--threads` the threads) as JSON. Schema: `packages/schema/json/review-draft.v1.json`. |
+
+## alden ask
+
+```sh
+alden ask <pr> "question" [--model <name>]
+```
+
+Asks your model a question about a PR and prints the answer as it's written, then (on stderr) the model and what the
+call cost. It answers from the PR's latest briefing of its current push (brief it first with `alden review`), the diff
+around the places that matter (lines and files the question names, then the places Alden flagged) and your notes for
+the repo. One call within your caps, recorded in `alden spend` as `owner/repo#12 question`; Ctrl-C stops it. Needs a
+model; never on a PR with text aimed at AI reviewers. Nothing is kept: each `alden ask` starts without earlier
+questions (in `alden ui`, the last five on a PR are sent along for follow-ups). `pr` takes the same forms as
+`alden review`; `--model` picks a model for this question only. See [Ask about this PR](models.md#ask-about-this-pr).
 
 ## alden send
 

@@ -56,7 +56,7 @@ yes), and this install's anonymous id and the salt for repo hashes. Checkouts of
 markers](queue.md#bots-and-ai-agents) are checked on your machine and dropped: only which agent was found (or that
 none was) is kept, in `~/.alden/cache` by the PR's head commit for a week, and never sent anywhere. See [Files Alden keeps](configuration.md#files-alden-keeps). Your GitHub token is stored in the
 OS keychain, or, where there's no keychain, in a file only your user can read. `alden auth logout` removes it. So is an
-Anthropic API key you stored with `alden auth model`; `alden auth model --remove` removes it.
+Anthropic or OpenAI API key you stored with `alden auth model`; `alden auth model --remove` removes them.
 
 The desktop app's [background briefings](desktop.md#while-youre-away) make the same GitHub calls as a review while
 you're away, and ask your model provider only if you turned on `background.model`. The briefings are held only in the

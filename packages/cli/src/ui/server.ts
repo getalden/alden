@@ -3,14 +3,18 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
-import { COMMIT_SHA, MAX_ACTIVE_REPORT_MS, type RankChange, type ReviewStage } from "@alden/core";
+import { COMMIT_SHA, MAX_ACTIVE_REPORT_MS, MAX_QUESTION_CHARS, type RankChange, type ReviewStage } from "@alden/core";
 import {
+  type AskEvent,
   type Briefing,
   BriefingSchema,
   type BriefingTarget,
   BriefingTargetSchema,
+  type DraftTone,
+  DraftToneSchema,
   FollowUpLevelSchema,
   type LocalSetupEvent,
+  ModelPickSchema,
   type PrDiff,
   type RankRule,
   type ReviewDraft,
@@ -18,6 +22,7 @@ import {
   type ReviewThreads,
   type ReviewEvent as ReviewVerdict,
   type SendReviewResult,
+  type ToneState,
 } from "@alden/schema";
 import { briefingFileName, briefingMarkdown } from "../render/markdown.js";
 import { stripControlDeep } from "../render/style.js";
@@ -71,10 +76,11 @@ export interface UiApi {
   /** Removes the GitHub sign-in Alden stored (the avatar menu's Sign out); says what still signs you in. */
   signOut(): Promise<{ remaining: string | null }>;
   /**
-   * Stores the Anthropic API key in the keychain, as `alden auth model` does; `null` removes it. Write-only: the answer
-   * says where the key now comes from, never the key.
+   * Stores an API key in the keychain, as `alden auth model` does: Anthropic's or OpenAI's, told apart by its shape.
+   * `null` removes the stored key of `provider` (Anthropic's unless said). Write-only: the answer says whose key it was
+   * and where that provider's key now comes from, never the key.
    */
-  setModelKey(key: string | null): Promise<unknown>;
+  setModelKey(key: string | null, provider?: "anthropic" | "openai"): Promise<unknown>;
   /** "Set up a model": what's available, testing and storing a key, a local model through Ollama (see model-setup.ts). */
   modelSetup: ModelSetupApi;
   /** Follow-ups on PRs you reviewed, for the desktop app's notifications, and each PR's own level (see follow-ups.ts). */
@@ -137,12 +143,30 @@ export interface UiApi {
    * places to look and the model's findings in the PR's latest briefing, at its current head, that have no comment of
    * yours near them. Within your budget caps; never on a PR with text aimed at AI reviewers.
    */
-  draftReview(input: { pr: string }): Promise<DraftReviewAnswer>;
+  draftReview(input: { pr: string; tone?: DraftTone }): Promise<DraftReviewAnswer>;
   /**
    * "Draft with Alden": the text of one comment (on a line, or a general note) or a reply in a thread, from the code
    * there or from what you've written so far (`text`). One small model call; it saves nothing. `signal` stops it.
    */
   suggestText(input: SuggestTextInput, signal?: AbortSignal): Promise<{ text: string; costUsd: number | null }>;
+  /**
+   * The tone Alden drafts in for a repo ("owner/name"): its own on this machine, or the global `drafts.tone`. Without
+   * a repo, the global one.
+   */
+  tone(repo?: string): Promise<ToneState>;
+  /** Sets a repo's tone (null removes it, back to the global one), or without a repo the global `drafts.tone`. */
+  setTone(input: { repo?: string; tone: DraftTone | null }): Promise<ToneState>;
+  /**
+   * A question about a PR, answered by the model with its latest briefing (at the current head), the diff around the
+   * places that matter and your notes, in one call within your caps. `onText` hears the answer as it's written;
+   * `signal` stops it. Throws an `ApiError`: 409 (no model, no briefing for this head, text aimed at AI reviewers,
+   * over budget), 502 (the provider failed).
+   */
+  ask(
+    input: { pr: string; question: string; model?: string },
+    onText: (delta: string) => void,
+    signal?: AbortSignal,
+  ): Promise<{ costUsd: number | null; model: string }>;
   /**
    * Sends the PR's drafts to GitHub as one review, and deletes them once it's posted. The only call that writes to
    * GitHub: it runs on your click or command, never in the background, and Claude Code has no tool for it.
@@ -264,6 +288,8 @@ export interface SuggestTextInput {
   threadId?: string;
   /** What you've written so far: what you mean, to make into a clear comment. */
   text?: string;
+  /** The tone for this comment; the repo's tone when absent. */
+  tone?: DraftTone;
 }
 
 /**
@@ -447,6 +473,17 @@ function assistedFrom(body: Record<string, unknown>): { assisted?: { edited: boo
     throw new ApiError(400, "assisted is { edited: true | false }: whether you changed Alden's text before saving.");
   }
   return { assisted: { edited: (assisted as { edited: boolean }).edited } };
+}
+
+/** A repo as "owner/name". */
+const REPO_NAME = /^[\w.-]+\/[\w.-]+$/;
+
+/** A one-off tone from a request (`tone`), or undefined when it doesn't say. Anything else is refused. */
+function toneFrom(body: Record<string, unknown>): DraftTone | undefined {
+  if (body.tone === undefined) return undefined;
+  const tone = DraftToneSchema.safeParse(body.tone);
+  if (!tone.success) throw new ApiError(400, `tone is one of ${DraftToneSchema.options.join(", ")}.`);
+  return tone.data;
 }
 
 /** A reply from a request: the thread's node id (`inReplyTo`) and `resolve`; undefined when it isn't a reply. */
@@ -724,10 +761,17 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         return;
       case "PUT /api/model-key": {
         const body = await readJsonBody(req);
-        if (!(typeof body.key === "string" || body.key === null)) {
-          throw new ApiError(400, "Send { key }: the API key, or null to remove the stored one.");
+        const provider = body.provider === "openai" ? "openai" : body.provider === undefined ? undefined : "anthropic";
+        if (
+          !(typeof body.key === "string" || body.key === null) ||
+          (body.provider !== undefined && body.provider !== "anthropic" && body.provider !== "openai")
+        ) {
+          throw new ApiError(
+            400,
+            "Send { key }: an Anthropic or OpenAI API key, or null (with provider: anthropic | openai) to remove the stored one.",
+          );
         }
-        send(res, 200, await api.setModelKey(body.key));
+        send(res, 200, provider ? await api.setModelKey(body.key, provider) : await api.setModelKey(body.key));
         return;
       }
       case "GET /api/model-setup":
@@ -747,11 +791,25 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         await streamLocalSetup(body.model.trim(), res);
         return;
       }
+      case "GET /api/models":
+        send(res, 200, await api.modelSetup.models());
+        return;
+      case "PUT /api/models": {
+        const pick = ModelPickSchema.safeParse(await readJsonBody(req));
+        if (!pick.success) {
+          throw new ApiError(
+            400,
+            "Send { provider: anthropic | openai | ollama | bedrock | vertex | foundry, model }.",
+          );
+        }
+        send(res, 200, await api.modelSetup.pickModel(pick.data));
+        return;
+      }
       case "POST /api/model-setup/open": {
         const body = await readJsonBody(req);
-        const pages: SetupPage[] = ["keys", "cloud", "ollama"];
+        const pages: SetupPage[] = ["keys", "openaiKeys", "cloud", "ollama"];
         const page = pages.find((p) => p === body.page);
-        if (!page) throw new ApiError(400, "Send { page: keys | cloud | ollama }.");
+        if (!page) throw new ApiError(400, "Send { page: keys | openaiKeys | cloud | ollama }.");
         send(res, 200, await api.modelSetup.open(page));
         return;
       }
@@ -915,10 +973,34 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       }
       case "POST /api/drafts/alden": {
         const body = await readJsonBody(req);
-        if (typeof body.pr !== "string" || !body.pr.trim()) throw new ApiError(400, "Send { pr: owner/repo#12 }.");
-        send(res, 200, await api.draftReview({ pr: body.pr.trim() }));
+        if (typeof body.pr !== "string" || !body.pr.trim()) {
+          throw new ApiError(400, "Send { pr: owner/repo#12, tone? }.");
+        }
+        const tone = toneFrom(body);
+        send(res, 200, await api.draftReview({ pr: body.pr.trim(), ...(tone ? { tone } : {}) }));
         return;
       }
+      case "GET /api/tone": {
+        const repo = url.searchParams.get("repo")?.trim() || undefined;
+        if (repo !== undefined && !REPO_NAME.test(repo)) throw new ApiError(400, "Send ?repo=owner/name, or no repo.");
+        send(res, 200, await api.tone(repo));
+        return;
+      }
+      case "PUT /api/tone": {
+        const body = await readJsonBody(req, 1024);
+        const usage = `Send { repo?: owner/name, tone: ${DraftToneSchema.options.join(" | ")} }, or { repo, tone: null } to use the default there.`;
+        const repo = body.repo;
+        if (repo !== undefined && (typeof repo !== "string" || !REPO_NAME.test(repo.trim()))) {
+          throw new ApiError(400, usage);
+        }
+        const tone = body.tone === null && typeof repo === "string" ? null : DraftToneSchema.safeParse(body.tone).data;
+        if (tone === undefined) throw new ApiError(400, usage);
+        send(res, 200, await api.setTone({ ...(typeof repo === "string" ? { repo: repo.trim() } : {}), tone }));
+        return;
+      }
+      case "POST /api/ask":
+        await streamAsk(await readJsonBody(req), res);
+        return;
       case "POST /api/drafts/suggest-text": {
         const body = await readJsonBody(req);
         const usage =
@@ -935,6 +1017,7 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         if (threadId !== undefined && (typeof threadId !== "string" || !/^[\w=-]{1,200}$/.test(threadId) || place)) {
           throw new ApiError(400, usage);
         }
+        const tone = toneFrom(body);
         // Closing the request (Cancel in the UI) stops it: before the call, nothing is asked; after, the answer is dropped.
         const stop = new AbortController();
         res.on("close", () => {
@@ -949,6 +1032,7 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
               ...place,
               ...(typeof threadId === "string" ? { threadId } : {}),
               ...(typeof body.text === "string" ? { text: body.text.slice(0, 65_536) } : {}),
+              ...(tone ? { tone } : {}),
             },
             stop.signal,
           ),
@@ -1062,6 +1146,48 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
       write({ type: "briefing", briefing });
     } catch (error) {
       write({ type: "error", message: (error as Error).message });
+    }
+    res.end();
+  }
+
+  /**
+   * Newline-delimited JSON: the answer to a question about a PR as it's written ({ type: "delta", text }), then
+   * { type: "done", costUsd, model } or { type: "error", message, status }. Closing the request stops the model call.
+   */
+  async function streamAsk(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
+    const { pr, question, model } = body;
+    if (
+      typeof pr !== "string" ||
+      !pr.trim() ||
+      typeof question !== "string" ||
+      !question.trim() ||
+      question.length > MAX_QUESTION_CHARS ||
+      (model !== undefined && (typeof model !== "string" || !model.trim()))
+    ) {
+      throw new ApiError(400, `Send { pr: owner/repo#12, question (up to ${MAX_QUESTION_CHARS} characters), model? }.`);
+    }
+    const stop = new AbortController();
+    res.on("close", () => {
+      if (!res.writableFinished) stop.abort();
+    });
+    res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": "application/x-ndjson; charset=utf-8" });
+    // The answer can quote the PR: `stripControlDeep` takes out control sequences, as for every other string.
+    const write = (event: AskEvent) => {
+      if (!res.writableEnded) res.write(`${JSON.stringify(stripControlDeep(event))}\n`);
+    };
+    try {
+      const done = await options.api.ask(
+        { pr: pr.trim(), question: question.trim(), ...(typeof model === "string" ? { model: model.trim() } : {}) },
+        (text) => write({ type: "delta", text }),
+        stop.signal,
+      );
+      write({ type: "done", ...done });
+    } catch (error) {
+      write({
+        type: "error",
+        message: (error as Error).message,
+        status: error instanceof ApiError ? error.status : 500,
+      });
     }
     res.end();
   }

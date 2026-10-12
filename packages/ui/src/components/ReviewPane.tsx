@@ -696,6 +696,7 @@ export function ReviewPane(props: ReviewPaneProps) {
             files={files}
             open={drawer.open}
             onClose={drawer.close}
+            onOpen={drawer.toggle}
             editing={drawer.editing}
             onEditing={drawer.setEditing}
             focus={drawer.focus}

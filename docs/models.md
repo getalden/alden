@@ -8,9 +8,9 @@ third-party tools to use them.
 
 ## Setting one up
 
-`alden setup` (or **Set up a model** in the web UI and the desktop app) gets you a working model in about a minute: an
-Anthropic API key, checked with one tiny request and stored in your keychain; a local model through Ollama; or checks
-only. The sections below are the same choices by hand. If you'd rather Alden handled everything, sign up for
+`alden setup` (or **Set up a model** in the web UI and the desktop app, and the first run's Model step) gets you a
+working model in about a minute: an Anthropic or OpenAI API key (paste either kind and Alden detects which), checked
+with one tiny request and stored in your keychain; a local model through Ollama; or checks only. The sections below are the same choices by hand. If you'd rather Alden handled everything, sign up for
 [Alden Cloud (beta)](https://getalden.dev/cloud).
 
 ## Choosing a model
@@ -61,6 +61,56 @@ restarting `alden ui` or the desktop app. Alden looks for credentials in this or
 
 `alden auth status` and `alden doctor` say which one is in use, never the key. `alden auth model --remove` removes the
 stored key. Admin API keys and Claude.ai sign-in tokens are refused.
+
+### OpenAI (`openai`)
+
+Paste an OpenAI API key in `alden setup`, **Set up a model**, Settings → API keys or `alden auth model`: Alden tells it
+from an Anthropic key by its shape (sk-ant-… is Anthropic's, any other sk-…, such as sk-proj-…, OpenAI's; OpenAI admin
+keys, sk-admin-…, are refused), stores it in the keychain under its own name, and makes `openai` the provider with
+`gpt-6.1-sol` unless you'd chosen an OpenAI model. `alden setup` and **Set up a model** first check it with one Chat
+Completions request to `gpt-6-luna` for at most 16 output tokens, far less than a cent, and say why a key doesn't work
+(mistyped or deleted, no credit, no permission for the model API, no network). By hand:
+
+```sh
+alden auth model                       # paste the key, or: pbpaste | alden auth model
+alden config set model.provider openai
+alden config set model.name gpt-6-astra
+```
+
+Alden looks for the OpenAI key in this order:
+
+1. `OPENAI_API_KEY`.
+2. The key stored with `alden auth model` (in the keychain, or a file only you can read where there's no keychain).
+
+Briefings call `https://api.openai.com/v1/chat/completions` (`model.baseUrl` points elsewhere, for a proxy) with
+Structured Outputs in strict mode, so the answer has the briefing's shape; `max_completion_tokens` caps the output, and
+`model.effort` is sent as `reasoning_effort` to the GPT-6 models, which take all five levels (other OpenAI models get
+their own default). Cached input is counted apart, so spend is right.
+
+| Model | Note | Input | Cached input | Output |
+| --- | --- | --- | --- | --- |
+| `gpt-6.1-sol` (default) | fast | $2 | $0.10 | $10 |
+| `gpt-6-astra` | deepest | $10 | $1 | $50 |
+| `gpt-6-luna` | cheap | $0.10 | $0.01 | $0.50 |
+
+US dollars per million tokens, Standard tier, prompts under 272K tokens, from
+[OpenAI's pricing page](https://developers.openai.com/api/docs/pricing) on 12 October 2026; writing to the cache costs
+1.25 times input on these models. Alden also knows the prices of GPT-5.6, 5.5, 5.4, 5.2, 5.1, 5 and 4.1 for spend; a
+model it has no price for isn't counted against your caps, as with a local model, so check the page before using one.
+
+### Which key comes first
+
+Each provider reads its own variable first, then its stored key: `ANTHROPIC_API_KEY` (and the other Anthropic
+credentials below) for `anthropic`, `OPENAI_API_KEY` for `openai`. Which provider briefings use is `model.provider`,
+which pasting a key sets; the other key stays stored for the model picker. `alden doctor` reports both keys and where
+each comes from, never the key.
+
+### The model picker
+
+The web UI and the desktop app list the models you can switch to (`GET /api/models`): Anthropic and OpenAI through your
+key, Local through Ollama (the models it has pulled), and Bedrock, Vertex or Foundry when that's your provider. A
+provider is offered only when it's set up here. Picking one writes `model.provider` and `model.name` to your user
+config, as `alden config set` does.
 
 ### AWS Bedrock (`bedrock`)
 
@@ -125,8 +175,9 @@ With `drafts.auto` on (the default), the briefing's own model call also drafts t
 Comments drawer (see [Alden's drafts](comments.md#aldens-drafts)). There's no second call. For a PR (never your local
 changes, and never a PR the injection check flagged), the system prompt gains one paragraph asking, for each medium or
 high finding whose first anchor is an added line, for the comment a careful reviewer would leave on that line: to the
-author, in one to three plain sentences, with no preamble, praise or sign-off, never mentioning being an AI; and a
-suggested replacement for the line only when the fix is small and certain. Each finding in the answer may then carry
+author, in the repo's [tone](#the-tone-of-drafts) (concise: one to three plain sentences), with no preamble, praise or
+sign-off, never mentioning being an AI; and a suggested replacement for the line only when the fix is small and
+certain. Each finding in the answer may then carry
 a `draft` (`body`, optional `suggestion`).
 
 Alden checks every draft before offering it: it must be on a medium or high finding, on an added line the model was
@@ -146,7 +197,7 @@ own, made only when you press them (or run `alden comment <pr> --draft`), with t
 | | Draft my review | Draft with Alden |
 | --- | --- | --- |
 | What it sends | The PR's title and description, your notes for the repo, Alden's check results, and each place without a comment near it (at most 12), with its reason and the diff around it | The PR's title and description, your notes, where the comment goes and the diff around it, what Alden flagged there, the thread so far for a reply, and what you've written |
-| What it asks for | A comment (and, on an added line, maybe a suggested change) per place worth one | One comment or reply, in your voice |
+| What it asks for | A comment (and, on an added line, maybe a suggested change) per place worth one | One comment or reply, for you to edit and send |
 | Effort, output cap | Medium (low if `model.effort` is low), 8,000 tokens | Low, 2,000 tokens |
 | Spend ledger | `owner/repo#12 drafts` | `owner/repo#12 comment text` |
 
@@ -166,6 +217,46 @@ checks. What fails is dropped.
 (a budget stop sends nothing), recorded in `alden spend`, and its cost is shown when it's done. Draft my review asks
 nothing when every place already has a comment. A cancelled Draft with Alden sends nothing if it hasn't been sent yet;
 once it has, the call completes and is recorded, and its answer is dropped.
+
+## The tone of drafts
+
+Every drafting path (the briefing's drafts, Draft my review, Draft with Alden) writes in one of four tones, a style you
+pick, not an imitation of anyone:
+
+| Tone | What the system prompt asks for |
+| --- | --- |
+| `terse` | One short line per comment, a statement or a question: the problem and, when it isn't obvious, the fix. No reasoning, background or examples. |
+| `concise` (default) | One to three plain sentences: what's wrong or worth checking, and what to do. |
+| `detailed` | A short paragraph of three to six sentences: what's wrong, why it matters (what breaks, for whom, when) and a concrete fix, pointing at what in the diff shows it. |
+| `teaching` | Three to six plain, friendly sentences for a teammate newer to the code: the principle at stake, why it matters here, and the usual way to do it, with an example from the diff or repo when there is one. |
+
+The default is `drafts.tone` in your user config (`alden config set drafts.tone detailed`); any repo can have its own,
+kept on this machine (the UI's Tune, or `PUT /api/tone`). Draft my review and Draft with Alden also take a tone for one
+call (`alden comment <pr> --draft --tone terse`). The tone only changes the length and how much reasoning goes in: the
+rules around it (the PR's text fenced as data, never approving, never mentioning being an AI, the checks before a draft
+is offered) are the same for every tone. A concise briefing sends exactly the prompt it always did, so it keeps its
+prompt cache; another tone adds its instruction as the drafting section's last paragraph.
+
+## Ask about this PR
+
+A question about a PR, in your words (the UI, or `alden ask <pr> "question"`), answered by your model in one streamed
+call. There's no tool for it in `alden mcp`: in Claude Code, Claude is the model.
+
+| | |
+| --- | --- |
+| What it sends | The PR's title and description, your notes for the repo, the PR's latest briefing at its current head (the model's summary, the places to look, its findings, Alden's check results), the diff around the places that matter (lines and files your question names first, then the flagged places; about 48,000 characters at most), and up to five earlier questions on the PR from this session with their answers |
+| What it asks for | A short, direct answer from what that shows, saying so when it doesn't show enough, pointing at code as `path:line`. Never an approval or a verdict, never mentioning being an AI |
+| Effort, output cap | Medium (low if `model.effort` is low), 3,000 tokens |
+| Spend ledger | `owner/repo#12 question` |
+
+Everything from the PR is fenced between `<pr-content>` markers as in the drafting prompts, earlier answers too (they
+can quote it); your question and notes are outside. Likely secrets are redacted. Alden asks nothing without a briefing
+of the PR's current head, and never about a PR whose briefing (or current title, description or added lines) has text
+aimed at AI reviewers. The call is checked against your caps before it's sent; stopping it (closing the request, or
+Ctrl-C in the terminal) aborts the request, and what it may have cost (the input it sent, the output that arrived) is
+still recorded. Answers aren't stored: the last five questions and answers per PR stay in the running `alden ui` (or
+desktop app) process for follow-ups, and go when it quits or the PR gets a new push. Claude streams token by token, an
+OpenAI-compatible server through its server-sent events.
 
 ## Budgets
 

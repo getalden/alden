@@ -167,22 +167,26 @@
       weak spot: one GitHub CLI fix touched 11 files, and the briefing flagged 6.
     </p>
     <p>
-      <strong>Go, checks only, in the 0.9 development build (12 October 2026).</strong> 0.9 follows more of how Go code
-      calls itself: through interfaces, embedded structs, functions passed as values, and package-internal helpers.
-      Re-running the recorded PRs with the checks alone and no model gives the same Go figures as 0.8.0. This run has no
-      clones of the four Go repositories, so the code graph, where that work is, doesn't run on them, and every file
-      these fixes changed was already in the original PR's diff.
+      <strong>Go with the code graph, checks only, no model (12 October 2026).</strong> We re-ran the four Go regression
+      PRs with clones of the GitHub CLI and Prometheus, so the code graph ran, as it does in a real review. The 0.9
+      development build follows more of how Go code calls itself: package-internal helpers, interfaces, embedded structs
+      and functions passed as values. <strong>It flagged 9 of the 16 files the fixes changed, against 6 for 0.8.0</strong>,
+      all three Prometheus files among them; 2 of 16 were in Needs your eyes with both. The model runs above used 0.3.0
+      without clones.
     </p>
     <table>
       <thead>
         <tr>
-          <th>Go, checks only (no model, no clones)</th><th class="n">Files</th><th class="n">Flagged</th>
-          <th class="n">In Needs your eyes</th>
+          <th>Go, checks only, with clones</th><th class="n">Files</th><th class="n">0.8.0 flagged</th>
+          <th class="n">0.9 dev flagged</th><th class="n">0.8.0 in eyes</th><th class="n">0.9 dev in eyes</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td>0.8.0</td><td class="n">16</td><td class="n">1</td><td class="n">1</td></tr>
-        <tr><td>0.9 development build</td><td class="n">16</td><td class="n">1</td><td class="n">1</td></tr>
+        <tr><td>cli/cli#13009</td><td class="n">11</td><td class="n">6</td><td class="n">6</td><td class="n">2</td><td class="n">2</td></tr>
+        <tr><td>cli/cli#14136</td><td class="n">1</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+        <tr><td>cli/cli#10513</td><td class="n">1</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+        <tr><td>prometheus/prometheus#19183</td><td class="n">3</td><td class="n">0</td><td class="n">3</td><td class="n">0</td><td class="n">0</td></tr>
+        <tr><th>All Go</th><th class="n">16</th><th class="n">6</th><th class="n">9</th><th class="n">2</th><th class="n">2</th></tr>
       </tbody>
     </table>
 

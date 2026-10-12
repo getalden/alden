@@ -22,6 +22,7 @@ import {
   selectProvider,
   type TokenSource,
   telemetrySurface,
+  toneFor,
   track,
   UsageLog,
   type WithModel,
@@ -116,7 +117,9 @@ export function registerReviewCommand(program: Command): void {
           const learning = await learningFor(ref.repo);
           let diff: DiffFile[] | undefined;
           const client = createGitHubClient(resolved.token);
-          briefing = await reviewPullRequest(client, ref.repo, ref.number, config, model, {
+          // The briefing's drafted comments are in the repo's tone (its own on this machine, or drafts.tone).
+          const withTone = model ? { ...model, tone: toneFor(ref.repo, config).tone } : undefined;
+          briefing = await reviewPullRequest(client, ref.repo, ref.number, config, withTone, {
             enabled: options.graph,
             ...(learning ? { learning } : {}),
             onDiff: (files) => {

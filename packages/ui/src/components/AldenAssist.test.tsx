@@ -190,7 +190,10 @@ describe("Draft my review", () => {
     );
     expect(state.calls).toEqual([`DRAFT ${PR}`]);
     expect(within(drawer()).getByText("Add a test.")).toBeTruthy();
-    expect(within(drawer()).getAllByText("Drafted by Alden").length).toBeGreaterThan(0);
+    // Alden's draft, suggested until you keep it.
+    const card = within(drawer()).getByText("Add a test.").closest("li") as HTMLElement;
+    expect(card.querySelector(".dcard-who")?.textContent).toBe("Alden");
+    expect(card.querySelector(".dcard-state")?.textContent).toBe("suggested");
   });
 
   it("is in the drawer too, and says why when it couldn't draft", async () => {
@@ -318,6 +321,7 @@ describe("Draft with Alden in a comment box", () => {
 describe("Draft with Alden in a reply box", () => {
   it("drafts a reply for the thread, and counts saving it as an assisted reply", async () => {
     const { state } = await setup();
+    fireEvent.click(await within(drawer()).findByRole("tab", { name: /^Conversation/ }));
     const conversation = await within(drawer()).findByRole("region", { name: /^Conversation/ });
     fireEvent.click(
       await within(conversation).findByRole("button", { name: "Reply in the thread on src/charge.ts:3" }),

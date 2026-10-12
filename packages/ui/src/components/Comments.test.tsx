@@ -6,14 +6,17 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Api, ApiError, type ReviewRequest } from "../api";
 import {
   cannotSend,
+  type DraftMove,
   type DraftPatch,
   groupDrafts,
+  leftOut,
   linkedText,
   type NewDraft,
   type ReviewDraft,
   type ReviewEvent,
   reviewBody,
   type SendReviewResult,
+  toSend,
   type Unaddressed,
   useDrafts,
   whereText,
@@ -26,6 +29,7 @@ import { ReviewPane } from "./ReviewPane";
 afterEach(() => {
   cleanup();
   window.sessionStorage.clear();
+  window.localStorage.clear();
 });
 
 const PR = "acme/api#1";
@@ -137,11 +141,13 @@ function fakeApi(start: ReviewDraft[] = [], unaddressed: Unaddressed[] = []) {
       state.drafts.push(saved);
       return saved;
     },
-    editDraft: async (id: string, patch: DraftPatch) => {
+    editDraft: async (id: string, patch: DraftPatch | DraftMove) => {
       state.calls.push(`PATCH ${id} ${JSON.stringify(patch)}`);
       state.drafts = state.drafts.map((d) => {
         if (d.id !== id) return d;
-        const { suggestion, ...rest } = { ...d, ...patch };
+        const { suggestion, movedTo: _m, changedIn: _c, ...rest } = { ...d, ...patch };
+        // Placed on a line again, like the server: a draft again.
+        if ("line" in patch) rest.state = "draft";
         return suggestion === null || suggestion === undefined ? rest : { ...rest, suggestion };
       });
       return state.drafts.find((d) => d.id === id) as ReviewDraft;
@@ -287,12 +293,164 @@ describe("the Comments drawer", () => {
       within(lines)
         .getAllByRole("listitem")
         .map((li) => li.querySelector(".draft-where")?.textContent),
-    ).toEqual(["On src/charge.ts, lines 4–9", "On src/old.ts, line 4 (old side)"]);
-    expect(within(lines).getByText("from Claude")).toBeTruthy();
+    ).toEqual(["charge.ts:4–9", "old.ts:4 (old side)"]);
+    // Who wrote each is the first word on its card, and its state is on the right.
+    expect(
+      within(lines)
+        .getAllByRole("listitem")
+        .map((li) => [li.querySelector(".dcard-who")?.textContent, li.querySelector(".dcard-state")?.textContent]),
+    ).toEqual([
+      ["Claude Code", "draft"],
+      ["you", "draft"],
+    ]);
+    expect(lines.querySelector(".draft-where")?.getAttribute("title")).toBe("src/charge.ts");
     const body = within(aside).getByRole("region", { name: "In the review body · 1" });
-    expect(within(body).getByText("In the review body")).toBeTruthy();
+    expect(body.querySelector(".draft-where")?.textContent).toBe("general");
     expect(within(body).getByText("Thanks!")).toBeTruthy();
-    expect(within(aside).getByRole("button", { name: "Send review · 3 comments" })).toBeTruthy();
+    expect(within(aside).getByRole("button", { name: "Review and send · 3" })).toBeTruthy();
+    expect(within(aside).getByText("Nothing posts until you send.")).toBeTruthy();
+  });
+});
+
+describe("the drawer's shape", () => {
+  const width = () => (drawer() as HTMLElement).style.getPropertyValue("--drawer-w");
+
+  it("resizes from its left edge between 320 and 760, remembers it, and double-click puts it back", async () => {
+    await setup();
+    expect(width()).toBe("380px");
+    const edge = screen.getByRole("separator", { name: "Resize comments" });
+    fireEvent.mouseDown(edge, { clientX: 1000, button: 0 });
+    fireEvent.mouseMove(window, { clientX: 900 });
+    expect(width()).toBe("480px");
+    expect((drawer() as HTMLElement).textContent).toContain("480px");
+    fireEvent.mouseMove(window, { clientX: 100 });
+    expect(width()).toBe("760px");
+    fireEvent.mouseUp(window);
+    expect(window.localStorage.getItem("alden.comments.width")).toBe("760");
+    expect((drawer() as HTMLElement).textContent).not.toContain("760px");
+    fireEvent.mouseDown(edge, { clientX: 500, button: 0 });
+    fireEvent.mouseMove(window, { clientX: 2000 });
+    fireEvent.mouseUp(window);
+    expect(width()).toBe("320px");
+
+    // Another pane starts at the width you left it (and open, as you left it).
+    cleanup();
+    await setup([], [], false);
+    expect(width()).toBe("320px");
+    fireEvent.doubleClick(screen.getByRole("separator", { name: "Resize comments" }));
+    expect(width()).toBe("380px");
+    expect(window.localStorage.getItem("alden.comments.width")).toBeNull();
+    // And from the keyboard.
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize comments" }), { key: "ArrowLeft" });
+    expect(width()).toBe("396px");
+  });
+
+  it("starts at 380 when storage is blocked or holds nonsense", async () => {
+    window.localStorage.setItem("alden.comments.width", "9000");
+    await setup();
+    expect(width()).toBe("380px");
+  });
+
+  it("folds to a rail saying how many drafts there are, which opens it again", async () => {
+    await setup([draft("a", { body: "Thanks!" })]);
+    key("s");
+    expect(drawer()).toBeNull();
+    const rail = screen.getByRole("button", { name: "Open comments, 1 draft" });
+    expect(rail.textContent).toBe("‹Comments1S");
+    fireEvent.click(rail);
+    expect(drawer()).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /^Open comments/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close comments" }));
+    key("s");
+    expect(drawer()).not.toBeNull();
+  });
+
+  it("has Drafts and Conversation tabs, with their counts", async () => {
+    const fake = fakeApi([draft("a", { body: "Thanks!" })]);
+    (fake.api as unknown as { threads: unknown }).threads = async () => ({
+      schemaVersion: 1,
+      pr: PR,
+      headSha: "abc",
+      viewer: "me",
+      threads: [],
+    });
+    window.sessionStorage.setItem("alden.comments.drawer", "1");
+    render(<Harness api={fake.api} />);
+    const tabs = await screen.findByRole("tablist", { name: "Comments" });
+    await waitFor(() =>
+      expect(
+        within(tabs)
+          .getAllByRole("tab")
+          .map((t) => t.getAttribute("aria-label")),
+      ).toEqual(["Drafts 1", "Conversation 0"]),
+    );
+    fireEvent.click(within(tabs).getByRole("tab", { name: "Conversation 0" }));
+    expect(screen.getByText("No review threads yet.")).toBeTruthy();
+    expect(screen.queryByText("Thanks!")).toBeNull();
+    // ArrowLeft goes back to Drafts.
+    fireEvent.keyDown(within(tabs).getByRole("tab", { name: "Conversation 0" }), { key: "ArrowLeft" });
+    expect(screen.getByText("Thanks!")).toBeTruthy();
+    expect(document.activeElement).toBe(within(tabs).getByRole("tab", { name: "Drafts 1" }));
+  });
+});
+
+describe("Alden writes", () => {
+  it("shows the repo's tone, and changes it for the repo", async () => {
+    const fake = fakeApi();
+    const calls: string[] = [];
+    Object.assign(fake.api, {
+      tone: async (repo: string) => {
+        calls.push(`GET ${repo}`);
+        return { tone: "concise" };
+      },
+      setTone: async (tone: string, repo: string) => {
+        calls.push(`PUT ${repo} ${tone}`);
+        return { tone };
+      },
+    });
+    window.sessionStorage.setItem("alden.comments.drawer", "1");
+    render(<Harness api={fake.api} />);
+    const tones = await screen.findByRole("group", { name: "Alden writes" });
+    expect(calls).toEqual(["GET acme/api"]);
+    expect(
+      within(tones)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Terse", "Concise", "Detailed", "Teaching"]);
+    expect(within(tones).getByRole("button", { name: "Concise" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("the default for api")).toBeTruthy();
+    fireEvent.click(within(tones).getByRole("button", { name: "Teaching" }));
+    await waitFor(() => expect(calls).toContain("PUT acme/api teaching"));
+    expect(within(tones).getByRole("button", { name: "Teaching" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("for newer teammates")).toBeTruthy();
+  });
+
+  it("isn't shown where the API has no tone (404), and puts the tone back when saving fails", async () => {
+    const fake = fakeApi();
+    Object.assign(fake.api, {
+      tone: async () => {
+        throw new ApiError(404, "Not found");
+      },
+    });
+    window.sessionStorage.setItem("alden.comments.drawer", "1");
+    render(<Harness api={fake.api} />);
+    await waitFor(() => expect(fake.state.calls).toContain(`GET ${PR}`));
+    await act(async () => {});
+    expect(screen.queryByRole("group", { name: "Alden writes" })).toBeNull();
+    cleanup();
+
+    const failing = fakeApi();
+    Object.assign(failing.api, {
+      tone: async () => ({ tone: "terse" }),
+      setTone: async () => {
+        throw new ApiError(500, "disk full");
+      },
+    });
+    render(<Harness api={failing.api} />);
+    const tones = await screen.findByRole("group", { name: "Alden writes" });
+    fireEvent.click(within(tones).getByRole("button", { name: "Detailed" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Couldn't change how Alden writes: disk full");
+    expect(within(tones).getByRole("button", { name: "Terse" }).getAttribute("aria-pressed")).toBe("true");
   });
 });
 
@@ -321,9 +479,9 @@ describe("commenting on a place", () => {
     expect(screen.getAllByRole("list", { name: "Your comments on src/api.ts, line 9" })).toHaveLength(2);
     const lines = within(aside).getByRole("region", { name: "On lines · 1" });
     expect(within(lines).getByText("Does the web client pass a currency?")).toBeTruthy();
-    expect(lines.querySelector(".draft-where")?.textContent).toBe("On src/api.ts, line 9");
+    expect(lines.querySelector(".draft-where")?.textContent).toBe("api.ts:9");
     expect(toggle().textContent).toBe("Comments · 1 S");
-    expect(screen.getByRole("button", { name: "Send review · 1 comment" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Review and send · 1" })).toBeTruthy();
   });
 
   it("cancels with Escape and keeps nothing, leaving the drawer open", async () => {
@@ -385,7 +543,7 @@ describe("onComment and onFinish, for the diff and the guided review", () => {
     );
     await waitFor(() => expect(document.activeElement).toBe(diffLine));
     const lines = within(aside).getByRole("region", { name: "On lines · 1" });
-    expect(lines.querySelector(".draft-where")?.textContent).toBe("On src/charge.ts, lines 4–9");
+    expect(lines.querySelector(".draft-where")?.textContent).toBe("charge.ts:4–9");
     expect(within(lines).getByText("Suggested change")).toBeTruthy();
     expect(lines.querySelector("pre")?.textContent).toBe("a = 1\nb = 3");
 
@@ -454,8 +612,10 @@ describe("notes linking to code outside the diff", () => {
     );
     const body = await within(aside).findByRole("region", { name: "In the review body · 1" });
     const where = body.querySelector(".draft-where") as HTMLElement;
-    expect(where.textContent).toBe("In the review body · links to src/web.ts");
-    expect(where.querySelector("[title]")?.getAttribute("title")).toMatch(/code at abc, the PR's head when this was/);
+    expect(where.textContent).toBe("links to web.ts");
+    expect(where.getAttribute("title")).toMatch(
+      /^links to src\/web.ts\. The link shows the code at abc, the PR's head/,
+    );
     // It shows at the place in the briefing too.
     expect(screen.getByRole("list", { name: "Your comments on src/web.ts" }).textContent).toContain("Does this still");
   });
@@ -478,12 +638,12 @@ describe("notes linking to code outside the diff", () => {
     fireEvent.click(within(aside).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(within(aside).queryByRole("textbox", { name: /^Comment on/ })).toBeNull());
     const body = within(aside).getByRole("region", { name: "In the review body · 1" });
-    expect(body.querySelector(".draft-where")?.textContent).toBe("In the review body · links to src/api.ts, line 9");
+    expect(body.querySelector(".draft-where")?.textContent).toBe("links to api.ts:9");
     expect(within(body).getByText("charge(a, b)")).toBeTruthy();
 
     // What posts: the note in the body, starting with its link.
-    fireEvent.click(within(aside).getByRole("button", { name: "Send review · 1 comment" }));
-    const confirm = await within(aside).findByRole("region", { name: /Send this review/ });
+    fireEvent.click(within(aside).getByRole("button", { name: "Review and send · 1" }));
+    const confirm = await screen.findByRole("dialog", { name: "Send this review to GitHub?" });
     expect(confirm.textContent).toContain(
       "**[`src/api.ts` line 9](https://github.com/acme/api/blob/abc/src/api.ts#L9)**\n\nSuggested change:\n\n```\ncharge(a, b)\n```",
     );
@@ -634,26 +794,36 @@ describe("Comment on a line and general notes", () => {
     await waitFor(() =>
       expect(
         within(drawer() as HTMLElement)
-          .getAllByRole("heading", { level: 3 })
-          .map((h) => h.textContent),
+          .getAllByRole("region")
+          .map((h) => h.getAttribute("aria-label")),
       ).toEqual(["On lines · 3", "In the review body · 1"]),
     );
   });
 });
 
 describe("sending from the drawer", () => {
-  it("labels Claude's drafts, edits and deletes, and makes you rewrite an outdated one before sending", async () => {
+  it("labels Claude's drafts, edits and deletes, and moves an outdated one to its new lines", async () => {
     const { state } = await setup([
       draft("a", { path: "src/charge.ts", line: 3, side: "RIGHT", source: "claude", body: "Rounding?" }),
-      draft("bb", { path: "src/charge.ts", line: 1, side: "RIGHT", state: "outdated", body: "Old line" }),
+      draft("bb", {
+        path: "src/charge.ts",
+        line: 1,
+        side: "RIGHT",
+        state: "outdated",
+        body: "Old line",
+        changedIn: "3f2a91c0ffee",
+        movedTo: { path: "src/charge.ts", line: 4, side: "RIGHT" },
+      }),
       draft("ccc", { body: "General" }),
     ]);
-    expect(screen.getByText("from Claude")).toBeTruthy();
-    expect(screen.getByText("Outdated")).toBeTruthy();
-    expect(screen.getByText(/The PR has new commits since this was written/)).toBeTruthy();
-    const send = screen.getByRole("button", { name: "Send review · 3 comments" }) as HTMLButtonElement;
-    expect(send.disabled).toBe(true);
-    expect(screen.getByText("Rewrite or delete the outdated comment first.")).toBeTruthy();
+    const card = (text: string) => screen.getByText(text).closest("li") as HTMLElement;
+    expect(card("Rounding?").querySelector(".dcard-who")?.textContent).toBe("Claude Code");
+    expect(card("Old line").querySelector(".dcard-state")?.textContent).toBe("outdated");
+    expect(card("Old line").className).toContain("outdated");
+    expect(card("Old line").textContent).toContain("These lines changed in 3f2a91c · Move to new lines");
+    // An outdated draft is left out when you send; the rest can go.
+    const send = screen.getByRole("button", { name: "Review and send · 2" }) as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit comment on src/charge.ts, line 3" }));
     const edit = screen.getByRole("textbox", { name: "Edit comment on src/charge.ts, line 3" });
@@ -662,29 +832,43 @@ describe("sending from the drawer", () => {
     await waitFor(() => expect(state.calls).toContain(`PATCH a {"body":"Rounding? Use cents."}`));
     await screen.findByText("Rounding? Use cents.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Rewrite comment on src/charge.ts, line 1" }));
-    expect(screen.getByRole("heading", { name: "Rewrite on the current code" })).toBeTruthy();
-    expect((screen.getByRole("combobox", { name: "File" }) as HTMLSelectElement).value).toBe("src/charge.ts");
-    expect((screen.getByRole("textbox", { name: "Line" }) as HTMLInputElement).value).toBe("1");
-    fireEvent.change(screen.getByRole("textbox", { name: "Line" }), { target: { value: "2" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(state.calls).toContain("DELETE bb"));
-    expect(state.calls).toContain(
-      `POST ${JSON.stringify({ pr: PR, path: "src/charge.ts", line: 2, side: "RIGHT", body: "Old line" })}`,
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move comment on src/charge.ts, line 1 to new lines, src/charge.ts:4" }),
     );
-    await waitFor(() => expect(screen.queryByText("Outdated")).toBeNull());
+    await waitFor(() =>
+      expect(state.calls).toContain(`PATCH bb ${JSON.stringify({ path: "src/charge.ts", line: 4, side: "RIGHT" })}`),
+    );
+    await waitFor(() => expect(card("Old line").querySelector(".dcard-state")?.textContent).toBe("draft"));
+    expect(screen.getByRole("button", { name: "Review and send · 3" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete general note" }));
     expect(screen.getByText("Delete this note?")).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(state.calls).toContain("DELETE ccc"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Review and send · 2" })).toBeTruthy());
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Comments" }));
+  });
+
+  it("asks you to pick a line when Alden can't tell where an outdated draft's code went", async () => {
+    const { state } = await setup([
+      draft("bb", { path: "src/charge.ts", line: 1, side: "RIGHT", state: "outdated", body: "Old line" }),
+    ]);
+    expect(screen.getByText(/These lines changed ·/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pick a line for comment on src/charge.ts, line 1" }));
+    expect(screen.getByRole("heading", { name: "Pick the line it belongs on now" })).toBeTruthy();
+    expect((screen.getByRole("combobox", { name: "File" }) as HTMLSelectElement).value).toBe("src/charge.ts");
+    expect((screen.getByRole("textbox", { name: "Line" }) as HTMLInputElement).value).toBe("1");
+    fireEvent.change(screen.getByRole("textbox", { name: "Line" }), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    // It moves, keeping its id: nothing is added or deleted.
     await waitFor(() =>
-      expect((screen.getByRole("button", { name: "Send review · 2 comments" }) as HTMLButtonElement).disabled).toBe(
-        false,
+      expect(state.calls).toContain(
+        `PATCH bb ${JSON.stringify({ path: "src/charge.ts", line: 2, side: "RIGHT", body: "Old line" })}`,
       ),
     );
-    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Comments" }));
+    expect(state.calls.some((c) => c.startsWith("POST") || c.startsWith("DELETE"))).toBe(false);
+    await waitFor(() => expect(screen.queryByText(/These lines changed/)).toBeNull());
   });
 
   it("labels Alden's drafts with Keep, Edit and Drop, and sends only the ones you kept", async () => {
@@ -695,17 +879,22 @@ describe("sending from the drawer", () => {
       draft("ccc", { path: "src/charge.ts", line: 20, side: "RIGHT", source: "alden", drafted, body: "Log less." }),
       draft("dddd", { body: "Thanks!" }),
     ]);
-    expect(screen.getAllByText("Drafted by Alden")).toHaveLength(3);
+    const states = () => [...document.querySelectorAll(".dcard.pending .dcard-state")].map((e) => e.textContent);
+    expect(states()).toEqual(["suggested", "suggested", "suggested"]);
     const bar = screen.getByRole("region", { name: "Alden's drafts" });
     expect(bar.textContent).toContain("Alden drafted 3 comments");
     expect(bar.textContent).toContain("3 drafts by Alden not kept won't be sent.");
     // Untouched, they don't count toward what's sent.
-    expect(screen.getByRole("button", { name: "Send review · 1 comment" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Review and send · 1" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Keep comment on src/charge.ts, line 3" }));
     await waitFor(() => expect(state.calls).toContain(`KEEP ${JSON.stringify({ ids: ["a"] })}`));
-    await waitFor(() => expect(screen.getAllByText("Drafted by Alden")).toHaveLength(2));
-    expect(screen.getByRole("button", { name: "Send review · 2 comments" })).toBeTruthy();
+    await waitFor(() => expect(states()).toHaveLength(2));
+    // Kept, it looks like yours, still saying Alden drafted it.
+    const kept = screen.getByText("Round to cents.").closest("li") as HTMLElement;
+    expect(kept.querySelector(".dcard-who")?.textContent).toBe("Alden");
+    expect(kept.querySelector(".dcard-state")?.textContent).toBe("kept");
+    expect(screen.getByRole("button", { name: "Review and send · 2" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit comment on src/charge.ts, line 9" }));
     const edit = screen.getByRole("textbox", { name: "Edit comment on src/charge.ts, line 9" });
@@ -713,12 +902,16 @@ describe("sending from the drawer", () => {
     fireEvent.keyDown(edit, { key: "Enter", metaKey: true });
     await waitFor(() => expect(state.calls).toContain(`PATCH bb {"body":"Check the daily cap."}`));
 
+    // Dropped, it stays dimmed where it was, with nothing to press.
     fireEvent.click(screen.getByRole("button", { name: "Drop comment on src/charge.ts, line 20" }));
     await waitFor(() => expect(state.calls).toContain("DELETE ccc"));
-    await waitFor(() => expect(screen.queryByText("Log less.")).toBeNull());
+    await waitFor(() => expect(screen.getByRole("listitem", { name: "Dropped: Log less." })).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("button", { name: /^Send review/ }));
-    const summary = await screen.findByRole("region", { name: "Send this review to acme/api#1?" });
+    fireEvent.click(screen.getByRole("button", { name: /^Review and send/ }));
+    const summary = await screen.findByRole("dialog", { name: "Send this review to GitHub?" });
+    expect(within(summary).getByText("Drafted by Alden, kept by you").nextElementSibling?.textContent).toBe(
+      "1, posted as you",
+    );
     expect(within(summary).getByText("Round to cents.")).toBeTruthy();
   });
 
@@ -731,7 +924,7 @@ describe("sending from the drawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
     await waitFor(() => expect(state.calls).toContain(`KEEP ${JSON.stringify({ pr: PR })}`));
     await waitFor(() => expect(screen.queryByRole("region", { name: "Alden's drafts" })).toBeNull());
-    expect(screen.getByRole("button", { name: "Send review · 2 comments" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Review and send · 2" })).toBeTruthy();
   });
 
   it("drops all of Alden's drafts, leaving yours", async () => {
@@ -743,15 +936,17 @@ describe("sending from the drawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Drop all" }));
     await waitFor(() => expect(state.calls).toContain("DELETE a"));
     expect(state.calls).not.toContain("DELETE bb");
-    await waitFor(() => expect(screen.queryByText("Round to cents.")).toBeNull());
+    await waitFor(() => expect(screen.getByRole("listitem", { name: "Dropped: Round to cents." })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Keep comment/ })).toBeNull();
     expect(screen.getByText("Thanks!")).toBeTruthy();
   });
 
-  it("shows exactly what will post, lists what you didn't comment on before Approve, then says it was sent", async () => {
+  it("shows what will post, flags what you didn't comment on before Approve, then says it was sent", async () => {
     const { state } = await setup(
       [
         draft("a", { path: "src/charge.ts", line: 3, side: "RIGHT", source: "claude", body: "Rounding?" }),
         draft("bb", { body: "Thanks!" }),
+        draft("ccc", { path: "src/charge.ts", line: 1, side: "RIGHT", state: "outdated", body: "Old" }),
       ],
       [{ checkId: "callers.outside", title: "Caller of changed code in src/api.ts", path: "src/api.ts", line: 9 }],
     );
@@ -759,55 +954,81 @@ describe("sending from the drawer", () => {
     const verdict = screen.getByRole("group", { name: "Verdict" });
     fireEvent.click(within(verdict).getByRole("button", { name: "Approve" }));
     expect(within(verdict).getByRole("button", { name: "Approve" }).getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "Send review · 2 comments" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review and send · 2" }));
 
-    const summary = await screen.findByRole("region", { name: "Send this review to acme/api#1?" });
+    const summary = await screen.findByRole("dialog", { name: "Send this review to GitHub?" });
+    expect(summary.getAttribute("aria-modal")).toBe("true");
     // Focus moves to the summary's heading once it has rendered; on a busy machine that's a tick later.
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        within(summary).getByRole("heading", { name: "Send this review to acme/api#1?" }),
+        within(summary).getByRole("heading", { name: "Send this review to GitHub?" }),
       ),
     );
-    // While it shows, the verdict and Send are its own.
-    expect(screen.queryByRole("group", { name: "Verdict" })).toBeNull();
-    expect(summary.textContent).toContain("Approve");
-    expect(summary.textContent).toContain("Alden flagged 1 place you didn't comment on.");
-    expect(within(summary).getByText("Caller of changed code in src/api.ts")).toBeTruthy();
-    // The body is yours, then each general note.
+    expect(summary.textContent).toContain("acme/api #1");
+    const rows = [...summary.querySelectorAll(".send-row-v3")].map((r) => [
+      r.querySelector("dt")?.textContent,
+      r.querySelector("dd")?.textContent,
+    ]);
+    expect(rows).toEqual([
+      ["Verdict", "Approve"],
+      ["On lines", "1 comment"],
+      ["In the body", "your text and 1 note"],
+      ["Outdated, left out", "1"],
+    ]);
+    expect(summary.textContent).toContain("Alden flagged 1 place you didn't comment on");
+    expect(summary.textContent).toContain("src/api.ts:9 · Caller of changed code in src/api.ts.");
+    // The exact text is there too: the body is yours, then each general note.
     expect(within(summary).getByText("Looks right.\n\nThanks!", { normalizer: (s) => s })).toBeTruthy();
-    expect(within(summary).getByText("src/charge.ts:3")).toBeTruthy();
-    expect(within(summary).getByText("from Claude")).toBeTruthy();
+    expect(within(summary).getByText("src/charge.ts:3 · Claude Code")).toBeTruthy();
     expect(within(summary).getByText("Rounding?")).toBeTruthy();
     // Nothing has been sent yet.
     expect(state.calls.some((c) => c.startsWith("SEND"))).toBe(false);
 
-    // Esc goes back, keeping everything and the drawer open; then send for real.
+    // Esc goes back, keeping everything and the drawer open; then send for real, with ⌘↵.
     fireEvent.keyDown(within(summary).getByRole("button", { name: "Back" }), { key: "Escape" });
-    expect(screen.queryByRole("region", { name: "Send this review to acme/api#1?" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(drawer()).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Send review · 2 comments" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Approve on GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review and send · 2" }));
+    const again = await screen.findByRole("dialog", { name: "Send this review to GitHub?" });
+    fireEvent.keyDown(within(again).getByRole("button", { name: "Send review" }), { key: "Enter", metaKey: true });
 
-    const sent = await within(drawer() as HTMLElement).findByRole("status");
-    expect(sent.textContent).toContain("Sent to GitHub.");
-    expect(sent.textContent).toContain("You approved with 1 comment.");
+    const sent = await screen.findByText("Sent to GitHub", { selector: ".sent-toast" });
+    expect(sent.getAttribute("role")).toBe("status");
     expect(within(sent).getByRole("link", { name: "See the review ↗" }).getAttribute("href")).toBe(
       "https://github.com/acme/api/pull/1#pullrequestreview-9",
     );
     expect(state.calls).toContain(`SEND ${JSON.stringify({ pr: PR, event: "APPROVE", body: "Looks right." })}`);
     expect(state.calls.filter((c) => c.startsWith("SEND"))).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Send review" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Review and send · 0" })).toBeTruthy();
     expect(toggle().textContent).toBe("Comments S");
     expect((screen.getByRole("textbox", { name: "Review body" }) as HTMLTextAreaElement).value).toBe("");
     expect(screen.queryByText(/^Alden learned/)).toBeNull();
   });
 
+  it("Look first closes the summary and brings the place Alden flagged into view", async () => {
+    Element.prototype.scrollIntoView = () => {};
+    await setup(
+      [draft("bb", { body: "Thanks!" })],
+      [{ checkId: "callers.outside", title: "Caller of changed code in src/api.ts", path: "src/api.ts", line: 9 }],
+    );
+    fireEvent.click(within(screen.getByRole("group", { name: "Verdict" })).getByRole("button", { name: "Approve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review and send · 1" }));
+    const summary = await screen.findByRole("dialog");
+    fireEvent.click(within(summary).getByRole("button", { name: "Look first" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() =>
+      expect(
+        (document.activeElement as HTMLElement).closest("[data-comment-path]")?.getAttribute("data-comment-path"),
+      ).toBe("src/api.ts"),
+    );
+  });
+
   it("says in one quiet line what Alden learned from the review it just sent", async () => {
     const { state } = await setup([draft("a", { path: "src/charge.ts", line: 3, side: "RIGHT" })]);
     state.learning = ["you care about callers flags (2 of 3)", "tests flags are worth less here"];
-    fireEvent.click(screen.getByRole("button", { name: "Send review · 1 comment" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Send to GitHub" }));
-    await within(drawer() as HTMLElement).findByRole("status");
+    fireEvent.click(screen.getByRole("button", { name: "Review and send · 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send review" }));
+    await screen.findByText("Sent to GitHub", { selector: ".sent-toast" });
     expect(
       screen.getByText("Alden learned: you care about callers flags (2 of 3); tests flags are worth less here"),
     ).toBeTruthy();
@@ -816,20 +1037,20 @@ describe("sending from the drawer", () => {
   it("shows the server's error and keeps the drafts when sending fails", async () => {
     const { state } = await setup([draft("a", { path: "src/charge.ts", line: 3, side: "RIGHT" })]);
     state.sendError = "Your sign-in can't write reviews. Sign in with GitHub again.";
-    fireEvent.click(screen.getByRole("button", { name: "Send review · 1 comment" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Send to GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review and send · 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send review" }));
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Your sign-in can't write reviews. Sign in with GitHub again.",
     );
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Send review · 1 comment" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Review and send · 1" }));
     expect(screen.getByText("Body a")).toBeTruthy();
   });
 
   it("needs a body to request changes, and waits for the comment you're writing", async () => {
     await setup();
     fireEvent.click(screen.getByRole("button", { name: "Request changes" }));
-    const send = screen.getByRole("button", { name: "Send review" }) as HTMLButtonElement;
+    const send = screen.getByRole("button", { name: "Review and send · 0" }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     fireEvent.change(screen.getByRole("textbox", { name: "Review body" }), { target: { value: "Needs tests." } });
     expect(send.disabled).toBe(false);
@@ -951,6 +1172,19 @@ describe("drafts helpers", () => {
     expect(cannotSend("COMMENT", "", [draft("a", { state: "outdated" }), draft("b", { state: "outdated" })])).toBe(
       "Rewrite or delete the 2 outdated comments first.",
     );
+  });
+
+  it("sends yours and Claude Code's, leaving out Alden's unkept drafts and outdated ones", () => {
+    const all = [
+      draft("a"),
+      draft("bb", { source: "claude" }),
+      draft("ccc", { source: "alden" }),
+      draft("dddd", { state: "outdated", path: "src/charge.ts", line: 1 }),
+      draft("eeeee", { source: "alden", state: "outdated", path: "src/charge.ts", line: 2 }),
+    ];
+    expect(toSend(all).map((d) => d.id)).toEqual(["a", "bb"]);
+    expect(leftOut(all).map((d) => d.id)).toEqual(["dddd"]);
+    expect(cannotSend("COMMENT", "", toSend(all))).toBeUndefined();
   });
 
   it("builds a linked note's body with its link, as the server does", () => {

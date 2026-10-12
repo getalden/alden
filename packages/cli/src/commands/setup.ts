@@ -5,6 +5,7 @@ import {
   modelSetupState,
   OLLAMA_DOWNLOAD_URL,
   OLLAMA_URL,
+  OPENAI_KEYS_URL,
   type PullProgress,
   pullOllamaModel,
   setUpModelKey,
@@ -51,6 +52,9 @@ export function describeCurrent(state: ModelSetupState): string {
   const { current, key } = state;
   if (!current.available) return "no model set up, so reviews run the checks only.";
   if (current.provider === "anthropic") return `${current.model} via Anthropic, using ${key?.where ?? "your setup"}.`;
+  if (current.provider === "openai") {
+    return `${current.model} via OpenAI, using ${state.openaiKey?.where ?? "your key"}.`;
+  }
   if (current.provider === "openai-compatible") return `${current.model}, a local model (openai-compatible).`;
   return `${current.model} via ${current.provider}.`;
 }
@@ -77,8 +81,8 @@ export function setupPlan(state: ModelSetupState): string {
     "",
     `Now: ${describeCurrent(state)}`,
     "",
-    `1) Paste an Anthropic API key, from ${ANTHROPIC_KEYS_URL}:`,
-    "     alden auth model            # reads the key from standard input when piped",
+    `1) Paste an API key, Anthropic's (${ANTHROPIC_KEYS_URL}) or OpenAI's (${OPENAI_KEYS_URL}):`,
+    "     alden auth model            # either kind; reads it from standard input when piped",
     `2) Use a local model, ${ollamaLine(state)}. For ${state.memoryGb} GB of memory: ${rec.model} (${rec.why}).`,
     ...local,
     `     ${LOCAL_CAVEAT}`,
@@ -93,7 +97,7 @@ export function setupPlan(state: ModelSetupState): string {
 export async function runSetup(io: SetupIo, steps: SetupSteps): Promise<boolean> {
   const state = await steps.state();
   io.print(`Set up a model\n\nNow: ${describeCurrent(state)}\n`);
-  io.print("  1  Paste an Anthropic API key   Claude: the most thorough briefings");
+  io.print("  1  Paste an API key            Anthropic or OpenAI: Alden detects which");
   io.print(`  2  Use a local model            ${ollamaLine(state)}`);
   io.print("  3  Checks only                  no model: Alden's checks and callers, at no cost\n");
   const choice = (await io.ask("Choose 1, 2 or 3 [1]: ")).trim() || "1";
@@ -114,9 +118,9 @@ export async function runSetup(io: SetupIo, steps: SetupSteps): Promise<boolean>
 }
 
 async function keyStep(io: SetupIo, steps: SetupSteps): Promise<boolean> {
-  io.print(`\nCreate a key at ${ANTHROPIC_KEYS_URL}, then paste it here.`);
+  io.print(`\nCreate a key at ${ANTHROPIC_KEYS_URL} (Anthropic) or ${OPENAI_KEYS_URL} (OpenAI), then paste it here.`);
   for (let attempt = 0; attempt < 3; attempt++) {
-    const key = await io.secret("Anthropic API key (it won't show as you paste): ");
+    const key = await io.secret("API key, Anthropic or OpenAI (it won't show as you paste): ");
     if (!key) {
       io.print("No key given. Nothing changed.");
       return false;
@@ -130,7 +134,11 @@ async function keyStep(io: SetupIo, steps: SetupSteps): Promise<boolean> {
       else return false;
     }
     if (result.ok) {
-      io.print("It works. Stored for the terminal, alden ui, alden mcp and the desktop app; reviews now ask Claude.");
+      io.print(
+        result.provider === "openai"
+          ? "It works: an OpenAI key. Stored for the terminal, alden ui, alden mcp and the desktop app; reviews now ask OpenAI's models."
+          : "It works. Stored for the terminal, alden ui, alden mcp and the desktop app; reviews now ask Claude.",
+      );
       if (result.key?.source === "env") {
         io.print(`${result.key.where} is set here and comes first; the stored key is used where it isn't.`);
       }
@@ -202,7 +210,7 @@ async function localStep(io: SetupIo, steps: SetupSteps, state: ModelSetupState)
 }
 
 /** A terminal for `runSetup`: prompts on stdout, the key read without echo, progress redrawn on stderr. */
-function terminalIo(): SetupIo {
+export function terminalIo(): SetupIo {
   const color = shouldColor(process.stdout);
   return {
     print: (text, quiet) => console.log(quiet ? paint(text, "dim", color) : text),
@@ -233,7 +241,7 @@ export function registerSetupCommand(program: Command): void {
   program
     .command("setup")
     .description(
-      "Set up a model: paste an Anthropic API key (checked with one tiny request), use a local model with Ollama, or run checks only.",
+      "Set up a model: paste an Anthropic or OpenAI API key (checked with one tiny request), use a local model with Ollama, or run checks only.",
     )
     .action(async () => {
       if (!process.stdin.isTTY || !process.stdout.isTTY) {

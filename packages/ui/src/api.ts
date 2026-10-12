@@ -1,15 +1,20 @@
 import type {
+  AskEvent,
   Briefing,
   BriefingFreshness,
   BriefingTarget,
+  DraftTone,
   FeedbackInput,
   FeedbackSummary,
   FollowUpLevel,
   FollowUpNotifications,
+  KeyKind,
   KeyTestResult,
   LocalSetupEvent,
   MemoryItem,
   MemorySource,
+  ModelChoices,
+  ModelPick,
   ModelSetupState,
   PrDiff,
   PrWatch,
@@ -21,8 +26,10 @@ import type {
   RepoStats,
   ReviewThreads,
   ReviewTimeStats,
+  ToneState,
 } from "@alden/schema";
 import type {
+  DraftMove,
   DraftPatch,
   DraftsResponse,
   NewDraft,
@@ -127,7 +134,8 @@ export interface Session {
   eyes?: number;
   /** What this machine's queue covers (queue.orgs, queue.repos, queue.ignore); empty lists mean everywhere. */
   queueScope?: { orgs: string[]; repos: string[]; ignore: string[] };
-  background?: { enabled: boolean; model: boolean };
+  /** `prepare`: how many of the top PRs the desktop app keeps briefed (`background.prepare`). */
+  background?: { enabled: boolean; model: boolean; prepare?: number };
   /**
    * Whether the desktop app's "Briefing ready" notification plays a sound (`notifications.sound`), and how much it
    * tells you about PRs you reviewed (`notifications.followUps`).
@@ -136,7 +144,7 @@ export interface Session {
   /** Whether Alden learns from the reviews you send (`learning.fromReviews`, on unless you turn it off). */
   learning?: { fromReviews: boolean };
   /** Whether a model briefing drafts comments for you to keep, edit or drop (`drafts.auto`, on unless turned off). */
-  drafts?: { auto: boolean };
+  drafts?: { auto: boolean; tone?: DraftTone };
   /** Whether Alden records how long your reviews take, on this machine (`stats.reviewTime`, on unless turned off). */
   stats?: { reviewTime: boolean };
 }
@@ -217,48 +225,9 @@ export interface SuggestTextRequest {
   threadId?: string;
   /** What you've written so far, to make into a clear comment. */
   text?: string;
+  /** How Alden writes this one; the repo's tone when absent. */
+  tone?: DraftTone;
 }
-
-/** One model in the Tune popover's picker, with a word on what it's good for ("fast", "deepest", "offline"). */
-export interface ModelItem {
-  id: string;
-  note?: string | undefined;
-}
-
-/** The models one provider offers, and how Alden reaches it ("your key", "Ollama"); `available`: set up and usable. */
-export interface ModelGroup {
-  provider: string;
-  label: string;
-  via: string;
-  available: boolean;
-  items: ModelItem[];
-}
-
-/** `GET /api/models`: the model briefings use now, and every model Alden could use, by provider. */
-export interface ModelsState {
-  current: { provider: string; model: string } | null;
-  groups: ModelGroup[];
-}
-
-/** One way Alden writes the comments it drafts. */
-export interface ToneOption {
-  id: string;
-  label: string;
-  hint?: string | undefined;
-}
-
-/** `GET /api/tone`: how Alden writes in a repo (or by default), and the tones there are. */
-export interface ToneState {
-  tone: string;
-  tones?: ToneOption[] | undefined;
-  repo?: string | null | undefined;
-}
-
-/** A line of `POST /api/ask`'s answer: some text, then how it ended. */
-export type AskEvent =
-  | { type: "delta"; text: string }
-  | { type: "done"; costUsd: number | null; model: string }
-  | { type: "error"; message: string; status?: number };
 
 /** What signing out left: where Alden still finds a GitHub sign-in (the GitHub CLI's, an env var), or null. */
 export interface SignOutResult {
@@ -348,9 +317,22 @@ export class Api {
 
   useGitHubCli = () => this.request<{ login: string } | { error: string }>("/api/auth/gh", { method: "POST" });
 
-  /** Stores the Anthropic API key (null removes it). The answer says where the key comes from, never the key. */
-  setModelKey = (key: string | null) =>
-    this.request<{ key: Session["model"]["key"] }>("/api/model-key", { method: "PUT", body: JSON.stringify({ key }) });
+  /**
+   * Stores an API key, Anthropic's or OpenAI's (the server tells them apart); null removes the stored key of
+   * `provider`. The answer says whose key it was and where that provider's key comes from, never the key.
+   */
+  setModelKey = (key: string | null, provider?: KeyKind) =>
+    this.request<{ provider?: KeyKind; key: Session["model"]["key"] }>("/api/model-key", {
+      method: "PUT",
+      body: JSON.stringify({ key, ...(provider ? { provider } : {}) }),
+    });
+
+  /** The model picker: the model in use, and each provider's models (available only where set up). */
+  models = () => this.request<ModelChoices>("/api/models");
+
+  /** Makes a model the one reviews use. A provider that isn't set up answers 409. */
+  pickModel = (pick: ModelPick) =>
+    this.request<ModelChoices>("/api/models", { method: "PUT", body: JSON.stringify(pick) });
 
   /** What "Set up a model" offers: any key Alden finds, Ollama and its models, the local model for this machine. */
   modelSetup = () => this.request<ModelSetupState>("/api/model-setup");
@@ -384,45 +366,6 @@ export class Api {
       if (event.type === "error") throw new ApiError(500, event.message);
     }
     throw new ApiError(500, "Setting up the local model ended without saying how it went.");
-  }
-
-  /** Every model Alden could use, by provider, and the current one. A 404 means this Alden predates the route. */
-  models = () => this.request<ModelsState>("/api/models");
-
-  /** Makes a model the one briefings use (saved to your config). */
-  setModel = (choice: { provider: string; model: string }) =>
-    this.request<ModelsState>("/api/models", { method: "PUT", body: JSON.stringify(choice) });
-
-  /** How Alden writes in a repo ("owner/repo"), or its default without one. */
-  tone = (repo?: string) => this.request<ToneState>(`/api/tone${repo ? `?repo=${encodeURIComponent(repo)}` : ""}`);
-
-  setTone = (tone: string, repo?: string) =>
-    this.request<ToneState>("/api/tone", { method: "PUT", body: JSON.stringify({ tone, ...(repo ? { repo } : {}) }) });
-
-  /**
-   * Asks the model a question about a PR ("owner/repo#12"); `onText` hears the answer as it comes. Resolves with the
-   * whole answer, what it cost and which model answered.
-   */
-  async ask(
-    input: { pr: string; question: string },
-    onText: (text: string) => void,
-    signal?: AbortSignal,
-  ): Promise<{ text: string; costUsd: number | null; model: string }> {
-    const res = await this.fetcher("/api/ask", {
-      method: "POST",
-      headers: { "X-Alden-Token": this.token, "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-      ...(signal ? { signal } : {}),
-    });
-    let text = "";
-    for await (const event of ndjson<AskEvent>(res)) {
-      if (event.type === "delta") {
-        text += event.text;
-        onText(text);
-      } else if (event.type === "done") return { text, costUsd: event.costUsd, model: event.model };
-      else if (event.type === "error") throw new ApiError(event.status ?? 500, event.message);
-    }
-    throw new ApiError(500, "The answer ended without saying how it went.");
   }
 
   /** Removes the GitHub sign-in Alden stored. The GitHub CLI's, or a token in the environment, stays. */
@@ -509,7 +452,7 @@ export class Api {
     this.request<ReviewDraft>("/api/drafts", { method: "POST", body: JSON.stringify(draft) });
 
   /** A plain string changes the text only. */
-  editDraft = (id: string, patch: string | DraftPatch) =>
+  editDraft = (id: string, patch: string | DraftPatch | DraftMove) =>
     this.request<ReviewDraft>(`/api/drafts/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(typeof patch === "string" ? { body: patch } : patch),
@@ -526,8 +469,43 @@ export class Api {
    * "Draft my review": one model call that drafts Alden's comments for the places in the PR's latest briefing with no
    * comment near them. They're Alden's drafts: kept, edited or dropped in the drawer, never sent untouched.
    */
-  draftReview = (pr: string) =>
-    this.request<DraftReviewResult>("/api/drafts/alden", { method: "POST", body: JSON.stringify({ pr }) });
+  draftReview = (pr: string, tone?: DraftTone) =>
+    this.request<DraftReviewResult>("/api/drafts/alden", {
+      method: "POST",
+      body: JSON.stringify({ pr, ...(tone ? { tone } : {}) }),
+    });
+
+  /** How Alden writes for a repo ("owner/name"): its own tone on this machine, or the default (`drafts.tone`). */
+  tone = (repo?: string) => this.request<ToneState>(`/api/tone${repo ? `?repo=${encodeURIComponent(repo)}` : ""}`);
+
+  /** Sets a repo's tone (null goes back to the default), or without a repo the default itself. */
+  setTone = (tone: DraftTone | null, repo?: string) =>
+    this.request<ToneState>("/api/tone", { method: "PUT", body: JSON.stringify({ ...(repo ? { repo } : {}), tone }) });
+
+  /**
+   * Ask about this PR: one model call within your caps, answered from its briefing, diff and your notes. `onText`
+   * hears the answer as it's written; resolves with what it cost, or throws an `ApiError` with the server's status
+   * (409: no model, no briefing for this head, text aimed at AI reviewers, over budget; 502: the provider failed).
+   * `signal` stops the call.
+   */
+  async ask(
+    input: { pr: string; question: string; model?: string },
+    onText: (text: string) => void,
+    signal?: AbortSignal,
+  ): Promise<{ costUsd: number | null; model: string }> {
+    const res = await this.fetcher("/api/ask", {
+      method: "POST",
+      headers: { "X-Alden-Token": this.token, "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      ...(signal ? { signal } : {}),
+    });
+    for await (const event of ndjson<AskEvent>(res)) {
+      if (event.type === "delta") onText(event.text);
+      else if (event.type === "done") return { costUsd: event.costUsd, model: event.model };
+      else throw new ApiError(event.status, event.message);
+    }
+    throw new ApiError(500, "The answer ended without saying how it went.");
+  }
 
   /** "Draft with Alden": one comment's (or reply's) text for the box you're writing in. Saves nothing; `signal` stops it. */
   suggestText = (input: SuggestTextRequest, signal?: AbortSignal) =>
@@ -599,7 +577,7 @@ export interface RankChange {
 }
 
 /** The pages the setup step links to: where to create an Anthropic key, Alden Cloud's waitlist, Ollama's download. */
-export type SetupPage = "keys" | "cloud" | "ollama";
+export type SetupPage = "keys" | "openaiKeys" | "cloud" | "ollama";
 
 /** The lines of a newline-delimited JSON response, parsed; a failed request throws its error. */
 async function* ndjson<T>(res: Response): AsyncGenerator<T> {

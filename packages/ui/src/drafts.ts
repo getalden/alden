@@ -51,6 +51,21 @@ export interface DraftPatch {
   assisted?: { edited: boolean };
 }
 
+/** Puts a draft on a (new) line or range: "Move to new lines", or a line you picked. Brings an outdated draft back. */
+export interface DraftMove {
+  path: string;
+  line: number;
+  side: "RIGHT" | "LEFT";
+  startLine?: number | undefined;
+  /** With a line you picked, what you changed in it while you were at it. */
+  body?: string;
+  suggestion?: string | null;
+}
+
+/** How Alden writes the comments it drafts in a repo: GET and PUT /api/tone. */
+export type Tone = "terse" | "concise" | "detailed" | "teaching";
+export const TONES: Tone[] = ["terse", "concise", "detailed", "teaching"];
+
 /**
  * Where a comment goes: a line (or lines) of a file, or without `line` the whole file. What the diff, the briefing and
  * the guided review hand to `onComment`. `lineText` is the text of the line(s), when known, to start a suggested
@@ -126,7 +141,10 @@ export function reviewBody(body: string, drafts: ReviewDraft[]): string {
  * The drafts that post when you send: yours and Claude Code's. A comment Alden drafted posts only once you keep or
  * edit it (it's yours then); untouched, it stays behind.
  */
-export const toSend = (drafts: ReviewDraft[]) => drafts.filter((d) => d.source !== "alden");
+export const toSend = (drafts: ReviewDraft[]) => drafts.filter((d) => d.source !== "alden" && d.state !== "outdated");
+
+/** Your drafts whose lines changed: left out when you send, kept to move or delete. */
+export const leftOut = (drafts: ReviewDraft[]) => drafts.filter((d) => d.source !== "alden" && d.state === "outdated");
 
 /** Alden's drafts you haven't kept or edited yet. */
 export const unkept = (drafts: ReviewDraft[]) => drafts.filter((d) => d.source === "alden");
@@ -165,6 +183,14 @@ export interface BriefingComments {
   keep?(ids?: string[]): Promise<void>;
   /** Drops every one of Alden's drafts on the PR you haven't kept. */
   dropAlden?(): Promise<void>;
+  /** Puts a draft on a (new) line or range: an outdated one becomes a draft again. Throws with the server's message. */
+  move?(id: string, to: DraftMove): Promise<void>;
+  /**
+   * How Alden writes for this PR's repo, where the API has it (GET /api/tone): undefined until read, or when it
+   * doesn't (the picker isn't shown). `setTone` saves it for the repo.
+   */
+  tone?: Tone | undefined;
+  setTone?(tone: Tone): Promise<void>;
   /** Sends every draft as one review. Throws with the server's message, keeping the drafts. */
   send(): Promise<SendReviewResult>;
   /** The conversation already on the PR, where the API can read it: what replies (`inReplyTo`) answer. */
@@ -172,7 +198,45 @@ export interface BriefingComments {
 }
 
 type DraftsApi = Pick<Api, "drafts" | "addDraft" | "editDraft" | "deleteDraft" | "sendReview"> &
-  Partial<Pick<Api, "keepDrafts" | "threads">>;
+  Partial<Pick<Api, "keepDrafts" | "threads" | "tone" | "setTone">>;
+
+/** The repo of "owner/repo#12". */
+export const repoOf = (pr: string) => pr.replace(/#\d+$/, "");
+
+/** How Alden writes in a PR's repo, from GET /api/tone; undefined until read, or where the route isn't there (404). */
+function useTone(api: DraftsApi | undefined, repo: string | undefined) {
+  const [tones, setTones] = useState<Record<string, Tone>>({});
+  useEffect(() => {
+    if (!api?.tone || !repo || tones[repo]) return;
+    let live = true;
+    api
+      .tone(repo)
+      .then((answer) => {
+        const tone = answer?.tone;
+        if (live && tone && (TONES as string[]).includes(tone)) setTones((all) => ({ ...all, [repo]: tone }));
+      })
+      // No tone route (an older Alden) or it failed: the picker stays hidden.
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [api, repo, tones]);
+  const set = useCallback(
+    async (tone: Tone) => {
+      if (!api?.setTone || !repo) return;
+      const was = tones[repo];
+      setTones((all) => ({ ...all, [repo]: tone }));
+      try {
+        await api.setTone(tone, repo);
+      } catch (e) {
+        if (was) setTones((all) => ({ ...all, [repo]: was }));
+        throw e;
+      }
+    },
+    [api, repo, tones],
+  );
+  return { tone: repo ? tones[repo] : undefined, set };
+}
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : "Something went wrong.");
 
@@ -186,6 +250,7 @@ export function useDrafts(api: DraftsApi | undefined, pr: string | undefined): B
   const current = useRef(pr);
   current.current = pr;
   const threads = useThreads(api?.threads ? (api as Pick<Api, "threads">) : undefined, pr);
+  const tone = useTone(api, pr ? repoOf(pr) : undefined);
 
   const reload = useCallback(async () => {
     if (!api || !pr) return;
@@ -271,6 +336,12 @@ export function useDrafts(api: DraftsApi | undefined, pr: string | undefined): B
       }
       setData((d) => ({ ...d, drafts: d.drafts.filter((x) => !ids.includes(x.id)) }));
     },
+    async move(id, to) {
+      const saved = await api.editDraft(id, to);
+      setData((d) => ({ ...d, drafts: d.drafts.map((x) => (x.id === id ? saved : x)) }));
+      void reload();
+    },
+    ...(tone.tone ? { tone: tone.tone, setTone: tone.set } : {}),
     async send() {
       const body = bodies[pr]?.trim();
       // Time to review: the pane's last seconds count before the send ends the review's session.

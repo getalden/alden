@@ -8,6 +8,9 @@ import {
   type LlmErrorKind,
   type LlmProvider,
   type StopReason,
+  type StreamTextRequest,
+  type StreamTextResult,
+  type TextStreamer,
 } from "./provider.js";
 
 /** Maps the SDK's typed errors to what a user can do about them. Most specific first. */
@@ -53,7 +56,7 @@ export type MessagesClient = { messages: Pick<Anthropic["messages"], "stream" | 
  * ANTHROPIC_AUTH_TOKEN, or an `ant auth login` profile); platforms use their own (AWS, GCP, Azure). Alden never uses
  * Claude.ai subscription logins.
  */
-export class AnthropicProvider implements LlmProvider {
+export class AnthropicProvider implements LlmProvider, TextStreamer {
   readonly model: string;
   private client: Promise<MessagesClient> | undefined;
 
@@ -131,6 +134,47 @@ export class AnthropicProvider implements LlmProvider {
     const result: GenerateResult<T> = {
       output: reason === "end" ? ((response.parsed_output as T | null) ?? null) : null,
       usage,
+      stopReason: reason,
+      model: response.model,
+    };
+    if (reason === "refusal") {
+      const details = response.stop_details;
+      result.refusal = { category: details?.category ?? null, explanation: details?.explanation ?? null };
+    }
+    return result;
+  }
+
+  /** Plain text as it's written, for a question about a PR. `signal` stops the request (the SDK aborts it). */
+  async streamText(request: StreamTextRequest, onText: (delta: string) => void): Promise<StreamTextResult> {
+    const messages = await this.messages();
+    let response: Awaited<ReturnType<ReturnType<typeof messages.stream>["finalMessage"]>>;
+    try {
+      const stream = messages.stream(
+        {
+          model: this.model,
+          max_tokens: request.maxOutputTokens,
+          system: request.system,
+          messages: [{ role: "user", content: request.user }],
+          ...(request.effort && supportsEffort(this.model) ? { output_config: { effort: request.effort } } : {}),
+        },
+        request.signal ? { signal: request.signal } : undefined,
+      );
+      stream.on("text", (delta) => onText(delta));
+      response = await stream.finalMessage();
+    } catch (error) {
+      throw toLlmError(error);
+    }
+    const reason = stopReason(response.stop_reason);
+    const blocks = response.content as { type: string; text?: string }[];
+    const text = blocks.flatMap((block) => (block.type === "text" && block.text ? [block.text] : [])).join("");
+    const result: StreamTextResult = {
+      text,
+      usage: {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
+        cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
+      },
       stopReason: reason,
       model: response.model,
     };

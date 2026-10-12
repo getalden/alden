@@ -47,7 +47,7 @@ describe("ModelSetupDialog", () => {
   it("offers a key, then a local model, then checks only, and ends with Alden Cloud", async () => {
     setup({ modelSetup: vi.fn(async () => state()) });
     const text = screen.getByRole("dialog").textContent ?? "";
-    const at = ["Paste an Anthropic API key", "Use a local model", "Checks only", "Alden Cloud (beta)"].map((t) =>
+    const at = ["Paste an API key", "Use a local model", "Checks only", "Alden Cloud (beta)"].map((t) =>
       text.indexOf(t),
     );
     expect(at.every((i) => i >= 0)).toBe(true);
@@ -58,12 +58,15 @@ describe("ModelSetupDialog", () => {
     expect(screen.getByRole("link", { name: "console.anthropic.com" }).getAttribute("href")).toBe(
       "https://console.anthropic.com/settings/keys",
     );
+    expect(screen.getByRole("link", { name: "platform.openai.com" }).getAttribute("href")).toBe(
+      "https://platform.openai.com/api-keys",
+    );
   });
 
   it("tests and stores a key, then says no restart is needed", async () => {
     const testModelKey = vi.fn(async () => ({ ok: true as const, key: { source: "alden" as const, where: "x" } }));
     const { onReady } = setup({ modelSetup: vi.fn(async () => state()), testModelKey });
-    fireEvent.change(screen.getByLabelText(/Anthropic API key/), { target: { value: KEY } });
+    fireEvent.change(screen.getByPlaceholderText("sk-ant-… or sk-…"), { target: { value: KEY } });
     fireEvent.click(screen.getByText("Check and store"));
     await waitFor(() => expect(screen.getByText(/Briefings now ask Claude/)).toBeTruthy());
     expect(testModelKey).toHaveBeenCalledWith(KEY, false);
@@ -79,7 +82,7 @@ describe("ModelSetupDialog", () => {
       .mockResolvedValueOnce({ ok: false, reason: "network", message: "Couldn't reach api.anthropic.com." })
       .mockResolvedValueOnce({ ok: true, key: { source: "env", where: "ANTHROPIC_API_KEY" } });
     setup({ modelSetup: vi.fn(async () => state()), testModelKey });
-    fireEvent.change(screen.getByLabelText(/Anthropic API key/), { target: { value: KEY } });
+    fireEvent.change(screen.getByPlaceholderText("sk-ant-… or sk-…"), { target: { value: KEY } });
     fireEvent.click(screen.getByText("Check and store"));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("didn't accept"));
     expect(screen.queryByText("Store without checking")).toBeNull();
@@ -88,6 +91,25 @@ describe("ModelSetupDialog", () => {
     fireEvent.click(screen.getByText("Store without checking"));
     await waitFor(() => expect(screen.getByText(/ANTHROPIC_API_KEY is set where Alden runs/)).toBeTruthy());
     expect(testModelKey).toHaveBeenLastCalledWith(KEY, true);
+  });
+
+  it("detects an OpenAI key as you paste it, and says OpenAI's models answer now", async () => {
+    const openai = `sk-proj-${"o".repeat(48)}`;
+    const testModelKey = vi.fn(async () => ({
+      ok: true as const,
+      provider: "openai" as const,
+      key: { source: "alden" as const, where: "x" },
+    }));
+    setup({ modelSetup: vi.fn(async () => state()), testModelKey });
+    expect(screen.getByRole("status", { name: "Anthropic or OpenAI" })).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("sk-ant-… or sk-…"), { target: { value: openai } });
+    expect(screen.getByRole("status", { name: "OpenAI key" })).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("sk-ant-… or sk-…"), { target: { value: KEY } });
+    expect(screen.getByRole("status", { name: "Anthropic key" })).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("sk-ant-… or sk-…"), { target: { value: openai } });
+    fireEvent.click(screen.getByText("Check and store"));
+    await waitFor(() => expect(screen.getByText(/Your OpenAI key works.*OpenAI's models/)).toBeTruthy());
+    expect(testModelKey).toHaveBeenCalledWith(openai, false);
   });
 
   it("says how to get Ollama when it isn't running, and looks again", async () => {

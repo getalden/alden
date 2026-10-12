@@ -2,22 +2,27 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import {
+  AskError,
+  type AskTurn,
   addActiveTime,
   addNote,
+  askAboutPr,
   backgroundModelAllowed,
   briefingForDrafting,
   cachedReviewQueue,
   checkFreshness,
   checkLinkTarget,
-  checkModelKey,
   checkProgress,
   checkThread,
   cloneAt,
+  costBucket,
   createGitHubClient,
   DiffCache,
   type DiffFile,
   DraftingError,
+  detectKeyKind,
   draftReview,
+  draftsAtHead,
   dropAldenDrafts,
   type Effort,
   editNote,
@@ -31,10 +36,12 @@ import {
   forget,
   forgetAll,
   JsonCache,
+  type KeyProvider,
   keepAldenDrafts,
   loadConfig,
   loadLearning,
   localDiffView,
+  MAX_ASK_HISTORY,
   MODEL_ALIASES,
   makeAldenDrafts,
   memoryItems,
@@ -46,6 +53,7 @@ import {
   type Placement,
   placeOrLink,
   prName,
+  providerSupportsEffort,
   publicDraft,
   pullRequestDiffView,
   queueEvent,
@@ -60,6 +68,7 @@ import {
   rememberForDrafting,
   resolveModel,
   resolveModelKey,
+  resolveOpenAIKey,
   resolveToken,
   restore,
   reviewEvent,
@@ -76,12 +85,13 @@ import {
   sentComments,
   setConfigValue,
   setLearning,
+  setRepoTone,
   setTelemetryConsent,
   suggestCommentText,
-  supportsEffort,
   telemetryBlocked,
   telemetryConsent,
   telemetrySurface,
+  toneFor,
   track,
   UsageLog,
   unaddressedPlaces,
@@ -256,6 +266,8 @@ export function createUiApi(options: {
     }
   };
   const drafts = new ReviewDrafts();
+  /** The last few questions and answers per PR, for follow-ups: in memory only, for as long as this process runs. */
+  const history = new Map<string, { headSha: string; turns: AskTurn[] }>();
   /** PRs' review threads as last read, by PR: each answer carries the head it's of. Dropped once a review is sent. */
   const threadsRead = new Map<string, { at: number; threads: ReviewThreads }>();
   /** Your login, for marking your comments in threads: asked once per sign-in. */
@@ -373,7 +385,9 @@ export function createUiApi(options: {
         }
       }
       const choice = await selectProvider(config);
-      const resolvedModel = resolveModel(config.model.name);
+      // OpenAI with the default (Claude) model name means OpenAI's default model.
+      const resolvedModel =
+        config.model.provider === "openai" && choice.ok ? choice.provider.model : resolveModel(config.model.name);
       const ledger = new SpendLedger();
       return {
         version: options.version,
@@ -388,10 +402,14 @@ export function createUiApi(options: {
         queueScope: queueScope(config),
         eyes: config.review.eyes,
         ...(options.desktop ? { cli: cliStatus() } : {}),
-        background: { enabled: config.background.enabled, model: await backgroundModelAllowed() },
+        background: {
+          enabled: config.background.enabled,
+          model: await backgroundModelAllowed(),
+          prepare: config.background.prepare,
+        },
         notifications: { sound: config.notifications.sound, followUps: config.notifications.followUps },
         learning: { fromReviews: config.learning.fromReviews },
-        drafts: { auto: config.drafts.auto },
+        drafts: { auto: config.drafts.auto, tone: config.drafts.tone },
         stats: { reviewTime: config.stats.reviewTime },
         repo: (await repoOf(options.cwd)) ?? null,
         user,
@@ -400,10 +418,10 @@ export function createUiApi(options: {
           name: config.model.name,
           id: resolvedModel,
           effort: config.model.effort ?? null,
-          supportsEffort: config.model.provider !== "openai-compatible" && supportsEffort(resolvedModel),
+          supportsEffort: providerSupportsEffort(config.model.provider, resolvedModel),
           available: choice.ok,
           ...(choice.ok ? {} : { reason: choice.reason }),
-          // Where the Anthropic key comes from; never the key.
+          // Where the Anthropic (or OpenAI) key comes from; never the key.
           key: choice.ok && choice.key ? { source: choice.key.source, where: choice.key.where } : null,
         },
         aliases: MODEL_ALIASES,
@@ -474,21 +492,22 @@ export function createUiApi(options: {
     },
     useGitHubCli: () => signIn.useGitHubCli(),
     signOut: () => signIn.signOut(),
-    async setModelKey(key) {
-      const store = modelKeyStore();
-      if (key === null) await store.delete();
+    async setModelKey(key, provider) {
+      let whose: KeyProvider = provider ?? "anthropic";
+      if (key === null) await modelKeyStore(whose).delete();
       else {
         const trimmed = key.trim();
-        const problem = checkModelKey(trimmed);
-        if (problem) throw new ApiError(400, problem);
+        const detected = detectKeyKind(trimmed);
+        if (!detected.ok) throw new ApiError(400, detected.message);
+        whose = detected.provider;
         try {
-          await store.set(trimmed);
+          await modelKeyStore(whose).set(trimmed);
         } catch (error) {
           throw new ApiError(500, `Couldn't store the key (${(error as Error).message.slice(0, 160)}).`);
         }
       }
-      const now = await resolveModelKey();
-      return { key: now ? { source: now.source, where: now.where } : null };
+      const now = whose === "openai" ? await resolveOpenAIKey() : await resolveModelKey();
+      return { provider: whose, key: now ? { source: now.source, where: now.where } : null };
     },
 
     modelSetup: createModelSetupApi({ cwd: options.cwd }),
@@ -779,10 +798,11 @@ export function createUiApi(options: {
     async drafts(pr) {
       const ref = await prOf(pr);
       // Brought to the PR's current head when GitHub can be reached; as they were otherwise (signed out, offline).
-      await followPr(ref).catch(() => undefined);
+      const head = await followPr(ref).catch(() => undefined);
       const list = drafts.list(ref.name);
       return {
-        drafts: list.map(publicDraft),
+        // An outdated draft says where its code went, for "Move to new lines".
+        drafts: head ? draftsAtHead(list, head.headSha, head.files) : list.map(publicDraft),
         // Alden's drafts you haven't kept won't be sent, so they don't count as a word on the place they're on.
         unaddressed: unaddressedPlaces(
           drafts.briefed(ref.name)?.places ?? [],
@@ -887,7 +907,7 @@ export function createUiApi(options: {
       return { kept: kept.map(publicDraft) };
     },
 
-    async draftReview({ pr }) {
+    async draftReview({ pr, tone }) {
       const ref = await prOf(pr);
       const config = await loadConfig(options.cwd);
       const choice = await selectProvider(config);
@@ -918,6 +938,7 @@ export function createUiApi(options: {
           config,
           ledger: new SpendLedger(),
           checkLink: (link) => checkLinkTarget(client, ref.repo, headSha, link),
+          tone: tone ?? toneFor(ref.repo, config).tone,
         });
         for (const d of result.made) void track("draft_changed", { action: "add", source: "alden", inline: inline(d) });
         if (result.asked) modelUsed(ref.name);
@@ -979,11 +1000,94 @@ export function createUiApi(options: {
           config,
           ledger: new SpendLedger(),
           ...(signal ? { signal } : {}),
+          tone: input.tone ?? toneFor(ref.repo, config).tone,
         });
         modelUsed(ref.name);
         return { text: result.text, costUsd: result.usd ?? null };
       } catch (error) {
         throw draftingProblem(error);
+      }
+    },
+
+    async tone(repo) {
+      const config = await loadConfig(options.cwd);
+      return toneFor(repo, config);
+    },
+
+    async setTone({ repo, tone }) {
+      if (repo === undefined) {
+        if (tone === null) throw new ApiError(400, "Give a tone: the default can't be removed.");
+        try {
+          await setConfigValue("drafts.tone", tone);
+        } catch (error) {
+          throw new ApiError(400, (error as Error).message);
+        }
+      } else {
+        setRepoTone(repo, tone, openStore());
+      }
+      void track("tone_set", { tone, scope: repo === undefined ? "default" : "repo" });
+      return toneFor(repo, await loadConfig(options.cwd));
+    },
+
+    async ask({ pr, question, model }, onText, signal) {
+      const ref = await prOf(pr);
+      const key = ref.name.toLowerCase();
+      const refused = (status: number, message: string): never => {
+        void track("question_asked", {
+          outcome: "refused",
+          cost: null,
+          follow_up: (history.get(key)?.turns.length ?? 0) > 0,
+        });
+        throw new ApiError(status, message);
+      };
+      const config = await loadConfig(options.cwd);
+      const choice = await selectProvider(config, model);
+      if (!choice.ok) return refused(409, choice.reason);
+      const briefing = await briefingForDrafting(ref.name);
+      if (!briefing) return refused(409, `Brief ${ref.name} first: Alden answers from the briefing.`);
+      const { headSha, files, client } = await followPr(ref);
+      if (briefing.target.kind !== "pr" || briefing.target.headSha !== headSha) {
+        return refused(409, `${ref.name} has new commits since its briefing: brief it again, then ask.`);
+      }
+      // Earlier questions on this PR, at this head, in this session: for follow-ups. Nothing is written to disk.
+      const earlier = history.get(key);
+      const turns = earlier?.headSha === headSha ? earlier.turns : [];
+      const detail = await fetchPullRequest(client, ref.repo, ref.number).catch(() => undefined);
+      try {
+        const result = await askAboutPr({
+          briefing,
+          files,
+          question,
+          description: detail?.body,
+          learning: await learningFor(ref.repo),
+          history: turns,
+          provider: choice.provider,
+          config,
+          ledger: new SpendLedger(),
+          onText,
+          ...(signal ? { signal } : {}),
+        });
+        history.set(key, {
+          headSha,
+          turns: [...turns, { question, answer: result.text }].slice(-MAX_ASK_HISTORY),
+        });
+        modelUsed(ref.name);
+        void track("question_asked", {
+          outcome: "answered",
+          cost: costBucket(result.usd),
+          follow_up: turns.length > 0,
+        });
+        return { costUsd: result.usd ?? null, model: result.model };
+      } catch (error) {
+        if (!(error instanceof AskError)) throw error;
+        const called = error.kind !== "injection" && error.kind !== "over_budget";
+        void track("question_asked", {
+          outcome: error.kind === "cancelled" ? "cancelled" : called ? "failed" : "refused",
+          cost: called && error.usd !== undefined ? costBucket(error.usd) : null,
+          follow_up: turns.length > 0,
+        });
+        const cost = error.usd !== undefined && error.usd > 0 ? ` That call cost $${error.usd.toFixed(4)}.` : "";
+        throw new ApiError(called ? (error.kind === "cancelled" ? 499 : 502) : 409, `${error.message}${cost}`);
       }
     },
 
@@ -995,7 +1099,8 @@ export function createUiApi(options: {
         const sent = await sendReview(
           createGitHubClient(resolved.token),
           openStore(),
-          { repo: ref.repo, number: ref.number, event, ...(body !== undefined ? { body } : {}) },
+          // The summary before Send counts outdated drafts as left out: they stay, to move or delete.
+          { repo: ref.repo, number: ref.number, event, ...(body !== undefined ? { body } : {}), leaveOutdated: true },
           new Date(),
           // What you saw in guided review and the Diff tab, so approving past a place you saw counts as a silent pass.
           {
@@ -1226,7 +1331,9 @@ export function createUiApi(options: {
       const resolved = await signedIn();
       const learning = await learningFor(ref.repo);
       try {
-        briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model, {
+        // The briefing's drafted comments are in the repo's tone (its own on this machine, or drafts.tone).
+        const withTone = model ? { ...model, tone: toneFor(ref.repo, config).tone } : undefined;
+        briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, withTone, {
           ...graph,
           ...(learning ? { learning } : {}),
           onDiff: (files) => {

@@ -20,3 +20,6 @@ site/dist/
 eval/partners/
 # What `pnpm e2e:seed` opened and `pnpm e2e:verify` found: PR numbers in your repos, never committed.
 eval/e2e/
+
+# Design handoffs exported from Claude Design, kept locally
+design/

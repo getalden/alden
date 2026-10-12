@@ -126,6 +126,8 @@ export {
   ReactionEventSchema,
 } from "./memory.js";
 export {
+  type KeyKind,
+  KeyKindSchema,
   type KeyTestResult,
   KeyTestResultSchema,
   type LocalModel,
@@ -134,8 +136,18 @@ export {
   LocalRecommendationSchema,
   type LocalSetupEvent,
   LocalSetupEventSchema,
+  type ModelChoice,
+  ModelChoiceSchema,
+  type ModelChoices,
+  ModelChoicesSchema,
+  type ModelGroup,
+  type ModelGroupProvider,
+  ModelGroupProviderSchema,
+  ModelGroupSchema,
   type ModelKeyInfo,
   ModelKeyInfoSchema,
+  type ModelPick,
+  ModelPickSchema,
   type ModelSetupState,
   ModelSetupStateSchema,
   type OllamaStatus,
@@ -245,6 +257,7 @@ export {
 } from "./stats.js";
 export {
   ACTIVE_MINUTES_BUCKETS,
+  COST_BUCKETS,
   TELEMETRY_SCHEMA_VERSION,
   type TelemetryCommon,
   TelemetryCommonSchema,
@@ -254,3 +267,14 @@ export {
   type TelemetryProperties,
   WALL_TIME_BUCKETS,
 } from "./telemetry.js";
+export {
+  type AskEvent,
+  AskEventSchema,
+  type AskRequest,
+  AskRequestSchema,
+  DRAFT_TONES,
+  type DraftTone,
+  DraftToneSchema,
+  type ToneState,
+  ToneStateSchema,
+} from "./writing.js";

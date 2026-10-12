@@ -212,6 +212,43 @@ describe("Alden's drafts through the UI's API", () => {
     ]);
   });
 
+  it("says where an outdated draft's code went, moves it there, and leaves outdated ones out of the review", async () => {
+    const api = createUiApi({ version: "test", cwd: home });
+    const store = new ReviewDrafts();
+    // Written against an older head, when line 2 read differently; and one on a line that's gone.
+    const old = (text: string, body: string) =>
+      store.add({
+        pr: "acme/shop#7",
+        headSha: "h0",
+        body,
+        source: "you",
+        place: { path: "src/pay.ts", line: 2, side: "RIGHT", anchor: { text, before: "const a = 1;" }, lines: [text] },
+      });
+    const moved = old("const fee = 3;", "Why a fee of 3?");
+    const gone = old("legacyCharge();", "Is this still called?");
+    const listed = (await api.drafts("acme/shop#7")).drafts;
+    expect(listed.find((d) => d.id === moved.id)).toMatchObject({
+      state: "outdated",
+      changedIn: "h1",
+      movedTo: { path: "src/pay.ts", line: 2, side: "RIGHT" },
+    });
+    expect(listed.find((d) => d.id === gone.id)).toMatchObject({ state: "outdated", changedIn: "h1" });
+    expect(listed.find((d) => d.id === gone.id)).not.toHaveProperty("movedTo");
+
+    // "Move to new lines" is the ordinary PATCH with that place.
+    expect(await api.editDraft(moved.id, { path: "src/pay.ts", line: 2, side: "RIGHT" })).toMatchObject({
+      state: "draft",
+      headSha: "h1",
+      body: "Why a fee of 3?",
+    });
+    await api.sendReview({ pr: "acme/shop#7", event: "COMMENT" });
+    expect(github.posted[0]?.comments).toEqual([
+      { path: "src/pay.ts", line: 2, side: "RIGHT", body: "Why a fee of 3?" },
+    ]);
+    // The outdated one stayed behind, to place or delete.
+    expect((await api.drafts("acme/shop#7")).drafts.map((d) => d.id)).toEqual([gone.id]);
+  });
+
   it("makes an edited one yours, and drops one with the ordinary delete", async () => {
     const api = createUiApi({ version: "test", cwd: home });
     const edited = await api.editDraft((await aldenDraft()).id, { body: "Please add a test for the fee." });

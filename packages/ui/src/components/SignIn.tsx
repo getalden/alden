@@ -17,16 +17,14 @@ export function signInFailure(session: Session): string | undefined {
 }
 
 /**
- * Signing in to GitHub without a terminal: the same device flow as `alden auth login --device`, with the code shown
- * here and GitHub's page opened for you. Or, when the GitHub CLI is signed in, switching to its sign-in.
+ * The device flow from the UI, for the sign-in card and the first run: start it (GitHub's page opens with the code on
+ * screen), hear when it's done, switch to the GitHub CLI's sign-in, or look again after a terminal sign-in.
  */
-export function SignInCard({ api, session, onSignedIn }: { api: Api; session: Session; onSignedIn: () => void }) {
+export function useDeviceSignIn(api: Api, onSignedIn: () => void) {
   const [flow, setFlow] = useState<SignInState>({ state: "idle" });
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
   const [checking, setChecking] = useState(false);
-  const rejected = session.user && "error" in session.user ? session.user.error : undefined;
-  const canUseGh = session.signIn?.gitHubCli === true && session.signIn.source !== "gh";
 
   // While a code is out, ask the server how it's going; it hears from GitHub.
   useEffect(() => {
@@ -70,7 +68,6 @@ export function SignInCard({ api, session, onSignedIn }: { api: Api; session: Se
       )
       .finally(() => setChecking(false));
   };
-  const keychain = session.signIn?.problem?.kind === "keychain" ? signInFailure(session) : undefined;
   const useGh = () => {
     setError(undefined);
     api.useGitHubCli().then(
@@ -78,6 +75,25 @@ export function SignInCard({ api, session, onSignedIn }: { api: Api; session: Se
       (e: Error) => setError(e.message),
     );
   };
+  const copy = () => {
+    if (flow.state !== "waiting") return;
+    navigator.clipboard?.writeText(flow.userCode).then(
+      () => setCopied(true),
+      () => {},
+    );
+  };
+  return { flow, error, copied, checking, start, check, useGh, copy };
+}
+
+/**
+ * Signing in to GitHub without a terminal: the same device flow as `alden auth login --device`, with the code shown
+ * here and GitHub's page opened for you. Or, when the GitHub CLI is signed in, switching to its sign-in.
+ */
+export function SignInCard({ api, session, onSignedIn }: { api: Api; session: Session; onSignedIn: () => void }) {
+  const { flow, error, copied, checking, start, check, useGh, copy } = useDeviceSignIn(api, onSignedIn);
+  const rejected = session.user && "error" in session.user ? session.user.error : undefined;
+  const canUseGh = session.signIn?.gitHubCli === true && session.signIn.source !== "gh";
+  const keychain = session.signIn?.problem?.kind === "keychain" ? signInFailure(session) : undefined;
 
   if (flow.state === "waiting") {
     return (
@@ -95,16 +111,7 @@ export function SignInCard({ api, session, onSignedIn }: { api: Api; session: Se
           </>
         }
         action={
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() =>
-              navigator.clipboard?.writeText(flow.userCode).then(
-                () => setCopied(true),
-                () => {},
-              )
-            }
-          >
+          <button type="button" className="btn primary" onClick={copy}>
             {copied ? "Copied" : "Copy code"}
           </button>
         }

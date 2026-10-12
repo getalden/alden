@@ -134,6 +134,44 @@
         "outdated"
       ],
       "description": "outdated: the PR moved on and the line couldn't be found again, so it can't be sent until it's placed"
+    },
+    "changedIn": {
+      "description": "on an outdated draft, as the local API lists it: the PR's head commit its lines no longer match at. Absent when GitHub couldn't be reached",
+      "type": "string"
+    },
+    "movedTo": {
+      "description": "on an outdated draft, as the local API lists it: where its code reads most like it now, to move it there (PATCH it with this place). Absent when nothing is close enough or two places are equally close: pick a line",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "description": "the line (a range's last line) at the PR's head"
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "RIGHT",
+            "LEFT"
+          ]
+        },
+        "startLine": {
+          "description": "a range's first line, less than `line`",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "path",
+        "line",
+        "side"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

@@ -1,8 +1,9 @@
-import type { BriefingTarget, CheckResult } from "@alden/schema";
+import type { BriefingTarget, CheckResult, DraftTone } from "@alden/schema";
 import { z } from "zod";
 import type { DiffFile } from "../../diff/parse.js";
 import { fileKind, isLockfile } from "../../queue/files.js";
 import { redactSecrets } from "../secrets.js";
+import { toneInstruction } from "../tone.js";
 
 /** What the model is asked to return. Alden validates locations before trusting any of it. */
 export const LlmOutputSchema = z.object({
@@ -39,7 +40,7 @@ export const LlmOutputSchema = z.object({
 const LlmDraftSchema = z.object({
   body: z
     .string()
-    .describe("The review comment, to the author, in one to three plain sentences: what's wrong and what to do."),
+    .describe("The review comment, to the author: what's wrong and what to do, as long as the instructions ask for."),
   suggestion: z
     .string()
     .optional()
@@ -88,15 +89,28 @@ Alden replaces likely secrets with placeholders such as [redacted GitHub token, 
 Judge whether the change does what its title and description say: "yes", "partly", "no", or "unclear" when there is no meaningful description. Write plainly, with no preamble and no praise.`;
 
 /**
+ * The drafting section in a tone (see `toneInstruction`). Concise is the wording Alden always sent, unchanged, so a
+ * concise review keeps its prompt cache; the other tones ask for their own length and add their instruction.
+ */
+export function draftsPrompt(tone: DraftTone): string {
+  const shape =
+    tone === "concise"
+      ? " in one to three plain sentences saying what is wrong and what to do"
+      : " in the tone the last paragraph asks for";
+  const base = `The reviewer also wants comments drafted for them. For each medium or high severity finding whose first anchor is an added line (marked +), add a draft: the review comment a careful reviewer would leave on that line, written to the change's author${shape}. No preamble, no praise, no hedging, no sign-off, and never mention being an AI. Add a suggestion only when the fix is a small, certain replacement of that one line: its full new text, with its indentation, a few lines at most, and nothing else; never put a redaction placeholder in it. Leave the draft out for low severity findings, findings without a line, and findings on unchanged lines. The reviewer keeps, edits or drops each draft before anything is sent.`;
+  return tone === "concise" ? base : `${base}\n\n${toneInstruction(tone)}`;
+}
+
+/**
  * Appended to `SYSTEM_PROMPT` when `drafts.auto` is on, so a review without drafts sends the same system prompt as
  * before (and keeps its cache). Drafts are asked for only where Alden can use them, which keeps the extra output small:
  * medium and high findings on an added line, the only places Alden drafts a comment.
  */
-export const DRAFTS_PROMPT = `The reviewer also wants comments drafted for them. For each medium or high severity finding whose first anchor is an added line (marked +), add a draft: the review comment a careful reviewer would leave on that line, written to the change's author in one to three plain sentences saying what is wrong and what to do. No preamble, no praise, no hedging, no sign-off, and never mention being an AI. Add a suggestion only when the fix is a small, certain replacement of that one line: its full new text, with its indentation, a few lines at most, and nothing else; never put a redaction placeholder in it. Leave the draft out for low severity findings, findings without a line, and findings on unchanged lines. The reviewer keeps, edits or drops each draft before anything is sent.`;
+export const DRAFTS_PROMPT = draftsPrompt("concise");
 
-/** The system prompt for a review, with the drafting section when Alden asks for drafts. */
-export const systemPrompt = (drafts: boolean): string =>
-  drafts ? `${SYSTEM_PROMPT}\n\n${DRAFTS_PROMPT}` : SYSTEM_PROMPT;
+/** The system prompt for a review, with the drafting section (in the tone asked for) when Alden asks for drafts. */
+export const systemPrompt = (drafts: boolean, tone: DraftTone = "concise"): string =>
+  drafts ? `${SYSTEM_PROMPT}\n\n${draftsPrompt(tone)}` : SYSTEM_PROMPT;
 
 /** Rough token cost of text: about 3 characters per token for code. Real counts come from the provider. */
 const tokens = (text: string) => Math.ceil(text.length / 3);
@@ -174,6 +188,8 @@ export interface PromptInput {
   reviewerNotes?: (string | PromptNote)[];
   /** Ask for a drafted comment on qualifying findings (`drafts.auto`): adds `DRAFTS_PROMPT` to the system prompt. */
   drafts?: boolean;
+  /** The tone of those drafts (see `draftsPrompt`): concise unless said. */
+  tone?: DraftTone;
 }
 
 const MAX_NOTES = 12;
@@ -216,7 +232,7 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
     .map((file, index) => ({ file, index, rank: priority(file, flagged) }))
     .sort((a, b) => a.rank - b.rank || a.index - b.index);
 
-  const system = systemPrompt(input.drafts === true);
+  const system = systemPrompt(input.drafts === true, input.tone);
   let used = tokens(system) + tokens(preamble) + 200; // 200 for the omitted-files note
   const included: DiffFile[] = [];
   // Lockfiles are skipped on purpose (the dependency check reads them), so they aren't "omitted for budget".

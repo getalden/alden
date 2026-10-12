@@ -168,3 +168,49 @@ describe("platforms", () => {
     15_000,
   );
 });
+
+describe("OpenAICompatibleProvider.streamText", () => {
+  const sse = (events: unknown[]) =>
+    `${events.map((e) => `data: ${typeof e === "string" ? e : JSON.stringify(e)}`).join("\n\n")}\n\n`;
+
+  it("streams the text from server-sent events, with usage when the server sends it", async () => {
+    const body = sse([
+      { model: "qwen3-coder:30b", choices: [{ delta: { content: "It rounds " } }] },
+      { choices: [{ delta: { content: "down." }, finish_reason: "stop" }] },
+      { choices: [], usage: { prompt_tokens: 50, completion_tokens: 4 } },
+      "[DONE]",
+    ]);
+    const { doFetch, calls } = server(200, body);
+    const heard: string[] = [];
+    const result = await new OpenAICompatibleProvider("qwen3-coder:30b", undefined, undefined, doFetch).streamText(
+      { system: "sys", user: "q", maxOutputTokens: 300 },
+      (delta) => heard.push(delta),
+    );
+    expect(heard).toEqual(["It rounds ", "down."]);
+    expect(result).toEqual({
+      text: "It rounds down.",
+      usage: { inputTokens: 50, outputTokens: 4, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      stopReason: "end",
+      model: "qwen3-coder:30b",
+    });
+    const sent = JSON.parse(String(calls[0]?.init.body));
+    expect(sent).toMatchObject({ stream: true, stream_options: { include_usage: true }, max_tokens: 300 });
+    expect(sent.response_format).toBeUndefined();
+  });
+
+  it("says when the answer was cut off or refused, and fails on an error status", async () => {
+    const cut = server(200, sse([{ choices: [{ delta: { content: "Half" }, finish_reason: "length" }] }]));
+    expect(
+      (await new OpenAICompatibleProvider("m", undefined, undefined, cut.doFetch).streamText(request, () => {}))
+        .stopReason,
+    ).toBe("max_tokens");
+    const refused = server(200, sse([{ choices: [{ delta: { refusal: "No." }, finish_reason: "stop" }] }]));
+    expect(
+      await new OpenAICompatibleProvider("m", undefined, undefined, refused.doFetch).streamText(request, () => {}),
+    ).toMatchObject({ stopReason: "refusal", refusal: { explanation: "No." } });
+    const failing = server(503, "busy");
+    await expect(
+      new OpenAICompatibleProvider("m", undefined, undefined, failing.doFetch).streamText(request, () => {}),
+    ).rejects.toMatchObject({ kind: "overloaded" });
+  });
+});

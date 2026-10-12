@@ -14,9 +14,15 @@ own.
 
 In [the web UI](web-ui.md) and the desktop app, your comments collect in the **Comments** drawer beside the briefing
 (the toolbar's **Comments · 3**, or `s`). **Comment** on a place to look, or `c` on it, opens the drawer's editor on that
-place, saying where it goes ("Comment on py/orders/pricing.py, line 4"). The drawer lists your drafts by where they'll
-post, **On lines** or **In the review body**, and ends with the review body, the verdict and **Send review**. In a
-terminal:
+place, saying where it goes ("Comment on py/orders/pricing.py, line 4"). The drawer has two tabs, **Drafts** and
+**Conversation** (the PR's threads, see [Replying in a thread](#replying-in-a-thread)), each with its count. Drafts lists
+your drafts by where they'll post, **On lines** or **In the review body**, each card starting with who wrote it (**you**,
+**Alden** or **Claude Code**), then where it goes ("pricing.py:4"; hover it for the whole path), and its state on the
+right: **draft**, **suggested** (one of Alden's, until you keep it), **kept** or **outdated**. At the bottom are the
+verdict (**Comment**, **Approve** or **Request changes**) and **Review and send · 3**, which opens the summary before
+anything posts: "Nothing posts until you send." Drag the drawer's left edge to make it wider or narrower (320 to 760
+pixels; Alden remembers the width on this machine), or double-click the edge to put it back. `s` folds it to a narrow
+rail down the window's edge, "Comments 3"; click the rail or press `s` to open it again. In a terminal:
 
 ```sh
 alden comment acme/shop#7 src/pay.ts:12 "Is fee in cents here?"
@@ -122,8 +128,10 @@ a draft like any comment: kept on your machine, and posted only with Send.
   resolves only threads you started, and @ana started the one on src/pay.ts:40: reply instead, and leave resolving it
   to them." Resolve it on GitHub if you really mean to.
 
-In the UI, the Comments drawer's **Conversation** lists the PR's threads, yours (threads you started or replied in)
-first and open ones before resolved ones, which are folded away. Each shows its comments, a **Reply** box and, on a
+In the UI, the Comments drawer's **Conversation** tab lists the PR's threads, yours (threads you started or replied in)
+first and open ones before resolved ones, which are folded away and dimmed. Each card says where the thread is and
+whether it's yours ("pay.ts:40 · yours"), its state on the right (**replied 2h ago** when someone answered in a thread
+of yours, **open**, **outdated** or **resolved**), each comment with who wrote it in bold, a **Reply** box and, on a
 thread you started, **Resolve when sent**. Opened from the queue's [Your turn](queue.md#your-turn), the Conversation
 opens on the thread the news is in. The Diff tab shows each thread under its line (folded once resolved), with **Reply**, which opens
 that thread's box in the drawer. An outdated thread (its code has changed since) has no line in today's diff, so it's
@@ -193,8 +201,23 @@ time it lists them or sends them:
   differs, even by a space, from the code it was written against.
 - Not found (the line changed, left the diff, or can't be told apart from others like it, such as a lone `}`), the
   comment is marked **outdated**. It keeps the line and commit it was written for, so you can see what it was about,
-  and it can't be sent until you place it on a line again (in the UI) or delete it and write it again. A suggestion
+  and it isn't sent until you place it on a line again (in the UI) or delete it and write it again. A suggestion
 placed again is against the code at its new place: check the replacement still fits.
+
+### Move to new lines
+
+In the UI an outdated comment is dimmed, and says "These lines changed in 3f2a91c" (the PR's head it no longer matches)
+with **Move to new lines** when Alden can tell where its code went. That's a looser match than the one that moves
+comments on its own: the line in the same file (or the file it was renamed to), on the same side, that reads most like
+the line you commented on (most of its characters in common, ignoring spacing), with its neighbours as they were
+counting for it and, on a tie, the one nearest where it was. A range keeps its length. **Move to new lines** puts the
+comment there and makes it a draft again; read it once more, since the code changed under it. When nothing reads
+enough like it (the code was rewritten, or the file left the PR), or two places are equally close, it says **Pick a
+line** instead, which opens the file and line for you to choose; the comment moves there, keeping its text.
+
+The local API lists an outdated comment with `changedIn` (that head) and, when there is one, `movedTo`: the place
+(`path`, `line`, `side` and a range's `startLine`) to `PATCH /api/drafts/:id` with. `changedIn` is the head Alden
+found the lines changed at, not the exact commit that changed them.
 
 Alden only compares lines it can see in the diff. It doesn't follow a line that moved out of the diff and back, or one
 whose text changed, even trivially: those are outdated, on purpose. A comment Alden guessed the place of would post
@@ -213,8 +236,13 @@ Alden**, and the briefing marks each finding it drafted for **Draft ready**. The
   perhaps the same comment you sent last time.
 - **A suggested change** comes with one only when the fix is a small, certain replacement of that line. Alden checks it
   the way it checks yours: it must change the line, apply to it, and be a few lines at most.
-- **Keep**, **Edit** or **Drop** each in the drawer, or **Keep all** / **Drop all** at its top. Keeping or editing one
-  makes it yours (it's then sent like anything you wrote); dropping deletes it.
+- **Keep**, **Edit** or **Drop** each in the drawer, or **Keep all** / **Drop all** at its top. Until you keep it, its
+  card has a dashed border and says **suggested**; kept or edited, it's yours (sent like anything you wrote) and looks
+  like yours, still starting with **Alden** and saying **kept**. Dropping deletes it; the drawer shows it dimmed where
+  it was until you open another PR.
+- **Alden writes**, at the top of the drawer's Drafts, is the style Alden drafts in for this repo: **Terse** (one line,
+  no reasoning), **Concise** (the default), **Detailed** (why, impact and a fix) or **Teaching** (for newer teammates).
+  It's a choice for this repo, used the next time Alden drafts.
 - **Untouched, it's never sent.** Send posts your comments and the ones you kept; the drawer says "2 drafts by Alden not
   kept won't be sent", and they're cleared once the review is sent. A draft never approves anything: the verdict is
   always yours.
@@ -249,6 +277,16 @@ migration, a changed signature's callers) don't draft, nor does a finding withou
 anyway, ask. Both need a model set up (without one, the drawer offers **Set up a model**), make one model call within
 your [budget caps](models.md#budgets) and say what it cost, and never run on a PR with text aimed at AI reviewers
 (they say why, in the briefing's words).
+
+### The tone Alden writes in
+
+Every draft (the briefing's, Draft my review's, Draft with Alden's) is written in a tone you pick: **Terse** (one line,
+no reasoning), **Concise** (the default: what's wrong and what to do, in one to three sentences), **Detailed** (why,
+the impact and a fix) or **Teaching** (for newer teammates: the principle behind it, and the usual way). It's a style,
+not an imitation of you. The default is `drafts.tone`; a repo can have its own on this machine (Tune in the UI), and
+Draft my review and Draft with Alden can take one for a single call (`alden comment <pr> --draft --tone terse`). Every
+tone keeps the same rules: never an approval, never sent untouched. See
+[The tone of drafts](models.md#the-tone-of-drafts).
 
 ### Draft my review
 
@@ -311,7 +349,8 @@ on several lines goes as `start_line` and `start_side` to `line` and `side`.
 
 Alden won't send, and says why, when:
 
-- a comment is outdated (it names which),
+- a comment is outdated (it names which). In the UI it's left out instead: the summary counts it as "Outdated, left
+  out", and it stays in the drawer to move or delete after the rest is sent,
 - the PR got new commits since you last looked, which moved comments: look them over and send again,
 - a comment's line isn't in the diff, or its range no longer fits in one hunk (it names which),
 - the code a suggestion replaces isn't the code it was written against,

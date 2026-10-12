@@ -46,7 +46,9 @@ are served by Alden itself, under the SIL Open Font License.
 
 ## Signing in
 
-If Alden isn't signed in to GitHub, or GitHub no longer accepts its sign-in, the queue says so and offers:
+With no GitHub sign-in at all, the page opens on the first run: sign in, choose how Alden thinks, then your queue, one
+screen each (see [First run](desktop.md#first-run); **Skip setup** leaves it, Settings → **Run setup again** brings it
+back). If GitHub no longer accepts Alden's sign-in, or you skipped the first run, the queue says so and offers:
 
 - **Sign in with GitHub**: a one-time code, with GitHub's page opened for you. Alden picks up your approval by itself.
 - **Use my GitHub CLI sign-in**, when the GitHub CLI (`gh`) is signed in.
@@ -176,8 +178,9 @@ With no model set up, the model line says "no model" and Tune offers **Set up a 
 model list). It has the same three choices as
 `alden setup`, in the same order:
 
-1. **Paste an Anthropic API key.** Alden checks it with one tiny request, which costs a fraction of a cent, then keeps
-   it in your keychain. The page never gets it back.
+1. **Paste an API key**, Anthropic's or OpenAI's: Alden detects which as you paste (sk-ant-… is Anthropic's, any other
+   sk-… OpenAI's). It checks the key with one tiny request to its provider, which costs a fraction of a cent, then
+   keeps it in your keychain and makes that provider the model. The page never gets it back.
 2. **Use a local model** through Ollama. Alden recommends one for your machine's memory and downloads it, with
    progress, if Ollama doesn't have it. Local models flag less than Claude.
 3. **Checks only.**
@@ -284,24 +287,38 @@ it. See [Comments and sending a review](comments.md) for the same from the termi
 
 ### The Comments drawer
 
-**Comments 3** (or `s`) in the PR's header opens and closes the drawer. It says where your comments go: "Kept on
-this machine until you send them to acme/shop#412 on GitHub, as one review." It lists them by where they'll post:
+**Comments 3** (or `s`) in the PR's header opens and closes the drawer. Its header has two tabs, **Drafts** and
+**Conversation**, each with its count.
 
-- **On lines**: each with its file and line or range, its text and any suggested change, with **Edit** and
-  **Delete**.
-- **In the review body**: your general notes, which follow what you write in the body. A linked note says "links to
-  py/orders/tasks.py, line 5"; hovering it names the commit its link shows, the PR's head when you wrote it.
+**Drafts** starts with **Alden writes**: the style Alden drafts in for this repo, **Terse**, **Concise** (the default),
+**Detailed** or **Teaching**, saved for the repo (shown when your Alden has it). Then your drafts, as cards, by where
+they'll post:
 
+- **On lines**: each card's first line, in small type, says who wrote it (**you**, **Alden** or **Claude Code**), where
+  it goes ("pricing.py:4", or "pricing.py:4–9" for a range; hover for the whole path) and, on the right, its state:
+  **draft**, **suggested**, **kept** or **outdated**. Then its text (the first four lines, with **Show all**) and any
+  suggested change, with **Edit** and **Delete**.
+- **In the review body**: the review body, then your general notes, which follow it. A linked note says
+  "links to tasks.py:5"; hovering it names the file, line and the commit its link shows, the PR's head when you wrote it.
 - **Replies in threads**: where each reply goes, "Reply in thread on src/pay.ts:40, and resolve it".
 
-Below them are **Add a general note**, **Comment on a line…**, the review body, and the PR's **Conversation**: its
-review threads, yours first and open ones first, each with **Reply** and, on a thread you started, **Resolve when
-sent** (someone else's says "ana's to resolve"). A reply or a resolve
-is a draft like any other, sent with your review (see [Replying in a thread](comments.md#replying-in-a-thread)). At the bottom, always in view, are
-the verdict (**Comment**, **Approve** or **Request changes**) and **Send review · 3 comments**.
+Then **Add a general note**, **Comment on a line…** and **Draft my review**. With nothing drafted yet, it says where
+your comments will go: "Kept on this machine until you send them to acme/shop#412 on GitHub, as one review."
+
+**Conversation** has the PR's review threads, yours first and open ones first, each a card saying where it is and
+whether it's yours, its state (**replied 2h ago**, **open**, **outdated** or **resolved**), each comment with who wrote
+it in bold, and **Reply** and, on a thread you started, **Resolve when sent** (someone else's says "ana's to
+resolve"). A reply or a resolve is a draft like any other, sent with your review (see
+[Replying in a thread](comments.md#replying-in-a-thread)).
+
+At the bottom, always in view, are the verdict (**Comment**, **Approve** or **Request changes**), **Review and send · 3**
+and "Nothing posts until you send."
 
 The drawer stays open or closed as you left it in this window, and starts open when the window is wide enough for it
-beside the queue. ×, `s` or `Esc` puts it away.
+beside the queue. **S ›**, `s` or `Esc` folds it to a narrow rail on the window's edge saying "Comments 3"; click the
+rail or press `s` to open it again. Drag its left edge to resize it, from 320 to 760 pixels (Alden remembers the width
+on this machine; arrow keys work on the edge too), and double-click the edge to put it back to 380. In a narrow window
+it's a full-width sheet instead, with no rail.
 
 ### Write a comment
 
@@ -332,12 +349,13 @@ In the Diff tab, a linked note shows at its line, or on its file, when the diff 
 
 ### Claude's drafts, and outdated drafts
 
-Drafts that Claude Code added (through [the plugin or `alden mcp`](claude-code.md)) are marked **from Claude**, so you
+Drafts that Claude Code added (through [the plugin or `alden mcp`](claude-code.md)) start with **Claude Code**, so you
 read them before they go out under your name. Claude can draft comments, but never send them.
 
-Drafts Alden made from its model's findings are marked **Drafted by Alden**, with **Keep**, **Edit** and **Drop**, and
-**Keep all** / **Drop all** at the top of the drawer. Until you keep or edit one, it isn't sent: the drawer says how
-many won't be, and **Send review** counts only what will post. The briefing marks a finding with one **Draft ready**.
+Drafts Alden made from its model's findings start with **Alden** and say **suggested**, with a dashed border and
+**Keep**, **Edit** and **Drop**, and **Keep all** / **Drop all** at the top of the drawer. Until you keep or edit one,
+it isn't sent: the drawer says how many won't be, and **Review and send** counts only what will post. Kept, it looks
+like yours and says **kept**; dropped, it stays dimmed where it was until you open another PR. The briefing marks a finding with one **Draft ready**.
 See [Alden's drafts](comments.md#aldens-drafts).
 
 ### Drafting with Alden
@@ -352,23 +370,36 @@ Each comment and reply box has **Draft with Alden**: it fills an empty box with 
 (**Undo** empties it), or, when you've written something, shows Alden's version of it with **Use it** and **Keep
 mine**. **Cancel** stops it while it's drafting. It saves nothing: you save, and the comment is yours.
 
+Both write in the repo's tone (**Terse**, **Concise**, **Detailed** or **Teaching**: a style you pick for Alden's
+drafts, not an imitation of you), set per repo on this machine or for every repo (`drafts.tone`); either can take a
+different tone for one draft. See [The tone Alden writes in](comments.md#the-tone-alden-writes-in).
+
+**Ask about this PR** takes a question in your words and streams the model's answer, from the PR's briefing (of its
+latest push), the diff around the places that matter and your notes, with what the call cost when it's done. The last
+five questions on a PR go along for follow-ups while Alden runs; nothing is stored. See
+[Ask about this PR](models.md#ask-about-this-pr).
+
 On a PR with text aimed at AI reviewers, neither drafts: **Draft my review** says why, and the boxes say "Alden won't
 draft here". See [Drafting with Alden on demand](comments.md#drafting-with-alden-on-demand).
 
-A draft written before the PR's latest commits is marked **Outdated** when its lines changed. **Rewrite** puts it in a
-new comment on the current code (check the line), or delete it. The review won't send until you've done one or the
-other.
+A draft written before the PR's latest commits is dimmed and says **outdated** when its lines changed, with "These lines
+changed in 3f2a91c" and **Move to new lines** when Alden can tell where its code went (it then moves there and is a
+draft again), or **Pick a line** when it can't, which opens the file and line to choose. Or delete it. An outdated
+draft is left out when you send. See [Move to new lines](comments.md#move-to-new-lines).
 
 ### Send the review
 
-Pick the verdict: **Comment**, **Approve**, or **Request changes** (which needs a body). Then **Send review**. Nothing
-posts yet: a summary shows exactly what will, the PR, the verdict, the body (yours, then your general notes) and each
-comment with its file, line and suggestion. Before **Approve**, it also lists the places Alden flagged that you didn't
-comment on.
+Pick the verdict: **Comment**, **Approve**, or **Request changes** (which needs a body). Then **Review and send**.
+Nothing posts yet: "Send this review to GitHub?" counts what will, the verdict, the comments on lines and what's in the
+body, the drafts Alden wrote that you kept ("1, posted as you"), replies and resolves, and what stays behind (outdated
+drafts, Alden's drafts you didn't keep). **See exactly what posts** opens the text itself: the body (yours, then your
+general notes) and each comment with its file, line and suggestion. Only on **Approve** does it raise the places Alden
+flagged that you didn't comment on, each with **Look first**, which closes the summary and takes you to that place.
 
-Only the button in the summary sends it; **Back** returns to your drafts. Afterwards the drawer says "Sent to GitHub",
-with a link to the review, and, when Alden learned something from it, one line under that: "Alden learned: you care
-about callers flags (2 of 3)". If GitHub refuses, it shows why and keeps your drafts.
+Only **Send review** in the summary (or `⌘↵` there) sends it; **Back** or `Esc` returns to your drafts. Afterwards
+"✓ Sent to GitHub · See the review ↗" shows at the bottom of the window for a few seconds and, when Alden learned
+something from it, the drawer says so in one line: "Alden learned: you care about callers flags (2 of 3)". If GitHub
+refuses, the summary shows why and keeps your drafts.
 
 ## My changes
 
@@ -399,8 +430,11 @@ Settings change your user config, like `alden config set`; a repo's `.alden.toml
 - **Spend caps**: per briefing and per day. When a briefing would pass its cap, Alden doesn't ask the model and shows
   the checks.
 - **Briefings**: how many places "Needs your eyes" shows, 1 to 10 (3 by default).
-- **Anthropic API key**: stored in the keychain, like `alden auth model`. The field is write-only: the page only learns
-  where the key comes from.
+- **API keys**: where the Anthropic and the OpenAI key each come from, and a field that takes either kind (Alden
+  detects which), stored in the keychain like `alden auth model`. Write-only: the page only learns where each key comes
+  from. **Remove** drops a stored key.
+- **Setup**: **Run setup again** shows the first run's steps (sign in, a model, your queue). See
+  [First run](desktop.md#first-run).
 - **Your feedback**: how often you found Alden's places useful, and **Export redacted feedback**.
 - **Learning**: **Learn from my reviews** (on by default). Off, Alden stops noting which places you saw and learns only
   from Useful and Not useful. See [Places you saw](memory.md#places-you-saw).
@@ -455,7 +489,7 @@ Keys never fire while you're typing in a text box.
 | `f` | In the Diff tab: open or close the file you're in |
 | `g` | Walk through the places (guided review), or resume it at the step you left |
 | `n` `p` | Next and previous step in guided review |
-| `s` | Open or close the Comments drawer |
+| `s` | Open the Comments drawer, or fold it to its rail |
 | `c` | Comment on the place you're on (a place in "Needs your eyes", an evidence line); elsewhere, open "Comment on a line…" |
 | `⌘↵` / `Ctrl+↵` | Save the comment you're writing |
 | `Esc` | Cancel the comment you're writing, or leave the send summary; leave guided review; close the Comments drawer; stop a running briefing; in a narrow window, back to the queue |

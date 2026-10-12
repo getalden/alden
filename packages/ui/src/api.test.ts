@@ -132,35 +132,29 @@ describe("Api.recordSeen", () => {
 });
 
 describe("Api.ask", () => {
-  it("hears the answer as it streams, and resolves with all of it, the cost and the model", async () => {
+  it("hears the answer as it's written and resolves with the cost, however the stream is split", async () => {
     const lines = [
-      JSON.stringify({ type: "delta", text: "The retry " }),
-      JSON.stringify({ type: "delta", text: "has no ceiling." }),
-      JSON.stringify({ type: "done", costUsd: 0.0042, model: "claude-sonnet-5" }),
+      JSON.stringify({ type: "delta", text: "It rounds " }),
+      JSON.stringify({ type: "delta", text: "down." }),
+      JSON.stringify({ type: "done", costUsd: 0.004, model: "claude-sonnet-5" }),
     ].join("\n");
     const heard: string[] = [];
-    const api = new Api("t", streaming([lines.slice(0, 17), `${lines.slice(17)}\n`]));
-    await expect(api.ask({ pr: "a/b#1", question: "Why?" }, (text) => heard.push(text))).resolves.toEqual({
-      text: "The retry has no ceiling.",
-      costUsd: 0.0042,
+    const api = new Api("t", streaming([lines.slice(0, 7), lines.slice(7, 50), `${lines.slice(50)}\n`]));
+    await expect(api.ask({ pr: "a/b#1", question: "q" }, (t) => heard.push(t))).resolves.toEqual({
+      costUsd: 0.004,
       model: "claude-sonnet-5",
     });
-    expect(heard).toEqual(["The retry ", "The retry has no ceiling."]);
+    expect(heard).toEqual(["It rounds ", "down."]);
   });
 
-  it("throws the model's error with its status, and the server's when the request fails", async () => {
-    const failed = new Api(
+  it("throws the error line with its status", async () => {
+    const api = new Api(
       "t",
-      streaming([`${JSON.stringify({ type: "error", message: "Over the cap", status: 402 })}\n`]),
+      streaming([`${JSON.stringify({ type: "error", message: "Brief it first.", status: 409 })}\n`]),
     );
-    await expect(failed.ask({ pr: "a/b#1", question: "Why?" }, () => {})).rejects.toMatchObject({
-      status: 402,
-      message: "Over the cap",
+    await expect(api.ask({ pr: "a/b#1", question: "q" }, () => {})).rejects.toMatchObject({
+      status: 409,
+      message: "Brief it first.",
     });
-    const missing = new Api(
-      "t",
-      async () => new Response(JSON.stringify({ error: "No such endpoint" }), { status: 404 }),
-    );
-    await expect(missing.ask({ pr: "a/b#1", question: "Why?" }, () => {})).rejects.toMatchObject({ status: 404 });
   });
 });

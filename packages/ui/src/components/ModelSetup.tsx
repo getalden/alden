@@ -1,15 +1,67 @@
-import type { KeyTestResult, ModelSetupState } from "@alden/schema";
+import type { KeyKind, KeyTestResult, ModelSetupState } from "@alden/schema";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { Api, SetupPage } from "../api";
+import "./first-run.css";
 
-const PAGES: Record<SetupPage, string> = {
+export const PAGES: Record<SetupPage, string> = {
   keys: "https://console.anthropic.com/settings/keys",
+  openaiKeys: "https://platform.openai.com/api-keys",
   cloud: "https://getalden.dev/cloud",
   ollama: "https://ollama.com/download",
 };
 
 /** What was set up, for the last screen. */
-type Done = { kind: "key"; envFirst: string | null } | { kind: "local"; model: string };
+type Done = { kind: "key"; provider: KeyKind; envFirst: string | null } | { kind: "local"; model: string };
+
+/**
+ * Whose key it looks like, as you type: sk-ant-… is Anthropic's, any other sk-… OpenAI's. Only a hint for the
+ * screen; the server checks the whole key (and refuses Claude.ai tokens and admin keys) before testing it.
+ */
+export function keyKindOf(key: string): KeyKind | undefined {
+  const k = key.trim();
+  if (k.startsWith("sk-ant-")) return "anthropic";
+  if (k.startsWith("sk-")) return "openai";
+  return undefined;
+}
+
+export const KEY_KIND_LABEL: Record<KeyKind, string> = { anthropic: "Anthropic", openai: "OpenAI" };
+
+/**
+ * Testing and storing a pasted key, for "Set up a model" and the first run: one tiny request to its provider, then the
+ * keychain. `onDone` hears whose key it was; a failure says why, and offers to store it unchecked only when the
+ * provider couldn't be reached.
+ */
+export function useKeyTest(api: Api, onDone: (result: Extract<KeyTestResult, { ok: true }>) => void) {
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<Extract<KeyTestResult, { ok: false }>>();
+  const submit = (untested: boolean) => {
+    setBusy(true);
+    setFailure(undefined);
+    api
+      .testModelKey(key.trim(), untested)
+      .then(
+        (result) => (result.ok ? onDone(result) : setFailure(result)),
+        (e: Error) => setFailure({ ok: false, reason: "other", message: e.message }),
+      )
+      .finally(() => setBusy(false));
+  };
+  const unreachable = failure?.reason === "network" || failure?.reason === "unavailable";
+  return { key, setKey, busy, failure, unreachable, submit, kind: keyKindOf(key) };
+}
+
+/** Which kind of key Alden sees in the box: Anthropic or OpenAI, lit as you paste. A hint, not a choice. */
+export function KeyKindIndicator({ kind }: { kind: KeyKind | undefined }) {
+  return (
+    <span className="key-kind" role="status" aria-label={kind ? `${KEY_KIND_LABEL[kind]} key` : "Anthropic or OpenAI"}>
+      {(["anthropic", "openai"] as const).map((k) => (
+        <span key={k} className={kind === k ? "on" : undefined} aria-hidden="true">
+          {KEY_KIND_LABEL[k]}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 export function formatBytes(bytes: number): string {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
@@ -20,7 +72,7 @@ export function formatBytes(bytes: number): string {
  * A link to one of the setup pages. In the desktop app the window can't open tabs, so the server opens it in the
  * default browser instead.
  */
-function PageLink(props: { api: Api; desktop: boolean; page: SetupPage; children: ReactNode }) {
+export function PageLink(props: { api: Api; desktop: boolean; page: SetupPage; children: ReactNode }) {
   return (
     <a
       href={PAGES[props.page]}
@@ -39,7 +91,7 @@ function PageLink(props: { api: Api; desktop: boolean; page: SetupPage; children
 
 /**
  * "Set up a model", where the briefing options said "No model set up": the same three choices as `alden setup`, in the
- * same order. An Anthropic key (checked with one tiny request, then kept in the keychain), a local model through
+ * same order. An Anthropic or OpenAI key (checked with one tiny request, then kept in the keychain), a local model through
  * Ollama, or checks only; then the Alden Cloud line. Reviews read the config and the key afresh, so nothing restarts.
  */
 export function ModelSetupDialog(props: { api: Api; desktop: boolean; onClose: () => void; onReady: () => void }) {
@@ -101,9 +153,9 @@ export function ModelSetupDialog(props: { api: Api; desktop: boolean; onClose: (
               </p>
             )}
             <SetupChoice
-              title="Paste an Anthropic API key"
+              title="Paste an API key"
               tag="Recommended"
-              summary="Claude, with your own key: the most thorough briefings."
+              summary="Anthropic or OpenAI, with your own key: the most thorough briefings."
               expanded={open === "key"}
               onExpand={() => setOpen("key")}
             >
@@ -112,7 +164,11 @@ export function ModelSetupDialog(props: { api: Api; desktop: boolean; onClose: (
                 state={state}
                 link={link}
                 onDone={(result) =>
-                  setDone({ kind: "key", envFirst: result.key?.source === "env" ? result.key.where : null })
+                  setDone({
+                    kind: "key",
+                    provider: result.provider ?? "anthropic",
+                    envFirst: result.key?.source === "env" ? result.key.where : null,
+                  })
                 }
               />
             </SetupChoice>
@@ -179,48 +235,38 @@ function KeyStep(props: {
   link: (page: SetupPage, text: ReactNode) => ReactNode;
   onDone: (result: Extract<KeyTestResult, { ok: true }>) => void;
 }) {
-  const [key, setKey] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<Extract<KeyTestResult, { ok: false }>>();
-  const existing = props.state?.key;
+  const { key, setKey, busy, failure, unreachable, submit, kind } = useKeyTest(props.api, props.onDone);
+  const existing = props.state?.key ?? props.state?.openaiKey;
 
-  const submit = (untested: boolean) => {
-    setBusy(true);
-    setFailure(undefined);
-    props.api
-      .testModelKey(key.trim(), untested)
-      .then(
-        (result) => (result.ok ? props.onDone(result) : setFailure(result)),
-        (e: Error) => setFailure({ ok: false, reason: "other", message: e.message }),
-      )
-      .finally(() => setBusy(false));
-  };
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (key.trim()) submit(false);
   };
-  const unreachable = failure?.reason === "network" || failure?.reason === "unavailable";
 
   return (
     <form className="setup-step" onSubmit={onSubmit}>
       <p className="small">
-        Create a key at {props.link("keys", "console.anthropic.com")}, then paste it here.
+        Create a key at {props.link("keys", "console.anthropic.com")} or{" "}
+        {props.link("openaiKeys", "platform.openai.com")}, then paste it here.
         {existing && ` Alden already finds one, from ${existing.where}; a key here is stored for where that isn't set.`}
       </p>
       <label className="field">
-        Anthropic API key
+        <span className="key-field-head">
+          API key
+          <KeyKindIndicator kind={kind} />
+        </span>
         <input
           className="input mono"
           type="password"
           autoComplete="off"
           spellCheck={false}
-          placeholder="sk-ant-api03-…"
+          placeholder="sk-ant-… or sk-…"
           value={key}
           onChange={(e) => setKey(e.target.value)}
         />
         <span className="help">
-          Alden checks it with one tiny request (a fraction of a cent), then keeps it in your keychain. It's never shown
-          again.
+          Paste either kind and Alden detects it. Alden checks it with one tiny request (a fraction of a cent), then
+          keeps it in your keychain; calls go straight to the provider. It's never shown again.
         </span>
       </label>
       <div className="form-actions">
@@ -268,7 +314,7 @@ export function localOptions(state: ModelSetupState): LocalOption[] {
   return options;
 }
 
-function LocalStep(props: {
+export function LocalStep(props: {
   api: Api;
   state: ModelSetupState | undefined;
   link: (page: SetupPage, text: ReactNode) => ReactNode;
@@ -394,7 +440,7 @@ function DoneStep({ done, onReady }: { done: Done; onReady: () => void }) {
       <p>
         <span className="ok-text">✓</span>{" "}
         {done.kind === "key"
-          ? "Your key works, and it's in your keychain. Briefings now ask Claude."
+          ? `Your ${KEY_KIND_LABEL[done.provider]} key works, and it's in your keychain. Briefings now ask ${done.provider === "openai" ? "OpenAI's models" : "Claude"}.`
           : `Briefings now use ${done.model} on Ollama.`}
       </p>
       <p className="muted small">

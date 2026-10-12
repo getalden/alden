@@ -23,7 +23,22 @@ warning.
 
 ## First run
 
-Open Alden from Applications. Its icon appears in the menu bar, and its window opens on your queue.
+Open Alden from Applications. Its icon appears in the menu bar, and its window opens on your queue. When Alden has no
+GitHub sign-in yet, the window starts with three short steps instead, one screen each: sign in, choose how Alden
+thinks, and land in your ranked queue. **Skip setup** leaves at any step, and Settings → **Run setup again** brings
+them back (from the model step, when you're signed in). The terminal's `alden`, signed out, asks the same in the same
+order.
+
+1. **Sign in.** **Continue with GitHub** shows a one-time code and opens GitHub's page in your browser; the app picks
+   up your approval by itself and moves on. Alden asks GitHub for the `repo` and `read:org` scopes: `repo` is read and
+   write access to your repositories (Alden only reads PRs, and posts only the reviews you send), `read:org` lets it
+   see the review requests made to your teams. You can revoke it in GitHub's settings any time. **Use my GitHub CLI
+   sign-in** is there when the GitHub CLI is signed in on your Mac.
+2. **Model.** "How should Alden think?": your API key (paste an Anthropic or an OpenAI key and Alden detects which,
+   checks it with one tiny request and keeps it in your keychain), a local model through Ollama, or checks only. When a
+   model already works, **Continue** keeps it. Alden Cloud (beta) has a link to join the list.
+3. **Queue.** How many PRs are waiting on you and the top four, ranked; with background briefings on, the desktop app
+   says it's briefing the top ones. **Open the queue** goes there.
 
 ### Sign in
 
@@ -41,13 +56,14 @@ app is open, **I've signed in** looks again, and if Alden still can't see a sign
 
 ### Set up a model
 
-An app opened from the Finder never sees your shell's environment, so it doesn't see `ANTHROPIC_API_KEY`. Without a
-model, Alden runs its checks and finds callers, which costs nothing. To add one, use **Set up a model** in a PR's
-toolbar: paste an Anthropic API key (Alden checks it, then keeps it in your keychain), use a local model through
+An app opened from the Finder never sees your shell's environment, so it doesn't see `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY`. Without a model, Alden runs its checks and finds callers, which costs nothing. To add one, use **Set
+up a model** in a PR's toolbar: paste an Anthropic or OpenAI API key (Alden detects which, checks it, then keeps it in
+your keychain), use a local model through
 Ollama, or stay with checks only. The next briefing uses it, with no restart. See
 [Set up a model](web-ui.md#set-up-a-model).
 
-`alden setup` or `alden auth model` in a terminal, or Settings → Anthropic API key, work too. The app doesn't see
+`alden setup` or `alden auth model` in a terminal, or Settings → API keys, work too. The app doesn't see
 `OLLAMA_HOST` either: setting up a local model from a terminal where it's set writes the address into your config,
 which the app reads.
 

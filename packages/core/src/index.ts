@@ -128,14 +128,37 @@ export {
   checkBudget,
   estimateTokens,
 } from "./llm/budget.js";
-export { BudgetExceededError, type BudgetedOptions, type BudgetedResult, budgetedGenerate } from "./llm/budgeted.js";
+export {
+  BudgetExceededError,
+  type BudgetedOptions,
+  type BudgetedResult,
+  type BudgetedText,
+  budgetedGenerate,
+  budgetedStreamText,
+  StreamStoppedError,
+} from "./llm/budgeted.js";
+export {
+  ANTHROPIC_PICKS,
+  type ModelChoicesDeps,
+  ModelPickError,
+  modelChoices,
+  OPENAI_PICKS,
+  pickModel,
+} from "./llm/choices.js";
+export { providerSupportsEffort } from "./llm/effort.js";
 export {
   checkModelKey,
+  checkOpenAIKey,
+  detectKeyKind,
+  type KeyDetection,
+  type KeyProvider,
   type ModelKey,
   type ModelKeyDeps,
   type ModelKeySource,
   modelKeyStore,
+  OPENAI_KEYS_URL,
   resolveModelKey,
+  resolveOpenAIKey,
 } from "./llm/key.js";
 export { localDay, type SpendEntry, SpendLedger } from "./llm/ledger.js";
 export {
@@ -152,16 +175,27 @@ export {
 export {
   costUsd,
   MODEL_ALIASES,
+  type ModelPrice,
   NO_USAGE,
+  OPENAI_PRICES,
   PRICES,
   priceFor,
   resolveModel,
   type TokenUsage,
   worstCaseUsd,
 } from "./llm/models.js";
+export {
+  DEFAULT_OPENAI_MODEL,
+  isOpenAiModel,
+  OPENAI_BASE_URL,
+  OpenAIProvider,
+  openAiSupportsEffort,
+  strictSchema,
+} from "./llm/openai.js";
 export { DEFAULT_BASE_URL, OpenAICompatibleProvider } from "./llm/openai-compatible.js";
 export { createPlatformClient, type Platform, platformModelId } from "./llm/platforms.js";
 export {
+  canStream,
   type Effort,
   type GenerateRequest,
   type GenerateResult,
@@ -169,6 +203,9 @@ export {
   type LlmErrorKind,
   type LlmProvider,
   type StopReason,
+  type StreamTextRequest,
+  type StreamTextResult,
+  type TextStreamer,
 } from "./llm/provider.js";
 export { type ProviderChoice, selectProvider } from "./llm/select.js";
 export {
@@ -179,10 +216,13 @@ export {
   type KeyTestClient,
   modelSetupState,
   OLLAMA_DOWNLOAD_URL,
+  OPENAI_KEY_TEST_MODEL,
   type SetupStateDeps,
   setUpModelKey,
   testModelKey,
+  testOpenAIKey,
   useAnthropic,
+  useOpenAI,
 } from "./llm/setup.js";
 export { type MajorBump, majorBumps } from "./queue/bumps.js";
 export { type FileKind, fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";
@@ -200,6 +240,20 @@ export {
 } from "./queue/rank.js";
 export { followUpOf, isRereview, REREVIEW_REASON } from "./queue/rereview.js";
 export { applyRules, describeWhen, pathGlobs, ruleMatches, ruleReason } from "./queue/rules.js";
+export {
+  ASK_OUTPUT_TOKENS,
+  ASK_SYSTEM,
+  AskError,
+  type AskOptions,
+  type AskTurn,
+  askAboutPr,
+  askDiff,
+  askPrompt,
+  filesNamed,
+  INJECTED_ASK_NOTE,
+  MAX_ASK_HISTORY,
+  MAX_QUESTION_CHARS,
+} from "./review/ask.js";
 export {
   type AldenDraftsMade,
   aldenDraftsLine,
@@ -243,6 +297,7 @@ export {
   draftPlaces,
   draftReview,
   draftReviewPrompt,
+  draftReviewSystem,
   fence,
   hasCommentNear,
   INJECTED_DRAFTING_NOTE,
@@ -254,6 +309,7 @@ export {
   sentComments,
   suggestCommentText,
   suggestTextPrompt,
+  suggestTextSystem,
   talksToAi,
   usableText,
 } from "./review/draft-review.js";
@@ -267,14 +323,18 @@ export {
   commentableLines,
   commentBody,
   composeReviewBody,
+  draftsAtHead,
   fetchPullRequestState,
   findAgain,
   findThread,
   isNear,
   isReply,
   type LineAnchor,
+  lineLikeness,
   linkText,
   MAX_COMMENT_CHARS,
+  type MoveCandidate,
+  moveCandidate,
   NEAR_LINES,
   type Placement,
   placeOnDiff,
@@ -307,6 +367,7 @@ export {
   type BuiltPrompt,
   buildPrompt,
   DRAFTS_PROMPT,
+  draftsPrompt,
   type LlmOutput,
   LlmOutputSchema,
   LlmOutputWithDraftsSchema,
@@ -341,6 +402,14 @@ export {
   wasSeen,
 } from "./review/signals.js";
 export { type Declaration, declarationIn, type SignatureChange, signatureChanges } from "./review/signatures.js";
+export {
+  isDraftTone,
+  repoTone,
+  setRepoTone,
+  TONE_INSTRUCTIONS,
+  toneFor,
+  toneInstruction,
+} from "./review/tone.js";
 export { type Check, type CheckOutcome, type GraphContext, type ReviewContext, symbolKey } from "./review/types.js";
 export {
   addActiveTime,
@@ -375,6 +444,7 @@ export { UsageLog } from "./stats/usage.js";
 export { AldenStore, closeStores, MIGRATION_COUNT, openStore } from "./store/db.js";
 export {
   activeBucket,
+  costBucket,
   queueEvent,
   reviewEvent,
   reviewTimedEvent,

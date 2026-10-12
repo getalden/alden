@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FollowUpLevelSchema } from "./follow-ups.js";
 import { RankSettingsSchema } from "./rank.js";
+import { DraftToneSchema } from "./writing.js";
 
 /** Paths that raise a PR's risk score unless the user overrides them. */
 export const DEFAULT_SENSITIVE_PATHS = [
@@ -24,11 +25,13 @@ const OWNER_OR_REPO = /^[A-Za-z0-9-]+(\/[\w.-]+)?$/;
 export const AldenConfigSchema = z.object({
   model: z
     .object({
-      provider: z.enum(["anthropic", "bedrock", "vertex", "foundry", "openai-compatible"]).default("anthropic"),
+      provider: z
+        .enum(["anthropic", "openai", "bedrock", "vertex", "foundry", "openai-compatible"])
+        .default("anthropic"),
       name: z.string().default("sonnet"),
       /** How hard Claude thinks: more effort, more time and tokens. Unset means the model's own default (high). */
       effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
-      /** openai-compatible: the endpoint, e.g. http://localhost:11434/v1 for Ollama. */
+      /** openai-compatible: the endpoint, e.g. http://localhost:11434/v1 for Ollama. openai: another endpoint than OpenAI's own. */
       baseUrl: z.url().optional(),
       /** bedrock (AWS region) and vertex (GCP region, e.g. "global"). */
       region: z.string().optional(),
@@ -90,6 +93,12 @@ export const AldenConfigSchema = z.object({
        * Never sent on their own. Adds a little output to the model call Alden already makes. User config only.
        */
       auto: z.boolean().default(true),
+      /**
+       * How Alden writes the comments it drafts: terse (one line), concise (the default), detailed (why, impact and a
+       * fix) or teaching (for newer teammates). Any repo can have its own on this machine (the UI's Tune, or
+       * `PUT /api/tone`). User config only.
+       */
+      tone: DraftToneSchema.default("concise"),
     })
     .prefault({}),
   learning: z

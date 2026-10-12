@@ -29,7 +29,7 @@ fastTrackMaxLines = 50
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `model.provider` | `anthropic` | `anthropic`, `bedrock`, `vertex`, `foundry` or `openai-compatible`. |
+| `model.provider` | `anthropic` | `anthropic`, `openai`, `bedrock`, `vertex`, `foundry` or `openai-compatible`. |
 | `model.name` | `sonnet` | An alias (`sonnet`, `opus`, `haiku`, `fable`), a full model ID, or a local model's name. |
 | `model.effort` | unset | `low`, `medium`, `high`, `xhigh` or `max`. Unset uses the model's own default. |
 | `model.baseUrl` | `http://localhost:11434/v1` | `openai-compatible` only: the endpoint. |
@@ -125,6 +125,7 @@ For the [desktop app](desktop.md#while-youre-away).
 | Key | Default | What it does |
 | --- | --- | --- |
 | `drafts.auto` | `true` | On as soon as a model is set up. When a model briefs a PR, also draft comments for up to five of its medium and high findings, in the same call, for you to keep, edit or drop in the Comments drawer. Untouched drafts are never sent, and none approves. Off asks the model exactly what it asked before. Read from your user config only. Settings → Drafts sets it too. See [Alden's drafts](comments.md#aldens-drafts). |
+| `drafts.tone` | `"concise"` | How Alden writes the comments it drafts, in every drafting path: `terse` (one line, no reasoning), `concise`, `detailed` (why, impact and a fix) or `teaching` (for newer teammates). A style you pick, not an imitation of anyone. Any repo can have its own, kept on this machine (the UI's Tune, or `PUT /api/tone`); `alden comment <pr> --draft --tone …` picks one for one call. Read from your user config only. See [The tone of drafts](models.md#the-tone-of-drafts). |
 
 ## learning
 
@@ -173,6 +174,7 @@ to find callers in every repo under `~/src`.
 | `ALDEN_OPENAI_API_KEY` | The key for an `openai-compatible` endpoint (falls back to `OPENAI_API_KEY`). |
 | `ALDEN_TELEMETRY` | `0` or `false` turns usage stats off, whatever your config says. |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key, for the `anthropic` provider. Comes before the key stored with `alden auth model`. |
+| `OPENAI_API_KEY` | Your OpenAI API key, for the `openai` provider. Comes before the key stored with `alden auth model`. |
 | `DO_NOT_TRACK` | Set (to anything but `0`) to turn usage stats off. |
 | `OLLAMA_HOST` | Where Ollama listens, as Ollama reads it, for `alden setup`. Default `http://localhost:11434`. |
 

@@ -1,3 +1,4 @@
+import { DRAFT_TONES, type DraftTone, type ModelGroupProvider, type ToneState } from "@alden/schema";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -7,19 +8,46 @@ import {
   useRef,
   useState,
 } from "react";
-import { type Api, ApiError, type ModelGroup, type ModelsState, type Session, type ToneState } from "../api";
+import { type Api, ApiError, type Session } from "../api";
 import { formatUsd } from "../format";
+import { navigate } from "../router";
+import { API_KEYS_ID } from "./ApiKeySettings";
 import { type Choices, effortSupported, Switch } from "./ReviewOptions";
 
-type TuneApi = Pick<Api, "models" | "setModel" | "tone" | "setTone" | "ask" | "setConfig">;
+type TuneApi = Pick<Api, "models" | "pickModel" | "tone" | "setTone" | "ask" | "setConfig">;
 
-/** The tones there are until the server lists its own: how Alden writes the comments it drafts. */
-export const DEFAULT_TONES = [
-  { id: "terse", label: "Terse", hint: "one line, no reasoning" },
-  { id: "concise", label: "Concise", hint: "the usual" },
-  { id: "detailed", label: "Detailed", hint: "why, impact and a fix" },
-  { id: "teaching", label: "Teaching", hint: "for newer teammates" },
-];
+/** One provider's models in the picker: `GET /api/models`'s groups, or the session's when the server has none. */
+interface ModelGroup {
+  provider: string;
+  label: string;
+  via: string;
+  available: boolean;
+  items: { id: string; note?: string | undefined }[];
+}
+interface ModelsState {
+  current: { provider: string; model: string } | null;
+  groups: ModelGroup[];
+}
+
+/** How Alden writes the comments it drafts, as the popover names each tone. */
+const TONE_LABEL: Record<DraftTone, string> = {
+  terse: "Terse",
+  concise: "Concise",
+  detailed: "Detailed",
+  teaching: "Teaching",
+};
+
+/** "Add a key": Settings, at the API keys card. */
+function openApiKeys() {
+  navigate({ view: "settings" });
+  let tries = 0;
+  const find = () => {
+    const card = document.getElementById(API_KEYS_ID);
+    if (card) card.scrollIntoView({ block: "start" });
+    else if (++tries < 20) setTimeout(find, 100);
+  };
+  find();
+}
 
 /** How effort reads in the popover: Alden's efforts, low to max, with xhigh between high and max. */
 const EFFORT_LABEL: Record<string, string> = {
@@ -59,7 +87,7 @@ export function modelLine(session: Session, choices: Choices): string {
  */
 export function fallbackModels(session: Session): ModelsState {
   const models =
-    session.model.provider === "openai-compatible"
+    session.model.provider === "openai-compatible" || session.model.provider === "openai"
       ? [session.model.name]
       : [...new Set([session.model.name, ...Object.keys(session.aliases)])];
   const via =
@@ -311,7 +339,7 @@ function ModelRow(props: {
       return;
     }
     try {
-      const next = await api.setModel({ provider: g.provider, model });
+      const next = await api.pickModel({ provider: g.provider as ModelGroupProvider, model });
       setState({ models: next, saved: true });
       onChoices({ ...choices, llm: true, model });
       props.onSessionChange?.();
@@ -322,7 +350,8 @@ function ModelRow(props: {
   const isCurrent = (g: ModelGroup, model: string) =>
     choices.llm &&
     (state?.saved
-      ? current?.provider === g.provider && current.model === model
+      ? (current?.provider === g.provider || (current?.provider === "openai-compatible" && g.provider === "ollama")) &&
+        current?.model === model
       : model === choices.model || session.aliases[model] === choices.model);
 
   const onListKey = (event: ReactKeyboardEvent) => {
@@ -405,15 +434,10 @@ function ModelRow(props: {
             </button>
           </div>
           <div className="model-foot">
-            Keys live in Settings
-            {props.onSetUpModel && (
-              <>
-                {" · "}
-                <button type="button" className="link-button" onClick={props.onSetUpModel}>
-                  Add a key
-                </button>
-              </>
-            )}
+            Keys live in Settings ·{" "}
+            <button type="button" className="link-button" onClick={openApiKeys}>
+              Add a key
+            </button>
           </div>
         </div>
       )}
@@ -440,14 +464,13 @@ function ToneRow(props: { api: TuneApi; repo?: string | undefined; onProblem: (p
     };
   }, [api, repo]);
   if (!tone) return null;
-  const tones = tone.tones?.length ? tone.tones : DEFAULT_TONES;
-  const options = tones.some((t) => t.id === tone.tone)
-    ? tones
-    : [...tones, { id: tone.tone, label: tone.tone, hint: undefined }];
-  const hint = options.find((t) => t.id === tone.tone)?.hint;
   return (
     <div className="tune-field">
-      <label className="tune-label" htmlFor={`${id}tone`} title={hint}>
+      <label
+        className="tune-label"
+        htmlFor={`${id}tone`}
+        title={tone.source === "repo" ? "Set for this repo on this machine" : "Your default (drafts.tone)"}
+      >
         Alden writes
       </label>
       <select
@@ -455,22 +478,19 @@ function ToneRow(props: { api: TuneApi; repo?: string | undefined; onProblem: (p
         className="tune-select"
         value={tone.tone}
         onChange={(event) => {
-          const next = event.target.value;
+          const next = event.target.value as DraftTone;
           const was = tone;
           setTone({ ...tone, tone: next });
           onProblem(undefined);
-          api.setTone(next, repo).then(
-            (saved) => setTone((now) => ({ ...saved, tones: saved.tones ?? now?.tones })),
-            (error: unknown) => {
-              setTone(was);
-              onProblem(`Couldn't change the tone: ${messageOf(error)}`);
-            },
-          );
+          api.setTone(next, repo).then(setTone, (error: unknown) => {
+            setTone(was);
+            onProblem(`Couldn't change the tone: ${messageOf(error)}`);
+          });
         }}
       >
-        {options.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.label}
+        {DRAFT_TONES.map((t) => (
+          <option key={t} value={t}>
+            {TONE_LABEL[t]}
           </option>
         ))}
       </select>
@@ -556,11 +576,19 @@ function Ask({ api, pr }: { api: TuneApi; pr: string }) {
     abort.current = controller;
     setAnswer({ state: "asking", question: q, text: "" });
     setQuestion("");
+    let text = "";
     api
-      .ask({ pr, question: q }, (text) => setAnswer({ state: "asking", question: q, text }), controller.signal)
+      .ask(
+        { pr, question: q },
+        (delta) => {
+          text += delta;
+          setAnswer({ state: "asking", question: q, text });
+        },
+        controller.signal,
+      )
       .then(
         (done) => {
-          if (!controller.signal.aborted) setAnswer({ state: "done", question: q, ...done });
+          if (!controller.signal.aborted) setAnswer({ state: "done", question: q, text, ...done });
         },
         (error: unknown) => {
           if (controller.signal.aborted) return;
