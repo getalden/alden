@@ -26,8 +26,8 @@ Or download the desktop app's .dmg or a standalone binary for macOS, Linux or Wi
 ## Quickstart
 
 ```sh
-alden auth login   # reuses your GitHub CLI sign-in if you have one
-alden              # the interactive view: queue, briefings, feedback and sending, on one screen
+alden              # first time: sign in, pick a model, see your queue; then the interactive view
+alden auth login   # or sign in on its own (reuses your GitHub CLI sign-in if you have one)
 alden queue        # the PRs waiting on your review, ranked
 alden open 1       # open the top one in your browser
 
@@ -50,11 +50,12 @@ relationships, Blade templates and service config. Local reviews use your workin
 a clone of the PR's repo: the one you run it in, one it has seen you use, or one under `clones.folders`. It fetches the PR into its own worktree under `~/.alden/worktrees`
 (your checkout is never touched). `--no-graph` skips it.
 
-With a model (`alden setup` checks and stores an Anthropic API key, or sets up a local one through Ollama;
-`ANTHROPIC_API_KEY` works too), the review also asks a model what the change
+With a model (`alden setup` checks and stores an Anthropic or OpenAI API key, or sets up a local one through Ollama;
+`ANTHROPIC_API_KEY` or `OPENAI_API_KEY` works too), the review also asks a model what the change
 does, whether it matches its title, and what else deserves a look. Alden keeps only findings that point at real lines
 in the diff, and never lets them displace high-severity checks. Use `--model opus` for one review, or `--no-llm` to
 skip the model. Every call is checked against your caps before it's sent; `alden spend` shows what you've spent.
+`alden ask 1 "Is the retry safe?"` asks it a question about a briefed PR.
 
 ```text
 Needs your eyes

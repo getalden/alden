@@ -33,7 +33,22 @@ Windows, with a `SHA256SUMS` to check it against. Unpack it and put `alden` (`al
 
 The examples below assume `alden` is installed; with `npx`, put `npx alden@next` in place of `alden`.
 
+## Start
+
+```sh
+alden
+```
+
+On its own, signed out, `alden` walks you through the same three steps as the desktop app's and the web UI's first
+run, in text: it signs you in to GitHub, asks how Alden should think (an Anthropic or OpenAI key, a local model, or
+checks only; you can say no), then opens your queue. After that, `alden` opens the interactive view: your queue,
+briefings, feedback, comments and sending, on one screen. See [`alden` (interactive)](commands.md#alden-interactive).
+
+The desktop app and `alden ui` start with the same three steps when there's no sign-in yet.
+
 ## Sign in to GitHub
+
+To sign in without the interactive view:
 
 ```sh
 alden auth login
@@ -44,9 +59,6 @@ at github.com, and stores the resulting token in your OS keychain. `alden auth s
 Alden is using. See [Commands](commands.md#alden-auth) for the other options.
 
 Alden asks for the `repo` scope (to read private repos) and `read:org` (to see review requests sent to your teams).
-
-Or run `alden` on its own: signed out, it walks you through the same three steps as the app's first run, in text. It
-signs you in, asks `alden setup`'s questions unless a model already works (you can say no), then opens your queue.
 
 **At a company?** Alden needs no install on your organisation: it reads what your own sign-in can read. But many
 organisations use single sign-on or only allow approved apps, and then hide their PRs from a sign-in until it's
@@ -63,6 +75,14 @@ alden queue
 The PRs waiting on your review, in two groups: **Needs you**, ranked, and **Fast-track**, for small low-risk PRs you
 can clear quickly. Every row says why it ranks where it does. Open one with `alden open <#>`. See
 [The review queue](queue.md).
+
+Above them, **Your turn** lists the PRs you already reviewed where something happened since: a reply to your comment,
+a thread resolved, a push that outdated your comment. Opening one takes it off the list. See
+[Your turn](queue.md#your-turn).
+
+PRs written by AI coding agents (Copilot, Claude Code, Cursor, Devin, Codex and others) say so on their row, including a
+person's PR that an agent wrote, and how Alden knew (its branch, its description or its last commit).
+`alden queue --author agents` shows only those. See [Bots and AI agents](queue.md#bots-and-ai-agents).
 
 ## Get a briefing
 
@@ -81,13 +101,20 @@ A briefing has three parts:
 
 See [Briefings and checks](checks.md).
 
+With a model, you can also ask about a PR once it's briefed: `alden ask 1 "Is the retry safe?"` answers from the
+briefing, the diff around the places that matter and your notes, in one call within your caps. See
+[Ask about this PR](models.md#ask-about-this-pr).
+
 ## Or in your browser
 
 ```sh
 alden ui
 ```
 
-The queue, briefings, your feedback and what Alden learned, in a local web page. See [Alden in your browser](web-ui.md).
+The queue, briefings, your feedback and what Alden learned, in a local web page. A PR reads in three steps, **Brief**,
+**Walk through** (the flagged places one at a time) and **Diff**; the Comments drawer holds your drafts until you send
+them as one review, and **Tune** picks the model, the tone of Alden's drafts and asks the model a question. See
+[Alden in your browser](web-ui.md).
 
 ## Add a model (optional)
 
@@ -113,6 +140,10 @@ It offers three choices, and takes about a minute:
 In the web UI and the desktop app, **Set up a model** (where the briefing options would ask the model) offers the
 same. `alden auth model` stores a key without the check, and `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` works too,
 coming first where it's set. If you'd rather Alden handled everything, sign up for [Alden Cloud (beta)](https://getalden.dev/cloud).
+
+With a model, Alden can also draft comments on the places it flagged, in a tone you pick: terse, concise, detailed or
+teaching (`alden config set drafts.tone detailed`, or Tune in the UI per repo). Its drafts wait for you to keep, edit or
+drop them, and none is sent untouched. See [The tone of drafts](models.md#the-tone-of-drafts).
 
 The default is Claude Sonnet, capped at $0.50 per review and $10 per day. Each briefing shows what it cost, and
 `alden spend` shows the running total. See [Models, providers and budgets](models.md) for other models, AWS Bedrock,

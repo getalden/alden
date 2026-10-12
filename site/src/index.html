@@ -53,7 +53,8 @@
           <h1>The review companion that knows what you look for.</h1>
           <p class="lede">
             Alden ranks the PRs waiting on you and writes each one a briefing with the callers and checks the diff leaves
-            out. Every place you mark useful or not useful teaches it a little more about how you review.
+            out. When someone answers your comments, the PR comes back under Your turn. Every place you mark useful or not
+            useful teaches it a little more about how you review.
           </p>
           <div class="actions">
             <a class="btn big glow-btn" href="#install" data-track="install" data-label="hero">Install Alden</a>
@@ -136,8 +137,9 @@
           <p>
             Mark a place useful and Alden gives that kind of flag more weight next time. Mark it not useful and it backs
             off. Keep opening PRs in one area of the code, or from one author, bot or AI agent, ahead of where Alden ranked
-            them, and PRs like that rank higher. Everything it learns is listed, with where it came from, and you can edit or forget any
-            of it.
+            them, and PRs like that rank higher. A person's PR that Claude Code, Copilot, Cursor or another agent wrote
+            counts as that agent's too, and its row says how Alden knew. Everything it learns is listed, with where it came
+            from, and you can edit or forget any of it.
           </p>
           <fieldset class="weeks" id="weeks" aria-label="Pick a week"></fieldset>
         </div>
@@ -164,7 +166,8 @@
         <dl class="spec">
           <div><dt>where</dt><dd>On your machine. The queue, briefings and what Alden learns about you stay in ~/.alden.</dd></div>
           <div><dt>github</dt><dd>Your own sign-in. Alden reads PRs and posts only what you send: the comments you write in Alden go to GitHub as one review when you send it.</dd></div>
-          <div><dt>model</dt><dd>Your Anthropic key, Bedrock, Vertex, Foundry or a local model. Pick it per PR, or run checks only. No key? <a href="/cloud/">Alden Cloud</a> is planned, with a waitlist.</dd></div>
+          <div><dt>model</dt><dd>Your Anthropic or OpenAI key, Bedrock, Vertex, Foundry or a local model through Ollama. Pick it per PR, ask it a question about a PR, or run checks only. No key? <a href="/cloud/">Alden Cloud</a> is planned, with a waitlist.</dd></div>
+          <div><dt>drafts</dt><dd>Alden can draft comments on the places it flagged, in a tone you pick: terse, concise, detailed or teaching. Each one waits for you to keep, edit or drop it; none is sent untouched.</dd></div>
           <div><dt>spend</dt><dd>Caps per briefing and per day, $0.50 and $10 by default, checked before every call.</dd></div>
           <div><dt>source</dt><dd>Open source when the beta ends. The single-developer app stays free.</dd></div>
         </dl>
@@ -177,7 +180,8 @@
           <span class="kicker-num">04 / install</span>
           <h2>Install it now. It's free during the beta.</h2>
           <p>
-            Alden is in open beta: anyone can install it. Pick one of four ways, then sign in with GitHub. Full steps are in
+            Alden is in open beta: anyone can install it. Pick one of four ways, then open the app or run <code>alden</code>:
+            it signs you in with GitHub, asks how Alden should think, and shows your queue. Full steps are in
             <a href="/docs/getting-started/">Getting started</a>.
           </p>
         </div>
@@ -209,9 +213,10 @@
         </div>
         <div class="then">
           <h3>Then</h3>
-          <pre data-copy="first-run"><code>alden auth login     # reuses your GitHub CLI sign-in if you have one
+          <pre data-copy="first-run"><code>alden                # sign in, pick a model, then your queue, in the terminal
 alden queue          # the PRs waiting on your review, ranked
 alden review 1       # a briefing on #1
+alden ask 1 "Is the retry safe?"   # a question about it, to your model
 alden ui             # or all of it in your browser</code></pre>
           <h3>In Claude Code</h3>
           <pre data-copy="claude-plugin"><code>/plugin marketplace add getalden/claude-plugin
