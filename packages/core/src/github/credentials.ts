@@ -7,7 +7,7 @@ import { aldenHome } from "../config.js";
 const SERVICE = "alden";
 
 /** What Alden keeps: its own GitHub token, and the Anthropic API key from `alden auth model`. */
-export type CredentialName = "github" | "anthropic";
+export type CredentialName = "github" | "anthropic" | "openai";
 
 /** Where Alden keeps a secret. The OS keychain first, a 0600 file if there is no keychain. */
 export interface CredentialStore {

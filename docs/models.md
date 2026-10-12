@@ -8,9 +8,9 @@ third-party tools to use them.
 
 ## Setting one up
 
-`alden setup` (or **Set up a model** in the web UI and the desktop app) gets you a working model in about a minute: an
-Anthropic API key, checked with one tiny request and stored in your keychain; a local model through Ollama; or checks
-only. The sections below are the same choices by hand. If you'd rather Alden handled everything, sign up for
+`alden setup` (or **Set up a model** in the web UI and the desktop app, and the first run's Model step) gets you a
+working model in about a minute: an Anthropic or OpenAI API key (paste either kind and Alden detects which), checked
+with one tiny request and stored in your keychain; a local model through Ollama; or checks only. The sections below are the same choices by hand. If you'd rather Alden handled everything, sign up for
 [Alden Cloud (beta)](https://getalden.dev/cloud).
 
 ## Choosing a model
@@ -61,6 +61,56 @@ restarting `alden ui` or the desktop app. Alden looks for credentials in this or
 
 `alden auth status` and `alden doctor` say which one is in use, never the key. `alden auth model --remove` removes the
 stored key. Admin API keys and Claude.ai sign-in tokens are refused.
+
+### OpenAI (`openai`)
+
+Paste an OpenAI API key in `alden setup`, **Set up a model**, Settings → API keys or `alden auth model`: Alden tells it
+from an Anthropic key by its shape (sk-ant-… is Anthropic's, any other sk-…, such as sk-proj-…, OpenAI's; OpenAI admin
+keys, sk-admin-…, are refused), stores it in the keychain under its own name, and makes `openai` the provider with
+`gpt-6.1-sol` unless you'd chosen an OpenAI model. `alden setup` and **Set up a model** first check it with one Chat
+Completions request to `gpt-6-luna` for at most 16 output tokens, far less than a cent, and say why a key doesn't work
+(mistyped or deleted, no credit, no permission for the model API, no network). By hand:
+
+```sh
+alden auth model                       # paste the key, or: pbpaste | alden auth model
+alden config set model.provider openai
+alden config set model.name gpt-6-astra
+```
+
+Alden looks for the OpenAI key in this order:
+
+1. `OPENAI_API_KEY`.
+2. The key stored with `alden auth model` (in the keychain, or a file only you can read where there's no keychain).
+
+Briefings call `https://api.openai.com/v1/chat/completions` (`model.baseUrl` points elsewhere, for a proxy) with
+Structured Outputs in strict mode, so the answer has the briefing's shape; `max_completion_tokens` caps the output, and
+`model.effort` is sent as `reasoning_effort` to the GPT-6 models, which take all five levels (other OpenAI models get
+their own default). Cached input is counted apart, so spend is right.
+
+| Model | Note | Input | Cached input | Output |
+| --- | --- | --- | --- | --- |
+| `gpt-6.1-sol` (default) | fast | $2 | $0.10 | $10 |
+| `gpt-6-astra` | deepest | $10 | $1 | $50 |
+| `gpt-6-luna` | cheap | $0.10 | $0.01 | $0.50 |
+
+US dollars per million tokens, Standard tier, prompts under 272K tokens, from
+[OpenAI's pricing page](https://developers.openai.com/api/docs/pricing) on 12 October 2026; writing to the cache costs
+1.25 times input on these models. Alden also knows the prices of GPT-5.6, 5.5, 5.4, 5.2, 5.1, 5 and 4.1 for spend; a
+model it has no price for isn't counted against your caps, as with a local model, so check the page before using one.
+
+### Which key comes first
+
+Each provider reads its own variable first, then its stored key: `ANTHROPIC_API_KEY` (and the other Anthropic
+credentials below) for `anthropic`, `OPENAI_API_KEY` for `openai`. Which provider briefings use is `model.provider`,
+which pasting a key sets; the other key stays stored for the model picker. `alden doctor` reports both keys and where
+each comes from, never the key.
+
+### The model picker
+
+The web UI and the desktop app list the models you can switch to (`GET /api/models`): Anthropic and OpenAI through your
+key, Local through Ollama (the models it has pulled), and Bedrock, Vertex or Foundry when that's your provider. A
+provider is offered only when it's set up here. Picking one writes `model.provider` and `model.name` to your user
+config, as `alden config set` does.
 
 ### AWS Bedrock (`bedrock`)
 
@@ -147,7 +197,7 @@ own, made only when you press them (or run `alden comment <pr> --draft`), with t
 | | Draft my review | Draft with Alden |
 | --- | --- | --- |
 | What it sends | The PR's title and description, your notes for the repo, Alden's check results, and each place without a comment near it (at most 12), with its reason and the diff around it | The PR's title and description, your notes, where the comment goes and the diff around it, what Alden flagged there, the thread so far for a reply, and what you've written |
-| What it asks for | A comment (and, on an added line, maybe a suggested change) per place worth one | One comment or reply, for you to edit |
+| What it asks for | A comment (and, on an added line, maybe a suggested change) per place worth one | One comment or reply, for you to edit and send |
 | Effort, output cap | Medium (low if `model.effort` is low), 8,000 tokens | Low, 2,000 tokens |
 | Spend ledger | `owner/repo#12 drafts` | `owner/repo#12 comment text` |
 

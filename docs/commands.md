@@ -64,11 +64,13 @@ reading the version aren't affected. It asks npm at most once a day; `alden conf
 
 Sets up a model in about a minute. In a terminal it asks which of three you want:
 
-1. **Paste an Anthropic API key.** It links to where you create one, reads it without showing it, checks it with one
-   tiny request (Claude Haiku, one output token: a fraction of a cent), and stores it as `alden auth model` does. A key
-   Anthropic refuses isn't stored, and it says why: mistyped or deleted, no credit, or no permission. When Anthropic
-   can't be reached, it offers to store the key unchecked. If your config used another provider, Claude becomes the
-   model again.
+1. **Paste an API key**, Anthropic's or OpenAI's: Alden tells them apart (sk-ant-… is Anthropic's, any other sk-…
+   OpenAI's; Claude.ai sign-in tokens and admin keys are refused). It links to where you create each, reads the key
+   without showing it, checks it with one tiny request to its provider (Claude Haiku for one output token, or
+   gpt-6-luna for a few: a fraction of a cent), and stores it as `alden auth model` does. A key the provider refuses
+   isn't stored, and it says why: mistyped or deleted, no credit, or no permission. When the provider can't be reached,
+   it offers to store the key unchecked. Its provider then becomes the model (an OpenAI key picks `gpt-6.1-sol` unless
+   you'd chosen an OpenAI model).
 2. **Use a local model.** Looks for Ollama (at `OLLAMA_HOST`, or `http://localhost:11434`), lists what it has pulled,
    and recommends a model for your machine's memory (see [Models](models.md#local-and-openai-compatible-models-openai-compatible)).
    Choosing one it hasn't pulled downloads it with progress; then it sets `model.provider`, `model.name` and, when
@@ -80,17 +82,17 @@ with 0. In a terminal, it exits with 1 when no model was set up (except for chec
 
 ## alden auth
 
-Sign in to GitHub, and store your Anthropic API key.
+Sign in to GitHub, and store your Anthropic or OpenAI API key.
 
 | Command | What it does |
 | --- | --- |
 | `alden auth login` | Uses the GitHub CLI's sign-in if there is one. Otherwise signs you in with a code in your browser and stores the token. |
 | `alden auth login --device` | Signs in with a one-time code, even if the GitHub CLI is signed in. Press Enter to open the GitHub page for it. |
 | `alden auth login --with-token` | Reads a token from standard input, e.g. `echo $TOKEN \| alden auth login --with-token`. |
-| `alden auth status` | Shows the account Alden is using, where the token comes from, and its scopes; and where the Anthropic key comes from (never the key). Signed out, it says whether the keychain refused to answer. |
+| `alden auth status` | Shows the account Alden is using, where the token comes from, and its scopes; and where the model's key comes from (never the key). Signed out, it says whether the keychain refused to answer. |
 | `alden auth logout` | Removes the token Alden stored. Doesn't touch the GitHub CLI's sign-in. |
-| `alden auth model` | Asks for your Anthropic API key without showing it (or reads it from standard input, e.g. `pbpaste \| alden auth model`), checks it looks like an API key, and stores it in the OS keychain. The desktop app, `alden ui` and `alden mcp` use it too. `alden setup` does the same after checking the key works. |
-| `alden auth model --remove` | Removes the key Alden stored. |
+| `alden auth model` | Asks for your Anthropic or OpenAI API key without showing it (or reads it from standard input, e.g. `pbpaste \| alden auth model`), tells which it is from its shape, and stores it in the OS keychain under its provider's name. The desktop app, `alden ui` and `alden mcp` use it too. If the provider you use has no key, the pasted key's provider becomes the model; otherwise it says how to switch. `alden setup` does the same after checking the key works. |
+| `alden auth model --remove` | Removes the keys Alden stored, both unless `--provider anthropic` or `--provider openai` says which. |
 
 Alden looks for a token in this order:
 

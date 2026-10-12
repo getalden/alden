@@ -45,6 +45,9 @@ Alden is using. See [Commands](commands.md#alden-auth) for the other options.
 
 Alden asks for the `repo` scope (to read private repos) and `read:org` (to see review requests sent to your teams).
 
+Or run `alden` on its own: signed out, it walks you through the same three steps as the app's first run, in text. It
+signs you in, asks `alden setup`'s questions unless a model already works (you can say no), then opens your queue.
+
 **At a company?** Alden needs no install on your organisation: it reads what your own sign-in can read. But many
 organisations use single sign-on or only allow approved apps, and then hide their PRs from a sign-in until it's
 authorized. Run `alden doctor` after signing in: it names any organisation whose PRs Alden can't see, and how to fix it.
@@ -97,17 +100,19 @@ alden setup
 
 It offers three choices, and takes about a minute:
 
-1. **Paste an Anthropic API key** (create one at
-   [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)). Alden checks it with one tiny
-   request, which costs a fraction of a cent, and keeps it in your keychain, where the desktop app finds it too.
+1. **Paste an API key**, Anthropic's (create one at
+   [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)) or OpenAI's (at
+   [platform.openai.com/api-keys](https://platform.openai.com/api-keys)): Alden tells them apart. It checks the key
+   with one tiny request, which costs a fraction of a cent, and keeps it in your keychain, where the desktop app finds
+   it too.
 2. **Use a local model** with [Ollama](https://ollama.com). Alden suggests a coder model that fits your machine's
    memory, downloads it if Ollama doesn't have it, and points its config at it. Free and private, but local models flag
    less than Claude.
 3. **Checks only.** Nothing to set up.
 
 In the web UI and the desktop app, **Set up a model** (where the briefing options would ask the model) offers the
-same. `alden auth model` stores a key without the check, and `ANTHROPIC_API_KEY` works too, coming first where it's
-set. If you'd rather Alden handled everything, sign up for [Alden Cloud (beta)](https://getalden.dev/cloud).
+same. `alden auth model` stores a key without the check, and `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` works too,
+coming first where it's set. If you'd rather Alden handled everything, sign up for [Alden Cloud (beta)](https://getalden.dev/cloud).
 
 The default is Claude Sonnet, capped at $0.50 per review and $10 per day. Each briefing shows what it cost, and
 `alden spend` shows the running total. See [Models, providers and budgets](models.md) for other models, AWS Bedrock,

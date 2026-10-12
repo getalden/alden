@@ -43,7 +43,9 @@ are served by Alden itself, under the SIL Open Font License.
 
 ## Signing in
 
-If Alden isn't signed in to GitHub, or GitHub no longer accepts its sign-in, the queue says so and offers:
+With no GitHub sign-in at all, the page opens on the first run: sign in, choose how Alden thinks, then your queue, one
+screen each (see [First run](desktop.md#first-run); **Skip setup** leaves it, Settings → **Run setup again** brings it
+back). If GitHub no longer accepts Alden's sign-in, or you skipped the first run, the queue says so and offers:
 
 - **Sign in with GitHub**: a one-time code, with GitHub's page opened for you. Alden picks up your approval by itself.
 - **Use my GitHub CLI sign-in**, when the GitHub CLI (`gh`) is signed in.
@@ -151,8 +153,9 @@ clone of the PR's repo, it says so, and how to point Alden at your clones (`alde
 With no model set up, the toolbar offers **Set up a model** instead of Ask the model. It has the same three choices as
 `alden setup`, in the same order:
 
-1. **Paste an Anthropic API key.** Alden checks it with one tiny request, which costs a fraction of a cent, then keeps
-   it in your keychain. The page never gets it back.
+1. **Paste an API key**, Anthropic's or OpenAI's: Alden detects which as you paste (sk-ant-… is Anthropic's, any other
+   sk-… OpenAI's). It checks the key with one tiny request to its provider, which costs a fraction of a cent, then
+   keeps it in your keychain and makes that provider the model. The page never gets it back.
 2. **Use a local model** through Ollama. Alden recommends one for your machine's memory and downloads it, with
    progress, if Ollama doesn't have it. Local models flag less than Claude.
 3. **Checks only.**
@@ -382,8 +385,11 @@ Settings change your user config, like `alden config set`; a repo's `.alden.toml
 - **Spend caps**: per briefing and per day. When a briefing would pass its cap, Alden doesn't ask the model and shows
   the checks.
 - **Briefings**: how many places "Needs your eyes" shows, 1 to 10 (3 by default).
-- **Anthropic API key**: stored in the keychain, like `alden auth model`. The field is write-only: the page only learns
-  where the key comes from.
+- **API keys**: where the Anthropic and the OpenAI key each come from, and a field that takes either kind (Alden
+  detects which), stored in the keychain like `alden auth model`. Write-only: the page only learns where each key comes
+  from. **Remove** drops a stored key.
+- **Setup**: **Run setup again** shows the first run's steps (sign in, a model, your queue). See
+  [First run](desktop.md#first-run).
 - **Your feedback**: how often you found Alden's places useful, and **Export redacted feedback**.
 - **Learning**: **Learn from my reviews** (on by default). Off, Alden stops noting which places you saw and learns only
   from Useful and Not useful. See [Places you saw](memory.md#places-you-saw).

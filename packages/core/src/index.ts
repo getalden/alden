@@ -138,12 +138,27 @@ export {
   StreamStoppedError,
 } from "./llm/budgeted.js";
 export {
+  ANTHROPIC_PICKS,
+  type ModelChoicesDeps,
+  ModelPickError,
+  modelChoices,
+  OPENAI_PICKS,
+  pickModel,
+} from "./llm/choices.js";
+export { providerSupportsEffort } from "./llm/effort.js";
+export {
   checkModelKey,
+  checkOpenAIKey,
+  detectKeyKind,
+  type KeyDetection,
+  type KeyProvider,
   type ModelKey,
   type ModelKeyDeps,
   type ModelKeySource,
   modelKeyStore,
+  OPENAI_KEYS_URL,
   resolveModelKey,
+  resolveOpenAIKey,
 } from "./llm/key.js";
 export { localDay, type SpendEntry, SpendLedger } from "./llm/ledger.js";
 export {
@@ -160,13 +175,23 @@ export {
 export {
   costUsd,
   MODEL_ALIASES,
+  type ModelPrice,
   NO_USAGE,
+  OPENAI_PRICES,
   PRICES,
   priceFor,
   resolveModel,
   type TokenUsage,
   worstCaseUsd,
 } from "./llm/models.js";
+export {
+  DEFAULT_OPENAI_MODEL,
+  isOpenAiModel,
+  OPENAI_BASE_URL,
+  OpenAIProvider,
+  openAiSupportsEffort,
+  strictSchema,
+} from "./llm/openai.js";
 export { DEFAULT_BASE_URL, OpenAICompatibleProvider } from "./llm/openai-compatible.js";
 export { createPlatformClient, type Platform, platformModelId } from "./llm/platforms.js";
 export {
@@ -191,10 +216,13 @@ export {
   type KeyTestClient,
   modelSetupState,
   OLLAMA_DOWNLOAD_URL,
+  OPENAI_KEY_TEST_MODEL,
   type SetupStateDeps,
   setUpModelKey,
   testModelKey,
+  testOpenAIKey,
   useAnthropic,
+  useOpenAI,
 } from "./llm/setup.js";
 export { type MajorBump, majorBumps } from "./queue/bumps.js";
 export { type FileKind, fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./queue/files.js";

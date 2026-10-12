@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { graphLanguages, renderDoctor, reviewAccess } from "./doctor.js";
+import { graphLanguages, keysFinding, renderDoctor, reviewAccess } from "./doctor.js";
 
 describe("alden doctor", () => {
   it("names the languages the graph reads, most files first, skipping the rest", () => {
@@ -42,5 +42,17 @@ describe("reviewAccess", () => {
       status: "ok",
       detail: expect.stringMatching(/Pull requests: Read and write/),
     });
+  });
+});
+
+describe("keysFinding", () => {
+  it("reports both keys and where each comes from, never the key", () => {
+    expect(keysFinding({ where: "ANTHROPIC_API_KEY" }, { where: "the OpenAI key you stored" }).detail).toBe(
+      "Anthropic from ANTHROPIC_API_KEY; OpenAI from the OpenAI key you stored",
+    );
+    expect(keysFinding(undefined, { where: "OPENAI_API_KEY" }).detail).toBe(
+      "Anthropic none; OpenAI from OPENAI_API_KEY",
+    );
+    expect(keysFinding(undefined, undefined).detail).toMatch(/alden auth model/);
   });
 });

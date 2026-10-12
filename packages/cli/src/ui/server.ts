@@ -14,6 +14,7 @@ import {
   DraftToneSchema,
   FollowUpLevelSchema,
   type LocalSetupEvent,
+  ModelPickSchema,
   type PrDiff,
   type RankRule,
   type ReviewDraft,
@@ -73,10 +74,11 @@ export interface UiApi {
   openSignIn(): Promise<unknown>;
   useGitHubCli(): Promise<unknown>;
   /**
-   * Stores the Anthropic API key in the keychain, as `alden auth model` does; `null` removes it. Write-only: the answer
-   * says where the key now comes from, never the key.
+   * Stores an API key in the keychain, as `alden auth model` does: Anthropic's or OpenAI's, told apart by its shape.
+   * `null` removes the stored key of `provider` (Anthropic's unless said). Write-only: the answer says whose key it was
+   * and where that provider's key now comes from, never the key.
    */
-  setModelKey(key: string | null): Promise<unknown>;
+  setModelKey(key: string | null, provider?: "anthropic" | "openai"): Promise<unknown>;
   /** "Set up a model": what's available, testing and storing a key, a local model through Ollama (see model-setup.ts). */
   modelSetup: ModelSetupApi;
   /** Follow-ups on PRs you reviewed, for the desktop app's notifications, and each PR's own level (see follow-ups.ts). */
@@ -754,10 +756,17 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         return;
       case "PUT /api/model-key": {
         const body = await readJsonBody(req);
-        if (!(typeof body.key === "string" || body.key === null)) {
-          throw new ApiError(400, "Send { key }: the API key, or null to remove the stored one.");
+        const provider = body.provider === "openai" ? "openai" : body.provider === undefined ? undefined : "anthropic";
+        if (
+          !(typeof body.key === "string" || body.key === null) ||
+          (body.provider !== undefined && body.provider !== "anthropic" && body.provider !== "openai")
+        ) {
+          throw new ApiError(
+            400,
+            "Send { key }: an Anthropic or OpenAI API key, or null (with provider: anthropic | openai) to remove the stored one.",
+          );
         }
-        send(res, 200, await api.setModelKey(body.key));
+        send(res, 200, provider ? await api.setModelKey(body.key, provider) : await api.setModelKey(body.key));
         return;
       }
       case "GET /api/model-setup":
@@ -777,11 +786,25 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         await streamLocalSetup(body.model.trim(), res);
         return;
       }
+      case "GET /api/models":
+        send(res, 200, await api.modelSetup.models());
+        return;
+      case "PUT /api/models": {
+        const pick = ModelPickSchema.safeParse(await readJsonBody(req));
+        if (!pick.success) {
+          throw new ApiError(
+            400,
+            "Send { provider: anthropic | openai | ollama | bedrock | vertex | foundry, model }.",
+          );
+        }
+        send(res, 200, await api.modelSetup.pickModel(pick.data));
+        return;
+      }
       case "POST /api/model-setup/open": {
         const body = await readJsonBody(req);
-        const pages: SetupPage[] = ["keys", "cloud", "ollama"];
+        const pages: SetupPage[] = ["keys", "openaiKeys", "cloud", "ollama"];
         const page = pages.find((p) => p === body.page);
-        if (!page) throw new ApiError(400, "Send { page: keys | cloud | ollama }.");
+        if (!page) throw new ApiError(400, "Send { page: keys | openaiKeys | cloud | ollama }.");
         send(res, 200, await api.modelSetup.open(page));
         return;
       }

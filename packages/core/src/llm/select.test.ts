@@ -77,4 +77,22 @@ describe("selectProvider", () => {
     expect(await on("vertex")).toEqual(["vertex", "claude-sonnet-5"]);
     expect(await on("foundry")).toEqual(["foundry", "claude-sonnet-5"]);
   });
+
+  it("uses OpenAI with your OpenAI key, OpenAI's default model in place of a Claude alias, and says where the key is", async () => {
+    const openai = AldenConfigSchema.parse({ model: { provider: "openai" } });
+    const stored: CredentialStore = { ...noKey, get: async () => "sk-proj-stored" };
+    const chosen = await selectProvider(openai, undefined, { env: {}, store: noKey, openaiStore: stored });
+    expect(chosen.ok && [chosen.provider.provider, chosen.provider.model]).toEqual(["openai", "gpt-6.1-sol"]);
+    expect(chosen.ok && chosen.key).toEqual({
+      source: "alden",
+      where: "the OpenAI key you stored with `alden auth model`",
+    });
+    expect(JSON.stringify(chosen.ok && chosen.key)).not.toContain("sk-proj");
+    const astra = await selectProvider(openai, "gpt-6-astra", { env: { OPENAI_API_KEY: "k" }, openaiStore: noKey });
+    expect(astra.ok && astra.provider.model).toBe("gpt-6-astra");
+    expect(await selectProvider(openai, undefined, { env: {}, openaiStore: noKey })).toEqual({
+      ok: false,
+      reason: expect.stringMatching(/No OpenAI API key found.*OPENAI_API_KEY/),
+    });
+  });
 });

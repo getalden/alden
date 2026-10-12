@@ -5,7 +5,15 @@ import Anthropic from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig, setConfigValue, userConfigPath } from "../config.js";
 import type { CredentialStore } from "../github/credentials.js";
-import { KEY_TEST_MODEL, type KeyTestClient, modelSetupState, setUpModelKey, testModelKey } from "./setup.js";
+import {
+  KEY_TEST_MODEL,
+  type KeyTestClient,
+  modelSetupState,
+  OPENAI_KEY_TEST_MODEL,
+  setUpModelKey,
+  testModelKey,
+  testOpenAIKey,
+} from "./setup.js";
 
 const KEY = `sk-ant-api03-${"a".repeat(40)}`;
 const headers = new Headers();
@@ -52,7 +60,7 @@ afterEach(async () => {
 describe("testModelKey", () => {
   it("asks the smallest model for one token", async () => {
     const { make, calls } = client();
-    expect(await testModelKey(` ${KEY}\n`, make)).toEqual({ ok: true, key: null });
+    expect(await testModelKey(` ${KEY}\n`, make)).toEqual({ ok: true, provider: "anthropic", key: null });
     expect(calls).toEqual([
       { apiKey: KEY, body: { model: KEY_TEST_MODEL, max_tokens: 1, messages: [{ role: "user", content: "Hi" }] } },
     ]);
@@ -106,7 +114,11 @@ describe("setUpModelKey", () => {
     const store = memoryStore();
     const result = await setUpModelKey(KEY, { client: client().make, store, env: {}, profileDir: noProfiles() });
     expect(store.value).toBe(KEY);
-    expect(result).toEqual({ ok: true, key: { source: "alden", where: "the key you stored with `alden auth model`" } });
+    expect(result).toEqual({
+      ok: true,
+      provider: "anthropic",
+      key: { source: "alden", where: "the key you stored with `alden auth model`" },
+    });
   });
 
   it("stores nothing when Anthropic refuses the key", async () => {
@@ -129,7 +141,7 @@ describe("setUpModelKey", () => {
     });
     expect(calls).toEqual([]);
     expect(store.value).toBe(KEY);
-    expect(result).toEqual({ ok: true, key: { source: "env", where: "ANTHROPIC_API_KEY" } });
+    expect(result).toEqual({ ok: true, provider: "anthropic", key: { source: "env", where: "ANTHROPIC_API_KEY" } });
   });
 
   it("makes Claude the model again after a local one", async () => {
@@ -157,6 +169,7 @@ describe("modelSetupState", () => {
       cwd: home,
       env: {},
       store: memoryStore(),
+      openaiStore: memoryStore(),
       profileDir: join(home, "none"),
       fetch: offline,
       totalMemory: 16 * 1024 ** 3,
@@ -176,6 +189,7 @@ describe("modelSetupState", () => {
       cwd: home,
       env: {},
       store: memoryStore(KEY),
+      openaiStore: memoryStore(),
       profileDir: join(home, "none"),
       fetch: offline,
       totalMemory: 8 * 1024 ** 3,
@@ -190,11 +204,127 @@ describe("modelSetupState", () => {
       cwd: home,
       env: {},
       store: memoryStore(KEY),
+      openaiStore: memoryStore(),
       profileDir: join(home, "none"),
       fetch: offline,
       totalMemory: 8 * 1024 ** 3,
     });
     expect(local.current).toMatchObject({ provider: "openai-compatible", model: "qwen2.5-coder:7b", available: true });
     expect(local.key?.source).toBe("alden");
+  });
+});
+
+const OPENAI = `sk-proj-${"o".repeat(48)}`;
+
+/** A fake api.openai.com: records requests, answers with `status` and `body` (or throws to mean no network). */
+function openai(status: number, body: unknown = {}) {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const doFetch = (async (url: string, init: RequestInit) => {
+    calls.push({ url, init });
+    if (status === 0) throw new TypeError("fetch failed");
+    return new Response(JSON.stringify(body), { status });
+  }) as typeof fetch;
+  return { doFetch, calls };
+}
+
+describe("testOpenAIKey", () => {
+  it("asks the cheapest model for a few tokens, with the key as a bearer token", async () => {
+    const { doFetch, calls } = openai(200, { choices: [] });
+    expect(await testOpenAIKey(` ${OPENAI}\n`, doFetch)).toEqual({ ok: true, provider: "openai", key: null });
+    expect(calls[0]?.url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
+      model: OPENAI_KEY_TEST_MODEL,
+      max_completion_tokens: 16,
+      messages: [{ role: "user", content: "Hi" }],
+    });
+    expect(new Headers(calls[0]?.init.headers).get("authorization")).toBe(`Bearer ${OPENAI}`);
+  });
+
+  it("makes no request for an Anthropic key or a key that can't be one", async () => {
+    const { doFetch, calls } = openai(200);
+    expect(await testOpenAIKey(KEY, doFetch)).toMatchObject({ ok: false, reason: "shape" });
+    expect(await testOpenAIKey("sk-admin-xxxxxxxxxxxxxxxxxxxxxxxx", doFetch)).toMatchObject({ reason: "shape" });
+    expect(calls).toEqual([]);
+  });
+
+  it("says why a key doesn't work, without the key", async () => {
+    const reason = async (status: number, body: unknown = {}) => {
+      const result = await testOpenAIKey(OPENAI, openai(status, body).doFetch);
+      expect(JSON.stringify(result)).not.toContain(OPENAI);
+      return result.ok ? "ok" : result.reason;
+    };
+    expect(await reason(401, { error: { code: "invalid_api_key", message: "Incorrect API key" } })).toBe("invalid");
+    expect(await reason(429, { error: { code: "insufficient_quota" } })).toBe("billing");
+    expect(await reason(429, { error: { code: "rate_limit_exceeded" } })).toBe("ok");
+    expect(await reason(404, { error: { code: "model_not_found" } })).toBe("ok");
+    expect(await reason(403)).toBe("permission");
+    expect(await reason(503)).toBe("unavailable");
+    expect(await reason(0)).toBe("network");
+  });
+});
+
+describe("setUpModelKey with an OpenAI key", () => {
+  it("detects it, tests it with OpenAI, stores it under its own name and makes OpenAI the model", async () => {
+    await setConfigValue("model.provider", "openai-compatible");
+    await setConfigValue("model.name", "qwen2.5-coder:7b");
+    await setConfigValue("model.baseUrl", "http://localhost:11500/v1");
+    const anthropicStore = memoryStore();
+    const openaiStore = memoryStore();
+    const { doFetch, calls } = openai(200);
+    const { make, calls: anthropicCalls } = client();
+    const result = await setUpModelKey(OPENAI, {
+      client: make,
+      openaiFetch: doFetch,
+      store: anthropicStore,
+      openaiStore,
+      env: {},
+    });
+    expect(result).toEqual({
+      ok: true,
+      provider: "openai",
+      key: { source: "alden", where: "the OpenAI key you stored with `alden auth model`" },
+    });
+    expect(calls).toHaveLength(1);
+    expect(anthropicCalls).toEqual([]);
+    expect(openaiStore.value).toBe(OPENAI);
+    expect(anthropicStore.value).toBeUndefined();
+    const config = await loadConfig(home);
+    expect(config.model).toMatchObject({ provider: "openai", name: "gpt-6.1-sol" });
+    expect(config.model.baseUrl).toBeUndefined();
+  });
+
+  it("stores nothing when OpenAI refuses it, and keeps an OpenAI model you chose", async () => {
+    const openaiStore = memoryStore();
+    const refused = await setUpModelKey(OPENAI, { openaiFetch: openai(401).doFetch, openaiStore, env: {} });
+    expect(refused).toMatchObject({ ok: false, reason: "invalid" });
+    expect(openaiStore.value).toBeUndefined();
+
+    await writeFile(userConfigPath(), 'model = { provider = "anthropic", name = "gpt-6-astra" }\n');
+    await setUpModelKey(OPENAI, { openaiFetch: openai(200).doFetch, openaiStore, env: {} });
+    expect((await loadConfig(home)).model).toMatchObject({ provider: "openai", name: "gpt-6-astra" });
+  });
+
+  it("makes Claude the model again when an Anthropic key follows", async () => {
+    await writeFile(userConfigPath(), 'model = { provider = "openai", name = "gpt-6-luna" }\n');
+    await setUpModelKey(KEY, { client: client().make, store: memoryStore(), env: {}, profileDir: join(home, "x") });
+    const config = await loadConfig(home);
+    expect(config.model).toMatchObject({ provider: "anthropic", name: "sonnet" });
+  });
+
+  it("is reported by the setup state next to the Anthropic key", async () => {
+    const state = await modelSetupState({
+      cwd: home,
+      env: {},
+      store: memoryStore(),
+      openaiStore: memoryStore(OPENAI),
+      profileDir: join(home, "none"),
+      fetch: (async () => {
+        throw new TypeError("offline");
+      }) as typeof fetch,
+      totalMemory: 8 * 1024 ** 3,
+    });
+    expect(state.key).toBeNull();
+    expect(state.openaiKey).toEqual({ source: "alden", where: "the OpenAI key you stored with `alden auth model`" });
+    expect(JSON.stringify(state)).not.toContain(OPENAI);
   });
 });

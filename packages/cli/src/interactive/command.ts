@@ -1,9 +1,12 @@
-import { flushTelemetry, resolveToken, track } from "@alden/core";
+import { flushTelemetry, modelSetupState, resolveToken, track } from "@alden/core";
 import type { Command } from "commander";
+import { signInToGitHub } from "../commands/auth.js";
+import { realSteps, runSetup, terminalIo } from "../commands/setup.js";
 import { shouldColor } from "../render/style.js";
 import { askTelemetryOnce } from "../telemetry.js";
 import { startInteractive } from "./app.js";
 import { createEngine } from "./engine.js";
+import { runFirstRun } from "./first-run.js";
 
 /**
  * `alden` with no command, in a terminal: the queue, briefings, feedback, comments and sending, on one screen. Counted
@@ -13,10 +16,18 @@ export async function runInteractiveCommand(program: Command, version: string): 
   const started = Date.now();
   // Asked before the screen changes, as every command asks it.
   await askTelemetryOnce(program);
+  // Signed out: the first run, as in the app. Sign in, a model (or not), then the queue.
   if (!(await resolveToken())) {
-    console.error("Not signed in. Run `alden auth login`, then `alden` again.");
-    process.exitCode = 1;
-    return;
+    const open = await runFirstRun(terminalIo(), {
+      signIn: () => signInToGitHub({ device: false }),
+      signedIn: async () => (await resolveToken()) !== undefined,
+      modelState: () => modelSetupState(),
+      setUp: () => runSetup(terminalIo(), realSteps),
+    });
+    if (!open) {
+      process.exitCode = 1;
+      return;
+    }
   }
   let ok = false;
   try {
