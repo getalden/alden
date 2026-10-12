@@ -50,7 +50,7 @@ describe("modelChoices", () => {
       ["openai", "OpenAI", "your key", false],
       ["ollama", "Local", "Ollama", false],
     ]);
-    expect(none.groups[0]?.items[0]).toEqual({ id: "claude-sonnet-5", note: "fast" });
+    expect(none.groups[0]?.items[0]).toEqual({ id: "claude-sonnet-5", note: "the default" });
     expect(none.groups[1]?.items.map((m) => m.id)).toEqual(["gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"]);
     expect(none.groups[2]?.items).toEqual([]);
 

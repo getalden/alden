@@ -12,10 +12,11 @@ import { useAnthropic } from "./setup.js";
  * (`alden config set model.name …`); the one in use is always listed.
  */
 export const ANTHROPIC_PICKS: readonly ModelChoice[] = [
-  { id: "claude-sonnet-5", note: "fast" },
+  { id: "claude-sonnet-5", note: "the default" },
+  { id: "claude-sonnet-5-5", note: "fast" },
   { id: "claude-opus-5-5", note: "deep" },
   { id: "claude-fable-5-1", note: "deepest" },
-  { id: "claude-haiku-4-5", note: "cheap" },
+  { id: "claude-haiku-5-5", note: "cheap" },
 ];
 
 /** OpenAI's current flagship models (developers.openai.com/api/docs/models, checked 12 October 2026). */
