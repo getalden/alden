@@ -1,7 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { composeReviewBody, findThread, JsonCache, shortThreadId, threadWhere } from "@alden/core";
-import type { ReviewDraft, ReviewEvent, ReviewThread, SendReviewResult, UnaddressedPlace } from "@alden/schema";
+import {
+  DraftToneSchema,
+  type ReviewDraft,
+  type ReviewEvent,
+  type ReviewThread,
+  type SendReviewResult,
+  type UnaddressedPlace,
+} from "@alden/schema";
 import type { Command } from "commander";
 import { parsePrRef, queuePick } from "../pr-ref.js";
 import { paint, shouldColor, stripControlDeep } from "../render/style.js";
@@ -343,6 +350,7 @@ interface CommentOptions {
   delete?: string;
   keep?: string;
   draft?: boolean;
+  tone?: string;
   json?: boolean;
   threads?: boolean;
   reply?: string;
@@ -409,6 +417,10 @@ export function registerCommentCommands(program: Command, version: string): void
       "--draft",
       "ask the model (one call, within your caps) to draft comments for the places in the PR's latest briefing you haven't commented near, to keep, edit or drop",
     )
+    .option(
+      "--tone <tone>",
+      `with --draft, how Alden writes this time: ${DraftToneSchema.options.join(", ")} (default: the repo's tone, else drafts.tone)`,
+    )
     .option("--threads", "list the PR's review threads, with ids to reply by")
     .option("--reply <thread>", "reply in a review thread (its id from --threads, or file:line) instead")
     .option(
@@ -437,10 +449,19 @@ export function registerCommentCommands(program: Command, version: string): void
       if (options.resolve === true) {
         program.error(`Say which thread to resolve: alden comment ${pr} --resolve <id or file:line> (see --threads).`);
       }
+      if (options.tone !== undefined && !options.draft) {
+        program.error(`--tone goes with --draft: alden comment ${pr} --draft --tone ${options.tone}.`);
+      }
       if (options.draft) {
         if (words.length > 0)
           program.error(`--draft drafts from the briefing: alden comment ${pr} --draft, with no text.`);
-        const result = await api().draftReview({ pr }).catch(fail);
+        const tone = options.tone === undefined ? undefined : DraftToneSchema.safeParse(options.tone).data;
+        if (options.tone !== undefined && !tone) {
+          program.error(`--tone is one of ${DraftToneSchema.options.join(", ")}.`);
+        }
+        const result = await api()
+          .draftReview({ pr, ...(tone ? { tone } : {}) })
+          .catch(fail);
         if (options.json) console.log(JSON.stringify(result, null, 2));
         else for (const line of draftReviewLines(result, pr)) console.log(line);
         return;

@@ -198,7 +198,7 @@ alden comment <pr> [file:line[-endLine]] "text" [--suggest "code" | --suggest-fi
 alden comment <pr> --threads
 alden comment <pr> --reply <thread> "text" [--resolve]
 alden comment <pr> --resolve <thread>
-alden comment <pr> --draft
+alden comment <pr> --draft [--tone terse|concise|detailed|teaching]
 ```
 
 Writes a comment on a PR, kept in Alden until you send it with `alden send`. With `file:line`, it's on that line of
@@ -217,10 +217,25 @@ text, lists the PR's comments, ranges and suggestions (old lines and new) shown,
 | `--delete <id>` | Deletes a comment (or a reply), by the id the list shows. On one of [Alden's drafts](comments.md#aldens-drafts), drops it. |
 | `--keep <id>` | Keeps one of Alden's drafts (or `all` of them on the PR), making it yours so it's sent with your review. |
 | `--draft` | Asks the model, in one call within your caps, to draft comments for the places in the PR's latest briefing (from `alden review`, of its latest push) that have no comment or draft near them, and says how many it drafted, what it cost and how many places it skipped. They're [Alden's drafts](comments.md#aldens-drafts): keep them with `--keep`. Needs a model; never on a PR with text aimed at AI reviewers. See [Draft my review](comments.md#draft-my-review). |
+| `--tone <tone>` | With `--draft`: how Alden writes this time, `terse`, `concise`, `detailed` or `teaching`, instead of the repo's tone (its own on this machine, else `drafts.tone`). See [The tone of drafts](models.md#the-tone-of-drafts). |
 | `--threads` | Lists the PR's review threads, yours first and open ones first, each with a short id and every comment. |
 | `--reply <thread>` | Replies in a review thread already on the PR (any thread you can reply in, yours or not), by its short id or `file:line`, with your review. One reply per thread: again changes its text. See [Replying in a thread](comments.md#replying-in-a-thread). |
 | `--resolve [thread]` | With `--reply`, resolves the thread once your review is sent. Alone, names the thread to resolve, saying nothing. Only a thread you started: on someone else's, Alden says so and suggests a reply. |
 | `--json` | Print the comments (or the new one, or with `--threads` the threads) as JSON. Schema: `packages/schema/json/review-draft.v1.json`. |
+
+## alden ask
+
+```sh
+alden ask <pr> "question" [--model <name>]
+```
+
+Asks your model a question about a PR and prints the answer as it's written, then (on stderr) the model and what the
+call cost. It answers from the PR's latest briefing of its current push (brief it first with `alden review`), the diff
+around the places that matter (lines and files the question names, then the places Alden flagged) and your notes for
+the repo. One call within your caps, recorded in `alden spend` as `owner/repo#12 question`; Ctrl-C stops it. Needs a
+model; never on a PR with text aimed at AI reviewers. Nothing is kept: each `alden ask` starts without earlier
+questions (in `alden ui`, the last five on a PR are sent along for follow-ups). `pr` takes the same forms as
+`alden review`; `--model` picks a model for this question only. See [Ask about this PR](models.md#ask-about-this-pr).
 
 ## alden send
 

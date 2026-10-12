@@ -198,6 +198,32 @@ const api: UiApi = {
     }
     return { text: "Is this in \u001b[31mcents?", costUsd: 0.001 };
   },
+  tone: async (repo) => {
+    calls.push({ method: "tone", args: repo });
+    return repo ? { tone: "terse", source: "repo" } : { tone: "concise", source: "default" };
+  },
+  setTone: async (input) => {
+    calls.push({ method: "setTone", args: input });
+    return { tone: input.tone ?? "concise", source: input.repo && input.tone ? "repo" : "default" };
+  },
+  ask: async (input, onText, signal) => {
+    calls.push({ method: "ask", args: input });
+    if (input.pr === "a/b#9")
+      throw new ApiError(409, "Alden won't ask the model about a PR with text aimed at AI reviewers.");
+    if (input.pr === "a/b#502") {
+      onText("Half an ");
+      throw new ApiError(502, "The model provider is overloaded or erroring. Try again shortly.");
+    }
+    if (input.pr === "a/b#slow") {
+      onText("Thinking");
+      await new Promise<void>((resolve) => signal?.addEventListener("abort", () => resolve()));
+      calls.push({ method: "ask.aborted", args: signal?.aborted });
+      throw new ApiError(499, "Stopped.");
+    }
+    onText("It charges in ");
+    onText("\u001b[31mcents.");
+    return { costUsd: 0.004, model: "claude-sonnet-5" };
+  },
   diff: async (pr, since) => {
     calls.push({ method: "diff", args: since === undefined ? pr : { pr, since } });
     if (pr === "a/b#404") throw new ApiError(502, "GitHub couldn't find a/b#404.");
@@ -771,6 +797,91 @@ describe("alden ui server", () => {
     expect((await post("/api/drafts/suggest-text", { pr: "a/b#1", threadId: "x y" })).status).toBe(400);
     expect((await post("/api/drafts/suggest-text", { pr: "a/b#1", threadId: "T", path: "x.ts" })).status).toBe(400);
     expect((await post("/api/drafts/suggest-text", { pr: "a/b#1", line: 3 })).status).toBe(400);
+  });
+
+  it("passes a one-off tone to Draft my review and Draft with Alden, and refuses an unknown one", async () => {
+    const post = (path: string, body: unknown) => call(path, { method: "POST", headers: authed, body });
+    expect((await post("/api/drafts/alden", { pr: "a/b#1", tone: "teaching" })).status).toBe(200);
+    expect((await post("/api/drafts/suggest-text", { pr: "a/b#1", tone: "terse" })).status).toBe(200);
+    expect(calls).toEqual([
+      { method: "draftReview", args: { pr: "a/b#1", tone: "teaching" } },
+      { method: "suggestText", args: { pr: "a/b#1", tone: "terse" } },
+    ]);
+    expect((await post("/api/drafts/alden", { pr: "a/b#1", tone: "rude" })).status).toBe(400);
+    expect((await post("/api/drafts/suggest-text", { pr: "a/b#1", tone: 1 })).status).toBe(400);
+  });
+
+  it("reads and sets the tone, for a repo or the default, and checks the body", async () => {
+    const send = (method: string, path: string, body?: unknown) =>
+      call(path, { method, headers: authed, ...(body !== undefined ? { body } : {}) });
+    expect(JSON.parse((await send("GET", "/api/tone?repo=a/b")).text)).toEqual({ tone: "terse", source: "repo" });
+    expect(JSON.parse((await send("GET", "/api/tone")).text)).toEqual({ tone: "concise", source: "default" });
+    expect((await send("GET", "/api/tone?repo=nope")).status).toBe(400);
+    expect(JSON.parse((await send("PUT", "/api/tone", { repo: "a/b", tone: "detailed" })).text)).toEqual({
+      tone: "detailed",
+      source: "repo",
+    });
+    expect((await send("PUT", "/api/tone", { tone: "terse" })).status).toBe(200);
+    expect((await send("PUT", "/api/tone", { repo: "a/b", tone: null })).status).toBe(200);
+    expect(calls).toEqual([
+      { method: "tone", args: "a/b" },
+      { method: "tone", args: undefined },
+      { method: "setTone", args: { repo: "a/b", tone: "detailed" } },
+      { method: "setTone", args: { tone: "terse" } },
+      { method: "setTone", args: { repo: "a/b", tone: null } },
+    ]);
+    expect((await send("PUT", "/api/tone", { tone: null })).status).toBe(400);
+    expect((await send("PUT", "/api/tone", { tone: "loud" })).status).toBe(400);
+    expect((await send("PUT", "/api/tone", { repo: 3, tone: "terse" })).status).toBe(400);
+    expect((await call("/api/tone")).status).toBe(401);
+  });
+
+  it("streams an answer to a question as NDJSON, then done or an error with its status", async () => {
+    const post = (body: unknown) => call("/api/ask", { method: "POST", headers: authed, body });
+    const lines = (text: string) =>
+      text
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l));
+    const answered = await post({ pr: " a/b#1 ", question: " Is it in cents? ", model: "opus" });
+    expect(answered.status).toBe(200);
+    expect(answered.headers["content-type"]).toMatch(/ndjson/);
+    // The answer can quote the PR: control sequences are stripped as from every string the API sends.
+    expect(lines(answered.text)).toEqual([
+      { type: "delta", text: "It charges in " },
+      { type: "delta", text: "cents." },
+      { type: "done", costUsd: 0.004, model: "claude-sonnet-5" },
+    ]);
+    expect(calls).toEqual([{ method: "ask", args: { pr: "a/b#1", question: "Is it in cents?", model: "opus" } }]);
+    expect(lines((await post({ pr: "a/b#9", question: "q" })).text)).toEqual([
+      { type: "error", message: "Alden won't ask the model about a PR with text aimed at AI reviewers.", status: 409 },
+    ]);
+    expect(lines((await post({ pr: "a/b#502", question: "q" })).text)).toEqual([
+      { type: "delta", text: "Half an " },
+      { type: "error", message: "The model provider is overloaded or erroring. Try again shortly.", status: 502 },
+    ]);
+    expect((await post({ pr: "a/b#1" })).status).toBe(400);
+    expect((await post({ pr: "a/b#1", question: "   " })).status).toBe(400);
+    expect((await post({ pr: "a/b#1", question: "x".repeat(4_001) })).status).toBe(400);
+    expect((await post({ pr: "a/b#1", question: "q", model: 3 })).status).toBe(400);
+    expect((await call("/api/ask", { method: "POST", body: { pr: "a/b#1", question: "q" } })).status).toBe(401);
+  });
+
+  it("stops a question's model call when the request is closed", async () => {
+    const req = request({
+      host: "127.0.0.1",
+      port: ui.port,
+      path: "/api/ask",
+      method: "POST",
+      headers: { ...authed, Host: `127.0.0.1:${ui.port}`, "Content-Type": "application/json" },
+    });
+    req.on("error", () => {});
+    req.on("response", (res) => res.resume());
+    req.end(JSON.stringify({ pr: "a/b#slow", question: "q" }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    req.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toContainEqual({ method: "ask.aborted", args: true });
   });
 
   it("stops a suggestion when the request is closed", async () => {

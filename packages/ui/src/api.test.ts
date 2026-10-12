@@ -130,3 +130,31 @@ describe("Api.recordSeen", () => {
     expect(new Headers(sent?.init.headers).get("X-Alden-Token")).toBe("tok");
   });
 });
+
+describe("Api.ask", () => {
+  it("hears the answer as it's written and resolves with the cost, however the stream is split", async () => {
+    const lines = [
+      JSON.stringify({ type: "delta", text: "It rounds " }),
+      JSON.stringify({ type: "delta", text: "down." }),
+      JSON.stringify({ type: "done", costUsd: 0.004, model: "claude-sonnet-5" }),
+    ].join("\n");
+    const heard: string[] = [];
+    const api = new Api("t", streaming([lines.slice(0, 7), lines.slice(7, 50), `${lines.slice(50)}\n`]));
+    await expect(api.ask({ pr: "a/b#1", question: "q" }, (t) => heard.push(t))).resolves.toEqual({
+      costUsd: 0.004,
+      model: "claude-sonnet-5",
+    });
+    expect(heard).toEqual(["It rounds ", "down."]);
+  });
+
+  it("throws the error line with its status", async () => {
+    const api = new Api(
+      "t",
+      streaming([`${JSON.stringify({ type: "error", message: "Brief it first.", status: 409 })}\n`]),
+    );
+    await expect(api.ask({ pr: "a/b#1", question: "q" }, () => {})).rejects.toMatchObject({
+      status: 409,
+      message: "Brief it first.",
+    });
+  });
+});

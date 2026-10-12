@@ -57,3 +57,29 @@ export interface LlmProvider {
   countInputTokens(request: Omit<GenerateRequest<unknown>, "schema" | "maxOutputTokens">): Promise<number | undefined>;
   generate<T>(request: GenerateRequest<T>): Promise<GenerateResult<T>>;
 }
+
+/** A free-text answer, streamed: for a question about a PR, where the reader watches the words arrive. */
+export interface StreamTextRequest {
+  system: string;
+  user: string;
+  maxOutputTokens: number;
+  effort?: Effort;
+  /** Stops the call; what has arrived so far is kept in the result's `text`. */
+  signal?: AbortSignal;
+}
+
+export interface StreamTextResult {
+  text: string;
+  usage: TokenUsage;
+  stopReason: StopReason;
+  refusal?: { category: string | null; explanation: string | null };
+  model: string;
+}
+
+/** A provider that can stream plain text. The ones that can't answer in one piece through `generate`. */
+export interface TextStreamer {
+  streamText(request: StreamTextRequest, onText: (delta: string) => void): Promise<StreamTextResult>;
+}
+
+export const canStream = (provider: LlmProvider): provider is LlmProvider & TextStreamer =>
+  typeof (provider as Partial<TextStreamer>).streamText === "function";

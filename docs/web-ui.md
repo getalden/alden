@@ -326,6 +326,15 @@ Each comment and reply box has **Draft with Alden**: it fills an empty box with 
 (**Undo** empties it), or, when you've written something, shows Alden's version of it with **Use it** and **Keep
 mine**. **Cancel** stops it while it's drafting. It saves nothing: you save, and the comment is yours.
 
+Both write in the repo's tone (**Terse**, **Concise**, **Detailed** or **Teaching**: a style you pick for Alden's
+drafts, not an imitation of you), set per repo on this machine or for every repo (`drafts.tone`); either can take a
+different tone for one draft. See [The tone Alden writes in](comments.md#the-tone-alden-writes-in).
+
+**Ask about this PR** takes a question in your words and streams the model's answer, from the PR's briefing (of its
+latest push), the diff around the places that matter and your notes, with what the call cost when it's done. The last
+five questions on a PR go along for follow-ups while Alden runs; nothing is stored. See
+[Ask about this PR](models.md#ask-about-this-pr).
+
 On a PR with text aimed at AI reviewers, neither drafts: **Draft my review** says why, and the boxes say "Alden won't
 draft here". See [Drafting with Alden on demand](comments.md#drafting-with-alden-on-demand).
 

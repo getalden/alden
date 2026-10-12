@@ -1,6 +1,7 @@
 import {
   ACTIVE_MINUTES_BUCKETS,
   type Briefing,
+  type COST_BUCKETS,
   type RankedQueue,
   type RepoStats,
   type ReviewSignalEvent,
@@ -110,4 +111,13 @@ export function reviewTimedEvent(timing: ReviewTiming): TelemetryProperties<"rev
     verdict:
       timing.verdict === "APPROVE" ? "approve" : timing.verdict === "REQUEST_CHANGES" ? "request_changes" : "comment",
   };
+}
+
+/** What a model call cost, as a coarse bucket: never the amount. "unpriced" for a model with no known price. */
+export function costBucket(usd: number | undefined | null): (typeof COST_BUCKETS)[number] {
+  if (usd === undefined || usd === null) return "unpriced";
+  if (usd < 0.01) return "0-0.01";
+  if (usd < 0.05) return "0.01-0.05";
+  if (usd < 0.25) return "0.05-0.25";
+  return "0.25+";
 }
