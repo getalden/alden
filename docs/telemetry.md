@@ -40,6 +40,7 @@ dropped.
 | `draft_assisted` | That a comment or reply you saved was drafted with Alden ("Draft with Alden"), whether it's a reply or on a line, and whether you changed Alden's text first. Never the text |
 | `review_sent` | Comment, approve or request changes; how many line comments and general notes, how many drafted by you and by Claude Code; whether there was a body; how many flagged places it didn't comment near |
 | `review_signals` | What a review you sent taught Alden, as counts by kind: comments requesting changes, suggestions and comments near flags, flags approved past without a word, comments where Alden flagged nothing; or (`source: "outcome"`) how many suggestions authors applied and comments they resolved since the last check. Never which check, file or line |
+| `review_timed` | For each review you send from Alden whose briefing you opened in Alden (and only while [time to review](commands.md#time-to-review) is on): how long it took, in coarse buckets (active minutes: 0–2, 2–5, 5–10, 10–20, 20–30, 30–60, 60+; opening the briefing to sending: under 15 min, under an hour, 1–4 h, 4–24 h, 1–3 days, more), whether the active time was measured in the UI or estimated from a terminal, how many flagged places you saw, how many comments were sent, whether Alden's model helped, and the verdict. Never which PR or repo, or what anything said |
 | `stats_viewed` | A salted repo hash, how many PRs, whether there's a before and after, and median time to first review and cycle time before and after |
 | `telemetry_enabled` | That you said yes |
 
@@ -48,8 +49,8 @@ through `alden mcp`), Node or the standalone binary, the OS and CPU type, and ho
 ran.
 
 **Never sent:** code, diffs, PR titles or descriptions, file paths, repo names, user names, your notes, your comments,
-which places you saw, model output, tokens or keys. A repo appears only as a hash salted with a random value that never
-leaves your machine, so we can count repos but can't work out which ones they are.
+which places you saw, exact review times, model output, tokens or keys. A repo appears only as a hash salted with a
+random value that never leaves your machine, so we can count repos but can't work out which ones they are.
 
 ## Where it goes
 

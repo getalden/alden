@@ -130,6 +130,22 @@ FROM (
 WHERE before > 0 AND after IS NOT NULL`),
   },
   {
+    name: "Time to review, with and without the model",
+    description:
+      "Reviews sent from Alden in the last 90 days, by active-minutes bucket, with and without Alden's model (review_timed). Buckets, not medians: the event never carries exact times. Measured: the UI's measurement; the rest are terminal estimates.",
+    query: sql(`SELECT
+  properties.active_minutes AS active_minutes,
+  countIf(toString(properties.model) = 'true') AS with_model,
+  countIf(toString(properties.model) = 'false') AS without_model,
+  countIf(toString(properties.measured) = 'true') AS measured,
+  round(avg(toFloat(properties.places_seen)), 1) AS places_seen_avg,
+  round(avg(toFloat(properties.comments)), 1) AS comments_avg
+FROM events
+WHERE event = 'review_timed' AND timestamp > now() - INTERVAL 90 DAY
+GROUP BY active_minutes
+ORDER BY indexOf(['0-2', '2-5', '5-10', '10-20', '20-30', '30-60', '60+'], active_minutes)`),
+  },
+  {
     name: "Beyond the diff",
     description:
       'Per briefing: callers found outside the diff, places shown, and what learning hid. The "shows what the diff doesn\'t" claim.',

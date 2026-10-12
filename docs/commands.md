@@ -235,7 +235,8 @@ the first fix.
 
 ## alden stats
 
-Shows a repo's time to first review and review cycle time, before and after Alden.
+Shows a repo's time to first review and review cycle time, before and after Alden, then your own [time to
+review](#time-to-review).
 
 | Flag | What it does |
 | --- | --- |
@@ -245,6 +246,35 @@ Shows a repo's time to first review and review cycle time, before and after Alde
 | `--horizon <days>` | Judge each wait over this many days. Default 14. |
 | `--refresh` | Ignore the hour-long cache. |
 | `--json` | Print the stats as JSON. Schema: `packages/schema/json/repo-stats.v1.json`. |
+| `--review-time` | Only your time to review, from this machine: no GitHub, no sign-in. With `--json`, schema `packages/schema/json/review-time-stats.v1.json`. |
+
+### Time to review
+
+How long your reviews take with Alden, from the review sessions it records on your machine (`stats.reviewTime`, on by
+default): for the reviews whose briefing you first opened in the last 14, 30 and 90 days, the median **active** time
+and the median time from **opening** the briefing to **sending** the review, with and without Alden's model, each
+with how many reviews it rests on.
+
+```
+Time to review · your reviews sent with Alden, by the day you first opened the briefing
+                        Active      Open to send    Reviews
+  Last 14 days
+    With the model      12m         2h 10m          4 (few)
+    Without             9m          50m             3 (few)
+```
+
+- A session starts the first time you open a PR's briefing anywhere (the web UI, the desktop app, `alden review`, an
+  AI tool's `alden_review`; a background briefing counts when you read it), and ends when you send the review from
+  Alden. Reviewing the PR again later is a new session. One never sent within 14 days was abandoned.
+- **Active**, in the web UI and the desktop app: the time the PR's pane is visible and its window focused, leaving out
+  any stretch over 2 minutes without a key, click, scroll or pointer move. From a terminal or AI tool, which can't
+  tell: from its latest briefing there to the send, at most 30 minutes (the notes say how many reviews that is).
+- **With the model**: Alden's model briefed the PR, or drafted for it ("Draft my review", "Draft with Alden").
+- Reviews are grouped by the day you first opened the briefing, and counted only once that's 3 days ago, so quick
+  recent reviews don't crowd out slow ones not yet sent; open to send is capped at 3 days (`3d+`). Briefings never sent
+  from Alden aren't counted, and the notes say how many.
+- Under 10 reviews in a group is marked **(few)**: one review can swing the median. The two medians are shown side by
+  side, never as "faster": the reviews you use the model on aren't the same kind as the ones you don't.
 
 ## alden feedback
 
