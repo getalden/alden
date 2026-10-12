@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect } from "react";
+import { useEffect } from "react";
 
 /*
  * Time to review: how long the PR pane is in front of you, sent to the local API (which keeps it on this machine, and
@@ -50,8 +50,21 @@ export class ActiveClock {
 /** Reports active time on a PR ("owner/repo#12") to the local API. */
 export type ReportActive = (pr: string, activeMs: number) => Promise<unknown>;
 
-/** Set around the app when there's a local API and `stats.reviewTime` is on; absent, nothing is measured. */
-export const ReviewTimeContext = createContext<ReportActive | undefined>(undefined);
+/** Where active time goes: set by the app when there's a local API and `stats.reviewTime` is on. */
+let reporter: ReportActive | undefined;
+
+/**
+ * Sends the PR pane's active time with `report` while it's set; undefined (no local API, or `stats.reviewTime` off)
+ * sends nothing. Read when sending, so a pane that mounted first still reports.
+ */
+export function useReviewTimeReporter(report: ReportActive | undefined): void {
+  useEffect(() => {
+    reporter = report;
+    return () => {
+      if (reporter === report) reporter = undefined;
+    };
+  }, [report]);
+}
 
 /** The PR panes measuring now, by PR, so sending a review can report their last seconds first. */
 const flushers = new Map<string, Set<() => Promise<void>>>();
@@ -72,15 +85,16 @@ const ACTIVITY = ["pointerdown", "pointermove", "keydown", "wheel", "scroll", "t
 /**
  * Measures active time on a PR's pane while it's mounted, and reports it every 15 seconds, when the window loses focus
  * or the page goes away, and when the pane closes. `pr` undefined (your local changes, or no briefing yet) measures
- * nothing. Errors are ignored: a report that didn't land only means a review looks a little quicker.
+ * nothing, and so does the app without a reporter (see `useReviewTimeReporter`). Errors are ignored: a report that didn't land only means a review looks a little quicker.
  */
 export function useActiveTime(pr: string | undefined): void {
-  const report = useContext(ReviewTimeContext);
   useEffect(() => {
-    if (!pr || !report) return;
+    if (!pr) return;
     const clock = new ActiveClock();
     const flush = async () => {
       let ms = clock.take();
+      const report = reporter;
+      if (!report) return;
       while (ms > 0) {
         const part = Math.min(ms, MAX_REPORT_MS);
         ms -= part;
@@ -128,5 +142,5 @@ export function useActiveTime(pr: string | undefined): void {
       if (set.size === 0) flushers.delete(key);
       onAway();
     };
-  }, [pr, report]);
+  }, [pr]);
 }

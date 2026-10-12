@@ -8,8 +8,9 @@ import {
   flushActiveTime,
   IDLE_MS,
   REPORT_EVERY_MS,
-  ReviewTimeContext,
+  type ReportActive,
   useActiveTime,
+  useReviewTimeReporter,
 } from "./review-time";
 
 afterEach(() => {
@@ -48,17 +49,19 @@ function Pane({ pr }: { pr: string | undefined }) {
   return null;
 }
 
+/** As the app does: the reporter set after the pane mounted (a parent's effects run after its children's). */
+function App({ report, pr }: { report: ReportActive | undefined; pr: string | undefined }) {
+  useReviewTimeReporter(report);
+  return <Pane pr={pr} />;
+}
+
 describe("useActiveTime", () => {
   it("reports active time on a PR while it's in front of you, and before a send", async () => {
     vi.useFakeTimers({ now: 0 });
     vi.spyOn(document, "hasFocus").mockReturnValue(true);
     const reports: [string, number][] = [];
     const report = async (pr: string, ms: number) => reports.push([pr, ms]);
-    const { unmount } = render(
-      <ReviewTimeContext.Provider value={report}>
-        <Pane pr="acme/api#1" />
-      </ReviewTimeContext.Provider>,
-    );
+    const { unmount } = render(<App report={report} pr="acme/api#1" />);
     for (let i = 0; i < 3; i++) {
       vi.advanceTimersByTime(4 * SEC);
       fireEvent.keyDown(window, { key: "j" });
@@ -88,12 +91,9 @@ describe("useActiveTime", () => {
   it("measures nothing without a PR, or without the local API", () => {
     vi.useFakeTimers({ now: 0 });
     const report = vi.fn(async () => {});
-    render(
-      <ReviewTimeContext.Provider value={report}>
-        <Pane pr={undefined} />
-      </ReviewTimeContext.Provider>,
-    );
-    render(<Pane pr="acme/api#1" />);
+    const { unmount } = render(<App report={report} pr={undefined} />);
+    unmount();
+    render(<App report={undefined} pr="acme/api#1" />);
     fireEvent.keyDown(window, { key: "j" });
     vi.advanceTimersByTime(REPORT_EVERY_MS * 2);
     expect(report).not.toHaveBeenCalled();

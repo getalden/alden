@@ -17,7 +17,7 @@ import { useDrafts } from "./drafts";
 import { useFeedback } from "./feedback";
 import { fetchedAgo, waitingSince } from "./format";
 import { useQueueCollapsed, useQueueNav } from "./queue-prefs";
-import { ReviewTimeContext } from "./review-time";
+import { useReviewTimeReporter } from "./review-time";
 import { useReviews } from "./reviews";
 import { navigate, useRoute } from "./router";
 import { SeenBatcher, SeenContext } from "./seen";
@@ -56,6 +56,8 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
   const [settingUpModel, setSettingUpModel] = useState(false);
   // The flagged places you see, sent to the local API a few at a time (and before the page goes away).
   const seen = useMemo(() => (api ? new SeenBatcher(api.recordSeen) : undefined), [api]);
+  // Time to review: the PR pane's active time, to the local API, while stats.reviewTime is on.
+  useReviewTimeReporter(session?.stats?.reviewTime === false ? undefined : api?.reportActive);
   useEffect(() => {
     if (!seen) return;
     const flush = () => seen.flush();
@@ -230,196 +232,194 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
 
   return (
     <SeenContext.Provider value={session?.learning?.fromReviews === false ? undefined : seen?.record}>
-      <ReviewTimeContext.Provider value={session?.stats?.reviewTime === false ? undefined : api?.reportActive}>
-        <div className="app">
-          <TopBar session={session} route={route} queueCount={queueCount} />
-          {route.view === "queue" && (
-            <div className={`workspace${current ? " has-detail" : ""}`}>
-              <aside className={`side${collapsed ? " collapsed" : ""}`} aria-label="Your review queue">
-                {collapsed && (
-                  <button
-                    type="button"
-                    className="queue-rail"
-                    onClick={() => setCollapsed(false)}
-                    aria-label={`Show the queue${queueCount !== undefined ? `, ${queueCount} PRs` : ""}`}
-                    aria-keyshortcuts="["
-                    title="Show the queue  ["
-                  >
-                    <span aria-hidden="true">»</span>
-                    <span className="rail-label" aria-hidden="true">
-                      Queue
-                      {queueCount !== undefined
-                        ? ` · ${view && view.shown !== view.total ? `${view.shown} of ${queueCount}` : queueCount}`
-                        : ""}
-                    </span>
-                  </button>
-                )}
-                <TelemetryCard api={api} />
-                {folderNote && (
-                  <FolderNotice
-                    note={folderNote}
-                    filtered={nav.filters.repo !== undefined && nav.filters.repo === folderNote.repo}
-                    onShowAll={() => {
-                      setNav((n) => {
-                        const { repo: _, ...filters } = n.filters;
-                        return { ...n, filters };
-                      });
-                      setFolderNote(undefined);
-                    }}
-                  />
-                )}
-                <QueueView
-                  queue={queue}
-                  error={queueError ?? reactError}
-                  loading={queueLoading}
-                  nav={nav}
-                  onNav={setNav}
-                  search={search}
-                  onSearch={setSearch}
-                  view={view}
-                  focusSearch={searchFocus}
-                  onCollapse={() => setCollapsed(true)}
-                  onRefresh={() => loadQueue(true)}
-                  selected={selected}
-                  signedOut={session !== undefined && (session.user === null || "error" in session.user)}
-                  signIn={
-                    api && session ? (
-                      <SignInCard
-                        api={api}
-                        session={session}
-                        onSignedIn={() => {
-                          loadSession();
-                          loadQueue(true);
-                        }}
-                      />
-                    ) : undefined
-                  }
-                  reactions={reactions}
-                  reactionNotes={reactNotes}
-                  onReact={react}
-                  ready={ready}
-                  drafts={draftCounts}
-                  scope={session?.queueScope}
-                />
-              </aside>
-              <main className="main-pane detail">
-                {current ? (
-                  <PrPane
-                    prRef={current}
-                    row={all.find((r) => r.pr.repo === current.repo && r.pr.number === current.number)}
-                    session={session}
-                    choices={choicesNow}
-                    onChoices={setChoices}
-                    reviews={reviews}
-                    feedbackFor={feedbackFor}
-                    api={desktop ? api : undefined}
-                    draftsApi={api}
-                    onDraftCount={onDraftCount}
-                    cloneOf={api.clone}
-                    freshness={api.freshness}
-                    onSetUpModel={() => setSettingUpModel(true)}
-                  />
-                ) : (
-                  <p className="faint" style={{ margin: "auto", padding: "120px 0", fontSize: 13 }}>
-                    Briefings show here. Pick a PR, or press <kbd>j</kbd>.
-                  </p>
-                )}
-              </main>
-            </div>
-          )}
-          {route.view === "local" && (
-            <div className="workspace has-detail">
-              <aside className="side" aria-label="Working copies">
-                <div className="list-head">
-                  <h2 className="label">Working copy</h2>
-                </div>
-                {session?.repo ? (
-                  <div className="side-item" aria-current="true">
-                    <span className="name">{session.repo.repos[0] ?? session.repo.root.split("/").at(-1)}</span>
-                    <span className="sub">{session.repo.root}</span>
-                  </div>
-                ) : (
-                  <p className="side-note muted small">alden ui isn't running in a git repo.</p>
-                )}
-                <p className="note-box side-note">
-                  Alden reads <code>git diff HEAD</code> plus untracked files. Nothing leaves your machine except the
-                  model call.
-                </p>
-              </aside>
-              <main className="main-pane">
-                <ReviewPane
-                  crumbs={<span>{session?.repo?.root ?? "no repo"}</span>}
-                  title={`Your uncommitted changes${session?.repo?.repos[0] ? ` in ${session.repo.repos[0].split("/")[1]}` : ""}`}
-                  why={
-                    reviews.runs.local?.briefing
-                      ? {
-                          label: "Since your last commit",
-                          items: [
-                            `${reviews.runs.local.briefing.summary.files} files`,
-                            `+${reviews.runs.local.briefing.summary.additions} −${reviews.runs.local.briefing.summary.deletions}`,
-                          ],
-                        }
-                      : undefined
-                  }
-                  run={reviews.runs.local}
-                  feedbackFor={feedbackFor}
-                  request={toRequest(choicesNow, session)}
-                  onStart={(request) => reviews.start("local", request)}
-                  onCancel={() => reviews.cancel("local")}
-                  controls={
-                    <ReviewOptions
-                      session={session}
-                      choices={choicesNow}
-                      onChange={setChoices}
-                      onSetUpModel={() => setSettingUpModel(true)}
-                    />
-                  }
-                  emptyHint="Review your uncommitted changes (staged, unstaged and untracked) before you open a PR."
-                  perReviewUsd={session?.budget.perReviewUsd}
-                  exportWith={{ api, desktop: !!session?.desktop }}
-                  loadDiff={api.diff}
-                />
-              </main>
-            </div>
-          )}
-          {route.view === "memory" &&
-            (session ? <MemoryView api={api} session={session} /> : <StateCard tone="spin" title="Loading…" live />)}
-          {route.view === "stats" && (
-            <div className="page">
-              {session ? <StatsView api={api} session={session} /> : <StateCard tone="spin" title="Loading…" live />}
-            </div>
-          )}
-          {route.view === "settings" && (
-            <div className="page">
-              {session ? (
-                <SettingsView
-                  api={api}
-                  session={session}
-                  onSaved={() => {
-                    setChoices(undefined);
-                    loadSession();
+      <div className="app">
+        <TopBar session={session} route={route} queueCount={queueCount} />
+        {route.view === "queue" && (
+          <div className={`workspace${current ? " has-detail" : ""}`}>
+            <aside className={`side${collapsed ? " collapsed" : ""}`} aria-label="Your review queue">
+              {collapsed && (
+                <button
+                  type="button"
+                  className="queue-rail"
+                  onClick={() => setCollapsed(false)}
+                  aria-label={`Show the queue${queueCount !== undefined ? `, ${queueCount} PRs` : ""}`}
+                  aria-keyshortcuts="["
+                  title="Show the queue  ["
+                >
+                  <span aria-hidden="true">»</span>
+                  <span className="rail-label" aria-hidden="true">
+                    Queue
+                    {queueCount !== undefined
+                      ? ` · ${view && view.shown !== view.total ? `${view.shown} of ${queueCount}` : queueCount}`
+                      : ""}
+                  </span>
+                </button>
+              )}
+              <TelemetryCard api={api} />
+              {folderNote && (
+                <FolderNotice
+                  note={folderNote}
+                  filtered={nav.filters.repo !== undefined && nav.filters.repo === folderNote.repo}
+                  onShowAll={() => {
+                    setNav((n) => {
+                      const { repo: _, ...filters } = n.filters;
+                      return { ...n, filters };
+                    });
+                    setFolderNote(undefined);
                   }}
                 />
-              ) : (
-                <StateCard tone="spin" title="Loading…" live />
               )}
-            </div>
-          )}
-          {settingUpModel && (
-            <ModelSetupDialog
-              api={api}
-              desktop={desktop}
-              onClose={() => setSettingUpModel(false)}
-              onReady={() => {
-                setSettingUpModel(false);
-                // The model picker starts again from the new session, with the model on.
-                setChoices(undefined);
-                loadSession();
-              }}
-            />
-          )}
-        </div>
-      </ReviewTimeContext.Provider>
+              <QueueView
+                queue={queue}
+                error={queueError ?? reactError}
+                loading={queueLoading}
+                nav={nav}
+                onNav={setNav}
+                search={search}
+                onSearch={setSearch}
+                view={view}
+                focusSearch={searchFocus}
+                onCollapse={() => setCollapsed(true)}
+                onRefresh={() => loadQueue(true)}
+                selected={selected}
+                signedOut={session !== undefined && (session.user === null || "error" in session.user)}
+                signIn={
+                  api && session ? (
+                    <SignInCard
+                      api={api}
+                      session={session}
+                      onSignedIn={() => {
+                        loadSession();
+                        loadQueue(true);
+                      }}
+                    />
+                  ) : undefined
+                }
+                reactions={reactions}
+                reactionNotes={reactNotes}
+                onReact={react}
+                ready={ready}
+                drafts={draftCounts}
+                scope={session?.queueScope}
+              />
+            </aside>
+            <main className="main-pane detail">
+              {current ? (
+                <PrPane
+                  prRef={current}
+                  row={all.find((r) => r.pr.repo === current.repo && r.pr.number === current.number)}
+                  session={session}
+                  choices={choicesNow}
+                  onChoices={setChoices}
+                  reviews={reviews}
+                  feedbackFor={feedbackFor}
+                  api={desktop ? api : undefined}
+                  draftsApi={api}
+                  onDraftCount={onDraftCount}
+                  cloneOf={api.clone}
+                  freshness={api.freshness}
+                  onSetUpModel={() => setSettingUpModel(true)}
+                />
+              ) : (
+                <p className="faint" style={{ margin: "auto", padding: "120px 0", fontSize: 13 }}>
+                  Briefings show here. Pick a PR, or press <kbd>j</kbd>.
+                </p>
+              )}
+            </main>
+          </div>
+        )}
+        {route.view === "local" && (
+          <div className="workspace has-detail">
+            <aside className="side" aria-label="Working copies">
+              <div className="list-head">
+                <h2 className="label">Working copy</h2>
+              </div>
+              {session?.repo ? (
+                <div className="side-item" aria-current="true">
+                  <span className="name">{session.repo.repos[0] ?? session.repo.root.split("/").at(-1)}</span>
+                  <span className="sub">{session.repo.root}</span>
+                </div>
+              ) : (
+                <p className="side-note muted small">alden ui isn't running in a git repo.</p>
+              )}
+              <p className="note-box side-note">
+                Alden reads <code>git diff HEAD</code> plus untracked files. Nothing leaves your machine except the
+                model call.
+              </p>
+            </aside>
+            <main className="main-pane">
+              <ReviewPane
+                crumbs={<span>{session?.repo?.root ?? "no repo"}</span>}
+                title={`Your uncommitted changes${session?.repo?.repos[0] ? ` in ${session.repo.repos[0].split("/")[1]}` : ""}`}
+                why={
+                  reviews.runs.local?.briefing
+                    ? {
+                        label: "Since your last commit",
+                        items: [
+                          `${reviews.runs.local.briefing.summary.files} files`,
+                          `+${reviews.runs.local.briefing.summary.additions} −${reviews.runs.local.briefing.summary.deletions}`,
+                        ],
+                      }
+                    : undefined
+                }
+                run={reviews.runs.local}
+                feedbackFor={feedbackFor}
+                request={toRequest(choicesNow, session)}
+                onStart={(request) => reviews.start("local", request)}
+                onCancel={() => reviews.cancel("local")}
+                controls={
+                  <ReviewOptions
+                    session={session}
+                    choices={choicesNow}
+                    onChange={setChoices}
+                    onSetUpModel={() => setSettingUpModel(true)}
+                  />
+                }
+                emptyHint="Review your uncommitted changes (staged, unstaged and untracked) before you open a PR."
+                perReviewUsd={session?.budget.perReviewUsd}
+                exportWith={{ api, desktop: !!session?.desktop }}
+                loadDiff={api.diff}
+              />
+            </main>
+          </div>
+        )}
+        {route.view === "memory" &&
+          (session ? <MemoryView api={api} session={session} /> : <StateCard tone="spin" title="Loading…" live />)}
+        {route.view === "stats" && (
+          <div className="page">
+            {session ? <StatsView api={api} session={session} /> : <StateCard tone="spin" title="Loading…" live />}
+          </div>
+        )}
+        {route.view === "settings" && (
+          <div className="page">
+            {session ? (
+              <SettingsView
+                api={api}
+                session={session}
+                onSaved={() => {
+                  setChoices(undefined);
+                  loadSession();
+                }}
+              />
+            ) : (
+              <StateCard tone="spin" title="Loading…" live />
+            )}
+          </div>
+        )}
+        {settingUpModel && (
+          <ModelSetupDialog
+            api={api}
+            desktop={desktop}
+            onClose={() => setSettingUpModel(false)}
+            onReady={() => {
+              setSettingUpModel(false);
+              // The model picker starts again from the new session, with the model on.
+              setChoices(undefined);
+              loadSession();
+            }}
+          />
+        )}
+      </div>
     </SeenContext.Provider>
   );
 }
