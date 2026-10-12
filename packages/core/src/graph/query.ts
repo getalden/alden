@@ -1,4 +1,4 @@
-import type { FileSymbols } from "./extract.js";
+import type { Definition, FileSymbols } from "./extract.js";
 import { dirOf, type Resolver } from "./resolve.js";
 
 /** A place that calls (or instantiates, or renders) a symbol. */
@@ -10,6 +10,11 @@ export interface CallSite {
    * "name": only the name matches and no import could be resolved, so it may be a different symbol.
    */
   confidence: "import" | "name";
+  /**
+   * Go: how the call reaches a method other than through its own type: "interface Fetcher" (a call through an
+   * interface the type implements) or "Outer (embeds Inner)" (a method promoted from an embedded struct).
+   */
+  via?: string;
 }
 
 export interface SymbolRef {
@@ -160,6 +165,33 @@ const GO_COMMON_METHODS = new Set([
   "Fatalf",
 ]);
 
+/**
+ * Go method names that dozens of unrelated types implement (generated API clients, gRPC streams, workers). A call
+ * through an interface with one of these could reach any of them, so interfaces aren't followed for them.
+ */
+const GO_INTERFACE_COMMON = new Set([
+  "List",
+  "Patch",
+  "Watch",
+  "Push",
+  "Pull",
+  "Send",
+  "Recv",
+  "Process",
+  "Execute",
+  "Call",
+  "Build",
+  "Check",
+  "Describe",
+  "Description",
+  "Title",
+  "Kind",
+  "Status",
+  "Version",
+  "Config",
+  "Ping",
+]);
+
 /** Laravel and PHP names too common to trust on any receiver: only `$this`, `self`, `static` or the class count. */
 const PHP_COMMON_METHODS = new Set([
   "get",
@@ -237,6 +269,41 @@ function phpMethodNames(symbol: SymbolRef, eloquent: boolean): { calls: Set<stri
 /** How deep to follow re-export chains (barrel files re-exporting barrel files). */
 const MAX_REEXPORT_DEPTH = 4;
 
+/** How deep to follow Go embedding: a struct embedding a struct that embeds the changed one, and so on. */
+const MAX_EMBED_DEPTH = 3;
+
+/** A Go named type, keyed "dir#Name": one directory is one package. */
+interface GoType {
+  path: string;
+  def: Definition;
+}
+
+/** Go's types across the repo, for calls through interfaces and promoted methods. Built on first use. */
+interface GoTypes {
+  types: Map<string, GoType>;
+  /** "dir#Type" → the methods declared with it as receiver. */
+  methods: Map<string, Set<string>>;
+  /** "dir#Type" → the structs embedding it. */
+  embedders: Map<string, string[]>;
+  /** Method name → the interfaces with that method, embedded interfaces' methods included. */
+  interfacesByMethod: Map<string, string[]>;
+  /** "dir#Interface" → its whole method set, as far as the repo defines it. */
+  interfaceMethods: Map<string, Set<string>>;
+}
+
+/** A type (or interface) whose name can stand for the changed method's type at a call site. */
+interface GoMember {
+  key: string;
+  ref: SymbolRef;
+  via?: string;
+  /** Interfaces only: the call may be on any of the interface's implementations. */
+  loose?: boolean;
+  /** Other interfaces in the same package the call may go through. */
+  names?: string[];
+}
+
+const goTypeKey = (dir: string, name: string) => `${dir}#${name}`;
+
 /**
  * Who uses what, across a repo's index. Resolves every import once; `callersOf` then answers from memory.
  */
@@ -251,6 +318,8 @@ export class CodeGraph {
 
   /** PHP: "file#Class" → classes that extend or implement it, or use it as a trait. */
   private readonly descendants = new Map<string, SymbolRef[]>();
+
+  private goTypeIndex: GoTypes | undefined;
 
   constructor(
     private readonly files: Map<string, FileSymbols>,
@@ -403,6 +472,131 @@ export class CodeGraph {
     );
   }
 
+  /** A Go type name as written in `fromFile` (`Inner`, `pkg.Inner`) → "dir#Name", through the file's imports. */
+  private goTypeRef(fromFile: string, written: string): string {
+    const dot = written.indexOf(".");
+    if (dot === -1) return goTypeKey(dirOf(fromFile), written);
+    const local = written.slice(0, dot);
+    const binding = this.bindings.get(fromFile)?.find((b) => b.namespace && b.local === local);
+    // An external package's type (io.Reader): keyed by the package name, which matches nothing in the repo.
+    return goTypeKey(binding ? dirOf(binding.target) : `external:${local}`, written.slice(dot + 1));
+  }
+
+  private goTypes(): GoTypes {
+    if (this.goTypeIndex) return this.goTypeIndex;
+    const types = new Map<string, GoType>();
+    const methods = new Map<string, Set<string>>();
+    const embedders = new Map<string, string[]>();
+    for (const [dir, members] of this.goPackages) {
+      for (const path of members) {
+        for (const def of this.files.get(path)?.definitions ?? []) {
+          if (def.container) {
+            const key = goTypeKey(dir, def.container);
+            const set = methods.get(key) ?? new Set();
+            set.add(def.name);
+            methods.set(key, set);
+          } else if (def.kind === "class" || def.kind === "interface") {
+            types.set(goTypeKey(dir, def.name), { path, def });
+          }
+        }
+      }
+    }
+    for (const [key, type] of types) {
+      if (type.def.kind !== "class") continue;
+      for (const base of type.def.bases ?? []) {
+        const inner = this.goTypeRef(type.path, base);
+        embedders.set(inner, [...(embedders.get(inner) ?? []), key]);
+      }
+    }
+    // An interface's method set includes the interfaces it embeds. Embedded interfaces from outside the repo
+    // (io.Reader) add methods we can't see, so they're left out: matching is on the methods the repo declares.
+    const interfaceMethods = new Map<string, Set<string>>();
+    const methodSetOf = (key: string, depth: number): Set<string> => {
+      const known = interfaceMethods.get(key);
+      if (known) return known;
+      const type = types.get(key);
+      const set = new Set(type?.def.methods ?? []);
+      if (type && depth < MAX_EMBED_DEPTH) {
+        for (const base of type.def.bases ?? []) {
+          const inner = this.goTypeRef(type.path, base);
+          if (types.get(inner)?.def.kind === "interface") for (const m of methodSetOf(inner, depth + 1)) set.add(m);
+        }
+      }
+      if (depth === 0) interfaceMethods.set(key, set);
+      return set;
+    };
+    const interfacesByMethod = new Map<string, string[]>();
+    for (const [key, type] of types) {
+      if (type.def.kind !== "interface") continue;
+      for (const m of methodSetOf(key, 0)) interfacesByMethod.set(m, [...(interfacesByMethod.get(m) ?? []), key]);
+    }
+    this.goTypeIndex = { types, methods, embedders, interfacesByMethod, interfaceMethods };
+    return this.goTypeIndex;
+  }
+
+  /** A Go type's methods, its own and those promoted from the structs it embeds. */
+  private goMethodSet(key: string, depth = 0): Set<string> {
+    const { types, methods } = this.goTypes();
+    const set = new Set(methods.get(key) ?? []);
+    const type = types.get(key);
+    if (type?.def.kind === "class" && depth < MAX_EMBED_DEPTH) {
+      for (const base of type.def.bases ?? []) {
+        const inner = this.goTypeRef(type.path, base);
+        // An embedded interface brings its methods too, implemented by whatever value the field holds.
+        for (const m of this.goTypes().interfaceMethods.get(inner) ?? this.goMethodSet(inner, depth + 1)) set.add(m);
+      }
+    }
+    return set;
+  }
+
+  /**
+   * The Go types a call to `symbol` (a method) can be made through, besides its own: structs embedding its type, which
+   * get the method unless they declare their own, and interfaces it implements, judged by method names (the repo's
+   * interfaces only; Alden doesn't check parameter types).
+   */
+  private goFamily(symbol: SymbolRef & { container: string }): GoMember[] {
+    const { types, embedders, interfacesByMethod, interfaceMethods, methods } = this.goTypes();
+    const own = goTypeKey(dirOf(symbol.path), symbol.container);
+    const family: GoMember[] = [{ key: own, ref: { path: symbol.path, name: symbol.container } }];
+    const seen = new Set([own]);
+    let frontier = [own];
+    for (let depth = 0; depth < MAX_EMBED_DEPTH && frontier.length > 0; depth++) {
+      const next: string[] = [];
+      for (const inner of frontier) {
+        for (const outer of embedders.get(inner) ?? []) {
+          // An outer type declaring the same method shadows the promoted one.
+          if (seen.has(outer) || methods.get(outer)?.has(symbol.name)) continue;
+          seen.add(outer);
+          const type = types.get(outer);
+          if (!type) continue;
+          family.push({
+            key: outer,
+            ref: { path: type.path, name: type.def.name },
+            via: `${type.def.name} (embeds ${symbol.container})`,
+          });
+          next.push(outer);
+        }
+      }
+      frontier = next;
+    }
+    if (GO_COMMON_METHODS.has(symbol.name) || GO_INTERFACE_COMMON.has(symbol.name)) return family;
+    const implementers = family.map((m) => this.goMethodSet(m.key));
+    for (const key of interfacesByMethod.get(symbol.name) ?? []) {
+      const type = types.get(key);
+      const wanted = interfaceMethods.get(key);
+      if (!type || !wanted || seen.has(key)) continue;
+      if (!implementers.some((set) => [...wanted].every((m) => set.has(m)))) continue;
+      seen.add(key);
+      family.push({
+        key,
+        ref: { path: type.path, name: type.def.name },
+        via: `interface ${type.def.name}`,
+        loose: true,
+      });
+    }
+    return family;
+  }
+
   /** Go: one directory is one package. PHP: one namespace, whose classes need no `use` for each other. */
   private samePackage(a: string, b: string): boolean {
     if (a.endsWith(".go") && b.endsWith(".go")) return dirOf(a) === dirOf(b);
@@ -469,31 +663,60 @@ export class CodeGraph {
   callersOf(symbol: SymbolRef, exclude: Map<string, Set<number>> = new Map()): CallSite[] {
     const sites: CallSite[] = [];
     const seen = new Set<string>();
-    const add = (path: string, line: number, confidence: CallSite["confidence"]) => {
+    const add = (path: string, line: number, confidence: CallSite["confidence"], via?: string) => {
       const id = `${path}:${line}`;
       if (exclude.get(path)?.has(line)) return;
       if (seen.has(id)) {
         // A sure match on a line beats an uncertain one on the same line.
         const site = sites.find((s) => s.path === path && s.line === line);
-        if (site && confidence === "import") site.confidence = "import";
+        if (site && confidence === "import" && site.confidence === "name") {
+          site.confidence = "import";
+          if (via) site.via = via;
+          else delete site.via;
+        }
         return;
       }
       seen.add(id);
-      sites.push({ path, line, confidence });
+      sites.push({ path, line, confidence, ...(via ? { via } : {}) });
     };
 
     const lookFor = symbol.container ?? symbol.name;
     const isMethod = symbol.container !== undefined;
     const isPhp = symbol.path.endsWith(".php");
-    // PHP methods are also reached through interfaces, parents and facades; everything else through its own name.
-    const family = isMethod && isPhp ? this.classFamily(symbol, lookFor) : [{ path: symbol.path, name: lookFor }];
+    const isGo = symbol.path.endsWith(".go");
+    // PHP methods are also reached through interfaces, parents and facades; Go methods through the interfaces their
+    // type implements and the structs embedding it; everything else through its own name.
+    const goMembers = isMethod && isGo ? this.goFamily({ ...symbol, container: lookFor }) : undefined;
+    // Go: which of those a package's files reach, first match wins (the type itself, then embedders, interfaces).
+    const goByDir = new Map<string, GoMember>();
+    for (const member of goMembers ?? []) {
+      const dir = dirOf(member.ref.path);
+      const first = goByDir.get(dir);
+      if (!first) goByDir.set(dir, member);
+      // Several interfaces in one package: name a few, since the call may go through any.
+      else if (first.loose && member.loose)
+        goByDir.set(dir, { ...first, names: [...(first.names ?? []), member.ref.name] });
+    }
+    for (const member of goByDir.values()) {
+      const extra = member.names ?? [];
+      if (extra.length === 0) continue;
+      const shown = extra.slice(0, 2).join(", ");
+      member.via = `${member.via}, ${shown}${extra.length > 2 ? ` and ${extra.length - 2} more` : ""}`;
+    }
+    const family = goMembers
+      ? goMembers.map((m) => m.ref)
+      : isMethod && isPhp
+        ? this.classFamily(symbol, lookFor)
+        : [{ path: symbol.path, name: lookFor }];
     const exported = new Map<string, Set<string>>();
     for (const member of family) {
       for (const [file, names] of this.exportedAs(member)) {
         exported.set(file, new Set([...(exported.get(file) ?? []), ...names]));
       }
     }
-    const classNames = new Set(family.map((m) => m.name));
+    // Go: `Type.Method` (a method expression) is the type itself only in its own package; elsewhere a bare `check` is
+    // a variable that happens to share an unexported type's name. Interfaces and embedders don't count as the type.
+    const classNames = new Set(goMembers ? [] : family.map((m) => m.name));
     const methodNames = !isMethod
       ? undefined
       : isPhp
@@ -515,6 +738,16 @@ export class CodeGraph {
         else if (names_.has(b.imported)) names.add(b.local);
       }
       if (names.size === 0 && namespaces.size === 0) continue;
+      // Go: the closest way this file reaches the method, by its own package and the packages it imports.
+      let member: GoMember | undefined;
+      if (goMembers) {
+        const order = (m: GoMember | undefined) =>
+          m ? goMembers.findIndex((g) => g.key === m.key) : Number.POSITIVE_INFINITY;
+        for (const dir of [dirOf(path), ...(this.bindings.get(path) ?? []).map((b) => dirOf(b.target))]) {
+          const candidate = goByDir.get(dir);
+          if (order(candidate) < order(member)) member = candidate;
+        }
+      }
 
       for (const ref of symbols.references) {
         if (isMethod && methodNames) {
@@ -535,6 +768,7 @@ export class CodeGraph {
             SELF_NAMES.has(ref.object) ||
             names.has(ref.object) ||
             classNames.has(ref.object) ||
+            (goMembers !== undefined && ref.object === lookFor && this.samePackage(path, symbol.path)) ||
             (symbols.language === "go" && this.isGoReceiver(path, symbols, symbol, ref.object, ref.line));
           const common =
             symbols.language === "go"
@@ -542,8 +776,11 @@ export class CodeGraph {
               : symbols.language === "php"
                 ? PHP_COMMON_METHODS
                 : COMMON_METHODS;
-          // A property read only means the method on an Eloquent model, and even then it may be another model's.
-          if (selfish || !common.has(ref.name)) add(path, ref.line, asProperty ? "name" : "import");
+          // A property read only means the method on an Eloquent model, and even then it may be another model's. In
+          // Go, `x.Method` named without a call may as well be a field read, and a call through an interface may
+          // reach any of its implementations: unless on the receiver or the type itself, those are name matches.
+          const loose = asProperty || (!selfish && (ref.kind === "value" || member?.loose === true));
+          if (selfish || !common.has(ref.name)) add(path, ref.line, loose ? "name" : "import", member?.via);
         } else if (
           ref.kind !== "property" &&
           (ref.object === undefined

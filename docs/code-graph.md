@@ -1,7 +1,8 @@
 # The code graph
 
 A diff shows what changed. It doesn't show who depends on it. For that, Alden builds a code graph of the repo and
-lists the callers outside the diff of every public function, class and method the change touches. It then flags
+lists the callers outside the diff of every public function, class and method the change touches (in Go, package-internal
+ones too; see [Go](#go)). It then flags
 removed or re-signed code that's still called, and gives the model those call sites as context.
 
 ## Languages
@@ -34,7 +35,8 @@ for fully qualified calls (see [Laravel and Symfony](#laravel-and-symfony)).
      as the module, so `product_sync.upsert()` reaches `services/product_sync.py`.
    - Go: import paths under the repo's modules, read from every `go.mod` (nested modules, and local `replace`
      directives such as Kubernetes' `staging/` packages). An import reaches every file in the package, under the name
-     its `package` clause declares. Files in one package see each other's names without imports.
+     its `package` clause declares. Files in one package see each other's names without imports. Methods are also
+     reached through interfaces and embedded structs; see [Go](#go).
    - PHP: `use` imports (plain, aliased and grouped) and fully qualified names, mapped to files through the PSR-4
      prefixes in every `composer.json` (`autoload` and `autoload-dev`), or failing that the one file whose path ends
      in the class's namespace path. Classes in the same namespace see each other without `use`. Type hints count as
@@ -91,8 +93,36 @@ but callers are flagged as reached by a behaviour change rather than broken.
   `Get`, `Save`, logging methods…), where the method's receiver (`s` in `func (s *Server)`) plays the part of `this`.
 
 Alden doesn't infer types, so a method call on a variable of another type with the same method name, in a file that
-imports the package, is counted too. In Go, a bare name in another package is always that package's own, so Go has no
-name-only matches.
+imports the package, is counted too. In Go, a bare name in another package is always that package's own, so Go's
+name-only matches are only the uncertain cases below: calls through interfaces, and methods named without a call.
+
+## Go
+
+Go code calls a lot through types the call site doesn't name. The graph follows:
+
+- **Package-internal code.** A changed unexported function, method, type or function variable is looked up too: a Go
+  package is often dozens of files sharing helpers, so `isStaleSeries` changing in `head.go` reaches its callers in
+  `head_wal.go`. Only its own package can call it. Helpers in `_test.go` files aren't followed.
+- **Interfaces.** A changed method is reached through the repo's interfaces its type implements, judged by method
+  names (an interface's own and those of interfaces it embeds; Alden doesn't compare parameter types, and methods of
+  interfaces from outside the repo, such as `io.Reader`, aren't required). Calls in files that use the interface's
+  package count, marked `name match only` and with the interface named: `calls Client.PushDefault (signature changed)
+  through interface GitConfigClient, name match only`. This is how dependency injection reaches an implementation:
+  `team.Service` in one package, `teamimpl.Service` in another. Names that dozens of unrelated types implement (Go's
+  common list above, and `List`, `Patch`, `Watch`, `Status` and the like, which every generated API client has) aren't
+  followed through interfaces.
+- **Embedded structs.** A method promoted through embedding (`type Server struct{ *store.Base }`) is reached by calls
+  in files that use the embedding type's package, up to three levels deep, unless that type declares its own method of
+  the same name. These are sure matches: `calls Base.Sync (changed) through Server (embeds Base)`.
+- **Functions as values.** A function or method named without being called is a use: struct fields
+  (`FetchOptions: shared.FetchOptions`), assignments (`opts.Run = runEdit`, `h := s.handle`), returns, option lists
+  (`[]Option{WithRetry}`) and package-level values. `pkg.Func` and bare names are sure; `x.Method` is a name match
+  unless `x` is the method's receiver, since it may as well read a field of another type.
+- **Function variables.** A package-level `var now = func() time.Time {…}`, often swapped out in tests, is a
+  definition its callers reach, exported or not.
+
+Struct fields aren't followed: `x.Name` reads are everywhere, and a type check would be needed to tell whose field it
+is.
 
 ## Laravel and Symfony
 

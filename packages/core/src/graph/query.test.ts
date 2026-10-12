@@ -108,6 +108,224 @@ func main() {
   });
 });
 
+describe("Go calls the type system makes", () => {
+  const goModules = [{ path: "github.com/acme/app", dir: "" }];
+
+  it("reaches a method through the repo's interfaces its type implements, as name matches", async () => {
+    const graph = await repo(
+      {
+        "git/client.go": `package git
+
+type Client struct{}
+
+func (c *Client) PushDefault() string { return "" }
+func (c *Client) ReadBranchConfig() string { return "" }
+`,
+        "shared/finder.go": `package shared
+
+type GitConfigClient interface {
+\tReadBranchConfig() string
+\tPushDefault() string
+}
+
+type Pusher interface {
+\tPushDefault() string
+}
+
+type Everything interface {
+\tPusher
+\tReadBranchConfig() string
+}
+
+// Client has no Forget, so it isn't a Remote.
+type Remote interface {
+\tPushDefault() string
+\tForget()
+}
+`,
+        // Calls through the interface, without importing the git package.
+        "shared/resolve.go": `package shared
+
+func resolve(c GitConfigClient, e Everything) {
+\t_ = c.PushDefault()
+\t_ = e.PushDefault()
+}
+`,
+        "remotes/remotes.go": `package remotes
+
+import "github.com/acme/app/shared"
+
+func push(c shared.GitConfigClient) { c.PushDefault() }
+`,
+        "only/remote.go": `package only
+
+type Remote interface {
+\tPushDefault() string
+\tForget()
+}
+
+func push(r Remote) { r.PushDefault() }
+`,
+        "cmd/main.go": `package main
+
+import "github.com/acme/app/git"
+
+func main() {
+\tc := &git.Client{}
+\tc.PushDefault()
+}
+`,
+      },
+      { goModules },
+    );
+    const callers = graph.callersOf({ path: "git/client.go", name: "PushDefault", container: "Client" });
+    expect(sites(callers)).toEqual([
+      "cmd/main.go:7",
+      "remotes/remotes.go:5?",
+      "shared/resolve.go:4?",
+      "shared/resolve.go:5?",
+    ]);
+    expect(callers.map((c) => c.via)).toEqual([
+      undefined,
+      "interface GitConfigClient, Pusher, Everything",
+      "interface GitConfigClient, Pusher, Everything",
+      "interface GitConfigClient, Pusher, Everything",
+    ]);
+  });
+
+  it("doesn't follow interfaces for names every API client has, or a variable named like an unexported type", async () => {
+    const graph = await repo(
+      {
+        "clients/rule.go": `package clients
+
+type ruleClient struct{}
+
+func (c *ruleClient) List() []string { return nil }
+func (c *ruleClient) Refresh() error { return nil }
+`,
+        "shared/lister.go": "package shared\n\ntype Lister interface{ List() []string }\n",
+        "shared/use.go": `package shared
+
+func use(l Lister, ruleClient Refresher) {
+\tl.List()
+\truleClient.Refresh()
+}
+
+type Refresher interface{ Refresh() error }
+`,
+      },
+      { goModules },
+    );
+    expect(sites(graph.callersOf({ path: "clients/rule.go", name: "List", container: "ruleClient" }))).toEqual([]);
+    // Through Refresher, so a name match: the variable's name says nothing about its type outside the package.
+    expect(sites(graph.callersOf({ path: "clients/rule.go", name: "Refresh", container: "ruleClient" }))).toEqual([
+      "shared/use.go:5?",
+    ]);
+  });
+
+  it("reaches a method promoted through embedding, unless the outer type declares its own", async () => {
+    const graph = await repo(
+      {
+        "store/base.go": "package store\n\ntype Base struct{}\n\nfunc (b *Base) Sync() error { return nil }\n",
+        "api/server.go":
+          'package api\n\nimport "github.com/acme/app/store"\n\ntype Server struct {\n\t*store.Base\n\tname string\n}\n',
+        "api/admin.go": "package api\n\ntype Admin struct{ Server }\n",
+        "other/other.go": `package other
+
+import "github.com/acme/app/store"
+
+type Mirror struct{ store.Base }
+
+func (m Mirror) Sync() error { return nil }
+`,
+        "cmd/main.go": `package main
+
+import (
+\t"github.com/acme/app/api"
+\t"github.com/acme/app/other"
+)
+
+func main(s *api.Server, a *api.Admin, m other.Mirror) {
+\ts.Sync()
+\ta.Sync()
+}
+`,
+        "cmd/mirror.go":
+          'package main\n\nimport "github.com/acme/app/other"\n\nfunc mirror(m other.Mirror) { m.Sync() }\n',
+      },
+      { goModules },
+    );
+    const callers = graph.callersOf({ path: "store/base.go", name: "Sync", container: "Base" });
+    // Mirror's own Sync shadows the promoted one, so cmd/mirror.go isn't a caller.
+    expect(sites(callers)).toEqual(["cmd/main.go:9", "cmd/main.go:10"]);
+    expect(callers.map((c) => c.via)).toEqual(["Server (embeds Base)", "Server (embeds Base)"]);
+  });
+
+  it("counts functions and methods named without a call: struct fields, assignments, returns and option lists", async () => {
+    const graph = await repo(
+      {
+        "shared/fetch.go": `package shared
+
+func FetchOptions() error { return nil }
+
+func WithRetry() Option { return nil }
+
+type Option func()
+
+type Prompter struct{}
+
+func (p *Prompter) Survey() error { return nil }
+
+func (p *Prompter) Hook() func() error { return p.Survey }
+`,
+        "cmd/edit.go": `package cmd
+
+import "github.com/acme/app/shared"
+
+type EditOptions struct{ FetchOptions func() error }
+
+func NewCmdEdit(p *shared.Prompter) *EditOptions {
+\topts := &EditOptions{FetchOptions: shared.FetchOptions}
+\topts.FetchOptions = shared.FetchOptions
+\tsurvey := p.Survey
+\t_ = []shared.Option{shared.WithRetry}
+\t_ = survey
+\treturn opts
+}
+
+func run(opts *EditOptions) { opts.FetchOptions() }
+`,
+      },
+      { goModules },
+    );
+    expect(sites(graph.callersOf({ path: "shared/fetch.go", name: "FetchOptions" }))).toEqual([
+      "cmd/edit.go:8",
+      "cmd/edit.go:9",
+    ]);
+    expect(sites(graph.callersOf({ path: "shared/fetch.go", name: "WithRetry" }))).toEqual(["cmd/edit.go:11"]);
+    // A method value may be a field read on another type: a name match, unless it's on the receiver.
+    expect(sites(graph.callersOf({ path: "shared/fetch.go", name: "Survey", container: "Prompter" }))).toEqual([
+      "cmd/edit.go:10?",
+      "shared/fetch.go:13",
+    ]);
+  });
+
+  it("finds package-level function variables and package-internal helpers", async () => {
+    const graph = await repo(
+      {
+        "tsdb/clock.go":
+          "package tsdb\n\nvar now = func() int64 { return 0 }\n\nfunc isStale(v float64) bool { return v != v }\n",
+        "tsdb/head.go": "package tsdb\n\nfunc gc() {\n\t_ = now()\n\tif isStale(1) {\n\t}\n}\n",
+        "tsdb/head_test.go": "package tsdb\n\nfunc TestGC() { now = func() int64 { return 1 } }\n",
+        "other/head.go": "package other\n\nfunc isStale(v float64) bool { return false }\n\nfunc x() { isStale(1) }\n",
+      },
+      { goModules },
+    );
+    expect(sites(graph.callersOf({ path: "tsdb/clock.go", name: "now" }))).toEqual(["tsdb/head.go:4"]);
+    expect(sites(graph.callersOf({ path: "tsdb/clock.go", name: "isStale" }))).toEqual(["tsdb/head.go:5"]);
+  });
+});
+
 describe("PHP callers", () => {
   const psr4 = [{ prefix: "App\\", dirs: ["app"] }];
 

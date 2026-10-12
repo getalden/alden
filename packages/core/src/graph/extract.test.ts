@@ -304,6 +304,76 @@ func run() {
   });
 });
 
+describe("Go types, values and function variables", () => {
+  const source = `package shared
+
+type GitConfigClient interface {
+	io.Closer
+	PushDefault() (string, error)
+}
+
+type Number interface{ ~int | ~float64 }
+
+type Server struct {
+	*store.Base
+	Mirror[int]
+	name  string
+	inner struct{ Hidden }
+}
+
+var now = func() int64 { return 0 }
+
+var defaultTimeout, retries = 10, 3
+
+func NewCmd(p *Prompter) *Options {
+	opts := &Options{Fetch: FetchOptions, Survey: p.Survey}
+	opts.Run = runEdit
+	handler := p.Handle
+	_ = []Option{WithRetry, cfg.WithTimeout}
+	if err != nil {
+		return nil, err
+	}
+	return opts, ok
+}
+`;
+
+  it("records what structs and interfaces embed, interfaces' own methods, and function variables", async () => {
+    const symbols = await extractSymbols("shared/shared.go", source);
+    const defs = symbols?.definitions ?? [];
+    expect(defs.find((d) => d.name === "GitConfigClient")).toMatchObject({
+      bases: ["io.Closer"],
+      methods: ["PushDefault"],
+    });
+    // A constraint isn't an embedding, and an anonymous struct's fields aren't the outer struct's.
+    expect(defs.find((d) => d.name === "Number")?.bases).toBeUndefined();
+    expect(defs.find((d) => d.name === "Server")?.bases).toEqual(["store.Base", "Mirror"]);
+    // `now` is called like a function; plain unexported values still aren't definitions.
+    expect(names(defs)).toEqual([
+      "+GitConfigClient:interface",
+      "+Number:interface",
+      "+Server:class",
+      "-now:variable",
+      "+NewCmd:function",
+    ]);
+  });
+
+  it("records functions and methods named without a call as values, skipping locals like err and ok", async () => {
+    const symbols = await extractSymbols("shared/shared.go", source);
+    const values = (symbols?.references ?? [])
+      .filter((r) => r.kind === "value")
+      .map((r) => `${r.object ? `${r.object}.` : ""}${r.name}@${r.line}`);
+    expect(values).toEqual([
+      "FetchOptions@22",
+      "p.Survey@22",
+      "runEdit@23",
+      "p.Handle@24",
+      "WithRetry@25",
+      "cfg.WithTimeout@25",
+      "opts@29",
+    ]);
+  });
+});
+
 describe("goPackageNameFromPath", () => {
   it.each([
     ["fmt", "fmt"],
