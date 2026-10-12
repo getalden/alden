@@ -1,5 +1,0 @@
----
-"alden": minor
----
-
-Read a PR's existing review conversation in Alden, and answer it with your review. The Comments drawer's **Conversation** lists the PR's threads (yours first, open ones first), each with a **Reply** box and **Resolve when sent**; the Diff tab shows threads under their lines, with **Reply**. In a terminal, `alden comment <pr> --threads` lists them with short ids, `alden comment <pr> --reply <id or file:line> "text" [--resolve]` replies, and `alden comment <pr> --resolve <thread>` resolves one without a word. Replies and resolves are drafts: they go out only with Send (the UI's or `alden send`), whose summary says where each goes ("Reply in thread on src/pay.ts:40, and resolve it"). A review with replies is started pending, the replies added, then submitted with your verdict, and only then are threads resolved; if a step fails before the submit, Alden deletes the pending review so nothing half-posts, and says which step failed. Claude Code's `alden_draft_comment` can draft a reply with `in_reply_to`; it still can't send or resolve.
