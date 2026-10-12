@@ -142,7 +142,7 @@ export const LlmSectionSchema = z.object({
     .string()
     .optional()
     .describe(
-      "why the model drafted no comments though `drafts.auto` is on, e.g. text in the PR aimed at AI reviewers",
+      "why a PR's model briefing has no drafted comments, in one line: drafting is off (`drafts.auto`), text in the PR aimed at AI reviewers, or no finding Alden drafts for",
     ),
 });
 

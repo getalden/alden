@@ -1,4 +1,4 @@
-import type { AldenConfig, Briefing, LlmSection } from "@alden/schema";
+import type { AldenConfig, Briefing, LlmFinding, LlmSection } from "@alden/schema";
 import type { z } from "zod";
 import type { DiffFile } from "../../diff/parse.js";
 import { checkLesson, checkReason, dismissKey, type Learning, noteStoppedAt, promptNotes } from "../../learn/learn.js";
@@ -28,6 +28,32 @@ const TITLE_CHECK = NOT_CHECKED[0] as string;
 /** Why a briefing has no drafted comments though `drafts.auto` is on: the PR talks to AI reviewers. */
 export const INJECTED_DRAFTS_NOTE =
   "Alden drafted no comments for this PR: it has text aimed at AI reviewers (see the check), so nothing the model wrote is offered to send under your name.";
+
+/** Why a PR's model briefing has no drafted comments: none of its findings is one Alden drafts for. */
+export const NONE_TO_DRAFT_NOTE =
+  "No drafts: Alden drafts comments for the model's medium and high findings on changed lines, and this briefing had none.";
+
+/** Why a PR's model briefing has no drafted comments: the model wrote none for the findings that could have one. */
+export const NONE_DRAFTED_NOTE =
+  "No drafts: the model didn't draft a comment for any of its medium or high findings on changed lines.";
+
+/** Why a PR's model briefing has no drafted comments: drafting is off. */
+export const DRAFTS_OFF_NOTE = "No drafts: Draft comments for me is off in Settings (`drafts.auto`).";
+
+/** Why a PR's model briefing has no drafted comments, in one line, or nothing when it may have some. */
+function draftsNoteFor(
+  findings: LlmFinding[],
+  why: { pr: boolean; enabled: boolean; injected: boolean },
+): string | undefined {
+  if (!why.pr) return undefined;
+  if (!why.enabled) return DRAFTS_OFF_NOTE;
+  if (why.injected) return INJECTED_DRAFTS_NOTE;
+  const worth = findings.filter(
+    (f) => (f.severity === "medium" || f.severity === "high") && f.anchors.some((a) => a.line !== undefined),
+  );
+  if (worth.length === 0) return NONE_TO_DRAFT_NOTE;
+  return worth.some((f) => f.draft) ? undefined : NONE_DRAFTED_NOTE;
+}
 
 const ERROR_NOTES: Record<LlmErrorKind, string> = {
   auth: "The model provider rejected the credentials. `alden auth status` says where the key comes from; set a new one with `alden auth model` (or check your provider's login).",
@@ -264,6 +290,11 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
       ? [{ title: f.title, reason: checkReason(lesson), ...(f.anchors[0] ? { anchor: f.anchors[0] } : {}) }]
       : [];
   });
+  // Findings your feedback quietened get no draft, so they don't count as ones the model left undrafted.
+  const draftsNote = draftsNoteFor(
+    findings.filter((f) => !quietLesson(f)),
+    { pr: briefing.target.kind === "pr", enabled: config.drafts.auto, injected },
+  );
   const notes = prompt.reviewerNotes;
   const hidden = [...(briefing.learning?.hidden ?? []), ...hiddenFindings, ...quietFindings];
   const quietened = briefing.learning?.quietened ?? [];
@@ -290,7 +321,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
       matchesTitle: result.output.matchesTitle,
       findings,
       droppedFindings: dropped,
-      ...(wantDrafts && injected ? { draftsNote: INJECTED_DRAFTS_NOTE } : {}),
+      ...(draftsNote ? { draftsNote } : {}),
     },
   };
 }

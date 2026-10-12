@@ -12,7 +12,7 @@ import { closeStores } from "../../store/db.js";
 import { buildBriefing } from "../briefing.js";
 import { mergeLookHere } from "./merge.js";
 import { type LlmOutput, LlmOutputSchema, LlmOutputWithDraftsSchema, SYSTEM_PROMPT, systemPrompt } from "./prompt.js";
-import { addModelReview, INJECTED_DRAFTS_NOTE } from "./run.js";
+import { addModelReview, DRAFTS_OFF_NOTE, INJECTED_DRAFTS_NOTE, NONE_DRAFTED_NOTE, NONE_TO_DRAFT_NOTE } from "./run.js";
 
 const FIXTURES = join(import.meta.dirname, "../../github/__fixtures__");
 const config = AldenConfigSchema.parse({});
@@ -547,14 +547,39 @@ describe("drafted comments in the model's answer", () => {
     expect(requests[0]?.system).toBe(SYSTEM_PROMPT);
     expect(requests[0]?.schema).toBe(LlmOutputSchema);
     expect(result.llm?.findings.some((f) => f.draft)).toBe(false);
+    expect(result.llm?.draftsNote).toBe(DRAFTS_OFF_NOTE);
   });
 
   it("asks for no drafts on local changes", async () => {
     const { briefing, files } = recorded("grafana", 133736);
     const { provider, requests } = drafting(answer);
     const local = { ...briefing, target: { kind: "local" as const, repoRoot: "/x", branch: null } };
-    await addModelReview(local, { provider, config, ledger: new SpendLedger(join(dir, "a.db")), files });
+    const result = await addModelReview(local, { provider, config, ledger: new SpendLedger(join(dir, "a.db")), files });
     expect(requests[0]?.system).toBe(SYSTEM_PROMPT);
+    expect(result.llm?.draftsNote).toBeUndefined();
+  });
+
+  it("says why a PR got no drafts when none of the model's findings is one Alden drafts for", async () => {
+    const { briefing, files } = recorded("grafana", 133736);
+    const run = async (findings: LlmOutput["findings"]) =>
+      (
+        await addModelReview(briefing, {
+          provider: drafting({ ...answer, findings }).provider,
+          config,
+          ledger: new SpendLedger(join(dir, "a.db")),
+          files,
+        })
+      ).llm?.draftsNote;
+    // A medium finding on a whole file and a low one (a check's critical place isn't the model's): nothing to draft.
+    const wholeFile = { title: "Whole file", detail: "d", severity: "medium" as const, anchors: [{ path }] };
+    const low = { title: "Nit", detail: "d", severity: "low" as const, anchors: [{ path, line: 191 }] };
+    expect(await run([wholeFile, { ...low, draft: { body: "Rename this." } }])).toBe(NONE_TO_DRAFT_NOTE);
+    expect(await run([])).toBe(NONE_TO_DRAFT_NOTE);
+    // One that could have a draft, but the model wrote none.
+    expect(await run([{ ...low, severity: "high" }])).toBe(NONE_DRAFTED_NOTE);
+    expect(NONE_TO_DRAFT_NOTE).toBe(
+      "No drafts: Alden drafts comments for the model's medium and high findings on changed lines, and this briefing had none.",
+    );
   });
 
   it("drafts nothing for a PR with text aimed at AI reviewers, and says why", async () => {

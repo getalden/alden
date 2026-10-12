@@ -214,6 +214,11 @@ Alden**, and the briefing marks each finding it drafted for **Draft ready**. The
 - **A PR with text aimed at AI reviewers** (the [injection check](checks.md)) gets no drafts, and the briefing says why:
   its author may have steered the model, and a draft is text you'd send under your name.
 
+When a model briefing of a PR has no drafts, its footer (and `alden review`, under the model's line) says why in one
+line: none of the model's findings was a medium or high one on a changed line ("No drafts: Alden drafts comments for
+the model's medium and high findings on changed lines, and this briefing had none."), the model wrote no comment for
+the ones that were, the PR has text aimed at AI reviewers, or drafting is off.
+
 In a terminal, `alden review` says "Alden drafted 3 comments — see them with `alden comment acme/shop#7`", where
 they're marked "drafted by Alden, not kept". `alden comment acme/shop#7 --keep <id>` (or `--keep all`) keeps them,
 `--delete <id>` drops one, and `alden send` leaves the ones you didn't keep behind and says so.
