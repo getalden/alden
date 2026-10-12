@@ -179,6 +179,20 @@ const api: UiApi = {
     calls.push({ method: "keepDrafts", args: input });
     return { kept: [] };
   },
+  draftReview: async (input) => {
+    calls.push({ method: "draftReview", args: input });
+    if (input.pr === "a/b#9") throw new ApiError(409, "Alden won't draft comments for this PR.");
+    return { made: 2, skipped: 1, asked: 3, costUsd: 0.012, drafts: [] };
+  },
+  suggestText: async (input, signal) => {
+    calls.push({ method: "suggestText", args: input });
+    if (input.pr === "a/b#slow") {
+      // Waits until the request is closed, as a model call the UI cancelled would.
+      await new Promise<void>((resolve) => signal?.addEventListener("abort", () => resolve()));
+      calls.push({ method: "suggestText.aborted", args: signal?.aborted });
+    }
+    return { text: "Is this in \u001b[31mcents?", costUsd: 0.001 };
+  },
   diff: async (pr, since) => {
     calls.push({ method: "diff", args: since === undefined ? pr : { pr, since } });
     if (pr === "a/b#404") throw new ApiError(502, "GitHub couldn't find a/b#404.");
@@ -709,6 +723,59 @@ describe("alden ui server", () => {
     expect((await post({ ids: ["../x"] })).status).toBe(400);
     expect((await post({ pr: 7 })).status).toBe(400);
     expect((await call("/api/drafts/keep", { method: "POST", body: { pr: "a/b#1" } })).status).toBe(401);
+  });
+
+  it("drafts a review with Alden, and suggests a comment's text, checking each body", async () => {
+    const post = (path: string, body: unknown) => call(path, { method: "POST", headers: authed, body });
+    const made = await post("/api/drafts/alden", { pr: " a/b#1 " });
+    expect(JSON.parse(made.text)).toEqual({ made: 2, skipped: 1, asked: 3, costUsd: 0.012, drafts: [] });
+    const refused = await post("/api/drafts/alden", { pr: "a/b#9" });
+    expect(refused.status).toBe(409);
+    expect(JSON.parse(refused.text).error).toMatch(/won't draft/);
+    expect((await post("/api/drafts/alden", {})).status).toBe(400);
+    expect((await call("/api/drafts/alden", { method: "POST", body: { pr: "a/b#1" } })).status).toBe(401);
+
+    const text = await post("/api/drafts/suggest-text", { pr: "a/b#1", path: "x.ts", line: 3, text: "cents?" });
+    // The model's text is shown, never run: control sequences are stripped like every string the API sends.
+    expect(JSON.parse(text.text)).toEqual({ text: "Is this in cents?", costUsd: 0.001 });
+    await post("/api/drafts/suggest-text", { pr: "a/b#1", threadId: "PRRT_kwDO1" });
+    await post("/api/drafts/suggest-text", { pr: "a/b#1" });
+    expect(calls.filter((c) => c.method === "suggestText").map((c) => c.args)).toEqual([
+      { pr: "a/b#1", path: "x.ts", line: 3, text: "cents?" },
+      { pr: "a/b#1", threadId: "PRRT_kwDO1" },
+      { pr: "a/b#1" },
+    ]);
+    expect((await post("/api/drafts/suggest-text", { pr: "a/b#1", text: 3 })).status).toBe(400);
+    expect((await post("/api/drafts/suggest-text", { pr: "a/b#1", threadId: "x y" })).status).toBe(400);
+    expect((await post("/api/drafts/suggest-text", { pr: "a/b#1", threadId: "T", path: "x.ts" })).status).toBe(400);
+    expect((await post("/api/drafts/suggest-text", { pr: "a/b#1", line: 3 })).status).toBe(400);
+  });
+
+  it("stops a suggestion when the request is closed", async () => {
+    const req = request({
+      host: "127.0.0.1",
+      port: ui.port,
+      path: "/api/drafts/suggest-text",
+      method: "POST",
+      headers: { ...authed, Host: `127.0.0.1:${ui.port}`, "Content-Type": "application/json" },
+    });
+    req.on("error", () => {});
+    req.end(JSON.stringify({ pr: "a/b#slow" }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    req.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toContainEqual({ method: "suggestText.aborted", args: true });
+  });
+
+  it("counts a comment saved from Alden's text as assisted, and checks the flag", async () => {
+    const send = (method: string, path: string, body: unknown) => call(path, { method, headers: authed, body });
+    await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", assisted: { edited: true } });
+    await send("PATCH", "/api/drafts/d1", { body: "y", assisted: { edited: false } });
+    expect(calls.map((c) => c.args)).toEqual([
+      { input: { pr: "a/b#1", body: "x", assisted: { edited: true } }, source: "you" },
+      { id: "d1", change: { body: "y", assisted: { edited: false } } },
+    ]);
+    expect((await send("POST", "/api/drafts", { pr: "a/b#1", body: "x", assisted: true })).status).toBe(400);
   });
 
   it("passes memory changes and reactions through, and checks their bodies", async () => {

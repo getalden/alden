@@ -556,6 +556,43 @@
           "properties": {
             "event": {
               "type": "string",
+              "const": "draft_assisted"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "reply": {
+                  "type": "boolean",
+                  "description": "a reply in a review thread, rather than a comment"
+                },
+                "inline": {
+                  "type": "boolean",
+                  "description": "on a line, rather than a general note or a reply"
+                },
+                "edited": {
+                  "type": "boolean",
+                  "description": "you changed Alden's text before saving it"
+                }
+              },
+              "required": [
+                "reply",
+                "inline",
+                "edited"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
               "const": "review_sent"
             },
             "properties": {

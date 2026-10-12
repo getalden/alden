@@ -126,6 +126,17 @@ export interface UiApi {
    */
   keepDrafts(input: { ids?: string[]; pr?: string }): Promise<{ kept: ReviewDraft[] }>;
   /**
+   * "Draft my review": one model call that drafts Alden's comments (Keep, Edit or Drop, never sent untouched) for the
+   * places to look and the model's findings in the PR's latest briefing, at its current head, that have no comment of
+   * yours near them. Within your budget caps; never on a PR with text aimed at AI reviewers.
+   */
+  draftReview(input: { pr: string }): Promise<DraftReviewAnswer>;
+  /**
+   * "Draft with Alden": the text of one comment (on a line, or a general note) or a reply in a thread, from the code
+   * there or from what you've written so far (`text`). One small model call; it saves nothing. `signal` stops it.
+   */
+  suggestText(input: SuggestTextInput, signal?: AbortSignal): Promise<{ text: string; costUsd: number | null }>;
+  /**
    * Sends the PR's drafts to GitHub as one review, and deletes them once it's posted. The only call that writes to
    * GitHub: it runs on your click or command, never in the background, and Claude Code has no tool for it.
    */
@@ -213,6 +224,31 @@ export interface DraftInput {
    */
   inReplyTo?: string;
   resolve?: boolean;
+  /** Its text came from "Draft with Alden": counted (never the text) as an assisted comment, edited or not. */
+  assisted?: { edited: boolean };
+}
+
+/** What "Draft my review" did: drafts made, places skipped for a comment already near them, and what it cost. */
+export interface DraftReviewAnswer {
+  made: number;
+  skipped: number;
+  /** Places the model was asked about: 0 when every place already had a comment, and nothing was asked. */
+  asked: number;
+  /** null when no call was made, or the model has no known price. */
+  costUsd: number | null;
+  drafts: ReviewDraft[];
+}
+
+/** What "Draft with Alden" is for: a line (or file), a thread (a reply), or neither (a general note). */
+export interface SuggestTextInput {
+  pr: string;
+  path?: string;
+  line?: number;
+  startLine?: number;
+  side?: "RIGHT" | "LEFT";
+  threadId?: string;
+  /** What you've written so far: what you mean, to make into a clear comment. */
+  text?: string;
 }
 
 /**
@@ -228,6 +264,8 @@ export interface DraftChange {
   line?: number;
   startLine?: number;
   side?: "RIGHT" | "LEFT";
+  /** The new text came from "Draft with Alden" (see `DraftInput.assisted`). */
+  assisted?: { edited: boolean };
 }
 
 export type MemoryChange =
@@ -382,6 +420,20 @@ function resolveFrom(body: Record<string, unknown>): boolean | undefined {
   return body.resolve;
 }
 
+/** Whether a draft's text came from "Draft with Alden": `{ edited }`, or nothing. */
+function assistedFrom(body: Record<string, unknown>): { assisted?: { edited: boolean } } {
+  const { assisted } = body;
+  if (assisted === undefined) return {};
+  if (
+    typeof assisted !== "object" ||
+    assisted === null ||
+    typeof (assisted as { edited?: unknown }).edited !== "boolean"
+  ) {
+    throw new ApiError(400, "assisted is { edited: true | false }: whether you changed Alden's text before saving.");
+  }
+  return { assisted: { edited: (assisted as { edited: boolean }).edited } };
+}
+
 /** A reply from a request: the thread's node id (`inReplyTo`) and `resolve`; undefined when it isn't a reply. */
 function replyFrom(body: Record<string, unknown>): { inReplyTo: string; resolve?: boolean } | undefined {
   const resolve = resolveFrom(body);
@@ -515,6 +567,7 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
           ...suggestion,
           ...place,
           ...(resolve !== undefined ? { resolve } : {}),
+          ...assistedFrom(body),
         }),
       );
       return;
@@ -801,6 +854,7 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
                 ...placeFrom(body),
                 ...(typeof suggestion === "string" ? { suggestion } : {}),
                 ...reply,
+                ...assistedFrom(body),
               },
               "you",
             ),
@@ -826,8 +880,51 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
               body: typeof body.body === "string" ? body.body : "",
               ...placeFrom(body),
               ...(typeof suggestion === "string" ? { suggestion } : {}),
+              ...assistedFrom(body),
             },
             "you",
+          ),
+        );
+        return;
+      }
+      case "POST /api/drafts/alden": {
+        const body = await readJsonBody(req);
+        if (typeof body.pr !== "string" || !body.pr.trim()) throw new ApiError(400, "Send { pr: owner/repo#12 }.");
+        send(res, 200, await api.draftReview({ pr: body.pr.trim() }));
+        return;
+      }
+      case "POST /api/drafts/suggest-text": {
+        const body = await readJsonBody(req);
+        const usage =
+          "Send { pr, text? } with { path, line?, side?, startLine? } for a comment on code, or { threadId } for a reply.";
+        if (
+          typeof body.pr !== "string" ||
+          !body.pr.trim() ||
+          (body.text !== undefined && typeof body.text !== "string")
+        ) {
+          throw new ApiError(400, usage);
+        }
+        const place = placeFrom(body);
+        const threadId = body.threadId;
+        if (threadId !== undefined && (typeof threadId !== "string" || !/^[\w=-]{1,200}$/.test(threadId) || place)) {
+          throw new ApiError(400, usage);
+        }
+        // Closing the request (Cancel in the UI) stops it: before the call, nothing is asked; after, the answer is dropped.
+        const stop = new AbortController();
+        res.on("close", () => {
+          if (!res.writableFinished) stop.abort();
+        });
+        send(
+          res,
+          200,
+          await api.suggestText(
+            {
+              pr: body.pr.trim(),
+              ...place,
+              ...(typeof threadId === "string" ? { threadId } : {}),
+              ...(typeof body.text === "string" ? { text: body.text.slice(0, 65_536) } : {}),
+            },
+            stop.signal,
           ),
         );
         return;

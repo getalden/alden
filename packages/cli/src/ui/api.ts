@@ -4,6 +4,7 @@ import { join, sep } from "node:path";
 import {
   addNote,
   backgroundModelAllowed,
+  briefingForDrafting,
   cachedReviewQueue,
   checkFreshness,
   checkLinkTarget,
@@ -14,10 +15,13 @@ import {
   createGitHubClient,
   DiffCache,
   type DiffFile,
+  DraftingError,
+  draftReview,
   dropAldenDrafts,
   type Effort,
   editNote,
   FeedbackLog,
+  fetchPullRequest,
   fetchPullRequestState,
   fetchReviewQueue,
   fetchReviewThreads,
@@ -50,6 +54,7 @@ import {
   reactionProgress,
   recordReaction,
   recordSeen,
+  rememberForDrafting,
   resolveModel,
   resolveModelKey,
   resolveToken,
@@ -63,9 +68,11 @@ import {
   seenPlaces,
   selectProvider,
   sendReview,
+  sentComments,
   setConfigValue,
   setLearning,
   setTelemetryConsent,
+  suggestCommentText,
   supportsEffort,
   telemetryBlocked,
   telemetryConsent,
@@ -335,6 +342,14 @@ export function createUiApi(options: {
       if (fresh.state === "fresh") entry.checkedAt = now;
       else prepared.delete(key);
     }
+  };
+
+  /** A drafting failure as the UI shows it, with what the call cost when one was made. */
+  const draftingProblem = (error: unknown): unknown => {
+    if (!(error instanceof DraftingError)) return error;
+    const cost = error.usd !== undefined && error.usd > 0 ? ` That call cost $${error.usd.toFixed(4)}.` : "";
+    const status = error.kind === "failed" || error.kind === "refused" ? 502 : 409;
+    return new ApiError(status, `${error.message}${cost}`);
   };
 
   const api: UiApi = {
@@ -783,6 +798,9 @@ export function createUiApi(options: {
           ...(input.suggestion !== undefined ? { suggestion: input.suggestion } : {}),
         });
         void track("draft_changed", { action: "add", source, inline: inline(draft) });
+        if (input.assisted) {
+          void track("draft_assisted", { reply: false, inline: inline(draft), edited: input.assisted.edited });
+        }
         return publicDraft(draft);
       } catch (error) {
         throw new ApiError(400, (error as Error).message);
@@ -819,6 +837,9 @@ export function createUiApi(options: {
       }
       if (!edited) throw new ApiError(404, `No draft ${id}. It may have been sent or deleted.`);
       void track("draft_changed", { action: "edit", source: edited.source, inline: inline(edited) });
+      if (change.assisted) {
+        void track("draft_assisted", { reply: false, inline: inline(edited), edited: change.assisted.edited });
+      }
       // Editing one of Alden's drafts makes it yours, as keeping it does.
       if (edited.source === "alden" && (change.body !== undefined || change.suggestion !== undefined)) {
         const learn = (await loadConfig(options.cwd)).learning.fromReviews;
@@ -850,6 +871,104 @@ export function createUiApi(options: {
       const { kept } = await keepAldenDrafts(which, { learn });
       for (const draft of kept) void track("draft_changed", { action: "keep", source: "alden", inline: inline(draft) });
       return { kept: kept.map(publicDraft) };
+    },
+
+    async draftReview({ pr }) {
+      const ref = await prOf(pr);
+      const config = await loadConfig(options.cwd);
+      const choice = await selectProvider(config);
+      if (!choice.ok) throw new ApiError(409, choice.reason);
+      const briefing = await briefingForDrafting(ref.name);
+      if (!briefing) {
+        throw new ApiError(409, `Brief ${ref.name} first: Alden drafts from the briefing's places to look.`);
+      }
+      const { headSha, files, client } = await followPr(ref);
+      if (briefing.target.kind !== "pr" || briefing.target.headSha !== headSha) {
+        throw new ApiError(409, `${ref.name} has new commits since its briefing: brief it again, then draft.`);
+      }
+      // Where you've already commented on GitHub counts as a word on a place, as a draft does.
+      const sent = await threadsOf(ref).then(
+        (read) => sentComments(read.threads),
+        () => [],
+      );
+      const detail = await fetchPullRequest(client, ref.repo, ref.number).catch(() => undefined);
+      try {
+        const result = await draftReview({
+          briefing,
+          files,
+          headSha,
+          description: detail?.body,
+          learning: await learningFor(ref.repo),
+          sent,
+          provider: choice.provider,
+          config,
+          ledger: new SpendLedger(),
+          checkLink: (link) => checkLinkTarget(client, ref.repo, headSha, link),
+        });
+        for (const d of result.made) void track("draft_changed", { action: "add", source: "alden", inline: inline(d) });
+        return {
+          made: result.made.length,
+          skipped: result.skipped,
+          asked: result.asked,
+          costUsd: result.usd ?? null,
+          drafts: result.made.map(publicDraft),
+        };
+      } catch (error) {
+        throw draftingProblem(error);
+      }
+    },
+
+    async suggestText(input, signal) {
+      const ref = await prOf(input.pr);
+      const config = await loadConfig(options.cwd);
+      const choice = await selectProvider(config);
+      if (!choice.ok) throw new ApiError(409, choice.reason);
+      const { headSha, files, client, source } = await followPr(ref);
+      let thread: ReviewThreads["threads"][number] | undefined;
+      if (input.threadId !== undefined) {
+        thread = (await threadsOf(ref)).threads.find((t) => t.id === input.threadId);
+        if (!thread) throw new ApiError(404, "That thread isn't on the PR any more. Read the conversation again.");
+      }
+      let detail: Awaited<ReturnType<typeof fetchPullRequest>>;
+      try {
+        detail = await fetchPullRequest(client, ref.repo, ref.number);
+      } catch (error) {
+        throw new ApiError(502, describeGitHubError(error, source));
+      }
+      // The briefing you're looking at, when it's of this head: what Alden flagged near the line.
+      const saved = await briefingForDrafting(ref.name);
+      const briefing = saved?.target.kind === "pr" && saved.target.headSha === headSha ? saved : undefined;
+      const at =
+        input.path !== undefined
+          ? { path: input.path, line: input.line, startLine: input.startLine, side: input.side }
+          : undefined;
+      try {
+        const result = await suggestCommentText({
+          target: {
+            kind: "pr",
+            repo: ref.repo,
+            number: ref.number,
+            url: detail.url,
+            title: detail.title,
+            author: detail.author?.login ?? null,
+            baseRef: detail.baseRefName,
+            headRef: detail.headRefName,
+            headSha,
+          },
+          description: detail.body,
+          files,
+          learning: await learningFor(ref.repo),
+          briefing,
+          for: { ...(thread ? { thread } : at ? { at } : {}), ...(input.text?.trim() ? { text: input.text } : {}) },
+          provider: choice.provider,
+          config,
+          ledger: new SpendLedger(),
+          ...(signal ? { signal } : {}),
+        });
+        return { text: result.text, costUsd: result.usd ?? null };
+      } catch (error) {
+        throw draftingProblem(error);
+      }
     },
 
     async sendReview({ pr, event, body }) {
@@ -971,6 +1090,7 @@ export function createUiApi(options: {
         source,
       });
       void track("draft_changed", { action: "add", source, inline: false });
+      if (input.assisted) void track("draft_assisted", { reply: true, inline: false, edited: input.assisted.edited });
       return publicDraft(draft);
     } catch (error) {
       throw new ApiError(400, (error as Error).message);
@@ -1007,6 +1127,7 @@ export function createUiApi(options: {
     }
     if (!edited) throw new ApiError(404, `No draft ${draft.id}. It may have been sent or deleted.`);
     void track("draft_changed", { action: "edit", source: edited.source, inline: false });
+    if (change.assisted) void track("draft_assisted", { reply: true, inline: false, edited: change.assisted.edited });
     return publicDraft(edited);
   }
 
@@ -1068,6 +1189,8 @@ export function createUiApi(options: {
     } catch {
       // the database is locked or damaged: the review still stands
     }
+    // What "Draft my review" and "Draft with Alden" draft from.
+    await rememberForDrafting(briefing);
     // Comments drafted from the model's findings, for you to keep, edit or drop: never sent on their own.
     try {
       const { made } = makeAldenDrafts(briefing, diff, { enabled: config.drafts.auto });

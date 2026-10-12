@@ -1,6 +1,13 @@
 import type { ReviewDraft } from "@alden/schema";
 import { describe, expect, it } from "vitest";
-import { draftedLines, parseWhere, renderDrafts, renderSendSummary, suggestionFrom } from "./comment.js";
+import {
+  draftedLines,
+  draftReviewLines,
+  parseWhere,
+  renderDrafts,
+  renderSendSummary,
+  suggestionFrom,
+} from "./comment.js";
 
 const draft = (extra: Partial<ReviewDraft>): ReviewDraft => ({
   id: "a1b2c3d4",
@@ -209,5 +216,23 @@ describe("linked notes in the terminal", () => {
       "**[`py/orders/tasks.py` line 5](https://github.com/acme/shop/blob/0123456789abcdef/py/orders/tasks.py#L5)**: Retry here too?",
     );
     expect(summary).toContain("Comments (0)");
+  });
+});
+
+describe("alden comment --draft", () => {
+  it("says what Alden drafted and what it cost, what it skipped, and how to keep them", () => {
+    expect(draftReviewLines({ made: 2, skipped: 1, asked: 3, costUsd: 0.0213 }, "acme/shop#7")).toEqual([
+      "Alden drafted 2 comments for acme/shop#7 ($0.0213). Skipped 1 place that already has a comment or draft near it.",
+      "See them: alden comment acme/shop#7. Keep with --keep <id> or --keep all, drop with --delete <id>: drafts by Alden not kept won't be sent.",
+    ]);
+    expect(draftReviewLines({ made: 0, skipped: 0, asked: 2, costUsd: null }, "acme/shop#7")).toEqual([
+      "Alden drafted nothing for acme/shop#7: the model found nothing worth a comment at those places.",
+    ]);
+    expect(draftReviewLines({ made: 0, skipped: 3, asked: 0, costUsd: null }, "acme/shop#7")).toEqual([
+      "Nothing to draft for acme/shop#7: every place in its briefing has a comment or draft near it already.",
+    ]);
+    expect(draftReviewLines({ made: 0, skipped: 0, asked: 0, costUsd: null }, "acme/shop#7")).toEqual([
+      "Nothing to draft for acme/shop#7: its briefing has no places to look.",
+    ]);
   });
 });
