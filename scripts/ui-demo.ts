@@ -613,6 +613,29 @@ const api: UiApi = {
     if (!drafts.delete(id)) throw new ApiError(404, `No draft ${id}.`);
     return { ok: true };
   },
+  // Drafting with Alden, with no model: stand-in words, so the buttons and what they say can be seen.
+  draftReview: async ({ pr }) => {
+    const { name, headSha, files } = recordedPr(pr);
+    const places = drafts.briefed(name)?.places ?? [];
+    const made = places.slice(0, 2).map((place) => {
+      const spot = place.anchor ? placeOrLink(files, place.anchor.path, place.anchor.line, "RIGHT") : undefined;
+      return drafts.add({
+        pr: name,
+        headSha,
+        source: "alden",
+        body: `Demo: the model would write the comment for "${place.title}" here.`,
+        ...(spot && !("problem" in spot) ? spot : {}),
+      });
+    });
+    const asked = places.length;
+    return { made: made.length, skipped: 0, asked, costUsd: null, drafts: made.map(publicDraft) };
+  },
+  suggestText: async ({ text }) => ({
+    text: text?.trim()
+      ? `${text.trim()} (Demo: the model would make this a clear comment.)`
+      : "Demo: the model would write this comment from the code here.",
+    costUsd: null,
+  }),
   // The places you saw, kept in the throwaway database as Alden keeps them in yours.
   recordSeen: async ({ pr, headSha, places }) => {
     if (!demoLearnFromReviews) return { recorded: 0 };

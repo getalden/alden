@@ -226,11 +226,59 @@ they're marked "drafted by Alden, not kept". `alden comment acme/shop#7 --keep <
 Keep, edit and drop teach Alden too, for the finding's check: keeping or editing one counts once as a comment near
 that place (sending it later doesn't count it again), and dropping one counts a little the other way, like approving
 past a place you saw (0.2, never for secrets or text aimed at AI reviewers, and never enough alone to quieten a check).
-Nothing is learned while `learning.fromReviews` is off. Usage stats count keeps, edits and drops, never the text.
+Nothing is learned while `learning.fromReviews` is off. Usage stats count keeps, edits and drops, never the text. Drafts
+you ask for with [Draft my review](#draft-my-review) are the same.
 
 To turn drafting off, switch off **Draft comments for me** in Settings, or `alden config set drafts.auto false`. The
 model is then asked exactly what it was asked before. See [Models](models.md#drafted-comments) for what the model is
 asked and what it costs.
+
+## Drafting with Alden on demand
+
+The briefing's drafts follow strict rules, so a place can end up with none: Alden's own checks (a destructive
+migration, a changed signature's callers) don't draft, nor does a finding without a line. When you want Alden's words
+anyway, ask. Both need a model set up (without one, the drawer offers **Set up a model**), make one model call within
+your [budget caps](models.md#budgets) and say what it cost, and never run on a PR with text aimed at AI reviewers
+(they say why, in the briefing's words).
+
+### Draft my review
+
+**Draft my review**, beside **Comments** in the briefing and in the Comments drawer, asks the model in one call for a
+comment on each of the PR's places to look ("Needs your eyes", which includes Alden's checks) and on the model's
+medium and high findings, whatever the briefing drafted or didn't:
+
+- **From the briefing you're looking at.** It drafts from the PR's latest briefing, which must be of its latest push:
+  brief it (again) first otherwise.
+- **Only where there's no word yet.** A place with a draft near it (anyone's, within three lines, as the warning before
+  Approve counts it) or a comment of yours already on GitHub near it is skipped, and Alden says how many. When every
+  place has one, nothing is asked and nothing is spent.
+- **At most eight drafts**, each on the place's line when GitHub takes a comment there, otherwise a general note linking
+  to the line or file (a [linked note](#comments-on-code-outside-the-diff)), or a plain general note for a place with
+  no code (one about the PR's title, say). A suggested change comes only on an added line, checked like the briefing's.
+- **They're Alden's drafts**, exactly like the briefing's: marked **Drafted by Alden**, kept, edited or dropped the same
+  way, teaching Alden the same way, never sent untouched, never an approval. A new model briefing of the PR (with `drafts.auto`
+  on) replaces the ones you didn't touch.
+
+It says what happened: "Alden drafted 3 comments ($0.02): keep, edit or drop each in Comments. Skipped 2 places with a
+comment or draft near them already.", or that there was nothing new to draft, or why it couldn't (no briefing of the
+latest push, a budget stop, the model failing). In a terminal: `alden comment <pr> --draft`, after `alden review <pr>`.
+
+### Draft with Alden
+
+Every comment box (a place's comment, a line you pick with **Comment on a line…**, a general note) and every thread's
+Reply box has **Draft with Alden**. It asks the model for one comment on that code (or a reply that answers the
+thread) and puts it in the box for you to edit:
+
+- **An empty box** takes Alden's text at once; **Undo** empties it again.
+- **Text you've written** is what you mean: Alden makes it a clear review comment saying the same thing, and shows its
+  version beside yours. **Use it** puts it in the box (Undo puts yours back); **Keep mine** leaves yours.
+- **Cancel** stops it while it's drafting. If the model was already asked, the call is still recorded in your spend and
+  its answer is dropped.
+- **It saves and sends nothing.** What you save is your comment, like anything you write: it counts toward learning as
+  yours. Usage stats count that it was drafted with Alden, and whether you changed it, never the text.
+
+It's one small call at low effort, using what's at that line (the diff around it, what Alden flagged there, your notes
+for the repo, and for a reply the thread so far).
 
 ## Sending
 

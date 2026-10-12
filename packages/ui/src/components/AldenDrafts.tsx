@@ -3,7 +3,7 @@ import { type BriefingComments, type ReviewDraft, unkept } from "../drafts";
 import { plural } from "../format";
 
 /*
- * Alden's drafts in the Comments drawer: comments it drafted from its model's findings, labelled "Drafted by Alden".
+ * Alden's drafts in the Comments drawer: comments it drafted from the model's findings or on request (Draft my review), labelled "Drafted by Alden".
  * Each is only a suggestion until you keep or edit it, when it becomes yours; untouched, it's never sent, and none of
  * them approves anything.
  */
@@ -113,8 +113,8 @@ export function AldenDraftsBar({ comments }: { comments: BriefingComments }) {
   return (
     <section className="alden-drafts card" aria-label="Alden's drafts">
       <p className="small">
-        <strong>Alden drafted {plural(n, "comment")}</strong> from its model's findings. Keep, edit or drop each:{" "}
-        {plural(n, "draft")} by Alden not kept won't be sent.
+        <strong>Alden drafted {plural(n, "comment")}</strong> for this PR. Keep, edit or drop each: {plural(n, "draft")}{" "}
+        by Alden not kept won't be sent.
       </p>
       <div className="form-actions">
         {comments.keep && (

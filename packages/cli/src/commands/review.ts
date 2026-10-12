@@ -10,6 +10,7 @@ import {
   loadConfig,
   makeAldenDrafts,
   ReviewDrafts,
+  rememberForDrafting,
   repoFromRemote,
   resolveToken,
   reviewEvent,
@@ -126,6 +127,8 @@ export function registerReviewCommand(program: Command): void {
           } catch {
             // the database is locked or damaged: the review still stands
           }
+          // What `alden comment <pr> --draft` drafts from.
+          await rememberForDrafting(briefing);
           // Comments drafted from the model's findings, kept until you keep, edit or drop them: never sent on their own.
           // Not beside a review thread already on the PR; drafted as before when the threads can't be read.
           try {

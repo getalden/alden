@@ -15,6 +15,7 @@ import { type BriefingComments, type CommentPlace, useDrawerOpen } from "../draf
 import type { BriefingFeedback } from "../feedback";
 import type { ReviewRun } from "../reviews";
 import { onLinkClick } from "../router";
+import { AldenAssistContext, DraftMyReview, useAssist } from "./AldenAssist";
 import { BriefingAge } from "./BriefingAge";
 import { BriefingView } from "./BriefingView";
 import {
@@ -125,6 +126,11 @@ interface ReviewPaneProps {
   loadDiff?: ((pr?: string, since?: string) => Promise<PrDiff>) | undefined;
   /** The head commit you last reviewed, on a PR you reviewed before: the Diff tab offers the changes since. */
   reviewedHead?: string | undefined;
+  /**
+   * Drafting with Alden on a PR: "Draft my review" and "Draft with Alden" (`model`: one is set up; without one, the
+   * drawer offers `onSetUpModel`).
+   */
+  assist?: { api: Pick<Api, "draftReview" | "suggestText">; model: boolean; onSetUpModel?: () => void } | undefined;
 }
 
 /**
@@ -403,6 +409,17 @@ export function ReviewPane(props: ReviewPaneProps) {
     drawer.editing !== undefined && drawer.editing.kind !== "note",
   );
   const count = comments && !comments.loading ? comments.drafts.length : 0;
+  const assist = useAssist({
+    api: props.assist?.api,
+    comments,
+    briefing: run?.running ? undefined : run?.briefing,
+    model: props.assist?.model ?? false,
+    onSetUpModel: props.assist?.onSetUpModel,
+    // Show the drafts it made.
+    onDrafted: () => {
+      if (!drawer.open) drawer.toggle();
+    },
+  });
   useEffect(() => {
     if (!run?.running) return;
     const onKey = (event: KeyboardEvent) => {
@@ -412,7 +429,7 @@ export function ReviewPane(props: ReviewPaneProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [run?.running, props.onCancel]);
 
-  return (
+  const pane = (
     <ReviewActionsContext.Provider value={drawer.actions}>
       <div className={`review-pane${comments && drawer.open ? " drawer-open" : ""}`}>
         <section className="review-main" aria-labelledby="review-title">
@@ -474,6 +491,7 @@ export function ReviewPane(props: ReviewPaneProps) {
                 {count > 0 ? `Comments · ${count}` : "Comments"} <kbd>S</kbd>
               </button>
             )}
+            {comments && !run?.running && <DraftMyReview from="toolbar" />}
           </div>
           {props.notice && (
             <div className="notice note-box">
@@ -571,4 +589,5 @@ export function ReviewPane(props: ReviewPaneProps) {
       </div>
     </ReviewActionsContext.Provider>
   );
+  return <AldenAssistContext.Provider value={assist}>{pane}</AldenAssistContext.Provider>;
 }

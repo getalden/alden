@@ -124,6 +124,37 @@ const whoDrafted = (d: ReviewDraft) =>
 export const aldenNotKept = (n: number, pr: string) =>
   `${n === 1 ? "1 draft" : `${n} drafts`} by Alden not kept won't be sent: keep ${n === 1 ? "it" : "them"} (alden comment ${pr} --keep <id> or --keep all), or drop ${n === 1 ? "it" : "them"} with --delete <id>.`;
 
+/**
+ * What `alden comment <pr> --draft` says: how many comments Alden drafted and what the call cost, the places it left
+ * alone because a comment or draft is near them already, and how to keep them.
+ */
+export function draftReviewLines(
+  result: { made: number; skipped: number; asked: number; costUsd: number | null },
+  pr: string,
+): string[] {
+  const skipped =
+    result.skipped > 0
+      ? ` Skipped ${result.skipped === 1 ? "1 place that already has" : `${result.skipped} places that already have`} a comment or draft near it.`
+      : "";
+  const cost = result.costUsd !== null ? ` ($${result.costUsd.toFixed(4)})` : "";
+  if (result.asked === 0) {
+    return [
+      result.skipped === 0
+        ? `Nothing to draft for ${pr}: its briefing has no places to look.`
+        : `Nothing to draft for ${pr}: every place in its briefing has a comment or draft near it already.`,
+    ];
+  }
+  if (result.made === 0) {
+    return [
+      `Alden drafted nothing for ${pr}${cost}: the model found nothing worth a comment at those places.${skipped}`,
+    ];
+  }
+  return [
+    `Alden drafted ${result.made === 1 ? "1 comment" : `${result.made} comments`} for ${pr}${cost}.${skipped}`,
+    `See ${result.made === 1 ? "it" : "them"}: alden comment ${pr}. Keep with --keep <id> or --keep all, drop with --delete <id>: drafts by Alden not kept won't be sent.`,
+  ];
+}
+
 /** What `alden comment` says once a comment is drafted: where it went (a linked note says why), and how to send. */
 export function draftedLines(untrusted: ReviewDraft, pr: string): string[] {
   const draft = stripControlDeep(untrusted);
@@ -309,6 +340,7 @@ interface CommentOptions {
   suggestFile?: string;
   delete?: string;
   keep?: string;
+  draft?: boolean;
   json?: boolean;
   threads?: boolean;
   reply?: string;
@@ -371,6 +403,10 @@ export function registerCommentCommands(program: Command, version: string): void
     .option("--suggest-file <path>", "suggest the replacement code in this file")
     .option("--delete <id>", "delete a comment instead")
     .option("--keep <id>", "keep a comment Alden drafted (or all of them), so it's sent with your review")
+    .option(
+      "--draft",
+      "ask the model (one call, within your caps) to draft comments for the places in the PR's latest briefing you haven't commented near, to keep, edit or drop",
+    )
     .option("--threads", "list the PR's review threads, with ids to reply by")
     .option("--reply <thread>", "reply in a review thread (its id from --threads, or file:line) instead")
     .option(
@@ -398,6 +434,14 @@ export function registerCommentCommands(program: Command, version: string): void
       }
       if (options.resolve === true) {
         program.error(`Say which thread to resolve: alden comment ${pr} --resolve <id or file:line> (see --threads).`);
+      }
+      if (options.draft) {
+        if (words.length > 0)
+          program.error(`--draft drafts from the briefing: alden comment ${pr} --draft, with no text.`);
+        const result = await api().draftReview({ pr }).catch(fail);
+        if (options.json) console.log(JSON.stringify(result, null, 2));
+        else for (const line of draftReviewLines(result, pr)) console.log(line);
+        return;
       }
       if (options.keep) {
         const which = options.keep === "all" ? { pr } : { ids: [options.keep] };

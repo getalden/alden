@@ -127,7 +127,8 @@ function priority(file: DiffFile, flaggedPaths: Set<string>): number {
   return 4;
 }
 
-function describeChecks(checks: CheckResult[]): string {
+/** Alden's check results as the model reads them: status, severity, summary, and each flagged check's evidence. */
+export function describeChecks(checks: CheckResult[]): string {
   return checks
     .map((c) => {
       const evidence = c.status === "flagged" ? c.evidence.map((e) => `\n    - ${e.text}`).join("") : "";

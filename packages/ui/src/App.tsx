@@ -574,6 +574,15 @@ function PrPane(props: {
       guided={props.draftsApi ? { loadDiff: props.draftsApi.diff } : undefined}
       loadDiff={props.draftsApi?.diff}
       reviewedHead={row?.followUp?.lastReviewedHead}
+      assist={
+        props.draftsApi
+          ? {
+              api: props.draftsApi,
+              model: session?.model.available === true,
+              ...(props.onSetUpModel ? { onSetUpModel: props.onSetUpModel } : {}),
+            }
+          : undefined
+      }
     />
   );
 }

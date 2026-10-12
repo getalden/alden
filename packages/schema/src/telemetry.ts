@@ -120,6 +120,14 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
     }),
   }),
   z.object({
+    event: z.literal("draft_assisted"),
+    properties: z.object({
+      reply: z.boolean().describe("a reply in a review thread, rather than a comment"),
+      inline: z.boolean().describe("on a line, rather than a general note or a reply"),
+      edited: z.boolean().describe("you changed Alden's text before saving it"),
+    }),
+  }),
+  z.object({
     event: z.literal("review_sent"),
     properties: z.object({
       review: z.enum(["comment", "approve", "request_changes"]),

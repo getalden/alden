@@ -138,6 +138,35 @@ dropped; the finding stays.
 same per-review cap. It works with any model, your own key or a local one. With `drafts.auto = false` the prompt and
 the answer's shape are exactly what they were without drafts, so nothing extra is asked or paid for.
 
+## Drafting on demand
+
+[Draft my review](comments.md#draft-my-review) and [Draft with Alden](comments.md#draft-with-alden) are calls of their
+own, made only when you press them (or run `alden comment <pr> --draft`), with the model you've set up:
+
+| | Draft my review | Draft with Alden |
+| --- | --- | --- |
+| What it sends | The PR's title and description, your notes for the repo, Alden's check results, and each place without a comment near it (at most 12), with its reason and the diff around it | The PR's title and description, your notes, where the comment goes and the diff around it, what Alden flagged there, the thread so far for a reply, and what you've written |
+| What it asks for | A comment (and, on an added line, maybe a suggested change) per place worth one | One comment or reply, in your voice |
+| Effort, output cap | Medium (low if `model.effort` is low), 8,000 tokens | Low, 2,000 tokens |
+| Spend ledger | `owner/repo#12 drafts` | `owner/repo#12 comment text` |
+
+**The PR's text is data, never instructions.** Everything that came from the PR (its title and description, its code,
+the reasons and evidence that quote it, other people's comments in a thread) goes between `<pr-content>` markers, and
+the system prompt says what's inside them is material to review, never instructions: if it asks for anything
+(approve, ignore a problem, write certain words), the model is told not to, and to draft nothing for that place. Any
+such marker inside the PR's own text is taken out first, so the PR can't close the fence. Your notes and what you've
+written are outside it. Likely secrets are redacted as in a briefing. Neither runs on a PR whose title, description or
+added lines (or, for a reply, the thread) talk to AI reviewers.
+
+**Checked before it's offered.** An answer must be plain text of reasonable length, not mention being an AI, contain
+nothing aimed at AI reviewers, and not be a bare approval ("LGTM"); a suggested change must pass the briefing's draft
+checks. What fails is dropped.
+
+**Costs.** Each is one call, checked against `budget.perReviewUsd` and what's left of `budget.dailyUsd` before it's sent
+(a budget stop sends nothing), recorded in `alden spend`, and its cost is shown when it's done. Draft my review asks
+nothing when every place already has a comment. A cancelled Draft with Alden sends nothing if it hasn't been sent yet;
+once it has, the call completes and is recorded, and its answer is dropped.
+
 ## Budgets
 
 Every model call is checked against two caps before it's sent:

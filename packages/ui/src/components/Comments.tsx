@@ -28,6 +28,7 @@ import {
   whereText,
 } from "../drafts";
 import { plural } from "../format";
+import { type AssistTarget, DraftMyReview, DraftWithAlden } from "./AldenAssist";
 import { AldenDraftActs, AldenDraftsBar, AldenLabel } from "./AldenDrafts";
 import { Conversation, type ReplyFocus, ReplySummary } from "./Conversation";
 import { DraftText } from "./DraftText";
@@ -198,7 +199,10 @@ export function CommentEditor(props: {
   /** Something to know before saving: where it will post, when that isn't where you'd expect. */
   notice?: string | undefined;
   suggest?: Suggest | undefined;
-  onSave: (body: string, suggestion: string | undefined) => Promise<void>;
+  /** Where "Draft with Alden" writes for, when it's offered here (and a model is set up). */
+  assist?: AssistTarget | undefined;
+  /** `assisted`: the text came from "Draft with Alden", and whether you changed it before saving. */
+  onSave: (body: string, suggestion: string | undefined, assisted?: { edited: boolean }) => Promise<void>;
   onCancel: () => void;
 }) {
   const [text, setText] = useState(props.initial ?? "");
@@ -206,6 +210,8 @@ export function CommentEditor(props: {
   const [code, setCode] = useState(props.suggest?.initial ?? props.suggest?.lineText ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
+  /** What "Draft with Alden" put in the box, until Undo. */
+  const [assisted, setAssisted] = useState<string>();
   const area = useRef<HTMLTextAreaElement>(null);
   const codeArea = useRef<HTMLTextAreaElement>(null);
   const toggled = useRef(false);
@@ -229,7 +235,11 @@ export function CommentEditor(props: {
     setSaving(true);
     setError(undefined);
     try {
-      await props.onSave(text.trim(), withSuggestion ? code : undefined);
+      await props.onSave(
+        text.trim(),
+        withSuggestion ? code : undefined,
+        assisted !== undefined ? { edited: text.trim() !== assisted.trim() } : undefined,
+      );
     } catch (e) {
       setError(messageOf(e));
       setSaving(false);
@@ -271,6 +281,17 @@ export function CommentEditor(props: {
         onChange={(e) => setText(e.target.value)}
         onKeyDown={saveKeys}
       />
+      {props.assist && (
+        <DraftWithAlden
+          target={props.assist}
+          text={text}
+          onText={(next) => {
+            setText(next);
+            area.current?.focus();
+          }}
+          onAssisted={setAssisted}
+        />
+      )}
       {props.suggest && (
         <div className="suggest">
           <button
@@ -464,9 +485,13 @@ function LineForm(props: {
           </label>
         </div>
       }
+      assist={path ? { path, side, ...lines } : undefined}
       onCancel={props.onCancel}
-      onSave={(body, suggestion) =>
-        props.onSave(lineDraft({ path, side, ...(lines as { line: number; startLine?: number }) }, body, suggestion))
+      onSave={(body, suggestion, assisted) =>
+        props.onSave({
+          ...lineDraft({ path, side, ...(lines as { line: number; startLine?: number }) }, body, suggestion),
+          ...(assisted ? { assisted } : {}),
+        })
       }
     />
   );
@@ -949,9 +974,13 @@ export function CommentsDrawer(props: {
                         }
                       : undefined
                   }
+                  assist={editing.place}
                   onCancel={() => closeForm(props.returnFocus)}
-                  onSave={async (body, suggestion) => {
-                    await comments.add(lineDraft(editing.place, body, suggestion));
+                  onSave={async (body, suggestion, assisted) => {
+                    await comments.add({
+                      ...lineDraft(editing.place, body, suggestion),
+                      ...(assisted ? { assisted } : {}),
+                    });
                     if (editing.replaces) await comments.remove(editing.replaces);
                     closeForm(props.returnFocus);
                   }}
@@ -982,9 +1011,10 @@ export function CommentsDrawer(props: {
                 <CommentEditor
                   label="General note"
                   initial={editing.initial}
+                  assist={{ note: true }}
                   onCancel={() => closeForm(noteButton)}
-                  onSave={async (body) => {
-                    await comments.add({ body });
+                  onSave={async (body, _suggestion, assisted) => {
+                    await comments.add({ body, ...(assisted ? { assisted } : {}) });
                     if (editing.replaces) await comments.remove(editing.replaces);
                     closeForm(noteButton);
                   }}
@@ -1056,6 +1086,7 @@ export function CommentsDrawer(props: {
                     Comment on a line…
                   </button>
                 )}
+                <DraftMyReview from="drawer" />
               </div>
             )}
 
