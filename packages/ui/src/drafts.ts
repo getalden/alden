@@ -37,6 +37,8 @@ export interface NewDraft {
   inReplyTo?: string;
   /** On a reply: resolve the thread once the review is sent. With it, `body` may be empty. */
   resolve?: boolean;
+  /** Its text came from "Draft with Alden": counted (never the text), and whether you changed it first. */
+  assisted?: { edited: boolean };
 }
 
 /** A change to a draft: its text, and its suggestion (`null` takes the suggestion off), or a reply's Resolve. */
@@ -44,6 +46,8 @@ export interface DraftPatch {
   body: string;
   suggestion?: string | null;
   resolve?: boolean;
+  /** The new text came from "Draft with Alden" (see `NewDraft.assisted`). */
+  assisted?: { edited: boolean };
 }
 
 /**

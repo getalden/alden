@@ -3326,3 +3326,23 @@ details > summary {
 .diff-thread.resolved .diff-thread-toggle {
   color: var(--ink2);
 }
+/* Drafting with Alden: "Draft with Alden" under a comment box, and what "Draft my review" says it did. */
+.assist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.assist-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.assist-line {
+  align-self: center;
+  overflow-wrap: anywhere;
+}

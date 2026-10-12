@@ -194,6 +194,28 @@ export type ReviewEvent =
   | { type: "briefing"; briefing: Briefing }
   | { type: "error"; message: string };
 
+/** What "Draft my review" did: drafts made, places skipped for a comment already near them, places asked about, cost. */
+export interface DraftReviewResult {
+  made: number;
+  skipped: number;
+  asked: number;
+  /** null when nothing was asked, or the model has no known price (a local model). */
+  costUsd: number | null;
+  drafts: ReviewDraft[];
+}
+
+/** What "Draft with Alden" writes for: a line or file of the PR, a thread (a reply), or neither (a general note). */
+export interface SuggestTextRequest {
+  pr: string;
+  path?: string;
+  line?: number;
+  startLine?: number;
+  side?: "RIGHT" | "LEFT";
+  threadId?: string;
+  /** What you've written so far, to make into a clear comment. */
+  text?: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -397,6 +419,21 @@ export class Api {
   /** Keeps Alden's drafts (by id, or all of them on `pr`): they become yours, and are sent with the review. */
   keepDrafts = (which: { ids: string[] } | { pr: string }) =>
     this.request<{ kept: ReviewDraft[] }>("/api/drafts/keep", { method: "POST", body: JSON.stringify(which) });
+
+  /**
+   * "Draft my review": one model call that drafts Alden's comments for the places in the PR's latest briefing with no
+   * comment near them. They're Alden's drafts: kept, edited or dropped in the drawer, never sent untouched.
+   */
+  draftReview = (pr: string) =>
+    this.request<DraftReviewResult>("/api/drafts/alden", { method: "POST", body: JSON.stringify({ pr }) });
+
+  /** "Draft with Alden": one comment's (or reply's) text for the box you're writing in. Saves nothing; `signal` stops it. */
+  suggestText = (input: SuggestTextRequest, signal?: AbortSignal) =>
+    this.request<{ text: string; costUsd: number | null }>("/api/drafts/suggest-text", {
+      method: "POST",
+      body: JSON.stringify(input),
+      ...(signal ? { signal } : {}),
+    });
 
   /**
    * The Diff tab: a PR's diff at its current head ("owner/repo#12"), or without one the local changes. The server keeps

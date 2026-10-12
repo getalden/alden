@@ -2,6 +2,7 @@ import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState }
 import type { BriefingComments, ReviewDraft } from "../drafts";
 import { plural } from "../format";
 import { type ReviewThread, replyIn, replyWhere, threadPlace } from "../threads";
+import { DraftWithAlden } from "./AldenAssist";
 
 /*
  * The conversation already on a PR, in the Comments drawer: its review threads, each with a Reply box and a Resolve
@@ -41,6 +42,8 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  /** What "Draft with Alden" put in the box, until Undo: saving it counts as an assisted reply. */
+  const [assisted, setAssisted] = useState<string>();
   const card = useRef<HTMLLIElement>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const replyButton = useRef<HTMLButtonElement>(null);
@@ -48,6 +51,7 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
 
   const startWriting = () => {
     setText(draft?.body ?? "");
+    setAssisted(undefined);
     setError(undefined);
     setWriting(true);
   };
@@ -62,14 +66,17 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
   }, [writing]);
 
   /** Makes the reply draft say this: added, changed, or (with nothing to say or resolve) dropped. */
-  async function save(body: string, resolve: boolean) {
+  async function save(body: string, resolve: boolean, fromAlden?: { edited: boolean }) {
     setBusy(true);
     setError(undefined);
+    const counted = fromAlden && body.trim() ? { assisted: fromAlden } : {};
     try {
       if (!draft) {
-        if (body.trim() || resolve) await comments.add({ inReplyTo: thread.id, body, ...(resolve ? { resolve } : {}) });
+        if (body.trim() || resolve) {
+          await comments.add({ inReplyTo: thread.id, body, ...(resolve ? { resolve } : {}), ...counted });
+        }
       } else if (!body.trim() && !resolve) await comments.remove(draft.id);
-      else await comments.edit(draft.id, { body, resolve });
+      else await comments.edit(draft.id, { body, resolve, ...counted });
       return true;
     } catch (e) {
       setError(messageOf(e));
@@ -82,10 +89,12 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
     setWriting(false);
     requestAnimationFrame(() => replyButton.current?.focus());
   };
+  /** Whether the reply being saved is Alden's text, and whether you changed it. */
+  const fromAlden = () => (assisted !== undefined ? { edited: text.trim() !== assisted.trim() } : undefined);
   const keys = (e: ReactKeyboardEvent) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      void save(text.trim(), draft?.resolve === true).then((ok) => ok && finish());
+      void save(text.trim(), draft?.resolve === true, fromAlden()).then((ok) => ok && finish());
     } else if (e.key === "Escape") {
       // The drawer closes on Esc; here it only closes the box.
       e.preventDefault();
@@ -130,13 +139,22 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
             onChange={(e) => setText(e.target.value)}
             onKeyDown={keys}
           />
+          <DraftWithAlden
+            target={{ threadId: thread.id }}
+            text={text}
+            onText={(next) => {
+              setText(next);
+              area.current?.focus();
+            }}
+            onAssisted={setAssisted}
+          />
           <div className="form-actions">
             <button
               type="button"
               className="btn sm primary"
               disabled={busy}
               onClick={async () => {
-                if (await save(text.trim(), draft?.resolve === true)) finish();
+                if (await save(text.trim(), draft?.resolve === true, fromAlden())) finish();
               }}
             >
               {busy ? "Saving…" : "Save reply"}
