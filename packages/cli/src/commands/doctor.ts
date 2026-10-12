@@ -14,14 +14,16 @@ import {
   type OrgAccess,
   openStore,
   orgInScope,
+  providerSupportsEffort,
   queueScope,
   repoConfigPath,
   repoFromRemote,
   resolveModel,
+  resolveModelKey,
+  resolveOpenAIKey,
   resolveToken,
   SpendLedger,
   selectProvider,
-  supportsEffort,
   type TokenSource,
   telemetryBlocked,
   telemetryConsent,
@@ -42,6 +44,21 @@ export interface Finding {
   detail: string;
   /** What to do about a warning or failure. */
   fix?: string;
+}
+
+/**
+ * Both API keys Alden can use, and where each comes from (never the key): the environment first, then the key stored
+ * with `alden auth model`. Informational: the Model line says whether the one in use works.
+ */
+export function keysFinding(anthropic: { where: string } | undefined, openai: { where: string } | undefined): Finding {
+  if (!anthropic && !openai) {
+    return { area: "API keys", status: "ok", detail: "none; `alden auth model` stores an Anthropic or OpenAI key" };
+  }
+  return {
+    area: "API keys",
+    status: "ok",
+    detail: `Anthropic ${anthropic ? `from ${anthropic.where}` : "none"}; OpenAI ${openai ? `from ${openai.where}` : "none"}`,
+  };
 }
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -248,25 +265,29 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
     const choice = await selectProvider(config);
     const id = resolveModel(config.model.name);
     if (choice.ok) {
+      const shown = config.model.provider === "openai" ? choice.provider.model : id;
       const effort =
-        config.model.effort && config.model.provider !== "openai-compatible" && !supportsEffort(id)
-          ? ` (${id} ignores effort ${config.model.effort})`
+        config.model.effort &&
+        config.model.provider !== "openai-compatible" &&
+        !providerSupportsEffort(config.model.provider, choice.provider.model.replace(/^anthropic\./, ""))
+          ? ` (${shown} ignores effort ${config.model.effort})`
           : config.model.effort
             ? `, effort ${config.model.effort}`
             : "";
       const key = choice.key ? `, using ${choice.key.where}` : "";
-      add({ area: "Model", status: "ok", detail: `${id} via ${config.model.provider}${effort}${key}` });
+      add({ area: "Model", status: "ok", detail: `${shown} via ${config.model.provider}${effort}${key}` });
     } else {
       add({
         area: "Model",
         status: "warn",
         detail: "none set up, so reviews run the checks only",
         fix:
-          config.model.provider === "anthropic"
-            ? "Run `alden setup` to paste an API key or use a local model (or set ANTHROPIC_API_KEY); Bedrock, Vertex and Foundry are in docs/models.md."
+          config.model.provider === "anthropic" || config.model.provider === "openai"
+            ? "Run `alden setup` to paste an Anthropic or OpenAI API key or use a local model (or set ANTHROPIC_API_KEY or OPENAI_API_KEY); Bedrock, Vertex and Foundry are in docs/models.md."
             : `${choice.reason} Or run \`alden setup\`.`,
       });
     }
+    add(keysFinding(await resolveModelKey(), await resolveOpenAIKey()));
     const spent = await new SpendLedger().spentOn().catch(() => 0);
     add({
       area: "Budget",

@@ -64,6 +64,12 @@ const api: UiApi = {
       calls.push({ method: "open", args: page });
       return { opened: page };
     },
+    models: async () => ({ current: { provider: "anthropic", model: "claude-sonnet-5" }, groups: [] }),
+    pickModel: async (pick) => {
+      calls.push({ method: "pickModel", args: pick });
+      if (pick.provider === "openai") throw new ApiError(409, "No OpenAI API key found.");
+      return { current: { provider: pick.provider, model: pick.model }, groups: [] };
+    },
   },
   followUps: {
     check: async () => {
@@ -524,6 +530,26 @@ describe("alden ui server", () => {
     expect(calls).toEqual([
       { method: "setModelKey", args: key },
       { method: "setModelKey", args: null },
+    ]);
+  });
+
+  it("lists the models to pick from, and sets one, checking what's sent", async () => {
+    const put = (body: unknown) => call("/api/models", { method: "PUT", headers: authed, body });
+    expect(JSON.parse((await call("/api/models", { headers: authed })).text)).toEqual({
+      current: { provider: "anthropic", model: "claude-sonnet-5" },
+      groups: [],
+    });
+    const picked = await put({ provider: "ollama", model: "qwen3-coder:30b" });
+    expect(JSON.parse(picked.text).current).toEqual({ provider: "ollama", model: "qwen3-coder:30b" });
+    const refused = await put({ provider: "openai", model: "gpt-6-astra" });
+    expect(refused.status).toBe(409);
+    expect(JSON.parse(refused.text)).toEqual({ error: "No OpenAI API key found." });
+    expect((await put({ provider: "openai-compatible", model: "x" })).status).toBe(400);
+    expect((await put({ provider: "anthropic" })).status).toBe(400);
+    expect((await call("/api/models", { method: "GET" })).status).toBe(401);
+    expect(calls).toEqual([
+      { method: "pickModel", args: { provider: "ollama", model: "qwen3-coder:30b" } },
+      { method: "pickModel", args: { provider: "openai", model: "gpt-6-astra" } },
     ]);
   });
 

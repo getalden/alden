@@ -24,11 +24,13 @@ const OWNER_OR_REPO = /^[A-Za-z0-9-]+(\/[\w.-]+)?$/;
 export const AldenConfigSchema = z.object({
   model: z
     .object({
-      provider: z.enum(["anthropic", "bedrock", "vertex", "foundry", "openai-compatible"]).default("anthropic"),
+      provider: z
+        .enum(["anthropic", "openai", "bedrock", "vertex", "foundry", "openai-compatible"])
+        .default("anthropic"),
       name: z.string().default("sonnet"),
       /** How hard Claude thinks: more effort, more time and tokens. Unset means the model's own default (high). */
       effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
-      /** openai-compatible: the endpoint, e.g. http://localhost:11434/v1 for Ollama. */
+      /** openai-compatible: the endpoint, e.g. http://localhost:11434/v1 for Ollama. openai: another endpoint than OpenAI's own. */
       baseUrl: z.url().optional(),
       /** bedrock (AWS region) and vertex (GCP region, e.g. "global"). */
       region: z.string().optional(),

@@ -1,23 +1,31 @@
 import { createInterface } from "node:readline";
 import {
-  checkModelKey,
   createGitHubClient,
   credentialsFilePath,
   DefaultCredentialStore,
+  detectKeyKind,
   FileCredentialStore,
   getViewer,
   ghCliToken,
   githubClientId,
+  type KeyProvider,
   loadConfig,
   modelKeyStore,
   pollForToken,
   requestDeviceCode,
   resolveModelKey,
+  resolveOpenAIKey,
   resolveToken,
+  selectProvider,
   type TokenSource,
+  useAnthropic,
+  useOpenAI,
   type Viewer,
   whyNoToken,
 } from "@alden/core";
+
+const KEY_LABEL: Record<KeyProvider, string> = { anthropic: "Anthropic", openai: "OpenAI" };
+
 import type { Command } from "commander";
 import { openInBrowser } from "./open.js";
 
@@ -73,6 +81,12 @@ export function readSecret(
 async function modelKeyLine(): Promise<string> {
   const config = await loadConfig().catch(() => undefined);
   const provider = config?.model.provider ?? "anthropic";
+  if (provider === "openai") {
+    const key = await resolveOpenAIKey();
+    return key
+      ? `OpenAI API key: from ${key.where}.`
+      : "OpenAI API key: none, so reviews run the checks only. Run `alden auth model` to add one.";
+  }
   if (provider !== "anthropic") return `Model: ${provider}, with its own credentials (see \`alden doctor\`).`;
   const key = await resolveModelKey();
   return key
@@ -85,8 +99,48 @@ function scopeWarning(viewer: Viewer): string | undefined {
   return `Warning: this token is missing ${viewer.missingScopes.join(", ")}. Alden may not see private repos or team review requests.`;
 }
 
+/**
+ * Signs in to GitHub, as `alden auth login` does: the GitHub CLI's sign-in when there is one (unless `device`), else
+ * the device flow, with Enter opening GitHub's page in a terminal. Throws with what went wrong. The interactive first
+ * run (`alden` on its own, signed out) uses it too.
+ */
+export async function signInToGitHub(options: { device: boolean }): Promise<void> {
+  const store = new DefaultCredentialStore();
+  if (!options.device) {
+    const token = await ghCliToken();
+    if (token) {
+      const viewer = await getViewer(createGitHubClient(token));
+      console.log(`Using your GitHub CLI sign-in as @${viewer.login}. Nothing new was stored.`);
+      console.log("To sign in to Alden separately, run `alden auth login --device`.");
+      const warning = scopeWarning(viewer);
+      if (warning) console.warn(`${warning} Fix it with \`gh auth refresh -s read:org\`.`);
+      return;
+    }
+  }
+  const clientId = githubClientId();
+  const code = await requestDeviceCode(clientId);
+  console.log(`Your one-time code: ${code.userCode}`);
+  // In a terminal, Enter opens the page while Alden keeps waiting for the approval, as `gh auth login` does.
+  const interactive = process.stdin.isTTY && process.stdout.isTTY;
+  const prompt = interactive ? createInterface({ input: process.stdin, output: process.stdout }) : undefined;
+  if (prompt) {
+    console.log(`Press Enter to open ${code.verificationUri} in your browser, then enter the code there.`);
+    prompt.once("line", () => {
+      openInBrowser(code.verificationUri, `Couldn't open a browser. Go to ${code.verificationUri}.`);
+      console.log("Waiting for you to approve it in the browser…");
+    });
+  } else {
+    console.log(`Open ${code.verificationUri} and enter the code.`);
+    console.log("Waiting for you to approve it in the browser…");
+  }
+  const token = await pollForToken(clientId, code).finally(() => prompt?.close());
+  const viewer = await getViewer(createGitHubClient(token));
+  await store.set(token);
+  console.log(`Signed in to github.com as @${viewer.login}.`);
+}
+
 export function registerAuthCommand(program: Command): void {
-  const auth = program.command("auth").description("Sign in to GitHub, and store your Anthropic API key.");
+  const auth = program.command("auth").description("Sign in to GitHub, and store your Anthropic or OpenAI API key.");
 
   auth
     .command("login")
@@ -109,44 +163,8 @@ export function registerAuthCommand(program: Command): void {
         return;
       }
 
-      if (!options.device) {
-        const token = await ghCliToken();
-        if (token) {
-          const viewer = await getViewer(createGitHubClient(token));
-          console.log(`Using your GitHub CLI sign-in as @${viewer.login}. Nothing new was stored.`);
-          console.log("To sign in to Alden separately, run `alden auth login --device`.");
-          const warning = scopeWarning(viewer);
-          if (warning) console.warn(`${warning} Fix it with \`gh auth refresh -s read:org\`.`);
-          return;
-        }
-      }
-
-      let clientId: string;
       try {
-        clientId = githubClientId();
-      } catch (error) {
-        program.error((error as Error).message);
-      }
-      const code = await requestDeviceCode(clientId);
-      console.log(`Your one-time code: ${code.userCode}`);
-      // In a terminal, Enter opens the page while Alden keeps waiting for the approval, as `gh auth login` does.
-      const interactive = process.stdin.isTTY && process.stdout.isTTY;
-      const prompt = interactive ? createInterface({ input: process.stdin, output: process.stdout }) : undefined;
-      if (prompt) {
-        console.log(`Press Enter to open ${code.verificationUri} in your browser, then enter the code there.`);
-        prompt.once("line", () => {
-          openInBrowser(code.verificationUri, `Couldn't open a browser. Go to ${code.verificationUri}.`);
-          console.log("Waiting for you to approve it in the browser…");
-        });
-      } else {
-        console.log(`Open ${code.verificationUri} and enter the code.`);
-        console.log("Waiting for you to approve it in the browser…");
-      }
-      try {
-        const token = await pollForToken(clientId, code).finally(() => prompt?.close());
-        const viewer = await getViewer(createGitHubClient(token));
-        await store.set(token);
-        console.log(`Signed in to github.com as @${viewer.login}.`);
+        await signInToGitHub({ device: options.device === true });
       } catch (error) {
         program.error((error as Error).message);
       }
@@ -183,39 +201,60 @@ export function registerAuthCommand(program: Command): void {
   auth
     .command("model")
     .description(
-      "Store your Anthropic API key in the keychain, for the CLI, alden ui, alden mcp and the desktop app. Asks for it without showing it, or reads it from standard input.",
+      "Store your Anthropic or OpenAI API key in the keychain (Alden tells them apart), for the CLI, alden ui, alden mcp and the desktop app. Asks for it without showing it, or reads it from standard input.",
     )
-    .option("--remove", "remove the key Alden stored")
-    .action(async (options: { remove?: boolean }) => {
-      const store = modelKeyStore();
+    .option("--remove", "remove the keys Alden stored (both, unless --provider says which)")
+    .option("--provider <provider>", "with --remove: anthropic or openai")
+    .action(async (options: { remove?: boolean; provider?: string }) => {
       if (options.remove) {
-        await store.delete();
-        console.log("Removed the Anthropic API key Alden stored.");
-        const remaining = await resolveModelKey();
-        if (remaining) console.log(`Alden will still use ${remaining.where}.`);
+        if (options.provider !== undefined && options.provider !== "anthropic" && options.provider !== "openai") {
+          program.error("--provider is anthropic or openai.");
+        }
+        const which: KeyProvider[] = options.provider ? [options.provider as KeyProvider] : ["anthropic", "openai"];
+        for (const provider of which) {
+          await modelKeyStore(provider).delete();
+          console.log(`Removed the ${KEY_LABEL[provider]} API key Alden stored.`);
+          const remaining = provider === "openai" ? await resolveOpenAIKey() : await resolveModelKey();
+          if (remaining) console.log(`Alden will still use ${remaining.where}.`);
+        }
         return;
       }
       let key: string;
       try {
         key = process.stdin.isTTY
-          ? await readSecret("Anthropic API key (it won't show as you paste): ")
+          ? await readSecret("Anthropic or OpenAI API key (it won't show as you paste): ")
           : await readStdin();
       } catch (error) {
         program.error((error as Error).message);
       }
       if (!key) program.error("No key given.");
-      const problem = checkModelKey(key);
-      if (problem) program.error(problem);
-      await store.set(key);
-      const inFile = (await new FileCredentialStore("anthropic").get().catch(() => undefined)) !== undefined;
+      const detected = detectKeyKind(key);
+      if (!detected.ok) program.error(detected.message);
+      const provider = detected.provider;
+      await modelKeyStore(provider).set(key.trim());
+      const inFile = (await new FileCredentialStore(provider).get().catch(() => undefined)) !== undefined;
       console.log(
         inFile
-          ? `Stored your Anthropic API key in ${credentialsFilePath()} (owner-only), since there's no keychain here.`
-          : "Stored your Anthropic API key in the keychain.",
+          ? `Stored your ${KEY_LABEL[provider]} API key in ${credentialsFilePath()} (owner-only), since there's no keychain here.`
+          : `Stored your ${KEY_LABEL[provider]} API key in the keychain.`,
       );
-      const first = await resolveModelKey();
+      const first = provider === "openai" ? await resolveOpenAIKey() : await resolveModelKey();
       if (first && first.source === "env") {
         console.log(`${first.where} is set here and comes first; Alden uses the stored key where it isn't set.`);
+      }
+      // A key for another provider than the one set up: switch when the current one has no model, else say how.
+      const config = await loadConfig().catch(() => undefined);
+      if (config && config.model.provider !== provider) {
+        const current = await selectProvider(config);
+        if (!current.ok) {
+          if (provider === "openai") await useOpenAI();
+          else await useAnthropic();
+          console.log(`Reviews now use ${KEY_LABEL[provider]}'s models. \`alden setup\` or the model picker switches.`);
+        } else {
+          console.log(
+            `Reviews still use ${config.model.provider}. To use ${KEY_LABEL[provider]}: alden config set model.provider ${provider}`,
+          );
+        }
       }
     });
 

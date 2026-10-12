@@ -3,26 +3,42 @@ import {
   ANTHROPIC_KEYS_URL,
   detectOllama,
   isLocalModelName,
+  ModelPickError,
+  modelChoices,
   modelSetupState,
   OLLAMA_DOWNLOAD_URL,
+  OPENAI_KEYS_URL,
   ollamaUrl,
+  pickModel,
   pullOllamaModel,
   setUpModelKey,
   useLocalModel,
 } from "@alden/core";
-import type { KeyTestResult, LocalSetupEvent, ModelSetupState } from "@alden/schema";
+import type { KeyTestResult, LocalSetupEvent, ModelChoices, ModelPick, ModelSetupState } from "@alden/schema";
 import { openInBrowser } from "../commands/open.js";
 import { ApiError } from "./server.js";
 
 /** The pages the setup step links to. Only these open from the server: the desktop window can't open tabs itself. */
-export const SETUP_PAGES = { keys: ANTHROPIC_KEYS_URL, cloud: ALDEN_CLOUD_URL, ollama: OLLAMA_DOWNLOAD_URL } as const;
+export const SETUP_PAGES = {
+  keys: ANTHROPIC_KEYS_URL,
+  openaiKeys: OPENAI_KEYS_URL,
+  cloud: ALDEN_CLOUD_URL,
+  ollama: OLLAMA_DOWNLOAD_URL,
+} as const;
 export type SetupPage = keyof typeof SETUP_PAGES;
 
 /** "Set up a model" from the web UI and the desktop app: the same steps as `alden setup`. */
 export interface ModelSetupApi {
   state(): Promise<ModelSetupState>;
-  /** Tests the key with one tiny request and stores it if it works; `untested` stores it without the request. */
+  /**
+   * Tests the key (Anthropic's or OpenAI's, told apart by its shape) with one tiny request and stores it if it works;
+   * `untested` stores it without the request.
+   */
   testKey(key: string, untested: boolean): Promise<KeyTestResult>;
+  /** The model picker: the model in use, and each provider's models, available when set up here. */
+  models(): Promise<ModelChoices>;
+  /** Makes a picked model the one reviews use. A provider that isn't set up is a 409, a bad name a 400. */
+  pickModel(pick: ModelPick): Promise<ModelChoices>;
   /** Pulls `model` with Ollama unless it's there already, then makes it the model, reporting as it goes. */
   useLocal(model: string, onEvent: (event: LocalSetupEvent) => void, signal: AbortSignal): Promise<void>;
   open(page: SetupPage): Promise<{ opened: string }>;
@@ -38,6 +54,18 @@ export function createModelSetupApi(options: { cwd: string; fetch?: typeof fetch
     state: () => modelSetupState({ cwd: options.cwd, fetch: doFetch }),
 
     testKey: (key, untested) => setUpModelKey(key, { untested }),
+
+    models: () => modelChoices({ cwd: options.cwd, fetch: doFetch }),
+
+    async pickModel(pick) {
+      try {
+        return await pickModel(pick, { cwd: options.cwd, fetch: doFetch });
+      } catch (error) {
+        if (error instanceof ModelPickError)
+          throw new ApiError(error.kind === "unavailable" ? 409 : 400, error.message);
+        throw error;
+      }
+    },
 
     async useLocal(model, onEvent, signal) {
       if (!isLocalModelName(model)) throw new ApiError(400, `"${model}" isn't a model name Ollama knows.`);

@@ -9,7 +9,6 @@ import {
   cachedReviewQueue,
   checkFreshness,
   checkLinkTarget,
-  checkModelKey,
   checkProgress,
   checkThread,
   cloneAt,
@@ -17,6 +16,7 @@ import {
   DiffCache,
   type DiffFile,
   DraftingError,
+  detectKeyKind,
   draftReview,
   dropAldenDrafts,
   type Effort,
@@ -31,6 +31,7 @@ import {
   forget,
   forgetAll,
   JsonCache,
+  type KeyProvider,
   keepAldenDrafts,
   loadConfig,
   loadLearning,
@@ -46,6 +47,7 @@ import {
   type Placement,
   placeOrLink,
   prName,
+  providerSupportsEffort,
   publicDraft,
   pullRequestDiffView,
   queueEvent,
@@ -60,6 +62,7 @@ import {
   rememberForDrafting,
   resolveModel,
   resolveModelKey,
+  resolveOpenAIKey,
   resolveToken,
   restore,
   reviewEvent,
@@ -78,7 +81,6 @@ import {
   setLearning,
   setTelemetryConsent,
   suggestCommentText,
-  supportsEffort,
   telemetryBlocked,
   telemetryConsent,
   telemetrySurface,
@@ -373,7 +375,9 @@ export function createUiApi(options: {
         }
       }
       const choice = await selectProvider(config);
-      const resolvedModel = resolveModel(config.model.name);
+      // OpenAI with the default (Claude) model name means OpenAI's default model.
+      const resolvedModel =
+        config.model.provider === "openai" && choice.ok ? choice.provider.model : resolveModel(config.model.name);
       const ledger = new SpendLedger();
       return {
         version: options.version,
@@ -400,10 +404,10 @@ export function createUiApi(options: {
           name: config.model.name,
           id: resolvedModel,
           effort: config.model.effort ?? null,
-          supportsEffort: config.model.provider !== "openai-compatible" && supportsEffort(resolvedModel),
+          supportsEffort: providerSupportsEffort(config.model.provider, resolvedModel),
           available: choice.ok,
           ...(choice.ok ? {} : { reason: choice.reason }),
-          // Where the Anthropic key comes from; never the key.
+          // Where the Anthropic (or OpenAI) key comes from; never the key.
           key: choice.ok && choice.key ? { source: choice.key.source, where: choice.key.where } : null,
         },
         aliases: MODEL_ALIASES,
@@ -473,21 +477,22 @@ export function createUiApi(options: {
       return signIn.status();
     },
     useGitHubCli: () => signIn.useGitHubCli(),
-    async setModelKey(key) {
-      const store = modelKeyStore();
-      if (key === null) await store.delete();
+    async setModelKey(key, provider) {
+      let whose: KeyProvider = provider ?? "anthropic";
+      if (key === null) await modelKeyStore(whose).delete();
       else {
         const trimmed = key.trim();
-        const problem = checkModelKey(trimmed);
-        if (problem) throw new ApiError(400, problem);
+        const detected = detectKeyKind(trimmed);
+        if (!detected.ok) throw new ApiError(400, detected.message);
+        whose = detected.provider;
         try {
-          await store.set(trimmed);
+          await modelKeyStore(whose).set(trimmed);
         } catch (error) {
           throw new ApiError(500, `Couldn't store the key (${(error as Error).message.slice(0, 160)}).`);
         }
       }
-      const now = await resolveModelKey();
-      return { key: now ? { source: now.source, where: now.where } : null };
+      const now = whose === "openai" ? await resolveOpenAIKey() : await resolveModelKey();
+      return { provider: whose, key: now ? { source: now.source, where: now.where } : null };
     },
 
     modelSetup: createModelSetupApi({ cwd: options.cwd }),

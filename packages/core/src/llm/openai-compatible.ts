@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { resolveModel } from "./models.js";
+import { resolveModel, type TokenUsage } from "./models.js";
 import {
   type GenerateRequest,
   type GenerateResult,
@@ -12,13 +12,17 @@ import {
 /** Ollama's default, so `model.provider openai-compatible` works for local models with no other setup. */
 export const DEFAULT_BASE_URL = "http://localhost:11434/v1";
 
-interface ChatCompletion {
+export interface ChatCompletion {
   model?: string;
   choices?: { message?: { content?: string | null; refusal?: string | null }; finish_reason?: string | null }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
+  };
 }
 
-function kindFor(status: number): LlmErrorKind {
+export function kindFor(status: number): LlmErrorKind {
   if (status === 401 || status === 403) return "auth";
   if (status === 404) return "not_found";
   if (status === 429) return "rate_limit";
@@ -32,16 +36,52 @@ function kindFor(status: number): LlmErrorKind {
  * validated with zod here, because not every server enforces the schema.
  */
 export class OpenAICompatibleProvider implements LlmProvider {
-  readonly provider = "openai-compatible";
+  readonly provider: string = "openai-compatible";
   readonly model: string;
 
   constructor(
     model: string,
-    private readonly baseUrl: string = DEFAULT_BASE_URL,
-    private readonly apiKey: string | undefined = process.env.ALDEN_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY,
-    private readonly doFetch: typeof fetch = fetch,
+    protected readonly baseUrl: string = DEFAULT_BASE_URL,
+    protected readonly apiKey: string | undefined = process.env.ALDEN_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY,
+    protected readonly doFetch: typeof fetch = fetch,
   ) {
     this.model = resolveModel(model);
+  }
+
+  /** The request body. OpenAI's own API differs a little (see openai.ts). */
+  protected body<T>(request: GenerateRequest<T>): Record<string, unknown> {
+    return {
+      model: this.model,
+      max_tokens: request.maxOutputTokens,
+      messages: [
+        { role: "system", content: request.system },
+        { role: "user", content: request.user },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "review", schema: z.toJSONSchema(request.schema), strict: true },
+      },
+    };
+  }
+
+  /** The answer's JSON, before it's checked against the schema. */
+  protected parseContent(content: string): unknown {
+    return JSON.parse(content);
+  }
+
+  /** Token counts. These servers don't report caching. */
+  protected usageOf(body: ChatCompletion): TokenUsage {
+    return {
+      inputTokens: body.usage?.prompt_tokens ?? 0,
+      outputTokens: body.usage?.completion_tokens ?? 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
+  }
+
+  /** Said when the server can't be reached. */
+  protected unreachable(url: string): string {
+    return `Couldn't reach ${url}. Is the server running?`;
   }
 
   /** These servers have no standard way to count tokens; the budget check estimates instead. */
@@ -59,21 +99,10 @@ export class OpenAICompatibleProvider implements LlmProvider {
           "content-type": "application/json",
           ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}),
         },
-        body: JSON.stringify({
-          model: this.model,
-          max_tokens: request.maxOutputTokens,
-          messages: [
-            { role: "system", content: request.system },
-            { role: "user", content: request.user },
-          ],
-          response_format: {
-            type: "json_schema",
-            json_schema: { name: "review", schema: z.toJSONSchema(request.schema), strict: true },
-          },
-        }),
+        body: JSON.stringify(this.body(request)),
       });
     } catch (error) {
-      throw new LlmError("network", `Couldn't reach ${url}. Is the server running?`, error);
+      throw new LlmError("network", this.unreachable(url), error);
     }
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -82,12 +111,7 @@ export class OpenAICompatibleProvider implements LlmProvider {
 
     const body = (await response.json()) as ChatCompletion;
     const choice = body.choices?.[0];
-    const usage = {
-      inputTokens: body.usage?.prompt_tokens ?? 0,
-      outputTokens: body.usage?.completion_tokens ?? 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
+    const usage = this.usageOf(body);
     const model = body.model ?? this.model;
     const finish = choice?.finish_reason;
     const stopReason: StopReason =
@@ -111,7 +135,7 @@ export class OpenAICompatibleProvider implements LlmProvider {
     let output: T | null = null;
     if (stopReason === "end" && choice?.message?.content) {
       try {
-        const parsed = request.schema.safeParse(JSON.parse(choice.message.content));
+        const parsed = request.schema.safeParse(this.parseContent(choice.message.content));
         output = parsed.success ? parsed.data : null;
       } catch {
         output = null;

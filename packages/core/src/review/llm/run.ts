@@ -2,9 +2,9 @@ import type { AldenConfig, Briefing, LlmFinding, LlmSection } from "@alden/schem
 import type { z } from "zod";
 import type { DiffFile } from "../../diff/parse.js";
 import { checkLesson, checkReason, dismissKey, type Learning, noteStoppedAt, promptNotes } from "../../learn/learn.js";
-import { supportsEffort } from "../../llm/anthropic.js";
 import { affordableInputTokens } from "../../llm/budget.js";
 import { BudgetExceededError, type BudgetedResult, budgetedGenerate } from "../../llm/budgeted.js";
+import { providerSupportsEffort } from "../../llm/effort.js";
 import type { SpendLedger } from "../../llm/ledger.js";
 import { type Effort, LlmError, type LlmErrorKind, type LlmProvider } from "../../llm/provider.js";
 import { isLockfile } from "../../queue/files.js";
@@ -162,8 +162,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
       !result.output &&
       result.stopReason === "max_tokens" &&
       effort !== "low" &&
-      provider.provider !== "openai-compatible" &&
-      supportsEffort(provider.model)
+      providerSupportsEffort(provider.provider, provider.model)
     ) {
       const first = result;
       const left = config.budget.perReviewUsd - (first.usd ?? 0);
@@ -212,9 +211,7 @@ export async function addModelReview(briefing: Briefing, options: ModelReviewOpt
   const base = {
     provider: provider.provider,
     model: result.model,
-    ...(usedEffort && provider.provider !== "openai-compatible" && supportsEffort(result.model)
-      ? { effort: usedEffort }
-      : {}),
+    ...(usedEffort && providerSupportsEffort(provider.provider, result.model) ? { effort: usedEffort } : {}),
     omittedFiles: prompt.omittedFiles,
     ...(prompt.redactedSecrets > 0 ? { redactedSecrets: prompt.redactedSecrets } : {}),
     ...(result.usd === undefined ? {} : { usd: result.usd }),
