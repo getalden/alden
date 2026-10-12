@@ -6,9 +6,12 @@ The landing page and the docs, built into `site/dist` and served by Cloudflare P
   its animations (still under reduced motion). Fonts are the same bundled Geist files as the app.
 - The docs are the repo's own `docs/*.md`, rendered by `site/build.ts` in the order `docs/README.md` lists them.
 - `site/src/assets/screens` are real screenshots of `alden ui` over the demo data (checks only, no model), for the home
-  page, the README and the docs: `pnpm screenshots` retakes them; `site/src/assets/og.png` is the social card made from
-  one. Docs pages show them with a relative link, `![alt](../site/src/assets/screens/x.png)`, which works on GitHub and
-  which `build.ts` turns into `/assets/screens/x.png` on the site.
+  page, the README and the docs: `pnpm screenshots` retakes them all (`scripts/screenshots.ts` lists each one and how
+  it's set up; the first run's three steps come from a demo that starts signed out with no model,
+  `ALDEN_DEMO_FIRST_RUN=1 ALDEN_DEMO_NO_MODEL=1 pnpm ui:demo`). Docs pages show them with a relative link,
+  `![alt](../site/src/assets/screens/x.png)`, which works on GitHub and which `build.ts` turns into
+  `/assets/screens/x.png` on the site. After retaking them, check the alt text where each is used still says what it
+  shows (`git grep screens/`).
 
 ```sh
 pnpm site:build                       # site/dist

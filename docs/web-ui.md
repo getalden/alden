@@ -92,7 +92,7 @@ Settings changes it.
 
 ### Search, filters and sort
 
-![The queue filtered to django/django with passing CI: 3 of 33 PRs, beside a briefing](../site/src/assets/screens/queue-filters-dark.png)
+![The Filter popover set to django/django with CI passing: 3 of 32 PRs, beside a briefing](../site/src/assets/screens/queue-filters-dark.png)
 
 Alden fetches your whole queue (up to the 1,000 PRs a GitHub search returns), so search and filters cover all of it.
 
@@ -168,6 +168,8 @@ One line under the rows, "Shaped by your feedback: …", says what your feedback
 
 The model line on the age line ("sonnet-5 · medium ▾", or "checks only") opens **Tune this briefing**:
 
+![Tune this briefing over a Django PR: the model, the tone Alden writes in, effort, callers, the cap, and a question asked about the PR with its answer and cost](../site/src/assets/screens/tune-dark.png)
+
 - **Model**: the models Alden can use, by provider (Anthropic, OpenAI, Local), with how it reaches each ("your key",
   "Ollama") and a word on what each is good for. A provider without a key can't be picked; **Add a key** sets one up.
   Picking a model saves it as the one briefings use. **Checks only** briefs without the model, for this window.
@@ -185,7 +187,7 @@ clone of the PR's repo, it says so, and how to point Alden at your clones (`alde
 
 ### Set up a model
 
-![The Set up a model dialog: paste an Anthropic API key, use a local model, or checks only](../site/src/assets/screens/model-setup-dark.png)
+![The Set up a model dialog: paste an Anthropic or OpenAI API key, use a local model, or checks only](../site/src/assets/screens/model-setup-dark.png)
 
 With no model set up, the model line says "no model" and Tune offers **Set up a model** (or **Add a key** in the
 model list). It has the same three choices as
@@ -225,7 +227,7 @@ them, and ends with the model, its cost and when it was briefed. A line beside t
 
 ## The Diff tab
 
-![The Diff tab on a Go PR: git/client.go with the place to look, E1, highlighted at line 445](../site/src/assets/screens/diff-dark.png)
+![3 Diff on a Go PR: git/client.go with the place to look, E1, under line 445](../site/src/assets/screens/diff-dark.png)
 
 Once a PR is briefed, **3 Diff** (or `d`) shows the code itself, so you don't have to go to GitHub to read it.
 
@@ -303,7 +305,7 @@ send your review: see [Places you saw](memory.md#places-you-saw). Nothing about 
 You write your review in Alden, beside the briefing, and send it to GitHub as one review. Nothing posts until you send
 it. See [Comments and sending a review](comments.md) for the same from the terminal.
 
-![The Comments drawer with four drafts: a comment on a line, a suggested change on lines 466–470, one from Claude, and a linked note in the review body](../site/src/assets/screens/comments-dark.png)
+![The Comments drawer: the tone Alden writes in, a draft Alden suggested with Keep, Edit and Drop, then your comment on a line, a suggested change on lines 466–470 and one from Claude Code](../site/src/assets/screens/comments-dark.png)
 
 ### The Comments drawer
 
@@ -408,6 +410,8 @@ draft again), or **Pick a line** when it can't, which opens the file and line to
 draft is left out when you send. See [Move to new lines](comments.md#move-to-new-lines).
 
 ### Send the review
+
+![Send this review to GitHub? over the Comments drawer: Approve, 4 comments on lines, 1 note in the body, 1 drafted by Alden and kept by you, what's left out, and the 3 places Alden flagged with no comment](../site/src/assets/screens/send-dark.png)
 
 Pick the verdict: **Comment**, **Approve**, or **Request changes** (which needs a body). Then **Review and send**.
 Nothing posts yet: "Send this review to GitHub?" counts what will, the verdict, the comments on lines and what's in the
