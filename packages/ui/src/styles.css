@@ -3381,3 +3381,759 @@ details > summary {
   align-self: center;
   overflow-wrap: anywhere;
 }
+
+/* ============================================================================================================== */
+/* v3 drawer: the Comments drawer, its rail, the send summary and "Sent to GitHub", from the "Alden App v3" design.  */
+/* Colours the v3 tokens don't name yet fall back to the design's own (dark) and a light equivalent.               */
+/* ============================================================================================================== */
+
+.comments-drawer.v3,
+.comments-rail,
+.send-backdrop,
+.sent-toast {
+  --d-rail: var(--rail, #eef6f5);
+  --d-ink4: var(--ink4, #869896);
+  --d-acc2: var(--acc2, #0f766e);
+  --d-hover: var(--hover, #e3f0ee);
+  --d-dash: var(--acc-line, #86c9bf);
+  --d-gone: #e3eeec;
+  --d-scrim: rgb(8 16 20 / 0.32);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) :is(.comments-drawer.v3, .comments-rail, .send-backdrop, .sent-toast) {
+    --d-rail: var(--rail, #0b161a);
+    --d-ink4: var(--ink4, #4d6563);
+    --d-acc2: var(--acc2, #5eead4);
+    --d-hover: var(--hover, #13262c);
+    --d-dash: var(--acc-line, #2b5a55);
+    --d-gone: #14232a;
+    --d-scrim: rgb(5 11 13 / 0.72);
+  }
+}
+:root[data-theme="dark"] :is(.comments-drawer.v3, .comments-rail, .send-backdrop, .sent-toast) {
+  --d-rail: var(--rail, #0b161a);
+  --d-ink4: var(--ink4, #4d6563);
+  --d-acc2: var(--acc2, #5eead4);
+  --d-hover: var(--hover, #13262c);
+  --d-dash: var(--acc-line, #2b5a55);
+  --d-gone: #14232a;
+  --d-scrim: rgb(5 11 13 / 0.72);
+}
+
+.comments-drawer.v3 {
+  position: relative;
+  width: var(--drawer-w, 380px);
+  background: var(--d-rail);
+  border-left: 1px solid var(--line);
+  font: 14px / 1.45 var(--font-ui);
+}
+.comments-drawer.v3[hidden] {
+  display: none;
+}
+body.drawer-resizing {
+  user-select: none;
+}
+
+/* The left edge: drag to resize, double-click to reset. */
+.comments-drawer.v3 .drawer-resize {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 4;
+  cursor: col-resize;
+  display: grid;
+  place-items: center;
+}
+.comments-drawer.v3 .drawer-resize:hover,
+.comments-drawer.v3 .drawer-resize:focus-visible {
+  background: rgb(20 184 166 / 0.12);
+  outline: none;
+}
+.comments-drawer.v3 .drawer-resize span {
+  width: 2px;
+  height: 100%;
+  background: transparent;
+}
+.comments-drawer.v3.dragging .drawer-resize span,
+.comments-drawer.v3 .drawer-resize:focus-visible span {
+  background: var(--acc);
+}
+
+/* Header: Drafts N, Conversation N, and S › to fold it to the rail. */
+.comments-drawer.v3 .drawer-head {
+  height: 48px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.drawer-tabs {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+.drawer-tab {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink2);
+  font: 500 13px var(--font-ui);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+}
+.drawer-tab:hover {
+  background: var(--panel);
+}
+.drawer-tab[aria-selected="true"] {
+  background: var(--acc-soft);
+  color: var(--ink);
+}
+.drawer-tab-n {
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
+}
+.drawer-px {
+  margin-left: auto;
+  font: 500 11px var(--font-mono);
+  color: var(--d-ink4);
+}
+.drawer-collapse {
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink3);
+  font: 500 12px var(--font-mono);
+}
+.drawer-collapse:hover {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.comments-drawer.v3 .drawer-scroll {
+  padding: 14px;
+  gap: 10px;
+}
+.drawer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comments-drawer.v3 .drawer-group {
+  gap: 8px;
+}
+.drawer-label {
+  margin: 0;
+  padding: 2px 2px 0;
+  font: 600 11px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.drawer-panel > .drawer-group + .drawer-group .drawer-label {
+  padding-top: 12px;
+}
+.drawer-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px;
+}
+
+/* The design's segmented control: equal columns on a sunk track. */
+.v3-seg {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 7px;
+  background: var(--sunk);
+}
+[role="group"].v3-seg button {
+  height: 26px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink3);
+  font: 500 12px var(--font-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+[role="group"].v3-seg button:hover {
+  color: var(--ink);
+}
+[role="group"].v3-seg button[aria-pressed="true"] {
+  background: var(--acc-soft);
+  color: var(--ink);
+}
+
+/* "Alden writes": the tone Alden drafts in for this repo. */
+.tone-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 2px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.tone-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tone-title {
+  font: 500 13px var(--font-ui);
+  color: var(--ink2);
+}
+.tone-hint {
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
+  text-align: right;
+}
+
+/* A draft: provenance first, where, state on the right; Alden's dashed until kept; outdated and dropped dim. */
+.dcards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comments-drawer.v3 .dcard {
+  padding: 12px;
+  border-radius: 9px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.comments-drawer.v3 .dcard.pending {
+  background: transparent;
+  border: 1px dashed var(--d-dash);
+}
+.comments-drawer.v3 .dcard.outdated {
+  background: transparent;
+}
+.comments-drawer.v3 .dcard.dropped {
+  background: transparent;
+  border-color: var(--d-gone);
+}
+.dcard-head {
+  display: flex;
+  gap: 8px;
+  font: 500 11.5px var(--font-mono);
+  color: var(--ink3);
+  min-width: 0;
+}
+.dcard-who {
+  flex: none;
+}
+.who-you {
+  color: var(--ink);
+}
+.who-alden {
+  color: var(--d-acc2);
+}
+.who-claude {
+  color: var(--ink2);
+}
+.comments-drawer.v3 .dcard-where {
+  font: inherit;
+  color: inherit;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dcard-state {
+  margin-left: auto;
+  flex: none;
+}
+.dcard.pending .dcard-state {
+  color: var(--d-acc2);
+}
+.dcard.outdated .dcard-state {
+  color: var(--warn);
+}
+.comments-drawer.v3 .dcard .draft-body {
+  font: 13.5px / 1.5 var(--font-ui);
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.comments-drawer.v3 .dcard.pending .draft-body {
+  color: var(--ink2);
+}
+.comments-drawer.v3 .dcard.outdated .draft-body,
+.comments-drawer.v3 .dcard.outdated .dcard-who {
+  color: var(--ink3);
+}
+.comments-drawer.v3 .dcard.dropped .draft-body,
+.comments-drawer.v3 .dcard.dropped .dcard-head {
+  color: var(--d-ink4);
+}
+.comments-drawer.v3 .dcard.outdated .draft-suggestion,
+.comments-drawer.v3 .dcard.dropped .draft-body {
+  opacity: 0.8;
+}
+.dcard-moved {
+  margin: 0;
+  font: 500 11.5px var(--font-mono);
+  color: var(--ink3);
+}
+.dcard-moved .link-button {
+  font: inherit;
+  color: var(--d-acc2);
+}
+.dcard-acts {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.dcard-act {
+  height: 22px;
+  padding: 0 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink3);
+  font: 500 12px var(--font-ui);
+}
+.dcard-act + .dcard-act {
+  margin-left: 0;
+}
+.dcard-act:hover {
+  background: var(--d-hover);
+  color: var(--ink);
+}
+/* Keep, Edit, Drop on Alden's drafts, and Keep all / Drop all. */
+.alden-act {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--ink3);
+  font: 500 12px var(--font-ui);
+}
+.alden-act.keep {
+  background: var(--acc-soft);
+  color: var(--d-acc2);
+}
+.alden-act.edit {
+  border: 1px solid var(--line2);
+  color: var(--ink2);
+}
+.alden-act:hover {
+  color: var(--ink);
+}
+.dcard-acts:has(.alden-act) {
+  padding-top: 4px;
+}
+/* A draft's text, cut at four lines: plain text here, not the briefing's code excerpt box. */
+.comments-drawer.v3 .draft-body.excerpt {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+.comments-drawer.v3 .draft-body.excerpt.open {
+  overflow: visible;
+}
+.comments-drawer.v3 .alden-drafts {
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px dashed var(--d-dash);
+  background: transparent;
+  color: var(--ink2);
+  gap: 8px;
+}
+.alden-drafts-acts {
+  display: flex;
+  gap: 6px;
+}
+.comments-drawer.v3 .comment-form {
+  gap: 8px;
+}
+.comments-drawer.v3 .drawer-body-field textarea {
+  width: 100%;
+  min-height: 0;
+  background: var(--panel);
+  border-color: var(--line);
+  font: 13.5px / 1.5 var(--font-ui);
+}
+.drawer-adds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-top: 4px;
+}
+/* Replies listed under the drafts, quietly. */
+.comments-drawer.v3 .drawer-group .card.drafts {
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+/* The design's buttons. */
+.v3-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--ink);
+  font: 500 12.5px var(--font-ui);
+  white-space: nowrap;
+}
+.v3-btn:hover:not(:disabled) {
+  background: var(--d-hover);
+}
+.v3-btn.quiet {
+  border-color: transparent;
+  color: var(--ink2);
+}
+.v3-btn.primary {
+  border: 0;
+  background: var(--acc);
+  color: var(--acc-ink);
+  font-weight: 600;
+}
+.v3-btn.primary:hover:not(:disabled) {
+  background: var(--acc);
+  filter: brightness(1.08);
+}
+.v3-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.drawer-adds .btn.sm.quiet {
+  height: 30px;
+}
+
+/* Conversation: a card per thread. */
+.tcards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comments-drawer.v3 .tcard {
+  padding: 12px;
+  border-radius: 9px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  gap: 8px;
+}
+.comments-drawer.v3 .tcard.resolved {
+  background: var(--panel);
+  opacity: 0.6;
+}
+.comments-drawer.v3 .tcard.shown {
+  box-shadow: inset 3px 0 0 var(--acc);
+}
+.tcard-head {
+  display: flex;
+  gap: 8px;
+  font: 500 11.5px var(--font-mono);
+  color: var(--ink3);
+  min-width: 0;
+}
+.tcard-where {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tcard-state {
+  margin-left: auto;
+  flex: none;
+}
+.tcard-state.new {
+  color: var(--d-acc2);
+}
+.tcard-state.open {
+  color: var(--ink2);
+}
+.tcard-state.warn {
+  color: var(--warn);
+}
+.comments-drawer.v3 .tcard .thread-body {
+  font: 13px / 1.5 var(--font-ui);
+  color: var(--ink2);
+}
+.comments-drawer.v3 .tcard .thread-author {
+  font: 600 13px / 1.5 var(--font-ui);
+  color: var(--ink);
+}
+.tcard-acts {
+  gap: 6px;
+}
+.tcard-act {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--ink3);
+  font: 500 12px var(--font-ui);
+}
+.tcard-act.reply {
+  border: 1px solid var(--line2);
+  color: var(--ink);
+}
+.tcard-act:hover {
+  background: var(--d-hover);
+}
+.comments-drawer.v3 .thread-resolve {
+  height: 26px;
+  margin-left: 0;
+  padding: 0 4px;
+  color: var(--ink3);
+  font: 500 12px var(--font-ui);
+}
+.tcard-link {
+  margin-left: auto;
+  font: 500 11.5px var(--font-mono);
+  color: var(--ink3);
+}
+
+/* Footer: verdict, Review and send, and the promise. */
+.comments-drawer.v3 .drawer-foot {
+  padding: 14px;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.comments-drawer.v3 .drawer-foot .send {
+  height: 38px;
+  font-size: 13.5px;
+}
+.drawer-foot-note {
+  margin: 0;
+  text-align: center;
+  font: 500 11.5px var(--font-mono);
+  color: var(--ink3);
+}
+
+/* Closed: a 44px rail with "Comments N" down it. */
+.comments-rail {
+  width: 44px;
+  flex: none;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: var(--d-rail);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  color: var(--ink3);
+}
+.comments-rail:hover {
+  background: var(--panel);
+}
+.rail-chev {
+  font: 500 12px var(--font-mono);
+}
+.rail-label {
+  writing-mode: vertical-rl;
+  font: 500 13px var(--font-ui);
+  color: var(--ink2);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.rail-n {
+  font: 500 11px var(--font-mono);
+  color: var(--d-acc2);
+}
+.rail-key {
+  margin-top: auto;
+  font: 500 11px var(--font-mono);
+  color: var(--d-ink4);
+}
+
+/* The send summary: a 520px dialog over the window. */
+.send-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--d-scrim);
+}
+.send-dialog {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.45);
+  display: flex;
+  flex-direction: column;
+  font: 14px / 1.45 var(--font-ui);
+}
+.send-top {
+  padding: 22px 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.send-meta {
+  font: 500 12px var(--font-mono);
+  color: var(--ink3);
+}
+.send-title {
+  margin: 0;
+  font: 600 20px / 1.3 var(--font-ui);
+  letter-spacing: -0.01em;
+}
+.send-title:focus {
+  outline: none;
+}
+.send-rows {
+  margin: 0;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+}
+.send-row-v3 {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.send-row-v3 dt {
+  color: var(--ink2);
+}
+.send-row-v3 dd {
+  margin: 0;
+  text-align: right;
+}
+.send-flagged {
+  margin: 12px 24px 0;
+  padding: 12px 14px;
+  border-radius: 9px;
+  background: var(--warn-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13.5px;
+}
+.send-flagged strong {
+  color: var(--warn);
+  font-weight: 600;
+}
+.send-flagged li {
+  color: var(--ink2);
+}
+.send-flagged .link-button {
+  font: inherit;
+  color: var(--d-acc2);
+}
+.send-exact {
+  margin: 12px 24px 0;
+  font-size: 13px;
+}
+.send-exact summary {
+  cursor: pointer;
+  font: 500 11.5px var(--font-mono);
+  color: var(--ink3);
+}
+.send-exact-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+}
+.send-error {
+  margin: 12px 24px 0;
+}
+.send-actions {
+  padding: 20px 24px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.send-actions .v3-btn {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.send-actions .v3-btn:first-of-type {
+  margin-left: auto;
+}
+.send-actions .v3-btn.primary {
+  padding: 0 16px;
+}
+.send-keys {
+  font: 500 11.5px var(--font-mono);
+  color: var(--ink3);
+}
+
+/* "✓ Sent to GitHub · See the review ↗", bottom centre of the briefing for 4 seconds. */
+.sent-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 70;
+  padding: 10px 16px;
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line2);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.3);
+  font: 500 13px var(--font-ui);
+  display: flex;
+  gap: 12px;
+  white-space: nowrap;
+}
+.sent-tick {
+  color: var(--d-acc2);
+}
+.sent-toast a {
+  color: var(--d-acc2);
+}
+
+/* Narrower panes: the drawer slides over the briefing at its width, never wider than the pane. */
+@container (max-width: 900px) {
+  .comments-drawer.v3 {
+    width: min(var(--drawer-w, 380px), 92%);
+  }
+}
+/* Narrow windows: a full-width sheet; the toolbar's Comments opens it, so no rail. */
+@media (max-width: 700px) {
+  .comments-drawer.v3 {
+    position: fixed;
+    width: auto;
+  }
+  .comments-drawer.v3 .drawer-resize,
+  .comments-rail {
+    display: none;
+  }
+}
+@media print {
+  .comments-rail,
+  .sent-toast,
+  .send-backdrop {
+    display: none;
+  }
+}

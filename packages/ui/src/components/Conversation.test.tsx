@@ -141,6 +141,8 @@ async function setup(
 ) {
   const fake = fakeApi(start, threads);
   render(<Harness api={fake.api} openThread={openThread} />);
+  // The drawer opens on Drafts; a thread to open on shows Conversation by itself.
+  if (!openThread) fireEvent.click(await within(drawer()).findByRole("tab", { name: /^Conversation/ }));
   await waitFor(() => expect(within(conversation()).getAllByRole("listitem").length).toBeGreaterThan(0));
   return fake;
 }
@@ -167,13 +169,25 @@ describe("threads helpers", () => {
 describe("the conversation in the Comments drawer", () => {
   it("lists the PR's threads, yours first, open ones before the folded resolved ones", async () => {
     await setup();
-    const places = [...conversation().querySelectorAll(".thread .draft-where")].map((e) => e.textContent);
-    expect(places).toEqual(["On src/charge.ts:40", "On src/charge.ts:3", "On src/charge.ts:9"]);
+    expect(within(drawer()).getByRole("tab", { name: "Conversation 4" }).getAttribute("aria-selected")).toBe("true");
+    const heads = [...conversation().querySelectorAll(".tcard-head")].map((e) => [
+      e.querySelector(".tcard-where")?.textContent,
+      e.querySelector(".tcard-state")?.textContent,
+    ]);
+    expect(heads).toEqual([
+      ["charge.ts:40 · yours", expect.stringMatching(/^replied \d+[mhdw] ago$/)],
+      ["charge.ts:3 · open", "open"],
+      ["charge.ts:9 · open", "open"],
+    ]);
+    expect(conversation().querySelector(".tcard-where")?.getAttribute("title")).toBe("src/charge.ts:40");
     expect(within(conversation()).getByRole("heading", { name: "Conversation · 3 open" })).toBeTruthy();
-    expect(conversation().textContent).toContain("You");
+    // Who said it in bold, then what they said.
+    const first = conversation().querySelector(".thread-comment") as HTMLElement;
+    expect(first.querySelector("b")?.textContent).toBe("you");
+    expect(first.textContent).toBe("you Cents?");
     expect(conversation().textContent).toContain("Why log cents?");
     fireEvent.click(within(conversation()).getByRole("button", { name: "Show 1 resolved thread" }));
-    expect(within(conversation()).getByText("Resolved")).toBeTruthy();
+    expect(conversation().querySelector(".tcard.resolved .tcard-state")?.textContent).toBe("resolved");
     // Only the thread you started has Resolve; the others are theirs to resolve.
     const ticks = within(conversation()).getAllByRole("checkbox", { name: "Resolve when sent" }) as HTMLInputElement[];
     expect(ticks.map((t) => t.disabled)).toEqual([false]);
@@ -210,19 +224,21 @@ describe("the conversation in the Comments drawer", () => {
       expect(state.calls).toContain(`POST ${JSON.stringify({ pr: PR, inReplyTo: "T_others", body: "Agreed." })}`),
     );
 
+    // Where each will post is listed with your drafts.
+    fireEvent.click(within(drawer()).getByRole("tab", { name: /^Drafts/ }));
     const replies = await within(drawer()).findByRole("region", { name: "Replies in threads · 2" });
     expect(replies.textContent).toContain("Reply in thread on src/charge.ts:40, and resolve it");
     expect(replies.textContent).toContain("Reply in thread on src/charge.ts:3");
     // Not in the review body.
-    expect(within(drawer()).queryByRole("region", { name: /In the review body/ })).toBeNull();
+    expect(within(drawer()).getByRole("region", { name: "In the review body · 0" })).toBeTruthy();
 
-    fireEvent.click(within(drawer()).getByRole("button", { name: "Send review · 2 comments" }));
-    const summary = await screen.findByRole("region", { name: "Send this review to acme/api#1?" });
-    expect(summary.textContent).toContain(", with 2 replies in threads");
+    fireEvent.click(within(drawer()).getByRole("button", { name: "Review and send · 2" }));
+    const summary = await screen.findByRole("dialog", { name: "Send this review to GitHub?" });
+    expect(summary.textContent).toContain("Replies in threads2 replies");
+    expect(summary.textContent).toContain("Resolved after it posts1 thread");
     expect(summary.textContent).toContain("Reply in thread on src/charge.ts:40, and resolve it");
-    fireEvent.click(within(summary).getByRole("button", { name: "Send to GitHub" }));
-    const sent = await within(drawer()).findByRole("status");
-    expect(sent.textContent).toContain("and resolved 1 thread");
+    fireEvent.click(within(summary).getByRole("button", { name: "Send review" }));
+    await screen.findByText("Sent to GitHub", { selector: ".sent-toast" });
     // The conversation is read again from GitHub: your reply and resolve are there now.
     await waitFor(() => expect(state.calls).toContain(`THREADS ${PR} refresh`));
   });
@@ -266,7 +282,7 @@ describe("the conversation in the Comments drawer", () => {
       },
       { timeout: 3000 },
     );
-    expect(shown()?.textContent).toContain("Resolved");
+    expect(shown()?.querySelector(".tcard-state")?.textContent).toBe("resolved");
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
     expect(within(conversation()).queryByRole("textbox")).toBeNull();
   });
