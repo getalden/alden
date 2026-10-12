@@ -1,20 +1,20 @@
 ---
 name: review
-description: Review a pull request, or the user's own uncommitted changes, the way this reviewer would, using Alden's checks, the callers of the changed code outside the diff, and what Alden knows the reviewer looks for. Use when the user asks to review a PR, look over a PR before approving it, or check their changes before opening one.
+description: Review a pull request, or the user's own uncommitted changes, with the user, using Alden's checks, the callers of the changed code outside the diff, and what Alden knows the reviewer looks for. Use when the user asks to review a PR, look over a PR before approving it, or check their changes before opening one.
 argument-hint: "[PR URL, owner/repo#123, a number from the queue, or nothing for local changes]"
 allowed-tools: mcp__plugin_alden_alden__alden_review mcp__plugin_alden_alden__alden_feedback mcp__plugin_alden_alden__alden_missed mcp__plugin_alden_alden__alden_memory mcp__plugin_alden_alden__alden_draft_comment Bash(gh pr view:*) Bash(gh pr diff:*) Bash(git diff:*) Bash(git status:*) Bash(git log:*) Read Grep Glob
 ---
 
 # Review with Alden
 
-Review `$ARGUMENTS` (no argument: the uncommitted changes in this repo) as the user would, with Alden's help.
+Review `$ARGUMENTS` (no argument: the uncommitted changes in this repo) with the user, with Alden's help.
 
 1. **Brief it.** Call `alden_review` with `pr` set to the argument, or with no `pr` for local changes. Don't pass
    `use_alden_model` unless the user asks for Alden's model too: you are the model here.
 2. **Read the change yourself.** For a PR: `gh pr view <pr>` and `gh pr diff <pr>`. For local changes:
    `git diff HEAD` (and `git status` for new files). Open the callers Alden lists outside the diff where they matter.
-3. **Review it like this reviewer.** The briefing's "What this reviewer cares about here" is what they look for and
-   skip: weigh your findings by it. Start with Alden's "Needs your eyes" places (E1…): for each, say whether it's a real
+3. **Review it with what this reviewer cares about.** The briefing's "What this reviewer cares about here" is what
+   they look for and skip: weigh your findings by it. Start with Alden's "Needs your eyes" places (E1…): for each, say whether it's a real
    problem, with the code that shows it. Then add what Alden missed, most important first, each with a file and line.
    Keep it short; say plainly when something looks fine.
 4. **Ask, then record.** End by asking which of Alden's places were useful. When the user answers, record each with

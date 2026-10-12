@@ -6,7 +6,7 @@ with the callers the diff leaves out and what it has learned you look for. This 
 
 | Command | What it does |
 | --- | --- |
-| `/alden:review [pr]` | Reviews a PR (a URL, `owner/repo#123`, or its number in your queue) the way you would, or your uncommitted changes when you don't name one, and records which of Alden's flags you found useful. |
+| `/alden:review [pr]` | Reviews a PR (a URL, `owner/repo#123`, or its number in your queue) with what you care about, or your uncommitted changes when you don't name one, and records which of Alden's flags you found useful. |
 | `/alden:queue [repo]` | The PRs waiting on you, ranked, and which to take next. |
 | `/alden:remember <note>` | Tells Alden something you care about in this repo. |
 

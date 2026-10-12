@@ -134,7 +134,7 @@ export function briefingMarkdown(untrusted: Briefing, options: BriefingMarkdownO
   if (notes.length > 0) {
     out.push(
       "## What this reviewer cares about here",
-      "_From Alden's memory: the reviewer's own notes and what it learned from their feedback. Review the way they would._",
+      "_From Alden's memory: the reviewer's own notes and what it learned from their feedback. Weigh what you find by it._",
       "",
     );
     for (const item of notes) {
