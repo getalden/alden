@@ -569,6 +569,27 @@ describe("callers.outside", () => {
     expect(result.evidence[1]?.text).toBe("calls formatAge (changed), name match only");
   });
 
+  it("shows one caller per file before a second from the same file, and sure matches before name-only ones", () => {
+    const at = (path: string, line: number, confidence: "import" | "name" = "import") => ({ path, line, confidence });
+    const result = callersCheck.run(
+      ctx([], {
+        graph: graph([change("createRun"), change("FetchOptions"), change("AssigneeIds")], {
+          "src/rank.ts#createRun": [at("cmd/create.go", 129), at("cmd/create.go", 377), at("cmd/create_test.go", 9)],
+          "src/rank.ts#FetchOptions": [at("jobs/run.go", 4, "name"), at("cmd/edit.go", 48), at("cmd/create.go", 500)],
+          "src/rank.ts#AssigneeIds": [at("shared/http.go", 103)],
+        }),
+      }),
+    );
+    expect(result.evidence.map((e) => (e.anchor ? `${e.anchor.path}:${e.anchor.line}` : e.text))).toEqual([
+      "cmd/create.go:129",
+      "cmd/edit.go:48",
+      "shared/http.go:103",
+      "cmd/create.go:377",
+      "cmd/create.go:500",
+      "and 2 more",
+    ]);
+  });
+
   it("follows Go's package-internal helpers, and says how a call reaches a method", () => {
     const helper = { ...change("isStale", "modified", false), path: "tsdb/head.go" };
     const method = { ...change("Sync", "modified"), path: "store/base.go", container: "Base" };

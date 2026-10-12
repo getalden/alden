@@ -318,11 +318,19 @@ func run(opts *EditOptions) { opts.FetchOptions() }
         "tsdb/head.go": "package tsdb\n\nfunc gc() {\n\t_ = now()\n\tif isStale(1) {\n\t}\n}\n",
         "tsdb/head_test.go": "package tsdb\n\nfunc TestGC() { now = func() int64 { return 1 } }\n",
         "other/head.go": "package other\n\nfunc isStale(v float64) bool { return false }\n\nfunc x() { isStale(1) }\n",
+        // Another package with its own unexported gc, importing tsdb: its s.gc() can't be tsdb's.
+        "tsdb/agent/db.go":
+          'package agent\n\nimport "github.com/acme/app/tsdb"\n\ntype stripe struct{}\n\nfunc (s *stripe) gc() {}\n\nfunc run(s *stripe) { s.gc(); tsdb.Open() }\n',
+        "tsdb/series.go":
+          "package tsdb\n\ntype stripeSeries struct{}\n\nfunc (s *stripeSeries) gc() {}\n\nfunc Open() { (&stripeSeries{}).gc() }\n",
       },
       { goModules },
     );
     expect(sites(graph.callersOf({ path: "tsdb/clock.go", name: "now" }))).toEqual(["tsdb/head.go:4"]);
     expect(sites(graph.callersOf({ path: "tsdb/clock.go", name: "isStale" }))).toEqual(["tsdb/head.go:5"]);
+    expect(sites(graph.callersOf({ path: "tsdb/series.go", name: "gc", container: "stripeSeries" }))).toEqual([
+      "tsdb/series.go:7",
+    ]);
   });
 });
 
