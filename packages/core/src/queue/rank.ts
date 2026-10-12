@@ -1,5 +1,6 @@
 import {
   type AldenConfig,
+  agentNote,
   type FastTrackKind,
   type Lane,
   QUEUE_SCHEMA_VERSION,
@@ -11,6 +12,7 @@ import {
 } from "@alden/schema";
 import type { PullRequestFacts } from "../github/pull-requests.js";
 import type { ReviewQueue } from "../github/queue.js";
+import { prAuthor } from "../learn/authors.js";
 import { type Learning, prFeatures, type QueueRow, queueBoost, sensitiveDir } from "../learn/learn.js";
 import { fileKind, isLockfile, isPatchBumpTitle, sensitiveMatcher } from "./files.js";
 import { followUpOf, REREVIEW_REASON } from "./rereview.js";
@@ -174,6 +176,9 @@ export function rankPullRequest(
   // Facts worth showing that don't change the score.
   if (pr.mergeable === "conflicting") add(0, "has conflicts");
   if (pr.isDraft) add(0, "draft");
+  // An agent's PR a person opened: the login shows the person, so say whose work it is and how Alden knew.
+  const agent = agentNote(prAuthor(pr, context.viewer));
+  if (agent) add(0, agent);
 
   const kind = fastTrackKind(pr);
   // Lockfiles are sensitive by default, but a patch bump is nothing but lockfile and manifest changes.

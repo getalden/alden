@@ -12,12 +12,20 @@ const FIXTURE = join(import.meta.dirname, "__fixtures__", "grafana.json");
 interface Calls {
   searches: { q: string; first: number; after: string | null }[];
   details: string[][];
+  /** The PRs whose description and last commit were read for an agent's marker, per request. */
+  markers: string[][];
   codeowners: number;
   manifests: string[];
   stackQueries: string[];
 }
 
-type Fixture = RawPullRequest & { id?: string; baseRefOid?: string; headRefOid?: string };
+type Fixture = RawPullRequest & {
+  id?: string;
+  baseRefOid?: string;
+  headRefOid?: string;
+  body?: string | null;
+  commitMessage?: string;
+};
 
 /**
  * A stand-in GitHub client serving recorded PRs: a search that pages through their ids and branches, their details by
@@ -34,7 +42,7 @@ function fakeClient(
     baseRefOid: pr.baseRefOid ?? `base-${pr.repository.nameWithOwner}`,
     headRefOid: pr.headRefOid ?? `head-${i}`,
   }));
-  const calls: Calls = { searches: [], details: [], codeowners: 0, manifests: [], stackQueries: [] };
+  const calls: Calls = { searches: [], details: [], markers: [], codeowners: 0, manifests: [], stackQueries: [] };
   const client = {
     auth: async () => ({ type: "token", token: "test-token" }),
     request: async (route: string) => {
@@ -65,6 +73,17 @@ function fakeClient(
             })),
             pageInfo: { hasNextPage: end < prs.length, endCursor: String(end) },
           },
+        };
+      }
+      if (query.includes("nodes(ids") && query.includes("message")) {
+        const ids = vars.ids as string[];
+        calls.markers.push(ids);
+        return {
+          nodes: ids.map((id) => {
+            const pr = prs.find((p) => p.id === id);
+            if (!pr) return null;
+            return { id, body: pr.body ?? null, commits: { nodes: [{ commit: { message: pr.commitMessage ?? "" } }] } };
+          }),
         };
       }
       if (query.includes("nodes(ids")) {
@@ -250,6 +269,61 @@ describe("fetchReviewQueue", () => {
     const again = fakeClient([...prs, bump], { blobs });
     await fetchReviewQueue(again.client, { cache, refresh: true });
     expect(again.calls.manifests).toHaveLength(0);
+  });
+
+  it("reads people's PRs for an AI agent's marker in one request per batch, remembered by head commit", async () => {
+    const person = (number: number, over: Partial<Fixture>): Fixture => ({
+      ...structuredClone(prs[0] as RawPullRequest),
+      number,
+      headRefOid: `h${number}`,
+      ...over,
+    });
+    const fleet: Fixture[] = [
+      person(1, { body: "Fixes the search index.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)" }),
+      person(2, { commitMessage: "Fix\n\nCo-authored-by: Cursor Agent <cursoragent@cursor.com>" }),
+      // Talking about Claude isn't Claude's work.
+      person(3, { body: "Claude suggested this approach; I rewrote it by hand." }),
+      // An agent's branch, a bot and an agent's account already say who wrote them: not read.
+      person(4, { headRefName: "copilot/fix-search", body: "🤖 Generated with Claude Code" }),
+      person(5, { author: { __typename: "Bot", login: "dependabot" } }),
+      person(6, { author: { __typename: "Bot", login: "claude" } }),
+    ];
+    const cache = new JsonCache(cacheDir);
+    const { client, calls } = fakeClient(fleet);
+    const queue = await fetchReviewQueue(client, { cache });
+    expect(calls.markers).toEqual([["PR_0", "PR_1", "PR_2"]]);
+    expect(queue.pullRequests.map((p) => p.agentMarker)).toEqual([
+      { agent: "claude", in: "description" },
+      { agent: "cursor", in: "commit" },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+
+    // Same head commits: remembered, the PR with no marker too.
+    const again = fakeClient(fleet);
+    const cached = await fetchReviewQueue(again.client, { cache, refresh: true });
+    expect(again.calls.markers).toEqual([]);
+    expect(cached.pullRequests[1]?.agentMarker).toEqual({ agent: "cursor", in: "commit" });
+
+    // A new push is read again.
+    const pushed = fakeClient(fleet.map((p) => (p.number === 3 ? { ...p, headRefOid: "h3-new" } : p)));
+    await fetchReviewQueue(pushed.client, { cache, refresh: true });
+    expect(pushed.calls.markers).toEqual([["PR_2"]]);
+  });
+
+  it("still ranks the queue when reading markers fails", async () => {
+    const { client } = fakeClient(prs);
+    const failing = client as unknown as { graphql: (q: string, v: Record<string, unknown>) => Promise<unknown> };
+    const graphql = failing.graphql;
+    failing.graphql = async (q, v) => {
+      if (q.includes("message")) throw new Error("502");
+      return graphql(q, v);
+    };
+    const queue = await fetchReviewQueue(client);
+    expect(queue.pullRequests).toHaveLength(prs.length);
+    expect(queue.pullRequests.every((p) => p.agentMarker === undefined)).toBe(true);
   });
 
   it("reports where the time went when asked", async () => {

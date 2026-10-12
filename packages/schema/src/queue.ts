@@ -20,6 +20,11 @@ export const MajorBumpSchema = z.object({
   to: z.string().describe("the major version after"),
 });
 
+export const AgentMarkerSchema = z.object({
+  agent: z.string().describe('the AI agent, as a slug: "claude", "copilot", "cursor"'),
+  in: z.enum(["description", "commit"]).describe("where its marker was: the PR's description or its last commit"),
+});
+
 export const PullRequestFactsSchema = z.object({
   repo: z.string().describe("owner/name"),
   number: z.number().int(),
@@ -68,6 +73,9 @@ export const PullRequestFactsSchema = z.object({
     .array(MajorBumpSchema)
     .optional()
     .describe("dependencies the PR's manifest changes move up a major version (or a 0.x minor one)"),
+  agentMarker: AgentMarkerSchema.optional().describe(
+    "an AI agent's marker on a PR a person opened (a footer in its description, a Co-authored-by trailer in its last commit); only the agent is kept, never the text",
+  ),
 });
 
 export const LaneSchema = z.enum(["needs-you", "fast-track"]);

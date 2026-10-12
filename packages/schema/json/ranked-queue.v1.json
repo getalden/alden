@@ -260,6 +260,29 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "agentMarker": {
+                "description": "an AI agent's marker on a PR a person opened (a footer in its description, a Co-authored-by trailer in its last commit); only the agent is kept, never the text",
+                "type": "object",
+                "properties": {
+                  "agent": {
+                    "type": "string",
+                    "description": "the AI agent, as a slug: \"claude\", \"copilot\", \"cursor\""
+                  },
+                  "in": {
+                    "type": "string",
+                    "enum": [
+                      "description",
+                      "commit"
+                    ],
+                    "description": "where its marker was: the PR's description or its last commit"
+                  }
+                },
+                "required": [
+                  "agent",
+                  "in"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -723,6 +746,29 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "agentMarker": {
+                "description": "an AI agent's marker on a PR a person opened (a footer in its description, a Co-authored-by trailer in its last commit); only the agent is kept, never the text",
+                "type": "object",
+                "properties": {
+                  "agent": {
+                    "type": "string",
+                    "description": "the AI agent, as a slug: \"claude\", \"copilot\", \"cursor\""
+                  },
+                  "in": {
+                    "type": "string",
+                    "enum": [
+                      "description",
+                      "commit"
+                    ],
+                    "description": "where its marker was: the PR's description or its last commit"
+                  }
+                },
+                "required": [
+                  "agent",
+                  "in"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -1187,6 +1233,29 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "agentMarker": {
+                "description": "an AI agent's marker on a PR a person opened (a footer in its description, a Co-authored-by trailer in its last commit); only the agent is kept, never the text",
+                "type": "object",
+                "properties": {
+                  "agent": {
+                    "type": "string",
+                    "description": "the AI agent, as a slug: \"claude\", \"copilot\", \"cursor\""
+                  },
+                  "in": {
+                    "type": "string",
+                    "enum": [
+                      "description",
+                      "commit"
+                    ],
+                    "description": "where its marker was: the PR's description or its last commit"
+                  }
+                },
+                "required": [
+                  "agent",
+                  "in"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [

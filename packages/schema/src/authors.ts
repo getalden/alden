@@ -1,9 +1,12 @@
 /**
  * Who wrote a PR, as learning sees it: you, a person, a bot, or an AI agent, and which bot or agent. More and more PRs
  * come from agents and bots, and how a reviewer treats them (opens Copilot's PRs first, skips Dependabot's) is worth
- * learning. Everything here works from what the queue already fetches: the author's login and GitHub type, and the
- * PR's branch name. Nothing costs an extra API call. Pure, so the web UI uses it too.
+ * learning. This works from the author's login and GitHub type, the PR's branch name, and, for a PR a person opened,
+ * the marker an agent left in its description or last commit (see `agent-markers.ts`), which the queue reads in one
+ * small extra request per batch of such PRs, remembered by head commit. Pure, so the web UI uses it too.
  */
+
+import type { AgentMarker } from "./agent-markers.js";
 
 export type AuthorKind = "you" | "person" | "bot" | "agent";
 
@@ -67,24 +70,38 @@ export function loginSlug(login: string): string {
     .replace(/\[bot\]$/, "");
 }
 
+/** Agents Alden only knows by the marker they leave on a commit, never by an account. */
+const AI_AGENT_TOOLS: Record<string, { slug: string; name: string }> = {
+  aider: { slug: "aider", name: "Aider" },
+};
+
 const agentNames = new Map(
-  [...Object.values(AI_AGENT_LOGINS), ...Object.values(AI_AGENT_USERS)].map((a) => [a.slug, a.name]),
+  [...Object.values(AI_AGENT_LOGINS), ...Object.values(AI_AGENT_USERS), ...Object.values(AI_AGENT_TOOLS)].map((a) => [
+    a.slug,
+    a.name,
+  ]),
 );
+
+/** How Alden knew a PR was an agent's: its account, its branch, or the agent's marker in its description or commit. */
+export type AgentVia = "account" | "branch" | "description" | "commit";
 
 export interface PrAuthor {
   kind: AuthorKind;
   /** The bot or agent as a slug ("dependabot", "copilot"), or a person's lowercased login. Absent for you. */
   id?: string;
-  /** For an agent's PR that a person opened from the agent's branch: that person's lowercased login. */
+  /** For an agent's PR that a person opened (from the agent's branch, or with its marker): their lowercased login. */
   person?: string;
+  /** For an agent's PR a person opened: how Alden knew it was the agent's. Absent when the agent's account opened it. */
+  via?: Exclude<AgentVia, "account">;
 }
 
 /**
  * Who wrote a PR. A bot is anything GitHub calls a Bot or whose login ends in "[bot]"; a bot that's a known AI agent
- * is an agent. A PR a person opened from an agent's branch is the agent's (and the person's).
+ * is an agent. A PR a person opened from an agent's branch, or that carries an agent's marker (`agentMarker`, from its
+ * description or last commit), is the agent's (and the person's).
  */
 export function prAuthor(
-  pr: { author: string | null; authorIsBot: boolean; headRef?: string },
+  pr: { author: string | null; authorIsBot: boolean; headRef?: string; agentMarker?: AgentMarker | undefined },
   viewer?: string,
 ): PrAuthor | undefined {
   if (!pr.author) return undefined;
@@ -96,11 +113,23 @@ export function prAuthor(
   const mine = viewer !== undefined && slug === viewer.toLowerCase();
   const branch = pr.headRef?.toLowerCase() ?? "";
   const viaAgent = Object.entries(AI_AGENT_BRANCHES).find(([prefix]) => branch.startsWith(prefix));
-  if (viaAgent) return { kind: "agent", id: viaAgent[1], ...(mine ? {} : { person: slug }) };
+  if (viaAgent) return { kind: "agent", id: viaAgent[1], ...(mine ? {} : { person: slug }), via: "branch" };
+  const marker = pr.agentMarker;
+  if (marker) return { kind: "agent", id: marker.agent, ...(mine ? {} : { person: slug }), via: marker.in };
   return mine ? { kind: "you" } : { kind: "person", id: slug };
 }
 
 /** "dependabot" → "Dependabot"; an unknown bot or agent keeps its login. */
 export function authorName(kind: "bot" | "agent", id: string): string {
   return (kind === "agent" ? agentNames.get(id) : BOT_NAMES[id]) ?? id;
+}
+
+/**
+ * The note a queue row shows for an agent's PR that a person opened, saying how Alden knew: "by Claude (from its last
+ * commit)". Undefined for anything else: an agent's own account already says who it is.
+ */
+export function agentNote(author: PrAuthor | undefined): string | undefined {
+  if (author?.kind !== "agent" || !author.id || !author.via) return undefined;
+  const from = { branch: "its branch", description: "its description", commit: "its last commit" }[author.via];
+  return `by ${authorName("agent", author.id)} (from ${from})`;
 }

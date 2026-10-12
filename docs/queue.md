@@ -190,12 +190,36 @@ Alden tells four kinds of author apart, and learns how you treat each, and each 
   (`devin-ai-integration[bot]`), Cursor (`cursor[bot]`), Codex (`chatgpt-codex-connector[bot]`), Jules
   (`google-labs-jules[bot]`), Amazon Q (`amazon-q-developer[bot]`) and Sweep (`sweep-ai[bot]`), and the
   `openhands-agent` account. A person's PR from an agent's branch (`claude/…`, `copilot/…`, `codex/…`, `cursor/…`,
-  `devin/…`) counts as that agent's too. An agent's name only counts on a bot account, so a person whose login is
-  `claude` stays a person.
+  `devin/…`) counts as that agent's too, and so does a person's PR that carries an agent's marker (below). An
+  agent's name only counts on a bot account, so a person whose login is `claude` stays a person.
 
-The list lives in `packages/schema/src/authors.ts`, so the web UI's author filter uses it too. Alden reads only what the queue already fetches (the author's
-login and type, and the branch name), so this costs no extra API calls; it doesn't read PR descriptions or commit
-trailers ("Generated with Claude Code", `Co-authored-by`).
+A person's PR that's an agent's work is still the person's too: learning counts it for both ("Claude PRs" and
+"@ana's PRs"), and its row says whose work it is and how Alden knew: "by Claude (from its branch)", "by Claude (from
+its description)", "by Claude (from its last commit)". An agent's own account needs no note; its login says it.
+
+**Agents' markers.** For a PR whose author and branch don't already say who wrote it (a person's PR, or yours), Alden
+reads its description and its last commit's message for what agents write there:
+
+| Agent | In the description | In the last commit |
+| --- | --- | --- |
+| Claude Code | A line "🤖 Generated with [Claude Code](…)" | `Co-Authored-By: Claude … <noreply@anthropic.com>`, or that line |
+| Copilot coding agent | `<!-- START COPILOT CODING AGENT … -->` | A co-author at `…+Copilot@users.noreply.github.com` |
+| Cursor | A link to `cursor.com/background-agent?bcId=bc-…` | `Co-authored-by: Cursor Agent <cursoragent@cursor.com>`, or `Made-with: Cursor` |
+| Devin | A link to `app.devin.ai/sessions/<id>` ("Link to Devin run") | |
+| Codex | A link to `chatgpt.com/codex/tasks/task_…` | |
+| Jules | "PR created automatically by Jules for task …", or a link to `jules.google.com/task/<n>` | |
+| OpenHands, Aider | | `openhands@all-hands.dev`, `noreply@aider.chat` |
+| Any agent app above | | A co-author at the app's bot noreply address, e.g. `…+amazon-q-developer[bot]@users.noreply.github.com` |
+
+It's conservative: a PR that mentions Claude, or quotes a marker in code or inline code, isn't an agent's. A footer
+counts only as a whole line, a link only with the run's id, and a `Co-authored-by` trailer only by its address, never
+its name. The description comes first, then the commit.
+
+The lists live in `packages/schema/src/authors.ts` and `agent-markers.ts` (with where each marker comes from), so the
+web UI's author filter uses them too. Markers cost one small request per batch of up to 25 PRs that need them, alongside
+the details, and the answer is remembered by the PR's head commit, so a PR is read again only after a new push. A
+description edited without a push isn't re-read until then. Bots' PRs, agents' own and PRs on an agent's branch are
+never read. Only which agent was found is kept; see [Privacy](privacy.md#what-stays-on-your-machine).
 
 ## Fast-track
 

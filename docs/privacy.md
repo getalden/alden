@@ -45,7 +45,9 @@ on PRs you reviewed: each of your threads as last seen (resolved, outdated, its 
 and one line per piece of news ("Ana replied to your comment on src/pay.ts:40"), kept 30 days, plus any PR's own
 notification level. So do your notes, what you've spent on models, usage stats waiting to be sent (only if you said
 yes), and this install's anonymous id and the salt for repo hashes. Checkouts of PRs for the code graph are in
-`~/.alden/worktrees`. See [Files Alden keeps](configuration.md#files-alden-keeps). Your GitHub token is stored in the
+`~/.alden/worktrees`. PR descriptions and last commit messages that the queue reads for [AI agents'
+markers](queue.md#bots-and-ai-agents) are checked on your machine and dropped: only which agent was found (or that
+none was) is kept, in `~/.alden/cache` by the PR's head commit for a week, and never sent anywhere. See [Files Alden keeps](configuration.md#files-alden-keeps). Your GitHub token is stored in the
 OS keychain, or, where there's no keychain, in a file only your user can read. `alden auth logout` removes it. So is an
 Anthropic API key you stored with `alden auth model`; `alden auth model --remove` removes it.
 

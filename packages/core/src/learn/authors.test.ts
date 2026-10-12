@@ -1,5 +1,7 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { authorName, loginSlug, prAuthor } from "./authors.js";
+import { agentMarker, agentNote, authorName, loginSlug, prAuthor } from "./authors.js";
 
 const pr = (author: string | null, authorIsBot = false, headRef = "main") => ({ author, authorIsBot, headRef });
 
@@ -33,8 +35,25 @@ describe("who wrote a PR", () => {
       kind: "agent",
       id: "claude",
       person: "sam",
+      via: "branch",
     });
-    expect(prAuthor(pr("me", false, "copilot/fix-login"), "Me")).toEqual({ kind: "agent", id: "copilot" });
+    expect(prAuthor(pr("me", false, "copilot/fix-login"), "Me")).toEqual({
+      kind: "agent",
+      id: "copilot",
+      via: "branch",
+    });
+  });
+
+  it("counts a person's PR with an agent's marker as the agent's, and the person's", () => {
+    const marked = { ...pr("sam"), agentMarker: { agent: "cursor", in: "commit" as const } };
+    expect(prAuthor(marked)).toEqual({ kind: "agent", id: "cursor", person: "sam", via: "commit" });
+    expect(agentNote(prAuthor(marked))).toBe("by Cursor (from its last commit)");
+    // The account or the branch says it first; a bot's PR stays the bot's.
+    expect(prAuthor({ ...marked, headRef: "claude/x" })).toMatchObject({ id: "claude", via: "branch" });
+    expect(prAuthor({ ...marked, author: "dependabot[bot]" })).toEqual({ kind: "bot", id: "dependabot" });
+    // An agent's own account needs no note: its login says who it is.
+    expect(agentNote(prAuthor(pr("claude[bot]")))).toBeUndefined();
+    expect(agentNote(prAuthor(pr("sam")))).toBeUndefined();
   });
 
   it("knows your own PRs", () => {
@@ -46,5 +65,21 @@ describe("who wrote a PR", () => {
     expect(authorName("bot", "dependabot")).toBe("Dependabot");
     expect(authorName("agent", "codex")).toBe("Codex");
     expect(authorName("bot", "acme-ci")).toBe("acme-ci");
+  });
+});
+
+describe("agents' markers on the recorded PRs", () => {
+  it("finds Claude Code's footer on the one recorded PR that has it, and nothing on the rest", () => {
+    // Real descriptions, some with AI-assistance disclosures in prose (django's template asks for one).
+    const dir = join(import.meta.dirname, "../github/__fixtures__");
+    const found = readdirSync(dir)
+      .filter((f) => f.endsWith(".json"))
+      .flatMap((f) =>
+        (
+          JSON.parse(readFileSync(join(dir, f), "utf8")) as { pullRequests: { number: number; body?: string }[] }
+        ).pullRequests.map((pr) => [`${f.replace(".json", "")}#${pr.number}`, agentMarker({ description: pr.body })]),
+      )
+      .filter(([, marker]) => marker);
+    expect(found).toEqual([["reg-prometheus#19183", { agent: "claude", in: "description" }]]);
   });
 });

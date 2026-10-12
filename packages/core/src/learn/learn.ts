@@ -754,7 +754,16 @@ export function queueBoost(learning: Learning | undefined, features: string[]): 
   const raw = [...byFamily.values()].reduce((sum, n) => sum + Math.sign(n) * OPEN_BOOST, 0);
   const points = Math.max(-MAX_OPEN_BOOST, Math.min(MAX_OPEN_BOOST, raw));
   if (points === 0) return { points: 0 };
-  const lead = matched.find((l) => (points > 0 ? l.direction === "up" : l.direction === "down")) as QueueLesson;
+  // The reason names the lesson with the most evidence; on a tie, who wrote it ("Dependabot PRs") says more than where
+  // its files are ("PRs touching web").
+  const evidence = (l: QueueLesson) => l.jumps + l.reactions + l.reviews;
+  const lead = matched
+    .filter((l) => (points > 0 ? l.direction === "up" : l.direction === "down"))
+    .sort(
+      (a, b) =>
+        evidence(b) - evidence(a) ||
+        Number(featureFamily(b.feature) === "author") - Number(featureFamily(a.feature) === "author"),
+    )[0] as QueueLesson;
   return { points, reason: queueReason(lead) };
 }
 

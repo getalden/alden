@@ -3,9 +3,12 @@
  * learning classify authors the same way. Re-exported here for learning and ranking.
  */
 export {
+  type AgentMarker,
   AI_AGENT_BRANCHES,
   AI_AGENT_LOGINS,
   type AuthorKind,
+  agentMarker,
+  agentNote,
   authorName,
   loginSlug,
   type PrAuthor,
