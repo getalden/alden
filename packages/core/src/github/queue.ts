@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
+import type { AgentMarker } from "@alden/schema";
 import type { JsonCache } from "../cache.js";
 import { type MajorBump, majorBumps } from "../queue/bumps.js";
 import { isManifest } from "../review/dependencies.js";
+import { fetchAgentMarkers, needsMarkers } from "./agent-markers.js";
 import type { GitHubClient } from "./client.js";
 import { CODEOWNERS_PATHS, type CodeownersRule, parseCodeowners } from "./codeowners.js";
 import { cachedOrgAccess, orgAccessWarnings, orgInScope } from "./orgs.js";
@@ -448,6 +450,9 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
   let bumpsCached = 0;
   const manifestSlot = limiter(CONCURRENCY);
   const manifestReads: Promise<void>[] = [];
+  const markers = new Map<string, AgentMarker>();
+  const markerReads: Promise<void>[] = [];
+  let markersCached = 0;
   // Progress names the repo of the first PR whose details are still loading.
   const loaded = new Set<string>();
   const reportDetails = () => {
@@ -480,10 +485,31 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
           .catch(() => {}),
       );
     }
+    // A person's PR may be an AI agent's: read its description and last commit for an agent's marker. See agent-markers.ts.
+    const unsure = batch.filter((ref) => {
+      const pr = byId.get(ref.id);
+      return pr !== undefined && needsMarkers(pr);
+    });
+    if (unsure.length > 0) {
+      const targets = unsure.map((r) => ({
+        id: r.id,
+        repo: r.repository.nameWithOwner,
+        number: r.number,
+        headOid: r.headRefOid,
+      }));
+      markerReads.push(
+        manifestSlot(() => timing.time("markers", fetchAgentMarkers(client, targets, cache)))
+          .then((found) => {
+            markersCached += found.cached;
+            for (const [id, marker] of found.markers) markers.set(id, marker);
+          })
+          .catch(() => {}),
+      );
+    }
     return nodes;
   });
   if (manifestReads.length > 0) onProgress("Reading changed dependency manifests");
-  await Promise.all(manifestReads);
+  await Promise.all([...manifestReads, ...markerReads]);
   const raw = new Map(details.flat().map((n) => [n.id, n]));
 
   const { viewer, warnings } = await viewerReady;
@@ -505,11 +531,13 @@ export async function fetchReviewQueue(client: GitHubClient, options: QueueOptio
       ...toFacts(pr, viewer, await (codeowners.get(ownersKey(ref)) ?? [])),
       stackedPrs: counts[i] ?? 0,
       ...(found?.length ? { majorBumps: found } : {}),
+      ...(markers.has(ref.id) ? { agentMarker: markers.get(ref.id) } : {}),
     });
   }
 
   timing.note("codeowners", `${codeowners.size} repos, ${codeownersCached} from cache`);
   timing.note("manifests", `${bumpsCached} from cache`);
+  timing.note("markers", `${markersCached} from cache`);
   const report = options.onTiming ?? (queueDebugEnabled() ? (r: string) => console.error(r) : undefined);
   report?.(timing.report(pullRequests.length));
 

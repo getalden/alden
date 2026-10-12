@@ -1,7 +1,16 @@
 export {
+  type AgentMarker,
+  type AgentMarkerSource,
+  agentMarker,
+  commitAgent,
+  descriptionAgent,
+} from "./agent-markers.js";
+export {
+  type AgentVia,
   AI_AGENT_BRANCHES,
   AI_AGENT_LOGINS,
   type AuthorKind,
+  agentNote,
   authorName,
   loginSlug,
   type PrAuthor,
@@ -130,6 +139,7 @@ export {
 } from "./model-setup.js";
 export { codeFence, lineLink, linkLines, noteText, repoOfPr } from "./note-text.js";
 export {
+  AgentMarkerSchema,
   type CiState,
   CiStateSchema,
   type FastTrackKind,
