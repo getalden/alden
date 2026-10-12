@@ -20,8 +20,13 @@ export interface Definition {
    * (Go so far); elsewhere the diff-based heuristic in review/signatures.ts applies.
    */
   signature?: string;
-  /** Classes: what they extend and implement, as written (PHP so far). */
+  /**
+   * Classes: what they extend and implement, as written (PHP). Go: the types a struct or interface embeds (`Inner`,
+   * `pkg.Inner`, without `*` or type arguments), whose methods it gets.
+   */
   bases?: string[];
+  /** Go interfaces: the names of the methods they declare themselves (not those of embedded interfaces). */
+  methods?: string[];
   /** PHP facades: the class `getFacadeAccessor` returns (`Foo::class`), as written. */
   facadeFor?: string;
 }
@@ -53,8 +58,10 @@ export interface Reference {
   /**
    * PHP: what kind of use, when it isn't a call. "new" instantiates (so it calls the constructor), "type" is a type
    * hint, "property" reads a property (`$user->posts`), which Eloquent turns into a method call.
+   * Go: "value" names a function or method without calling it (`Fetch: shared.FetchOptions`, `h := s.handle`,
+   * `return helper`), to be called later; `x.Name` there may just as well be a field read.
    */
-  kind?: "new" | "type" | "property";
+  kind?: "new" | "type" | "property" | "value";
 }
 
 export interface FileSymbols {
@@ -363,7 +370,25 @@ const GO_REFERENCES = `
   (composite_literal type: (generic_type type: (qualified_type package: (package_identifier) @object name: (type_identifier) @name)))
   (argument_list (identifier) @name)
   (argument_list (selector_expression operand: (_) @object field: (field_identifier) @name))
+  (keyed_element value: (literal_element (identifier) @value))
+  (keyed_element value: (literal_element (selector_expression operand: (_) @object field: (field_identifier) @value)))
+  (literal_value (literal_element (identifier) @value))
+  (literal_value (literal_element (selector_expression operand: (_) @object field: (field_identifier) @value)))
+  (assignment_statement right: (expression_list (identifier) @value))
+  (assignment_statement right: (expression_list (selector_expression operand: (_) @object field: (field_identifier) @value)))
+  (short_var_declaration right: (expression_list (identifier) @value))
+  (short_var_declaration right: (expression_list (selector_expression operand: (_) @object field: (field_identifier) @value)))
+  (var_spec value: (expression_list (identifier) @value))
+  (var_spec value: (expression_list (selector_expression operand: (_) @object field: (field_identifier) @value)))
+  (return_statement (expression_list (identifier) @value))
+  (return_statement (expression_list (selector_expression operand: (_) @object field: (field_identifier) @value)))
 `;
+
+/**
+ * Names in value positions that are never a package's function: Go's predeclared identifiers and the locals almost
+ * every function has. Dropping them keeps the index small; anything of two letters or fewer goes too.
+ */
+const GO_VALUE_NOISE = new Set(["err", "ctx", "nil", "true", "false", "iota", "ok", "res", "resp", "req", "result"]);
 
 const isGoExported = (name: string) => /^\p{Lu}/u.test(name);
 
@@ -426,6 +451,44 @@ function goTypeSignature(spec: Node): string {
   return collapse(`type ${spec.text}`);
 }
 
+/** An embedded type as written, without `*` or type arguments: `Inner`, `pkg.Inner`. */
+function goTypeName(type: Node | null): string | undefined {
+  while (type && (type.type === "pointer_type" || type.type === "generic_type")) {
+    type = type.type === "pointer_type" ? type.namedChild(0) : type.childForFieldName("type");
+  }
+  return type?.type === "type_identifier" || type?.type === "qualified_type" ? type.text : undefined;
+}
+
+/**
+ * What a struct or interface embeds, and an interface's own methods. A struct gets an embedded type's methods
+ * (promoted), and so do interfaces embedding another; a type with all of an interface's methods implements it.
+ */
+function goMembers(type: Node | null): { bases?: string[]; methods?: string[] } {
+  const bases: string[] = [];
+  const methods: string[] = [];
+  if (type?.type === "struct_type") {
+    const list = type.namedChildren.find((c) => c?.type === "field_declaration_list");
+    for (const field of list?.namedChildren ?? []) {
+      // An embedded field has a type and no name.
+      if (field?.type !== "field_declaration" || field.childForFieldName("name")) continue;
+      const name = goTypeName(field.childForFieldName("type"));
+      if (name) bases.push(name);
+    }
+  } else if (type?.type === "interface_type") {
+    for (const member of type.namedChildren) {
+      if (member?.type === "method_elem") {
+        const name = member.childForFieldName("name")?.text;
+        if (name) methods.push(name);
+      } else if (member?.type === "type_elem" && member.namedChildCount === 1) {
+        // `io.Reader` embeds an interface; `~int | ~string` is a constraint, not an embedding.
+        const name = goTypeName(member.namedChild(0));
+        if (name) bases.push(name);
+      }
+    }
+  }
+  return { ...(bases.length > 0 ? { bases } : {}), ...(methods.length > 0 ? { methods } : {}) };
+}
+
 function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
   const definitions: Definition[] = [];
   const imports: ImportBinding[] = [];
@@ -433,10 +496,10 @@ function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
     node: Node,
     name: string | undefined,
     kind: DefinitionKind,
-    extra: { container?: string; receiver?: string; signature?: string } = {},
+    extra: { container?: string; receiver?: string; signature?: string; bases?: string[]; methods?: string[] } = {},
   ) => {
     if (!name || name === "_") return;
-    const { container, receiver, signature } = extra;
+    const { container, receiver, signature, bases, methods } = extra;
     definitions.push({
       name,
       kind,
@@ -446,6 +509,8 @@ function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
       ...(container ? { container } : {}),
       ...(receiver && receiver !== "_" ? { receiver } : {}),
       ...(signature ? { signature } : {}),
+      ...(bases ? { bases } : {}),
+      ...(methods ? { methods } : {}),
     });
   };
   let goPackage: string | undefined;
@@ -487,19 +552,25 @@ function extractGo(root: Node): Omit<FileSymbols, "language" | "references"> {
       case "type_declaration":
         for (const spec of node.namedChildren) {
           if (spec?.type !== "type_spec" && spec?.type !== "type_alias") continue;
-          const type = spec.childForFieldName("type")?.type;
-          const kind = type === "struct_type" ? "class" : type === "interface_type" ? "interface" : "type";
+          const type = spec.childForFieldName("type");
+          const kind = type?.type === "struct_type" ? "class" : type?.type === "interface_type" ? "interface" : "type";
           // A grouped `type ( ... )` spans many specs; each gets its own lines.
-          add(spec, spec.childForFieldName("name")?.text, kind, { signature: goTypeSignature(spec) });
+          add(spec, spec.childForFieldName("name")?.text, kind, {
+            signature: goTypeSignature(spec),
+            ...goMembers(type),
+          });
         }
         break;
       case "const_declaration":
       case "var_declaration":
-        // Plain values only matter when exported, as in TypeScript.
+        // Plain values only matter when exported, as in TypeScript. A package-level function variable
+        // (`var now = func() time.Time {…}`, swapped out in tests) is called like a function, so it counts either way.
         for (const spec of node.descendantsOfType(["const_spec", "var_spec"])) {
           if (!spec) continue;
+          const values = spec.childForFieldName("value")?.namedChildren ?? [];
+          const isFunc = values.length === 1 && values[0]?.type === "func_literal";
           for (const name of spec.childrenForFieldName("name")) {
-            if (name && isGoExported(name.text)) add(spec, name.text, "variable");
+            if (name && (isGoExported(name.text) || isFunc)) add(spec, name.text, "variable");
           }
         }
         break;
@@ -704,7 +775,8 @@ export async function extractSymbols(path: string, source: string): Promise<File
     }
     const references: Reference[] = [];
     for (const match of query.matches(root)) {
-      const name = match.captures.find((c) => c.name === "name")?.node;
+      const value = match.captures.find((c) => c.name === "value")?.node;
+      const name = value ?? match.captures.find((c) => c.name === "name")?.node;
       const object = match.captures.find((c) => c.name === "object")?.node;
       const qualified = match.captures.find((c) => c.name === "qualified")?.node;
       if (qualified) {
@@ -722,7 +794,8 @@ export async function extractSymbols(path: string, source: string): Promise<File
         imports.push({ local: lastSegment(fqn), imported: lastSegment(fqn), from: fqn, line: line(object) });
         objectText = lastSegment(fqn);
       }
-      const kind = language === "php" ? phpKind(name) : undefined;
+      if (value && !objectText && (value.text.length <= 2 || GO_VALUE_NOISE.has(value.text))) continue;
+      const kind = language === "php" ? phpKind(name) : value ? "value" : undefined;
       references.push({
         name: name.text,
         ...(objectText ? { object: objectText } : {}),

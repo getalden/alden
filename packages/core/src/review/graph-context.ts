@@ -10,7 +10,7 @@ import { languageOf } from "../graph/parser.js";
 import { type CallSite, CodeGraph } from "../graph/query.js";
 import { createResolver, dirOf, loadResolverConfig, type Resolver } from "../graph/resolve.js";
 import { fileKind } from "../queue/files.js";
-import { type GraphContext, type ModuleChange, symbolKey } from "./types.js";
+import { type GraphContext, type ModuleChange, symbolKey, tracksCallers } from "./types.js";
 
 const run = promisify(execFile);
 
@@ -49,7 +49,7 @@ export async function buildGraphReview(root: string, files: DiffFile[], budgetMs
 
   const callers = new Map<string, ReturnType<CodeGraph["callersOf"]>>();
   for (const change of changes) {
-    if (!change.exported || change.change === "added") continue;
+    if (!tracksCallers(change) || change.change === "added") continue;
     callers.set(symbolKey(change), productionFirst(graph.callersOf(change, exclude)));
   }
 
@@ -74,7 +74,7 @@ export async function buildGraphReview(root: string, files: DiffFile[], budgetMs
       for (let n = from; n <= to; n++)
         body.push(`${String(n).padStart(5)} ${n === site.line ? ">" : " "} ${lines[n - 1] ?? ""}`);
       snippets.push(
-        `${site.path}:${site.line}${site.confidence === "name" ? " (name match only)" : ""}\n${body.join("\n")}`,
+        `${site.path}:${site.line}${site.via ? ` (through ${site.via})` : ""}${site.confidence === "name" ? " (name match only)" : ""}\n${body.join("\n")}`,
       );
     }
     if (sites.length > SNIPPETS_PER_SYMBOL) snippets.push(`…and ${sites.length - SNIPPETS_PER_SYMBOL} more`);
@@ -181,9 +181,13 @@ function importersOf(
 /** Languages whose callers the graph can find across files. */
 const CALLERS_READY = new Set(["typescript", "tsx", "python", "go", "php"]);
 
-/** Production code first: that's where a break hurts; tests follow. */
+/** Production code first: that's where a break hurts; tests follow. Within each, sure matches before name-only ones. */
 const productionFirst = (sites: CallSite[]) =>
-  sites.sort((a, b) => Number(fileKind(a.path) === "test") - Number(fileKind(b.path) === "test"));
+  sites.sort(
+    (a, b) =>
+      Number(fileKind(a.path) === "test") - Number(fileKind(b.path) === "test") ||
+      Number(a.confidence === "name") - Number(b.confidence === "name"),
+  );
 
 /** Service config: YAML and XML. Blade templates, which the parser skips. */
 const CONFIG_FILE = /\.(ya?ml|xml)$/;

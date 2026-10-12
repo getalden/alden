@@ -55,6 +55,14 @@ export interface ModuleChange {
   importers: CallSite[];
 }
 
+/**
+ * Changed symbols whose callers the graph looks up: public ones, and in Go also package-internal ones outside tests.
+ * A Go package is often dozens of files sharing unexported helpers, so a helper's other callers are code the PR
+ * didn't touch, as a public function's are.
+ */
+export const tracksCallers = (c: { exported: boolean; path: string }) =>
+  c.exported || (c.path.endsWith(".go") && !c.path.endsWith("_test.go"));
+
 /** "path#Class.method" or "path#name". */
 export const symbolKey = (s: { path: string; name: string; container?: string }) =>
   `${s.path}#${s.container ? `${s.container}.` : ""}${s.name}`;

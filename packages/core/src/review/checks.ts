@@ -7,7 +7,7 @@ import { type DependencyChange, diffDependencies, isManifest } from "./dependenc
 import { AI_INSTRUCTION_FILE, findInjection } from "./injection.js";
 import { findSecrets } from "./secrets.js";
 import { type SignatureChange, signatureChanges } from "./signatures.js";
-import { type Check, type CheckOutcome, MAX_EVIDENCE, type ReviewContext, symbolKey } from "./types.js";
+import { type Check, type CheckOutcome, MAX_EVIDENCE, type ReviewContext, symbolKey, tracksCallers } from "./types.js";
 
 const passed = (summary: string, evidence: Evidence[] = []): CheckOutcome => ({
   status: "passed",
@@ -467,7 +467,7 @@ function callersOutcome({ files, graph, graphUnavailable }: ReviewContext): Chec
         "The code graph wasn't available for this review, so callers outside the diff weren't checked.",
     );
   }
-  const publicChanges = graph.changes.filter((c) => c.exported && c.change !== "added");
+  const publicChanges = graph.changes.filter((c) => tracksCallers(c) && c.change !== "added");
   const goneModules = (graph.modules ?? []).filter((m) => m.importers.length > 0);
   if (publicChanges.length === 0 && goneModules.length === 0)
     return passed("No public functions, classes or methods changed.");
@@ -484,6 +484,8 @@ function callersOutcome({ files, graph, graphUnavailable }: ReviewContext): Chec
   let uncertain = 0;
   let breakingSymbols = 0;
   let reachingSymbols = 0;
+  // Go's package-internal helpers count too; then the summary doesn't call them all public.
+  let internal = false;
 
   for (const change of publicChanges) {
     const sites = graph.callers.get(symbolKey(change)) ?? [];
@@ -496,10 +498,11 @@ function callersOutcome({ files, graph, graphUnavailable }: ReviewContext): Chec
     const why = change.change === "removed" ? "removed" : isBreaking ? "signature changed" : "changed";
     if (isBreaking) breakingSymbols++;
     else reachingSymbols++;
+    if (!change.exported) internal = true;
     for (const site of sites) {
       if (site.confidence === "name") uncertain++;
       const evidence: Evidence = {
-        text: `calls ${label} (${why})${site.confidence === "name" ? ", name match only" : ""}`,
+        text: `calls ${label} (${why})${site.via ? ` through ${site.via}` : ""}${site.confidence === "name" ? ", name match only" : ""}`,
         anchor: { path: site.path, line: site.line },
       };
       (isBreaking ? breaking : reaching).push(evidence);
@@ -515,8 +518,13 @@ function callersOutcome({ files, graph, graphUnavailable }: ReviewContext): Chec
     }
   }
 
-  // Callers in code before callers in tests, across symbols, so the capped evidence keeps the ones that matter.
-  const codeFirst = (list: Evidence[]) => list.sort((a, b) => Number(isTestEvidence(a)) - Number(isTestEvidence(b)));
+  // Callers in code before callers in tests, across symbols, so the capped evidence keeps the ones that matter; sure
+  // matches before name-only ones.
+  const nameOnly = (e: Evidence) => e.text.endsWith("name match only");
+  const codeFirst = (list: Evidence[]) =>
+    list.sort(
+      (a, b) => Number(isTestEvidence(a)) - Number(isTestEvidence(b)) || Number(nameOnly(a)) - Number(nameOnly(b)),
+    );
   codeFirst(breaking);
   codeFirst(reaching);
 
@@ -527,7 +535,7 @@ function callersOutcome({ files, graph, graphUnavailable }: ReviewContext): Chec
     return {
       status: "flagged",
       severity: sure ? "high" : "medium",
-      summary: `${goneModules.length > 0 ? `${breakingSymbols} moved, removed or re-signed ${breakingSymbols === 1 ? "file or symbol" : "files or symbols"} still used from` : `${count(breakingSymbols, "removed or re-signed public symbol")} still called from`} ${count(breaking.length, "place")} this PR didn't change. Check each caller still works.${incomplete}`,
+      summary: `${goneModules.length > 0 ? `${breakingSymbols} moved, removed or re-signed ${breakingSymbols === 1 ? "file or symbol" : "files or symbols"} still used from` : `${count(breakingSymbols, `removed or re-signed ${internal ? "" : "public "}symbol`)} still called from`} ${count(breaking.length, "place")} this PR didn't change. Check each caller still works.${incomplete}`,
       evidence: capped([...breaking, ...reaching]),
     };
   }
@@ -535,7 +543,7 @@ function callersOutcome({ files, graph, graphUnavailable }: ReviewContext): Chec
     return {
       status: "flagged",
       severity: "low",
-      summary: `${count(reachingSymbols, "changed public symbol")} called from ${count(reaching.length, "place")} outside the diff${uncertain > 0 ? ` (${uncertain} by name only)` : ""}. Behaviour changes reach them.${incomplete}`,
+      summary: `${count(reachingSymbols, `changed ${internal ? "" : "public "}symbol`)} called from ${count(reaching.length, "place")} outside the diff${uncertain > 0 ? ` (${uncertain} by name only)` : ""}. Behaviour changes reach them.${incomplete}`,
       evidence: capped(reaching),
     };
   }

@@ -448,7 +448,7 @@ describe("callers.outside", () => {
   });
   const graph = (
     changes: ReturnType<typeof change>[],
-    callers: Record<string, { path: string; line: number; confidence: "import" | "name" }[]>,
+    callers: Record<string, { path: string; line: number; confidence: "import" | "name"; via?: string }[]>,
     complete = true,
   ) => ({
     changes,
@@ -567,6 +567,35 @@ describe("callers.outside", () => {
       "1 changed public symbol called from 2 places outside the diff (1 by name only). Behaviour changes reach them.",
     );
     expect(result.evidence[1]?.text).toBe("calls formatAge (changed), name match only");
+  });
+
+  it("follows Go's package-internal helpers, and says how a call reaches a method", () => {
+    const helper = { ...change("isStale", "modified", false), path: "tsdb/head.go" };
+    const method = { ...change("Sync", "modified"), path: "store/base.go", container: "Base" };
+    const result = callersCheck.run(
+      ctx([], {
+        graph: graph([helper, method], {
+          "tsdb/head.go#isStale": [{ path: "tsdb/head_wal.go", line: 20, confidence: "import" }],
+          "store/base.go#Base.Sync": [
+            { path: "cmd/main.go", line: 7, confidence: "import", via: "Server (embeds Base)" },
+            { path: "jobs/run.go", line: 4, confidence: "name", via: "interface Syncer" },
+          ],
+        }),
+      }),
+    );
+    expect(result).toMatchObject({ status: "flagged", severity: "low" });
+    expect(result.summary).toBe(
+      "2 changed symbols called from 3 places outside the diff (1 by name only). Behaviour changes reach them.",
+    );
+    expect(result.evidence.map((e) => e.text)).toEqual([
+      "calls isStale (changed)",
+      "calls Base.Sync (changed) through Server (embeds Base)",
+      "calls Base.Sync (changed) through interface Syncer, name match only",
+    ]);
+    // In other languages a private helper still isn't followed.
+    expect(callersCheck.run(ctx([], { graph: graph([change("helper", "modified", false)], {}) })).summary).toBe(
+      "No public functions, classes or methods changed.",
+    );
   });
 
   it("passes when changed public code has no outside callers, and says when the index was cut short", () => {
