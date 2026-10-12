@@ -1,5 +1,5 @@
 import { formatAge, type RankedPullRequest, type RankedQueue, REREVIEW_REASON } from "@alden/core";
-import type { FollowUpSummary, ScoreLine } from "@alden/schema";
+import type { FollowUpSummary, ScoreLine, YourTurnItem } from "@alden/schema";
 import { fit, paint, type RenderOptions, type Style, stripControlDeep } from "./style.js";
 
 export { type RenderOptions, shouldColor } from "./style.js";
@@ -55,6 +55,8 @@ export function explainLine(item: RankedPullRequest): string {
 export function followUpText(followUp: FollowUpSummary, now: number = Date.now()): string {
   const hours = Math.max(0, (now - Date.parse(followUp.lastReviewedAt)) / 3_600_000);
   const parts = [`reviewed ${formatAge(hours)} ago`];
+  // What you haven't seen says it better than the counts.
+  if (followUp.news) return [...parts, `new: ${followUp.news.text}`].join(" · ");
   if (followUp.yourThreads > 0 && followUp.resolved > 0) {
     parts.push(
       `${followUp.resolved} of your ${followUp.yourThreads} comment${followUp.yourThreads === 1 ? "" : "s"} resolved`,
@@ -69,6 +71,31 @@ interface Row {
   item: RankedPullRequest;
 }
 
+/**
+ * "Your turn": PRs you reviewed, off the queue, where something happened you haven't seen, with what and when. Not
+ * numbered, so `alden open 3` still means the queue's third row: each is opened by its name.
+ */
+function renderYourTurn(items: YourTurnItem[], options: QueueRenderOptions): string[] {
+  if (items.length === 0) return [];
+  const { color } = options;
+  const now = options.now ?? Date.now();
+  const prWidth = Math.min(32, Math.max(...items.map((i) => `${i.repo}#${i.number}`.length)));
+  const ageWidth = 8;
+  const titleWidth = Math.max(20, options.width - 2 - prWidth - 2 - 2 - ageWidth);
+  const indent = "    ";
+  const out = [paint(`Your turn (${items.length})`, "bold", color)];
+  for (const item of items) {
+    const ago = `${formatAge(Math.max(0, (now - Date.parse(item.news.at)) / 3_600_000))} ago`;
+    out.push(`  ${fitPr(item.repo, item.number, prWidth)}  ${fit(item.title, titleWidth)}  ${ago}`.trimEnd());
+    out.push(
+      `${indent}${paint(fit(item.news.text, Math.max(20, options.width - indent.length)).trimEnd(), "dim", color)}`,
+    );
+  }
+  out.push(paint(`${indent}alden open <pr> or alden review <pr> opens one, and it leaves Your turn.`, "dim", color));
+  out.push("");
+  return out;
+}
+
 /** The two-group queue table: a row per PR, and a dimmed line under it saying why it ranks where it does. */
 export function renderQueue(untrusted: RankedQueue, options: QueueRenderOptions): string {
   // Titles, authors, labels and repos come from GitHub users: no control characters reach the terminal.
@@ -77,8 +104,13 @@ export function renderQueue(untrusted: RankedQueue, options: QueueRenderOptions)
   const rows: Row[] = [...ranked.needsYou, ...ranked.fastTrack].map((item, i) => ({ rank: i + 1, item }));
   // Warnings matter most when the queue is empty: an org hiding its PRs looks exactly like nothing to review.
   const warningLines = ranked.warnings.map((w) => paint(`Warning: ${w}`, "yellow", options.color));
+  const yourTurn = renderYourTurn(ranked.yourTurn ?? [], options);
   if (rows.length === 0) {
-    return [`Nothing is waiting on @${ranked.viewer}'s review.`, ...(warningLines.length ? ["", ...warningLines] : [])]
+    return [
+      ...yourTurn,
+      `Nothing is waiting on @${ranked.viewer}'s review.`,
+      ...(warningLines.length ? ["", ...warningLines] : []),
+    ]
       .join("\n")
       .concat("\n");
   }
@@ -138,6 +170,7 @@ export function renderQueue(untrusted: RankedQueue, options: QueueRenderOptions)
   const out: string[] = [];
   out.push(...warningLines);
   if (warningLines.length > 0) out.push("");
+  out.push(...yourTurn);
 
   const groups: [string, Row[]][] = [
     ["Needs you", rows.filter((r) => r.item.lane === "needs-you")],

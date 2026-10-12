@@ -21,6 +21,51 @@ you were asked, CI, age, drafts); see [Search, filters and sort](web-ui.md#searc
 Every PR's facts include its **assignees** (up to 10), read in the same request as the rest of its details: one more
 small field per PR, no extra request. Queues cached before Alden read assignees are fetched again once.
 
+## Your turn
+
+Above Needs you: the PRs you reviewed where something happened that you haven't seen. Each says what, in one line, and
+when:
+
+```text
+Your turn (2)
+  acme/shop#12  Charge in cents                                    3h ago
+    Ana replied to 2 of your comments · 1 resolved
+  acme/api#88   Retry the webhook                                  1d ago
+    A push outdated your comment
+    alden open <pr> or alden review <pr> opens one, and it leaves Your turn.
+```
+
+What counts: a reply to one of your comments (after your last word in that thread), a thread of yours resolved by
+someone else, and a push that makes one of your comments outdated. Counts are of threads: two replies in one thread
+are "replied to your comment". A reply you've already answered (on GitHub or from Alden) and a thread you resolved
+yourself aren't news.
+
+- **Opening the PR sees it.** In the web UI or the desktop app, opening it goes to the PR with the Comments drawer's
+  Conversation open on the thread the news is in; the row stays while the PR is open and is gone once you move on. In a
+  terminal, `alden open acme/shop#12` or `alden review acme/shop#12` (the rows aren't numbered, so `alden open 3` still
+  means the third PR of the queue). Anything newer brings the PR back.
+- **One list with the desktop app's notifications.** A notification you've seen doesn't take a PR off Your turn: only
+  opening it does. Opening it before the desktop app tells you means it doesn't.
+- **Re-reviews stay in Needs you.** A PR you were asked to review again is a review request, so it's ranked with the
+  rest, labelled **Re-review**; any news on it shows on its row ("New · Ana replied to your comment", or
+  `new: Ana replied to your comment` in the terminal) rather than under Your turn. The same goes for any PR in your
+  queue: no PR is listed twice.
+- **Your follow-up level applies**, per PR (`alden watch`, the bell) or globally (`notifications.followUps`): **Off**
+  shows none of its news, **Re-review only** only the re-review (its Needs you row), and **When it's your turn** and
+  **Every reply** all of it. The level decides what interrupts you; Your turn is there when you look, so it doesn't
+  wait for a whole round to be answered.
+- **Scope.** `--repo`, `--org`, `queue.repos`, `queue.orgs` and `queue.ignore` apply; the search, filters and sort
+  don't (they narrow the queue). Which PRs are followed (the open ones you reviewed in the last 14 days) is in
+  [Follow-ups](desktop.md#follow-ups-on-prs-you-reviewed).
+
+**What it costs.** It's the desktop app's follow-up check, now also run when the web UI or `alden queue` fetches a
+fresh queue: one read-only GraphQL request finds the PRs you reviewed and when each last changed, and only a PR whose
+`updatedAt` moved since the last look has its review threads read (one request each, a few at a time). Every Alden on
+your machine shares one check a minute: a queue fetched within a minute of the last check (here, in another terminal,
+or by the desktop app) asks GitHub nothing for it. With every level Off it asks nothing at all. The queue waits up to
+8 seconds for it, then shows what's stored, and the next queue has the rest. A cached queue (the UI's "As of 3 min ago")
+shows what the last check found without asking.
+
 ## Needs you
 
 Ranked by three factors, in this order of weight. **Blocking beats waiting beats risk.**
@@ -268,4 +313,7 @@ requests to stderr. The steps overlap, so their times add up to more than the to
 `--json` prints the ranked queue in the format described by `packages/schema/json/ranked-queue.v1.json`, for scripts
 and other tools. Each row's `breakdown` is its score by weight and rule, as `--explain` shows it. A PR you reviewed
 before has `followUp`: when you last reviewed (`lastReviewedAt`), the commit you reviewed when GitHub says
-(`lastReviewedHead`), and `rereviewRequestedAt` when it's a re-review.
+(`lastReviewedHead`), `rereviewRequestedAt` when it's a re-review, and `news` when something happened you haven't seen
+(`text`, `at`, the `replies`, `resolved` and `outdated` thread counts, the `thread` to open on, and its follow-up
+`events`). `yourTurn` is the [Your turn](#your-turn) group, newest first: each PR's `pr`, `repo`, `number`, `title`,
+`url` and `news`.

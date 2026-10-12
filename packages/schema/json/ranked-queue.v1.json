@@ -479,6 +479,60 @@
                 "minimum": 0,
                 "maximum": 9007199254740991,
                 "description": "of yours, unresolved but with a reply from someone else after your last word"
+              },
+              "news": {
+                "description": "what happened since that you haven't seen, at the PR's level",
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "description": "one plain line, e.g. 'Ana replied to 2 of your comments · 1 resolved'"
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "description": "when the newest of it happened, or when Alden saw it (GitHub gives resolves no time)"
+                  },
+                  "replies": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "your threads with a reply you haven't seen"
+                  },
+                  "resolved": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "your threads resolved by someone else"
+                  },
+                  "outdated": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "your threads a push made outdated"
+                  },
+                  "thread": {
+                    "description": "the review thread the newest of it is in (its node id), to open on",
+                    "type": "string"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "the follow-up event ids it covers"
+                  }
+                },
+                "required": [
+                  "text",
+                  "at",
+                  "replies",
+                  "resolved",
+                  "outdated",
+                  "events"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -965,6 +1019,60 @@
                 "minimum": 0,
                 "maximum": 9007199254740991,
                 "description": "of yours, unresolved but with a reply from someone else after your last word"
+              },
+              "news": {
+                "description": "what happened since that you haven't seen, at the PR's level",
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "description": "one plain line, e.g. 'Ana replied to 2 of your comments · 1 resolved'"
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "description": "when the newest of it happened, or when Alden saw it (GitHub gives resolves no time)"
+                  },
+                  "replies": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "your threads with a reply you haven't seen"
+                  },
+                  "resolved": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "your threads resolved by someone else"
+                  },
+                  "outdated": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "your threads a push made outdated"
+                  },
+                  "thread": {
+                    "description": "the review thread the newest of it is in (its node id), to open on",
+                    "type": "string"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "the follow-up event ids it covers"
+                  }
+                },
+                "required": [
+                  "text",
+                  "at",
+                  "replies",
+                  "resolved",
+                  "outdated",
+                  "events"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -1452,6 +1560,60 @@
                 "minimum": 0,
                 "maximum": 9007199254740991,
                 "description": "of yours, unresolved but with a reply from someone else after your last word"
+              },
+              "news": {
+                "description": "what happened since that you haven't seen, at the PR's level",
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "description": "one plain line, e.g. 'Ana replied to 2 of your comments · 1 resolved'"
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "description": "when the newest of it happened, or when Alden saw it (GitHub gives resolves no time)"
+                  },
+                  "replies": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "your threads with a reply you haven't seen"
+                  },
+                  "resolved": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "your threads resolved by someone else"
+                  },
+                  "outdated": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "your threads a push made outdated"
+                  },
+                  "thread": {
+                    "description": "the review thread the newest of it is in (its node id), to open on",
+                    "type": "string"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "the follow-up event ids it covers"
+                  }
+                },
+                "required": [
+                  "text",
+                  "at",
+                  "replies",
+                  "resolved",
+                  "outdated",
+                  "events"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -1471,6 +1633,95 @@
           "reasons",
           "waitingHours",
           "waitingOnAuthor"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "yourTurn": {
+      "description": "PRs you reviewed, not in this queue, where something happened you haven't seen (replies, resolves, outdated comments), newest first",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pr": {
+            "type": "string",
+            "description": "\"owner/repo#123\""
+          },
+          "repo": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "news": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "one plain line, e.g. 'Ana replied to 2 of your comments · 1 resolved'"
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "description": "when the newest of it happened, or when Alden saw it (GitHub gives resolves no time)"
+              },
+              "replies": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "your threads with a reply you haven't seen"
+              },
+              "resolved": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "your threads resolved by someone else"
+              },
+              "outdated": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "your threads a push made outdated"
+              },
+              "thread": {
+                "description": "the review thread the newest of it is in (its node id), to open on",
+                "type": "string"
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "the follow-up event ids it covers"
+              }
+            },
+            "required": [
+              "text",
+              "at",
+              "replies",
+              "resolved",
+              "outdated",
+              "events"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "pr",
+          "repo",
+          "number",
+          "title",
+          "url",
+          "news"
         ],
         "additionalProperties": false
       }

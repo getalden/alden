@@ -812,6 +812,18 @@ textarea.input {
   color: var(--warn);
   background: var(--warn-soft);
 }
+/* News you haven't seen on a PR you reviewed: on its row, and in Your turn. */
+.followup-line.news {
+  color: var(--ink);
+}
+.chip.new {
+  color: var(--acc);
+  background: var(--acc-soft);
+}
+.turn-news {
+  font: 500 12px / 1.4 var(--font-ui);
+  color: var(--ink2);
+}
 .reactions {
   position: relative;
   z-index: 1;
@@ -2535,6 +2547,9 @@ details > summary {
 .pr-row.selected .chip.rereview {
   background: var(--warn-soft);
 }
+.pr-row.selected .chip.new {
+  background: var(--panel);
+}
 .mem-item.gone .text {
   text-decoration: line-through;
 }
@@ -3284,6 +3299,17 @@ details > summary {
 }
 .thread:first-child {
   border-top: 0;
+}
+/* The thread a PR was opened for, from its news in the queue. */
+.thread.shown {
+  box-shadow: inset 3px 0 0 var(--acc);
+}
+.thread:focus {
+  outline: none;
+}
+.thread:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: -2px;
 }
 .thread.resolved {
   background: var(--sunk);

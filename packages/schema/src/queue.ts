@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FollowUpSummarySchema } from "./follow-ups.js";
+import { FollowUpSummarySchema, YourTurnItemSchema } from "./follow-ups.js";
 import { ScoreLineSchema } from "./rank.js";
 
 /**
@@ -119,6 +119,12 @@ export const RankedQueueSchema = z.object({
     .array(RankedPullRequestSchema)
     .optional()
     .describe("PRs you dismissed from the queue; they come back when they change"),
+  yourTurn: z
+    .array(YourTurnItemSchema)
+    .optional()
+    .describe(
+      "PRs you reviewed, not in this queue, where something happened you haven't seen (replies, resolves, outdated comments), newest first",
+    ),
   warnings: z.array(z.string()),
 });
 

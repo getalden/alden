@@ -190,6 +190,8 @@ export function compareFollowUp(
     kind: "reply",
     at: c.createdAt,
     text: `${plainName(c.author)} replied to your comment on ${whereOf(t)}`,
+    thread: t.id,
+    ...(c.author ? { by: c.author } : {}),
   });
   const resolved = (t: ReviewThread): FollowUpEvent => ({
     ...base,
@@ -198,6 +200,7 @@ export function compareFollowUp(
     kind: "resolved",
     at,
     text: `Your comment on ${whereOf(t)} was resolved`,
+    thread: t.id,
   });
   const outdated = (t: ReviewThread): FollowUpEvent => ({
     ...base,
@@ -205,6 +208,7 @@ export function compareFollowUp(
     kind: "outdated",
     at,
     text: `A push changed the code under your comment on ${t.path}`,
+    thread: t.id,
   });
 
   if (!first) {

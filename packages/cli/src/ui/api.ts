@@ -433,8 +433,12 @@ export function createUiApi(options: {
           (await shared(JSON.stringify([scope.repos, scope.orgs, scope.ignore, refresh]), () =>
             fetchReviewQueue(client, { ...scope, refresh }),
           ));
-        // Rows you reviewed before get their thread counts from the last follow-up check.
-        const ranked = followUps.noteQueue(rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue)));
+        const fresh = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
+        // A fresh queue checks the PRs you reviewed for news first (only those GitHub says changed, at most once a
+        // minute); a cached one shows what the last check found.
+        if (!cached) await followUps.refresh(fresh);
+        // Rows you reviewed before get their thread counts and news; the other PRs with news make Your turn.
+        const ranked = await followUps.noteQueue(fresh, scope);
         void track("queue_ranked", queueEvent(ranked));
         // What came of the comments you sent lately, after the queue is in: at most a request per PR per day.
         if (!cached) {

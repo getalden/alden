@@ -23,7 +23,7 @@ export const THREADS_QUERY = `query($owner: String!, $name: String!, $number: In
           viewerCanReply
           viewerCanResolve
           comments(first: 100) {
-            nodes { id databaseId author { login } body createdAt url }
+            nodes { id databaseId author { login } body createdAt url viewerDidAuthor }
           }
         }
       }
@@ -52,6 +52,8 @@ export interface RawThread {
       body: string;
       createdAt: string;
       url: string;
+      /** The signed-in viewer wrote it: known without asking who the viewer is. Absent from older fixtures. */
+      viewerDidAuthor?: boolean;
     } | null)[];
   };
 }
@@ -63,7 +65,10 @@ export interface RawThreadsPullRequest {
 
 const same = (a: string | undefined, b: string) => a !== undefined && a.toLowerCase() === b.toLowerCase();
 
-/** GitHub's threads in Alden's shape: comments oldest first, and which are the viewer's. */
+/**
+ * GitHub's threads in Alden's shape: comments oldest first, and which are the viewer's (GitHub says, else by `viewer`'s
+ * login).
+ */
 export function toReviewThreads(
   repo: string,
   number: number,
@@ -78,7 +83,7 @@ export function toReviewThreads(
         id: c.id,
         databaseId: c.databaseId,
         author: c.author?.login ?? null,
-        isYou: same(c.author?.login, viewer),
+        isYou: c.viewerDidAuthor ?? same(c.author?.login, viewer),
         body: c.body,
         createdAt: new Date(c.createdAt).toISOString(),
         url: c.url,

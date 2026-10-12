@@ -54,7 +54,9 @@ app), GitHub rejected the token, or there's no sign-in anywhere.
 
 ## The queue
 
-The queue has two lanes: **Needs you**, ranked, and **Fast-track**, small low-risk PRs you can clear quickly. Each row
+The queue has two lanes: **Needs you**, ranked, and **Fast-track**, small low-risk PRs you can clear quickly. Above
+them, **Your turn** lists the PRs you reviewed where something happened you haven't seen, when there are any (see
+below). Each row
 shows the PR's title, repo and author, how long it has waited on you, its size and CI, and the reasons it ranks where
 it does. A reason marked ↑ or ↓ comes from your own feedback, and "↑ your rule: payments/ first" from a rule you set
 (see [Ranking](#ranking)). See [The review queue](queue.md) for how ranking works.
@@ -62,6 +64,14 @@ it does. A reason marked ↑ or ↓ comes from your own feedback, and "↑ your 
 A PR you reviewed before says so under its title: **Re-review** when you've been asked again since, then when you last
 reviewed ("Re-review · reviewed 2 days ago"). Once something has happened to your comments the line counts it too
 ("3 of your 5 comments resolved"). See [Re-reviews](queue.md#re-reviews).
+
+**Your turn.** A PR you reviewed that isn't in your queue, where someone answered you since, shows at the top: its
+title, what happened ("Ana replied to 2 of your comments · 1 resolved"), and when ("3h ago"). Click it to open the PR,
+with the Comments drawer's Conversation open on the thread the news is in; it stays in the list while it's open, and
+leaves once you move on. A PR that's in your queue (a re-review always is) gets the news on its own row instead,
+marked **New**, in place of the counts. Search and filters don't hide Your turn; your queue's scope does. It follows
+each PR's follow-up level (Off hides it) and shares what you've seen with the desktop app's notifications. See
+[Your turn](queue.md#your-turn) for what counts, and what it asks of GitHub.
 
 When you open the page, the last queue shows at once (up to a day old), marked "As of 3 min ago, refreshing…" until
 the current one arrives. `r`, or the refresh button, fetches it again. A PR you've opened shows "2 drafts" while it has
@@ -259,7 +269,8 @@ this machine until you send them to acme/shop#412 on GitHub, as one review." It 
 - **Replies in threads**: where each reply goes, "Reply in thread on src/pay.ts:40, and resolve it".
 
 Below them are **Add a general note**, **Comment on a line…**, the review body, and the PR's **Conversation**: its
-review threads, yours first and open ones first, each with **Reply** and **Resolve when sent**. A reply or a resolve
+review threads, yours first and open ones first, each with **Reply** and, on a thread you started, **Resolve when
+sent** (someone else's says "ana's to resolve"). A reply or a resolve
 is a draft like any other, sent with your review (see [Replying in a thread](comments.md#replying-in-a-thread)). At the bottom, always in view, are
 the verdict (**Comment**, **Approve** or **Request changes**) and **Send review · 3 comments**.
 
@@ -367,7 +378,8 @@ Settings change your user config, like `alden config set`; a repo's `.alden.toml
 - **Your feedback**: how often you found Alden's places useful, and **Export redacted feedback**.
 - **Learning**: **Learn from my reviews** (on by default). Off, Alden stops noting which places you saw and learns only
   from Useful and Not useful. See [Places you saw](memory.md#places-you-saw).
-- **Drafts**: **Draft comments for me** (on by default, `drafts.auto`). Off, a model briefing drafts no comments.
+- **Drafts**: **Draft comments for me** (on by default, `drafts.auto`: once you set up a model, its briefings draft
+  with nothing more to switch on). Off, a model briefing drafts no comments.
 - **Time to review**: **Time my reviews** (on by default, `stats.reviewTime`). Off, Alden records no review sessions.
   See [Time to review](commands.md#time-to-review).
 - **Your queue on this machine**: which organisations and repos the queue covers, and what to leave out. The queue

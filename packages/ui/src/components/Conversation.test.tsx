@@ -77,14 +77,14 @@ const draft = (id: string, extra: Partial<ReviewDraft> = {}): ReviewDraft => ({
 });
 
 /** The local API's drafts and threads routes, in memory. */
-function fakeApi(start: ReviewDraft[] = []) {
+function fakeApi(start: ReviewDraft[] = [], threads: ReviewThread[] = THREADS) {
   const state = { drafts: [...start], calls: [] as string[] };
   let next = 0;
   const api = {
     drafts: async () => ({ drafts: [...state.drafts], unaddressed: [] }),
     threads: async (pr: string, refresh = false) => {
       state.calls.push(`THREADS ${pr}${refresh ? " refresh" : ""}`);
-      return { schemaVersion: 1, pr, headSha: "abc", viewer: "me", threads: THREADS };
+      return { schemaVersion: 1, pr, headSha: "abc", viewer: "me", threads };
     },
     addDraft: async (input: NewDraft & { pr: string }) => {
       state.calls.push(`POST ${JSON.stringify(input)}`);
@@ -112,7 +112,7 @@ function fakeApi(start: ReviewDraft[] = []) {
   return { api, state };
 }
 
-function Harness({ api }: { api: Api }) {
+function Harness({ api, openThread }: { api: Api; openThread?: { threadId: string; n: number } | undefined }) {
   const comments = useDrafts(api, PR);
   const request = { pr: PR } as ReviewRequest;
   return (
@@ -126,6 +126,7 @@ function Harness({ api }: { api: Api }) {
       request={request}
       emptyHint=""
       comments={comments}
+      openThread={openThread}
     />
   );
 }
@@ -133,9 +134,13 @@ function Harness({ api }: { api: Api }) {
 const drawer = () => screen.getByRole("complementary", { name: "Comments" });
 const conversation = () => within(drawer()).getByRole("region", { name: /^Conversation/ });
 
-async function setup(start: ReviewDraft[] = []) {
-  const fake = fakeApi(start);
-  render(<Harness api={fake.api} />);
+async function setup(
+  start: ReviewDraft[] = [],
+  threads: ReviewThread[] = THREADS,
+  openThread?: { threadId: string; n: number },
+) {
+  const fake = fakeApi(start, threads);
+  render(<Harness api={fake.api} openThread={openThread} />);
   await waitFor(() => expect(within(conversation()).getAllByRole("listitem").length).toBeGreaterThan(0));
   return fake;
 }
@@ -169,9 +174,16 @@ describe("the conversation in the Comments drawer", () => {
     expect(conversation().textContent).toContain("Why log cents?");
     fireEvent.click(within(conversation()).getByRole("button", { name: "Show 1 resolved thread" }));
     expect(within(conversation()).getByText("Resolved")).toBeTruthy();
-    // GitHub won't let you resolve that one: the tick is there, but off.
+    // Only the thread you started has Resolve; the others are theirs to resolve.
     const ticks = within(conversation()).getAllByRole("checkbox", { name: "Resolve when sent" }) as HTMLInputElement[];
-    expect(ticks.map((t) => t.disabled)).toEqual([false, false, true]);
+    expect(ticks.map((t) => t.disabled)).toEqual([false]);
+    expect(within(conversation()).getAllByText("ana's to resolve")).toHaveLength(2);
+  });
+
+  it("offers Resolve on a thread you started only where GitHub lets you", async () => {
+    await setup([], [thread("T_mine", { startedByYou: true, viewerCanResolve: false })]);
+    const tick = within(conversation()).getByRole("checkbox", { name: "Resolve when sent" }) as HTMLInputElement;
+    expect(tick.disabled).toBe(true);
   });
 
   it("drafts a reply and a resolve, says where each will post, and sends them with the review", async () => {
@@ -189,23 +201,24 @@ describe("the conversation in the Comments drawer", () => {
     await waitFor(() =>
       expect(state.calls).toContain(`PATCH r0 ${JSON.stringify({ body: "Fixed in 3f2c.", resolve: true })}`),
     );
-    // Resolve alone, on another thread: a reply with nothing to say.
-    fireEvent.click(within(conversation()).getAllByRole("checkbox", { name: "Resolve when sent" })[1] as HTMLElement);
+    // A reply in Ana's thread, which is hers to resolve.
+    fireEvent.click(within(conversation()).getByRole("button", { name: "Reply in the thread on src/charge.ts:3" }));
+    const theirs = within(conversation()).getByRole("textbox", { name: "Reply in the thread on src/charge.ts:3" });
+    fireEvent.change(theirs, { target: { value: "Agreed." } });
+    fireEvent.keyDown(theirs, { key: "Enter", ctrlKey: true });
     await waitFor(() =>
-      expect(state.calls).toContain(
-        `POST ${JSON.stringify({ pr: PR, inReplyTo: "T_others", body: "", resolve: true })}`,
-      ),
+      expect(state.calls).toContain(`POST ${JSON.stringify({ pr: PR, inReplyTo: "T_others", body: "Agreed." })}`),
     );
 
     const replies = await within(drawer()).findByRole("region", { name: "Replies in threads · 2" });
     expect(replies.textContent).toContain("Reply in thread on src/charge.ts:40, and resolve it");
-    expect(replies.textContent).toContain("Resolve the thread on src/charge.ts:3");
+    expect(replies.textContent).toContain("Reply in thread on src/charge.ts:3");
     // Not in the review body.
     expect(within(drawer()).queryByRole("region", { name: /In the review body/ })).toBeNull();
 
     fireEvent.click(within(drawer()).getByRole("button", { name: "Send review · 2 comments" }));
     const summary = await screen.findByRole("region", { name: "Send this review to acme/api#1?" });
-    expect(summary.textContent).toContain(", with 1 reply in threads");
+    expect(summary.textContent).toContain(", with 2 replies in threads");
     expect(summary.textContent).toContain("Reply in thread on src/charge.ts:40, and resolve it");
     fireEvent.click(within(summary).getByRole("button", { name: "Send to GitHub" }));
     const sent = await within(drawer()).findByRole("status");
@@ -225,13 +238,9 @@ describe("the conversation in the Comments drawer", () => {
     expect((box as HTMLTextAreaElement).value).toBe("");
     fireEvent.change(box, { target: { value: "nevermind all good on this one." } });
     fireEvent.click(within(conversation()).getByRole("button", { name: "Save reply" }));
-    const tick = () => within(conversation()).getAllByRole("checkbox", { name: "Resolve when sent" })[1] as HTMLElement;
     await waitFor(() => expect(conversation().textContent).toContain("Your reply · posts with your review"));
-    fireEvent.click(tick());
-    await waitFor(() => expect(state.calls.some((c) => c.startsWith("PATCH"))).toBe(true));
     expect(state.calls.filter((c) => !c.startsWith("THREADS"))).toEqual([
       `POST ${JSON.stringify({ pr: PR, inReplyTo: "T_others", body: "nevermind all good on this one." })}`,
-      `PATCH r0 ${JSON.stringify({ body: "nevermind all good on this one.", resolve: true })}`,
     ]);
     fireEvent.click(
       within(conversation()).getByRole("button", { name: "Edit your reply in the thread on src/charge.ts:3" }),
@@ -243,6 +252,23 @@ describe("the conversation in the Comments drawer", () => {
         }) as HTMLTextAreaElement
       ).value,
     ).toBe("nevermind all good on this one.");
+  });
+
+  it("opens on the thread a PR was opened for from the queue's news, without starting a reply", async () => {
+    window.sessionStorage.removeItem("alden.comments.drawer");
+    await setup([], THREADS, { threadId: "T_done", n: 1 });
+    // The drawer opens, the resolved thread unfolds, and it's brought into view and focused.
+    const shown = () => conversation().querySelector(".thread.shown");
+    await waitFor(
+      () => {
+        expect(shown()).not.toBeNull();
+        expect(document.activeElement).toBe(shown());
+      },
+      { timeout: 3000 },
+    );
+    expect(shown()?.textContent).toContain("Resolved");
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(within(conversation()).queryByRole("textbox")).toBeNull();
   });
 
   it("drops a reply when its text is discarded and Resolve isn't ticked", async () => {

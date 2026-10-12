@@ -92,6 +92,8 @@ export {
   FollowUpEventSchema,
   type FollowUpLevel,
   FollowUpLevelSchema,
+  type FollowUpNews,
+  FollowUpNewsSchema,
   type FollowUpNotification,
   FollowUpNotificationSchema,
   type FollowUpNotifications,
@@ -106,6 +108,8 @@ export {
   ReviewThreadSchema,
   type ReviewThreads,
   ReviewThreadsSchema,
+  type YourTurnItem,
+  YourTurnItemSchema,
 } from "./follow-ups.js";
 export { jsonSchemas } from "./json-schema.js";
 export {

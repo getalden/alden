@@ -49,9 +49,9 @@ afterEach(() => {
 const sessions = () => store.all<Record<string, unknown>>("SELECT * FROM review_sessions ORDER BY opened_at");
 
 describe("a review session", () => {
-  it("is a new table, added as the latest migration", () => {
-    expect(MIGRATION_COUNT).toBe(9);
-    expect(store.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(9);
+  it("is a new table, added by migration 9", () => {
+    expect(MIGRATION_COUNT).toBeGreaterThanOrEqual(9);
+    expect(store.get<{ user_version: number }>("PRAGMA user_version")?.user_version).toBe(MIGRATION_COUNT);
     expect(sessions()).toEqual([]);
   });
 

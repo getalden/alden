@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { JsonCache, type QueueRow } from "@alden/core";
+import { JsonCache, markFollowUpsSeen, openStore, type QueueRow } from "@alden/core";
 import type { Command } from "commander";
 import { noteOpened } from "../learning.js";
+import { parsePrRef } from "../pr-ref.js";
 
 /** What `alden queue` last showed, so `alden open 3` opens the third row. */
 export const LAST_QUEUE_KEY = "last-queue";
@@ -26,14 +27,36 @@ export function openInBrowser(url: string, fallback = `Couldn't open a browser. 
   child.unref();
 }
 
+/** You opened a PR: what happened on it since your review is seen, and it leaves the queue's Your turn. */
+export function noteFollowUpsSeen(repo: string, number: number): void {
+  try {
+    markFollowUpsSeen(openStore(), repo, number);
+  } catch {
+    // the database is locked or damaged: opening the PR still works
+  }
+}
+
 export function registerOpenCommand(program: Command): void {
   program
     .command("open")
-    .description("Open a PR from your last `alden queue` in the browser, by its # in that list.")
-    .argument("<rank>", "the PR's number in the list, e.g. 3")
+    .description("Open a PR in the browser: by its # in your last `alden queue`, or by name (one under Your turn).")
+    .argument("<pr>", "the PR's number in the list, e.g. 3, or owner/repo#123, or a PR URL")
     .action(async (rankText: string) => {
-      const rank = Number.parseInt(rankText, 10);
-      if (!Number.isInteger(rank) || rank < 1 || String(rank) !== rankText.trim()) {
+      if (!/^#?\d+$/.test(rankText.trim())) {
+        let ref: { repo: string; number: number };
+        try {
+          ref = parsePrRef(rankText, undefined);
+        } catch (error) {
+          program.error((error as Error).message);
+        }
+        const url = `https://github.com/${ref.repo}/pull/${ref.number}`;
+        console.log(`Opening ${url}`);
+        openInBrowser(url);
+        noteFollowUpsSeen(ref.repo, ref.number);
+        return;
+      }
+      const rank = Number.parseInt(rankText.trim().replace("#", ""), 10);
+      if (!Number.isInteger(rank) || rank < 1 || String(rank) !== rankText.trim().replace("#", "")) {
         program.error(`"${rankText}" isn't a # from the list. Use the number on the left, e.g. \`alden open 3\`.`);
       }
 
@@ -54,5 +77,7 @@ export function registerOpenCommand(program: Command): void {
       console.log(`Opening ${url}`);
       openInBrowser(url);
       noteOpened(last.rows, url, "cli");
+      const ref = /github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/.exec(url);
+      if (ref) noteFollowUpsSeen(ref[1] as string, Number(ref[2]));
     });
 }

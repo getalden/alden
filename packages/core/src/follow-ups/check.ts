@@ -159,12 +159,15 @@ function lookups(store: AldenStore, since: string, known: Set<string>): { repo: 
   return out;
 }
 
-/** Stops following a PR: its state, its own level, and anything not yet told (the PR is done with). */
+/** Stops following a PR: its state, its own level, and anything not yet told or seen (the PR is done with). */
 function endFollow(store: AldenStore, repo: string, number: number): void {
   const key = prKeyOf(repo, number);
   store.transaction(() => {
     store.run("DELETE FROM follow_ups WHERE pr_key = ?", key);
-    store.run("UPDATE follow_up_events SET notified = 1 WHERE pr_key = ? AND notified = 0", key);
+    store.run(
+      "UPDATE follow_up_events SET notified = 1, seen = 1 WHERE pr_key = ? AND (notified = 0 OR seen = 0)",
+      key,
+    );
     clearWatch(store, repo, number);
   });
 }

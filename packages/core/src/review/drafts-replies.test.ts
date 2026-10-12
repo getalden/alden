@@ -74,10 +74,12 @@ const raw = (id: string, extra: Partial<RawThread> = {}): RawThread => ({
       {
         id: `C_${id}`,
         databaseId: 1,
-        author: { login: "ana" },
+        author: { login: "me" },
         body: "Cents?",
         createdAt: "2026-10-01T10:00:00Z",
         url: "https://github.com/acme/shop/pull/7#discussion_r1",
+        // Yours: Alden resolves only threads you started.
+        viewerDidAuthor: true,
       },
     ],
   },
@@ -93,7 +95,7 @@ const thread = (id: string, extra: Partial<ReviewThread> = {}): ReviewThread => 
   side: "RIGHT",
   isResolved: false,
   isOutdated: false,
-  startedByYou: false,
+  startedByYou: true,
   viewerCanReply: true,
   viewerCanResolve: true,
   comments: [],
@@ -233,6 +235,30 @@ describe("finding a thread", () => {
     expect(() => checkThread(locked, "T", { reply: false, resolve: true })).toThrow(/won't let you resolve/);
     // Already resolved: nothing to ask of GitHub.
     const done = { ...all, threads: [thread("T", { isResolved: true, viewerCanResolve: false })] };
+    expect(checkThread(done, "T", { reply: false, resolve: true }).id).toBe("T");
+  });
+
+  it("lets you reply in any thread you can see, and resolve only the ones you started", () => {
+    const ana = {
+      id: "C1",
+      databaseId: 1,
+      author: "ana",
+      isYou: false,
+      body: "Hm",
+      createdAt: "2026-10-01T10:00:00.000Z",
+      url: "u",
+    };
+    const theirs = thread("T", { startedByYou: false, comments: [ana] });
+    const all = { schemaVersion: 1 as const, pr: PR, headSha: "h1", viewer: "me", threads: [theirs] };
+    // GitHub would let you resolve it (viewerCanResolve), and you may reply: Alden still won't resolve Ana's thread.
+    expect(checkThread(all, "T", { reply: true, resolve: false }).id).toBe("T");
+    expect(() => checkThread(all, "T", { reply: true, resolve: true })).toThrow(
+      "Alden resolves only threads you started, and @ana started the one on src/pay.ts:40: reply instead, and leave resolving it to them.",
+    );
+    const gone = { ...all, threads: [{ ...theirs, comments: [{ ...ana, author: null }] }] };
+    expect(() => checkThread(gone, "T", { reply: false, resolve: true })).toThrow(/someone else started/);
+    // Resolved already: nothing to refuse.
+    const done = { ...all, threads: [{ ...theirs, isResolved: true }] };
     expect(checkThread(done, "T", { reply: false, resolve: true }).id).toBe("T");
   });
 });

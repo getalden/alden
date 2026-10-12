@@ -32,6 +32,8 @@ vi.mock("@alden/core", async (importOriginal) => {
     queueEvent: () => ({}),
     track: async () => {},
     backgroundModelAllowed: async () => false,
+    // The follow-up check with a fresh queue has its own tests (follow-ups.test.ts, and core's).
+    refreshFollowUps: async () => "checked",
     reviewPullRequest: async (): Promise<Briefing> => {
       github.reviews++;
       return {

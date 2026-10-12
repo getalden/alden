@@ -850,8 +850,9 @@ export function findThread(threads: ReviewThread[], ref: string): ReviewThread {
 }
 
 /**
- * Checks GitHub lets you do what a reply asks in its thread: reply (when it has text) and resolve (when ticked and the
- * thread isn't resolved already). Says why not in a sentence.
+ * Checks you can do what a reply asks in its thread: reply (when it has text: any thread GitHub lets you reply in, yours
+ * or not) and resolve (when ticked and the thread isn't resolved already: only a thread you started, and GitHub must
+ * let you). Says why not in a sentence.
  */
 export function checkThread(
   threads: ReviewThreads | undefined,
@@ -864,6 +865,14 @@ export function checkThread(
   }
   if (want.reply && !thread.viewerCanReply) {
     throw new Error(`GitHub won't take your reply in the thread on ${threadWhere(thread)} (it may be locked).`);
+  }
+  // GitHub lets anyone with write access resolve any thread; Alden resolves only yours, so you never close someone
+  // else's question for them.
+  if (want.resolve && !thread.isResolved && !thread.startedByYou) {
+    const who = thread.comments[0]?.author;
+    throw new Error(
+      `Alden resolves only threads you started, and ${who ? `@${who}` : "someone else"} started the one on ${threadWhere(thread)}: reply instead, and leave resolving it to them.`,
+    );
   }
   if (want.resolve && !thread.isResolved && !thread.viewerCanResolve) {
     throw new Error(

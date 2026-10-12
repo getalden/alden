@@ -157,10 +157,15 @@ Settings), and so does `alden watch <pr> --every-reply` (see [`alden watch`](com
 lasts until it's merged or closed. News below a PR's level isn't saved for later: raising the level doesn't bring it
 back.
 
+**In the queue too.** The same news is listed under [Your turn](queue.md#your-turn) at the top of the queue, in the
+window and in `alden queue`, until you open the PR: a notification you've seen doesn't take it off the list, and a PR
+you opened before its notification came isn't notified. Its level applies there too (Off hides it).
+
 **What it costs.** With each menu-bar refresh (every five minutes), one GitHub request finds the PRs you reviewed and
 when each last changed; only a PR that changed since the last look has its review threads read, one request each. All
-of it is read only. Follow-up notifications play your system's sound like "Briefing ready" does, unless you turned it
-off.
+of it is read only. The window's queue and `alden queue` share the same check: whichever asks first in a minute asks
+GitHub, and the others use what it found. Follow-up notifications play your system's sound like "Briefing ready"
+does, unless you turned it off.
 
 ## Settings only in the app
 

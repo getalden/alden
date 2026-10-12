@@ -86,6 +86,7 @@ const raw = (id: string, body: string, extra: Partial<RawThread> = {}): RawThrea
         body,
         createdAt: "2026-10-11T10:00:00Z",
         url: `https://github.com/${REPO}/pull/75#discussion_r1`,
+        viewerDidAuthor: true,
       },
     ],
   },

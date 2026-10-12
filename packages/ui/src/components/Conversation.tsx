@@ -13,10 +13,14 @@ import { DraftText } from "./DraftText";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : "Something went wrong.");
 
-/** Asks the Conversation to open (and focus) one thread's Reply box: the Diff tab's Reply. `n` asks again. */
+/**
+ * Asks the Conversation to open (and focus) one thread's Reply box: the Diff tab's Reply. `show` only brings the thread
+ * into view (a PR opened from its news). `n` asks again.
+ */
 export interface ReplyFocus {
   threadId: string;
   n: number;
+  show?: boolean;
 }
 
 /** Who wrote a comment in a thread: you, them, or an account that's gone. */
@@ -59,8 +63,9 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
   // biome-ignore lint/correctness/useExhaustiveDependencies: only when asked again
   useEffect(() => {
     if (focus?.threadId !== thread.id) return;
-    card.current?.scrollIntoView?.({ block: "nearest" });
-    if (thread.viewerCanReply) startWriting();
+    card.current?.scrollIntoView?.({ block: focus.show ? "center" : "nearest" });
+    if (focus.show) card.current?.focus();
+    else if (thread.viewerCanReply) startWriting();
   }, [focus]);
   useEffect(() => {
     if (writing) area.current?.focus();
@@ -105,7 +110,11 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
   };
 
   return (
-    <li ref={card} className={`thread${thread.isResolved ? " resolved" : ""}`}>
+    <li
+      ref={card}
+      className={`thread${thread.isResolved ? " resolved" : ""}${focus?.show && focus.threadId === thread.id ? " shown" : ""}`}
+      tabIndex={-1}
+    >
       <div className="draft-head">
         <span className="draft-where">
           On <span className="mono">{where}</span>
@@ -190,7 +199,15 @@ function ThreadCard(props: { thread: ReviewThread; comments: BriefingComments; f
               Discard
             </button>
           )}
-          {!thread.isResolved && (
+          {!thread.isResolved && !thread.startedByYou && (
+            <span
+              className="small faint thread-resolve"
+              title="Alden resolves only threads you started, so you never close someone else's question for them."
+            >
+              {thread.comments[0]?.author ? `${thread.comments[0].author}'s to resolve` : "Not yours to resolve"}
+            </span>
+          )}
+          {!thread.isResolved && thread.startedByYou && (
             <label
               className="small thread-resolve"
               title={

@@ -141,6 +141,43 @@ describe("renderQueue", () => {
     expect(lines[6]?.trim()).toBe("reviewed 2d ago");
   });
 
+  it("puts Your turn first, unnumbered, with what happened and when, and news on a queue row's reason line", () => {
+    const now = Date.parse("2026-09-28T18:00:00Z");
+    const news = (text: string, at: string) => ({ text, at, replies: 1, resolved: 0, outdated: 0, events: ["e"] });
+    const turn = {
+      pr: "acme/shop#12",
+      repo: "acme/shop",
+      number: 12,
+      title: "Charge in \u001b[31mcents",
+      url: "https://github.com/acme/shop/pull/12",
+      news: news("Ana replied to 2 of your comments · 1 resolved", "2026-09-28T15:00:00Z"),
+    };
+    const followUp = {
+      pr: "getalden/alden#3",
+      lastReviewedAt: "2026-09-26T18:00:00Z",
+      yourThreads: 2,
+      resolved: 1,
+      replied: 1,
+    };
+    const row = item(3, {
+      followUp: { ...followUp, news: news("Bo replied to your comment", "2026-09-28T17:00:00Z") },
+    });
+    const lines = renderQueue({ ...queue([row]), yourTurn: [turn] }, { width: 100, color: false, now }).split("\n");
+    expect(lines[0]).toBe("Your turn (1)");
+    expect(lines[1]).toMatch(/^ {2}acme\/shop#12 {2}Charge in cents\s+3h ago$/);
+    expect(lines[2]?.trim()).toBe("Ana replied to 2 of your comments · 1 resolved");
+    expect(lines[3]?.trim()).toBe("alden open <pr> or alden review <pr> opens one, and it leaves Your turn.");
+    expect(lines[5]).toBe("Needs you (1)");
+    // The queue's rows keep their numbers.
+    expect(lines[7]).toMatch(/^1\.\s+getalden\/alden#3/);
+    expect(lines[8]?.trim()).toBe("reviewed 2d ago · new: Bo replied to your comment");
+
+    // Nothing waiting on you, but news: both say so.
+    expect(renderQueue({ ...queue([]), yourTurn: [turn] }, { width: 100, color: false, now })).toMatch(
+      /Your turn \(1\)[\s\S]*\nNothing is waiting on @me's review\.\n$/,
+    );
+  });
+
   it("shows warnings first, and only colours when asked", () => {
     const plain = renderQueue(queue([item(1)], [], ["Couldn't list your teams"]), { width: 100, color: false });
     expect(plain.startsWith("Warning: Couldn't list your teams\n")).toBe(true);

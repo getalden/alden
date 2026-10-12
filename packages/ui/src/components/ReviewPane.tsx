@@ -132,6 +132,8 @@ interface ReviewPaneProps {
    * drawer offers `onSetUpModel`).
    */
   assist?: { api: Pick<Api, "draftReview" | "suggestText">; model: boolean; onSetUpModel?: () => void } | undefined;
+  /** Opens the Comments drawer's Conversation on this thread (a PR opened from its news); `n` asks again. */
+  openThread?: { threadId: string; n: number } | undefined;
 }
 
 /**
@@ -174,6 +176,14 @@ function useCommentsDrawer(comments: BriefingComments | undefined, hasFiles: boo
     },
     [setOpen],
   );
+  /** Opens the drawer on a thread in the Conversation, without starting a reply. */
+  const showThread = useCallback(
+    (threadId: string) => {
+      setOpen(true);
+      setFocus((f) => ({ to: "reply", threadId, show: true, n: (f?.n ?? 0) + 1 }));
+    },
+    [setOpen],
+  );
   const actions = useMemo<ReviewActions | undefined>(
     () => (enabled ? { onComment, onFinish, onReply } : undefined),
     [enabled, onComment, onFinish, onReply],
@@ -212,7 +222,7 @@ function useCommentsDrawer(comments: BriefingComments | undefined, hasFiles: boo
     return () => window.removeEventListener("keydown", onKey);
   }, [enabled, setOpen]);
 
-  return { open, close, toggle, editing, setEditing, focus, returnFocus, toggleButton, actions };
+  return { open, close, toggle, editing, setEditing, focus, returnFocus, toggleButton, actions, showThread };
 }
 
 export type BriefingTab = "briefing" | "diff";
@@ -404,6 +414,12 @@ export function ReviewPane(props: ReviewPaneProps) {
   const { run, comments } = props;
   const files = run?.briefing && !run.running && run.briefing.files.length > 0 ? run.briefing.files : undefined;
   const drawer = useCommentsDrawer(comments, files !== undefined);
+  const { showThread } = drawer;
+  const enabledDrawer = comments !== undefined;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when asked again
+  useEffect(() => {
+    if (props.openThread && enabledDrawer) showThread(props.openThread.threadId);
+  }, [props.openThread?.n, props.openThread?.threadId, enabledDrawer]);
   const drawerDiff = useDrawerDiff(
     run?.running ? undefined : run?.briefing,
     props.loadDiff ?? props.guided?.loadDiff,
