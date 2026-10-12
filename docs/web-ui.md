@@ -81,7 +81,7 @@ Alden fetches your whole queue (up to the 1,000 PRs a GitHub search returns), so
 - **Filters** are the row of menus under the search: repo, author (you, people, bots or AI agents, as
   [Bots and AI agents](queue.md#bots-and-ai-agents) tells them apart), how you were asked (you directly, your
   teams, or one team), assignee (you, unassigned, or someone), label, drafts (hide them, or only drafts; shown when the queue has any), CI
-  (passing, failing, running, none) and age (opened today, this week, or before). They combine. A filter that's on is
+  (passing, failing, running, none; cancelled CI is none of the first three) and age (opened today, this week, or before). They combine. A filter that's on is
   highlighted with its value, and the count says "3 of 33" with **Clear filters**.
 - **Sort**: Alden's rank (the default), open longest, waiting longest on you, recently updated, or smallest first for
   quick wins. It sorts inside each lane, and dismissed PRs stay at the bottom. Each row keeps its number from Alden's

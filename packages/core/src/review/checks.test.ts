@@ -64,7 +64,7 @@ const ctx = (files: DiffFile[], extra: Partial<ReviewContext> = {}): ReviewConte
 });
 
 describe("ci.status", () => {
-  const pr = (ci: "success" | "failure" | "pending" | "none") =>
+  const pr = (ci: "success" | "failure" | "pending" | "cancelled" | "none") =>
     ({ ci, author: "sam" }) as unknown as NonNullable<ReviewContext["pr"]>;
 
   it("passes, flags or skips by CI state", () => {
@@ -74,6 +74,9 @@ describe("ci.status", () => {
     expect(failing.summary).toContain("@sam");
     expect(ciCheck.run(ctx([], { target: prTarget, pr: pr("pending") })).status).toBe("skipped");
     expect(ciCheck.run(ctx([], { target: prTarget, pr: pr("none") })).summary).toMatch(/No CI ran/);
+    // A cancelled run isn't the author's to fix: never flagged as failing.
+    const cancelled = ciCheck.run(ctx([], { target: prTarget, pr: pr("cancelled") }));
+    expect(cancelled).toMatchObject({ status: "skipped", summary: expect.stringMatching(/^CI was cancelled/) });
   });
 
   it("skips local changes", () => {

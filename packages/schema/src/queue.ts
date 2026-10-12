@@ -8,7 +8,11 @@ import { ScoreLineSchema } from "./rank.js";
  */
 export const QUEUE_SCHEMA_VERSION = 1;
 
-export const CiStateSchema = z.enum(["success", "failure", "pending", "none"]);
+/**
+ * CI on a PR's latest commit. `cancelled`: nothing failed, but a run was cancelled and didn't run again, so CI didn't
+ * finish; it isn't the author's to fix, so it's never "failing".
+ */
+export const CiStateSchema = z.enum(["success", "failure", "pending", "cancelled", "none"]);
 
 export const MajorBumpSchema = z.object({
   name: z.string().describe("the package, as its manifest names it"),

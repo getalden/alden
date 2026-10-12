@@ -22,6 +22,7 @@ const CI: Record<CiState, { glyph: string; label: string }> = {
   success: { glyph: "✓", label: "CI" },
   failure: { glyph: "✕", label: "CI" },
   pending: { glyph: "◌", label: "CI" },
+  cancelled: { glyph: "⊘", label: "CI cancelled" },
   none: { glyph: "–", label: "no CI" },
 };
 

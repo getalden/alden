@@ -42,7 +42,12 @@ Ranked by three factors, in this order of weight. **Blocking beats waiting beats
 Every row gives its reasons, for example `waiting 3d · touches migrations/ · no tests`.
 
 **Failing CI sinks a PR.** When a PR's CI is failing, the author has to act before you do, so it drops to the bottom
-with `CI failing: ping @author`.
+with `CI failing: ping @author`. A **cancelled** run isn't failing: GitHub's summary counts one as a failure, so Alden
+reads the runs themselves. A cancelled run of a check that ran again counts as that other run; when a cancelled run is
+all that kept CI from passing, the row says **CI cancelled** (`cancelled` in `alden queue`) and the PR keeps its place,
+neither sunk nor ready to approve, since CI didn't finish. Any other run that failed (or timed out) still makes CI
+failing. Skipped and neutral runs pass, as GitHub counts them. When a commit has more than 100 runs, Alden can't read
+them all, and goes by GitHub's summary.
 
 **What you do moves PRs.** Alden learns which PRs you open ahead of their rank and which you mark useful or not
 useful, and ranks PRs like them higher or lower, with the reason on the row ("ranked higher: you usually open PRs

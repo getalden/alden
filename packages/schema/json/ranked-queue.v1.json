@@ -135,6 +135,7 @@
                   "success",
                   "failure",
                   "pending",
+                  "cancelled",
                   "none"
                 ]
               },
@@ -597,6 +598,7 @@
                   "success",
                   "failure",
                   "pending",
+                  "cancelled",
                   "none"
                 ]
               },
@@ -1060,6 +1062,7 @@
                   "success",
                   "failure",
                   "pending",
+                  "cancelled",
                   "none"
                 ]
               },

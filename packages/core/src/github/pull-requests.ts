@@ -30,7 +30,23 @@ export const PULL_REQUEST_FIELDS = `
     nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug organization { login } } } }
   }
   reviews(last: 20) { nodes { author { login } state submittedAt commit { oid } } }
-  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+  commits(last: 1) {
+    nodes {
+      commit {
+        statusCheckRollup {
+          state
+          contexts(first: 100) {
+            pageInfo { hasNextPage }
+            nodes {
+              __typename
+              ... on CheckRun { name status conclusion }
+              ... on StatusContext { context state }
+            }
+          }
+        }
+      }
+    }
+  }
   timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 20) {
     nodes {
       ... on ReviewRequestedEvent {
@@ -77,8 +93,19 @@ export interface RawPullRequest {
       commit?: { oid: string } | null;
     }[];
   };
-  commits: { nodes: { commit: { statusCheckRollup: { state: string } | null } }[] };
+  commits: { nodes: { commit: { statusCheckRollup: StatusRollup | null } }[] };
   timelineItems: { nodes: ({ createdAt: string; requestedReviewer: Reviewer | null } | Record<string, never>)[] };
+}
+
+/** One check run or commit status in a rollup. */
+type RollupContext =
+  | { __typename: "CheckRun"; name: string; status: string; conclusion: string | null }
+  | { __typename: "StatusContext"; context: string; state: string };
+
+/** A commit's CI: GitHub's summary, and (absent in fixtures recorded before Alden read them) each run in it. */
+interface StatusRollup {
+  state: string;
+  contexts?: { pageInfo: { hasNextPage: boolean }; nodes: (RollupContext | Record<string, never> | null)[] };
 }
 
 export interface Viewer {
@@ -94,14 +121,50 @@ function reviewerKey(reviewer: Reviewer | null): string | undefined {
   return undefined;
 }
 
+/** One run's outcome: a check run's conclusion (NEUTRAL and SKIPPED pass, as GitHub counts them), or a status. */
+function outcome(context: RollupContext): CiState {
+  if (context.__typename === "StatusContext") {
+    return context.state === "SUCCESS"
+      ? "success"
+      : context.state === "PENDING" || context.state === "EXPECTED"
+        ? "pending"
+        : "failure";
+  }
+  if (context.status !== "COMPLETED" || context.conclusion === null) return "pending";
+  if (["SUCCESS", "NEUTRAL", "SKIPPED"].includes(context.conclusion)) return "success";
+  return context.conclusion === "CANCELLED" ? "cancelled" : "failure";
+}
+
+/**
+ * CI that GitHub's rollup calls failing, from its runs: GitHub counts a cancelled run as a failure, but a cancelled run
+ * isn't the author's to fix. A cancelled run of a check that ran again counts as that other run; any other failing run
+ * makes it a failure; then anything still running makes it pending; then a cancelled run left makes it cancelled.
+ * Failure, as GitHub says, when the runs aren't all there to read.
+ */
+function failingRollup(rollup: StatusRollup): CiState {
+  const contexts = rollup.contexts;
+  if (!contexts || contexts.pageInfo.hasNextPage) return "failure";
+  const runs = contexts.nodes
+    .filter((n): n is RollupContext => n !== null && "__typename" in n)
+    .map((n) => ({ name: n.__typename === "CheckRun" ? n.name : n.context, outcome: outcome(n) }));
+  const kept = runs.filter(
+    (r) => r.outcome !== "cancelled" || !runs.some((o) => o.name === r.name && o.outcome !== "cancelled"),
+  );
+  for (const state of ["failure", "pending", "cancelled"] as const) {
+    if (kept.some((r) => r.outcome === state)) return state;
+  }
+  // Every run left passed (a cancelled one ran again); with no runs to read, GitHub's word stands.
+  return kept.length > 0 ? "success" : "failure";
+}
+
 function ciState(raw: RawPullRequest): CiState {
-  const state = raw.commits.nodes[0]?.commit.statusCheckRollup?.state;
-  switch (state) {
+  const rollup = raw.commits.nodes[0]?.commit.statusCheckRollup;
+  switch (rollup?.state) {
     case "SUCCESS":
       return "success";
     case "FAILURE":
     case "ERROR":
-      return "failure";
+      return failingRollup(rollup);
     case "PENDING":
     case "EXPECTED":
       return "pending";

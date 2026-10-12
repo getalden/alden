@@ -93,6 +93,10 @@ describe("rankPullRequest", () => {
     expect(r.reasons[0]).toBe("CI failing: ping @sam");
     expect(rank(facts({ ci: "failure", author: null })).reasons[0]).toBe("CI failing: ping the author");
     expect(rank(facts({ ci: "pending" })).waitingOnAuthor).toBe(false);
+    // Cancelled CI isn't failing: it doesn't sink the PR or ask the author for a fix.
+    const cancelled = rank(facts({ ci: "cancelled" }));
+    expect(cancelled.waitingOnAuthor).toBe(false);
+    expect(cancelled.reasons.some((r) => r.startsWith("CI failing"))).toBe(false);
   });
 
   it("treats truncated file lists as very large", () => {

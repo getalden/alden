@@ -12,11 +12,12 @@ function fitPr(repo: string, number: number, width: number): string {
   return `${repo.slice(0, Math.max(0, width - suffix.length))}${suffix}`;
 }
 
-const CI_LABEL = { success: "pass", failure: "fail", pending: "running", none: "–" } as const;
+const CI_LABEL = { success: "pass", failure: "fail", pending: "running", cancelled: "cancelled", none: "–" } as const;
 const CI_STYLE: Record<keyof typeof CI_LABEL, Style | undefined> = {
   success: "green",
   failure: "red",
   pending: "yellow",
+  cancelled: undefined,
   none: undefined,
 };
 
@@ -89,7 +90,7 @@ export function renderQueue(untrusted: RankedQueue, options: QueueRenderOptions)
     author: Math.min(16, Math.max(6, ...rows.map((r) => (r.item.pr.author ?? "ghost").length + 1))),
     waiting: 7,
     size: Math.max(4, ...rows.map((r) => `+${r.item.pr.additions}/-${r.item.pr.deletions}`.length)),
-    ci: 7,
+    ci: 9,
   };
   const gaps = 2 * 6;
   const fixed = cols.rank + cols.pr + cols.author + cols.waiting + cols.size + cols.ci + gaps;
