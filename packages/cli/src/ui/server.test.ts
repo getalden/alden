@@ -42,6 +42,7 @@ const api: UiApi = {
   signInStatus: async () => ({ state: "idle" }),
   openSignIn: async () => ({ state: "waiting" }),
   useGitHubCli: async () => ({ login: "sam" }),
+  signOut: async () => ({ remaining: "Your GitHub CLI sign-in" }),
   setModelKey: async (key) => {
     calls.push({ method: "setModelKey", args: key });
     return { key: key ? { source: "alden", where: "the keychain" } : null };
@@ -428,6 +429,8 @@ describe("alden ui server", () => {
     expect(JSON.parse((await post("/api/auth/device")).text)).toEqual({ state: "waiting", userCode: "ABCD-1234" });
     expect(JSON.parse((await call("/api/auth/device", { headers: authed })).text)).toEqual({ state: "idle" });
     expect(JSON.parse((await post("/api/auth/gh")).text)).toEqual({ login: "sam" });
+    expect(JSON.parse((await post("/api/auth/sign-out")).text)).toEqual({ remaining: "Your GitHub CLI sign-in" });
+    expect((await call("/api/auth/sign-out", { method: "POST" })).status).toBe(401);
     expect(JSON.parse((await post("/api/cli/install")).text)).toMatchObject({ state: "installed" });
     expect((await call("/api/auth/device", { method: "POST" })).status).toBe(401);
     expect(calls.map((c) => c.method)).toEqual(["startSignIn", "installCli"]);

@@ -602,6 +602,8 @@ const api: UiApi = {
   signInStatus: async () => (demoSignedIn ? { state: "done", login: "you" } : { state: "waiting" }),
   openSignIn: async () => ({ state: "idle" }),
   useGitHubCli: async () => ({ login: "you" }),
+  // Nothing is removed: the demo has no stored sign-in, and says so as Alden would with the GitHub CLI's.
+  signOut: async () => ({ remaining: "The demo's pretend sign-in" }),
   cliStatus: async () => ({ state: "missing", bundled: "/Applications/Alden.app/Contents/MacOS/alden" }),
   installCli: async () => ({ state: "installed", path: "/usr/local/bin/alden" }),
   prepared: async (pr) => {
@@ -876,4 +878,106 @@ const api: UiApi = {
 };
 
 const ui = await startUiServer({ api, staticDir: join(ROOT, "packages/ui/dist"), port, token: "demo" });
+fakeMissingRoutes(ui);
 console.log(`Alden demo UI at ${ui.url}  (build the UI first: pnpm --filter @alden/ui build)`);
+
+/**
+ * The Tune popover's routes (the model picker, the tone, Ask), faked here while the demo's API has no method for
+ * them. Nothing calls a model.
+ */
+function fakeMissingRoutes(server: typeof ui) {
+  // A route the demo's API doesn't implement: the server would fail on it, so it's answered here.
+  const missing = (name: string) => typeof (api as unknown as Record<string, unknown>)[name] !== "function";
+  const fake = { models: missing("models"), tone: missing("tone"), ask: missing("ask") };
+  if (!fake.models && !fake.tone && !fake.ask) return;
+  let current = { provider: "anthropic", model: "claude-sonnet-5" };
+  const groups = () => [
+    {
+      provider: "anthropic",
+      label: "Anthropic",
+      via: "your key",
+      available: demoModel,
+      items: [
+        { id: "claude-sonnet-5", note: "fast" },
+        { id: "claude-opus-5", note: "deepest" },
+        { id: "claude-haiku-4-5", note: "cheapest" },
+      ],
+    },
+    {
+      provider: "openai",
+      label: "OpenAI",
+      via: "no key",
+      available: false,
+      items: [
+        { id: "gpt-5", note: "deep" },
+        { id: "gpt-5-mini", note: "cheap" },
+      ],
+    },
+    {
+      provider: "ollama",
+      label: "Local",
+      via: "Ollama",
+      available: true,
+      items: [{ id: "llama3.2:3b", note: "offline" }],
+    },
+  ];
+  const toneByRepo = new Map<string, string>();
+  const body = async (req: import("node:http").IncomingMessage) => {
+    let text = "";
+    for await (const chunk of req) text += chunk;
+    return (text ? JSON.parse(text) : {}) as Record<string, unknown>;
+  };
+  const json = (res: import("node:http").ServerResponse, status: number, value: unknown) => {
+    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(value));
+  };
+  const [original] = server.server.listeners("request") as ((...args: unknown[]) => void)[];
+  if (!original) return;
+  server.server.removeAllListeners("request");
+  server.server.on("request", (req, res) => {
+    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    const route = `${req.method} ${url.pathname}`;
+    const ours =
+      (fake.models && (route === "GET /api/models" || route === "PUT /api/models")) ||
+      (fake.tone && (route === "GET /api/tone" || route === "PUT /api/tone")) ||
+      (fake.ask && route === "POST /api/ask");
+    if (!ours) return original.call(server.server, req, res);
+    if (req.headers["x-alden-token"] !== "demo") return json(res, 401, { error: "Missing or wrong session token." });
+    void (async () => {
+      if (route === "GET /api/models") return json(res, 200, { current, groups: groups() });
+      if (route === "PUT /api/models") {
+        const { provider, model } = await body(req);
+        if (typeof provider !== "string" || typeof model !== "string") {
+          return json(res, 400, { error: "Send { provider, model }." });
+        }
+        current = { provider, model };
+        return json(res, 200, { current, groups: groups() });
+      }
+      if (route === "GET /api/tone") {
+        const repo = url.searchParams.get("repo");
+        const own = toneByRepo.get(repo ?? "");
+        return json(res, 200, { tone: own ?? "concise", source: own ? "repo" : "default" });
+      }
+      if (route === "PUT /api/tone") {
+        const { tone, repo } = await body(req);
+        const key = typeof repo === "string" ? repo : "";
+        if (tone === null) toneByRepo.delete(key);
+        else if (typeof tone === "string") toneByRepo.set(key, tone);
+        else return json(res, 400, { error: "Send { tone, repo? }." });
+        const own = toneByRepo.get(key);
+        return json(res, 200, { tone: own ?? "concise", source: own ? "repo" : "default" });
+      }
+      const { pr, question } = await body(req);
+      res.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8" });
+      const answer = `Demo answer about ${String(pr)}: the model would answer "${String(question)}" here, from the briefing, the diff and the callers Alden found. Nothing was asked.`;
+      for (const word of answer.split(/(?<= )/)) {
+        res.write(`${JSON.stringify({ type: "delta", text: word })}\n`);
+        await sleep(35);
+      }
+      res.end(`${JSON.stringify({ type: "done", costUsd: 0.0031, model: current.model })}\n`);
+    })().catch((error: unknown) => {
+      if (!res.headersSent) json(res, 500, { error: (error as Error).message });
+      else res.end();
+    });
+  });
+}

@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Api, Session } from "../api";
 import { localOptions, ModelSetupDialog } from "./ModelSetup";
-import { ReviewOptions } from "./ReviewOptions";
+import { Tune } from "./Tune";
 
 afterEach(cleanup);
 
@@ -170,8 +170,8 @@ describe("localOptions", () => {
   });
 });
 
-describe("ReviewOptions without a model", () => {
-  it("offers to set one up instead of a disabled toggle", () => {
+describe("the Tune popover without a model", () => {
+  it("offers to set one up instead of a model picker", async () => {
     const onSetUpModel = vi.fn();
     const session = {
       model: { provider: "anthropic", name: "sonnet", id: "claude-sonnet-5", effort: null, available: false },
@@ -180,9 +180,12 @@ describe("ReviewOptions without a model", () => {
       budget: { perReviewUsd: 0.5, dailyUsd: 10, spentToday: 0 },
     } as unknown as Session;
     const choices = { llm: false, model: "sonnet", effort: "", graph: true };
-    render(<ReviewOptions session={session} choices={choices} onChange={() => {}} onSetUpModel={onSetUpModel} />);
-    fireEvent.click(screen.getByText("Set up a model"));
-    expect(onSetUpModel).toHaveBeenCalled();
-    expect(screen.queryByText("No model set up")).toBeNull();
+    render(<Tune session={session} choices={choices} onChoices={() => {}} onSetUpModel={onSetUpModel} pr="a/b#1" />);
+    fireEvent.click(screen.getByRole("button", { name: /no model/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Set up a model" }));
+    expect(onSetUpModel).toHaveBeenCalledTimes(1);
+    // No model, no Ask: it offers the setup there too.
+    expect(screen.queryByRole("textbox", { name: "Ask the model about this PR" })).toBeNull();
+    expect(screen.getByText(/Ask about this PR once a model is set up/)).toBeTruthy();
   });
 });

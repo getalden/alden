@@ -88,6 +88,7 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | `GET /api/auth/device` | How that sign-in is going: waiting (with the code), done, or failed. |
 | `POST /api/auth/device/open` | Opens GitHub's page for the code in the default browser. |
 | `POST /api/auth/gh` | Drops Alden's stored sign-in, so it uses the GitHub CLI's. |
+| `POST /api/auth/sign-out` | The avatar menu's Sign out: removes Alden's stored sign-in, as `alden auth logout` does, and says what still signs you in. |
 | `PUT /api/model-key` | Stores `{ key }` (an Anthropic or OpenAI API key, told apart by its shape) in the keychain, as `alden auth model` does; `{ key: null, provider? }` removes the stored key of `provider` (`anthropic` unless said). Write-only: answers `{ provider, key }` with where that key comes from, never the key. |
 | `GET /api/model-setup` | What "Set up a model" offers: what reviews use now, the Anthropic and OpenAI keys Alden finds (`key`, `openaiKey`: where from, never the key), whether Ollama runs and what it has pulled, this machine's memory and the local model recommended for it. |
 | `POST /api/model-setup/test-key` | Tests `{ key }`, Anthropic's or OpenAI's, with one tiny request to its provider (Haiku for one output token, or gpt-6-luna for a few) and stores it if it works, making that provider the model; `untested: true` stores it without the request. Answers `{ ok, provider, key }` or `{ ok: false, reason, message }`, never the key. |

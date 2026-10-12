@@ -491,6 +491,7 @@ export function createUiApi(options: {
       return signIn.status();
     },
     useGitHubCli: () => signIn.useGitHubCli(),
+    signOut: () => signIn.signOut(),
     async setModelKey(key, provider) {
       let whose: KeyProvider = provider ?? "anthropic";
       if (key === null) await modelKeyStore(whose).delete();

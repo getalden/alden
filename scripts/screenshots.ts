@@ -4,7 +4,8 @@
  * Starts `pnpm ui:demo` three times on their own ports (as a browser sees Alden, as the desktop app's window does,
  * and with no model, for "Set up a model"), all with a throwaway ALDEN_HOME (never yours), seeded with a few ranking
  * rules so Settings → Ranking has something to show. Then a headless Chrome with a throwaway profile, driven over the
- * DevTools protocol, writes PNGs to site/src/assets/screens. Build the UI first. No network: the demo is offline.
+ * DevTools protocol, writes PNGs to site/src/assets/screens (or ALDEN_SCREENS_OUT, to look without replacing the
+ * site's). Build the UI first. No network: the demo is offline.
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -12,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dirname, "..");
-const OUT = join(ROOT, "site/src/assets/screens");
+const OUT = process.env.ALDEN_SCREENS_OUT ?? join(ROOT, "site/src/assets/screens");
 const CDP_PORT = 9339;
 const CHROME =
   process.env.CHROME ??
@@ -114,15 +115,21 @@ window.__shot = {
     await this.sleep(400);
   },
   // Checks only: what the demo shows is then exactly what Alden finds in the recorded PR, nothing invented. The demo
-  // has no clone to find callers in, so callers are left out rather than showing the "no clone" notice.
+  // has no clone to find callers in, so callers are left out rather than showing the "no clone" notice. Both are in
+  // the Tune popover, from the model line.
   async brief() {
-    const model = await this.until(() => this.button("Ask the model"));
-    if (model.getAttribute("aria-pressed") === "true") model.click();
+    (await this.until(() => document.querySelector(".model-line"))).click();
+    await this.sleep(200);
+    (await this.until(() => document.querySelector('.tune-popover [aria-label^="Model:"]'))).click();
+    await this.sleep(200);
+    (await this.until(() => [...document.querySelectorAll('[role="menuitemradio"]')].find((b) => b.textContent.startsWith("Checks only")))).click();
     await this.sleep(100);
-    document.querySelector('[role="switch"][aria-checked="true"]')?.click();
+    document.querySelector('.tune-popover [role="switch"][aria-checked="true"]')?.click();
     await this.sleep(100);
+    document.querySelector(".tune-popover")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await this.sleep(200);
     await this.click("Brief me");
-    await this.until(() => document.querySelector('[role="tablist"][aria-label="Briefing or diff"]'), 8000);
+    await this.until(() => document.querySelector('[role="tablist"][aria-label="Reading step"]'), 8000);
     await this.sleep(500);
   },
 };
@@ -236,7 +243,7 @@ try {
   await shot("queue-filters-dark", {
     path: "/pr/django/django/19057",
     brief: true,
-    steps: `await s.key("s"); await s.select("Repository", "django/django"); await s.select("CI", "passing");`,
+    steps: `await s.key("s"); await s.click("Filter"); await s.select("Repository", "django/django"); await s.select("CI", "passing");`,
   });
   await shot("diff-dark", {
     path: "/pr/cli/cli/10513",
@@ -247,6 +254,20 @@ try {
     path: "/pr/cli/cli/10513",
     brief: true,
     steps: `await s.key("s"); await s.key("g"); await s.sleep(800);`,
+  });
+  // The Tune popover from the model line, with a question asked (the demo's answer is canned; no model is called).
+  await shot("tune-dark", {
+    path: "/pr/django/django/19057",
+    brief: true,
+    steps: `await s.key("s"); document.querySelector(".model-line").click(); await s.sleep(400);
+      (await s.until(() => document.querySelector('.tune-popover [aria-label^="Model:"]'))).click(); await s.sleep(300);
+      [...document.querySelectorAll('[role="menuitemradio"]')].find((b) => b.textContent.startsWith("claude-sonnet-5"))?.click();
+      await s.sleep(400);
+      const ask = await s.until(() => document.querySelector(".ask-input"));
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(ask, "Is the lookup fix safe for annotations on related fields?");
+      ask.dispatchEvent(new Event("input", { bubbles: true }));
+      ask.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await s.until(() => document.querySelector(".ask-foot")?.textContent.includes("$"), 8000);`,
   });
   await shot("comments-dark", { path: "/pr/cli/cli/10513", height: 1100, brief: true, steps: `await s.key("[");` });
   await shot("comments-light", {
@@ -265,7 +286,9 @@ try {
   await shot("model-setup-dark", {
     path: "/pr/django/django/19057",
     demo: "noModel",
-    steps: `await s.click("Set up a model"); await s.sleep(600);`,
+    steps: `(await s.until(() => document.querySelector(".model-line"))).click(); await s.sleep(300);
+      (await s.until(() => document.querySelector('.tune-popover [aria-label^="Model:"]'))).click();
+      await s.click("Add a key"); await s.sleep(600);`,
   });
   // A briefing the app prepared while you were away, as the window shows it (callers off: the demo has no clones).
   await shot("desktop-ready-dark", {
@@ -273,7 +296,7 @@ try {
     demo: "desktop",
     width: 1280,
     height: 840,
-    steps: `await s.key("s"); document.querySelector('[role="switch"][aria-checked="true"]')?.click();`,
+    steps: `await s.key("s");`,
   });
   await shot("desktop-settings-dark", {
     path: "/settings",

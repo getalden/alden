@@ -1,16 +1,17 @@
 import type { Briefing, BriefingFreshness, BriefingTarget } from "@alden/schema";
 import { useEffect, useRef, useState } from "react";
-import { fetchedAgo, plural } from "../format";
+import { formatWait, plural } from "../format";
 
 /** The window coming back to the front checks again, but not more often than this. */
 const RECHECK_ON_FOCUS_MS = 60_000;
 
-/** "Briefed just now", "Briefed 30 min ago", "Briefed 2h ago". */
+/** "briefed just now", "briefed 30m ago", "briefed 2h ago". */
 export function briefedAgo(generatedAt: string, now: number = Date.now()): string {
-  return `Briefed ${fetchedAgo(generatedAt, now) ?? "just now"}`;
+  const minutes = Math.floor((now - Date.parse(generatedAt)) / 60_000);
+  return `briefed ${minutes >= 1 ? `${formatWait(minutes / 60)} ago` : "just now"}`;
 }
 
-/** What changed since a briefing, in a few words, or undefined while it still matches its PR. */
+/** What changed since a briefing, in a sentence (for the tooltip), or undefined while it still matches its PR. */
 export function staleText(freshness: BriefingFreshness | undefined): string | undefined {
   if (freshness?.state === "pr_changed") {
     return freshness.commits ? `the PR has ${plural(freshness.commits, "new commit")}` : "the PR has changed since";
@@ -23,15 +24,27 @@ export function staleText(freshness: BriefingFreshness | undefined): string | un
   return undefined;
 }
 
+/** The same in a few characters for the age line: "main +4 commits", "PR +2 commits", "main moved". */
+export function staleShort(freshness: BriefingFreshness | undefined): string | undefined {
+  if (freshness?.state === "pr_changed") {
+    return freshness.commits ? `PR +${plural(freshness.commits, "commit")}` : "PR changed";
+  }
+  if (freshness?.state === "base_moved") {
+    return freshness.commits
+      ? `${freshness.baseRef} +${plural(freshness.commits, "commit")}`
+      : `${freshness.baseRef} moved`;
+  }
+  return undefined;
+}
+
 /**
- * When a PR briefing was made and, when the PR or its base has moved on since, what changed and a way to brief again.
- * Checks with GitHub when the briefing is shown and when the window regains focus (at most once a minute), never on a
- * timer.
+ * The start of the age line: when the briefing was made and, when the PR or its base has moved on since, what
+ * changed. Checks with GitHub when the briefing is shown and when the window regains focus (at most once a minute),
+ * never on a timer. Local changes have nothing to check.
  */
 export function BriefingAge(props: {
   briefing: Briefing;
   check?: ((target: BriefingTarget) => Promise<BriefingFreshness>) | undefined;
-  onRebrief: () => void;
 }) {
   const { briefing, check } = props;
   const [freshness, setFreshness] = useState<BriefingFreshness>();
@@ -72,21 +85,16 @@ export function BriefingAge(props: {
     };
   }, [check, briefing.target]);
 
-  const stale = staleText(freshness);
+  const stale = staleShort(freshness);
   return (
-    <div className="brief-age" role="status">
-      <span>
-        {briefedAgo(briefing.generatedAt, now)}
-        {stale ? " · " : ""}
-      </span>
+    <span className="brief-age" role="status" title={staleText(freshness)}>
+      {briefedAgo(briefing.generatedAt, now)}
       {stale && (
         <>
-          <span className="stale">{stale} ·</span>
-          <button type="button" className="btn xs" onClick={props.onRebrief}>
-            Re-brief
-          </button>
+          {" · "}
+          <span className="stale">{stale}</span>
         </>
       )}
-    </div>
+    </span>
   );
 }

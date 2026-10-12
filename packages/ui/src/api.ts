@@ -229,6 +229,11 @@ export interface SuggestTextRequest {
   tone?: DraftTone;
 }
 
+/** What signing out left: where Alden still finds a GitHub sign-in (the GitHub CLI's, an env var), or null. */
+export interface SignOutResult {
+  remaining: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -362,6 +367,9 @@ export class Api {
     }
     throw new ApiError(500, "Setting up the local model ended without saying how it went.");
   }
+
+  /** Removes the GitHub sign-in Alden stored. The GitHub CLI's, or a token in the environment, stays. */
+  signOut = () => this.request<SignOutResult>("/api/auth/sign-out", { method: "POST" });
 
   clone = (repo: string) => this.request<CloneInfo>(`/api/clone?repo=${encodeURIComponent(repo)}`);
 

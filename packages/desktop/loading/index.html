@@ -24,11 +24,14 @@
         border: 3px solid rgba(20, 184, 166, .25); border-top-color: #14b8a6;
         animation: spin 1s linear infinite;
       }
+      /* The title bar is the page (titleBarStyle Overlay): its top 44px drags the window, as Alden's top bar does. */
+      .drag { position: fixed; top: 0; left: 0; right: 0; height: 44px; }
       @keyframes spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) { .ring { animation: none; } }
     </style>
   </head>
   <body>
+    <div class="drag" data-tauri-drag-region></div>
     <main>
       <div class="ring" aria-hidden="true"></div>
       <p id="status">Starting Alden…</p>

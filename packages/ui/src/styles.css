@@ -1,7 +1,44 @@
 /*
- * Alden's look, from the Claude Design "Alden App v2" project: midnight surfaces with a teal signal, Geist for words
+ * Alden's look, from the Claude Design "Alden App v3" project: midnight surfaces with a teal signal, Geist for words
  * and Geist Mono for anything that's code, a path, a number or a key. Dark mode follows the system unless Settings
- * picks one (html[data-theme]).
+ * picks one (html[data-theme]). Light mode is derived from v3's dark one, keeping the same steps between surfaces.
+ *
+ * Tokens. Use them as `var(--name)`; components written before a token lands may add a fallback, `var(--side,
+ * #0b161a)`, with the dark value given here.
+ *
+ *   Surfaces, darkest to lightest in dark mode
+ *     --sunk         #050b0d  inputs, code, the track of a segmented control
+ *     --bg           #081014  the window and the PR pane
+ *     --side         #0b161a  the queue column, the Comments drawer, menus inside popovers
+ *     --panel        #101b20  the top bar, cards, popovers, dialogs
+ *     --hover        #13262c  a selected (or hovered) row, a hovered menu item
+ *   Lines
+ *     --line         #1a2a30  dividers and quiet borders
+ *     --line2        #263c44  control borders, popover borders
+ *     --line-faint   #14232a  a dropped draft's border
+ *   Ink, strongest to faintest
+ *     --ink          #f0fdfa  titles, the selected row, body text on cards
+ *     --ink-dim      #d4e6e3  queue row titles that aren't selected
+ *     --ink2         #a9c2c0  secondary text, labels beside a value
+ *     --ink3         #76918f  meta lines, hints, keys
+ *     --ink4         #4d6563  line numbers, the faintest hints
+ *   The teal signal
+ *     --acc          #14b8a6  primary buttons, switches, focus rings, step dots
+ *     --acc-ink      #04201d  text on --acc
+ *     --acc-soft     #0f2e2c  the selected segment, the current nav item, the avatar
+ *     --acc-text     #5eead4  teal text: Your turn, counts, links, the CI pass glyph
+ *     --acc-line     #2b5a55  the dashed border of an Alden draft not kept yet
+ *   States
+ *     --ok #5eead4 / --ok-soft #0e2a28   --warn #f2b866 / --warn-soft #2a2112   --bad #f38b7a / --bad-soft #2d1a17
+ *   Diff and code
+ *     --add-bg       #0c201e  an added line        --add-bg-strong #12332f  an added line with a place on it
+ *     --del-bg       #221413  a removed line       --hl-bg         #2d1a17  the highlighted line in an excerpt
+ *   Elevation
+ *     --shadow-pop   a popover or menu             --shadow-dialog  a dialog
+ *     --scrim        rgba(5,11,13,.72) behind a dialog
+ *   Type and shape
+ *     --font-ui "Geist"   --font-mono "Geist Mono"   --r-sm 4px  --r-md 6px  --r-lg 10px   --list-width 340px
+ *     --topbar-height 44px
  */
 
 @font-face {
@@ -23,68 +60,112 @@
   --r-sm: 4px;
   --r-md: 6px;
   --r-lg: 10px;
-  --list-width: 420px;
+  --list-width: 340px;
+  --topbar-height: 44px;
 
-  --bg: #f4faf9;
-  --panel: #ffffff;
+  /* Light, derived from v3: the same steps between surfaces, inverted, on a pale teal-grey. */
   --sunk: #e8f3f1;
+  --bg: #f4faf9;
+  --side: #f9fcfc;
+  --panel: #ffffff;
+  --hover: #e4f1ee;
   --line: #d5e5e2;
   --line2: #b5ccc8;
+  --line-faint: #e3eeec;
   --ink: #081014;
+  --ink-dim: #1c2e31;
   --ink2: #33484b;
   --ink3: #56696b;
+  --ink4: #7d9192;
   --acc: #0f766e;
   --acc-ink: #ffffff;
   --acc-soft: #d5f3ee;
+  --acc-text: #0f766e;
+  --acc-line: #8fd3c9;
   --ok: #0f766e;
   --ok-soft: #d9f2ec;
   --warn: #8a5712;
   --warn-soft: #f5e8cf;
   --bad: #b4382a;
   --bad-soft: #f5e0da;
+  --add-bg: #e3f6f1;
+  --add-bg-strong: #cdeee6;
+  --del-bg: #fbe9e5;
+  --hl-bg: #f5e0da;
+  --shadow-pop: 0 20px 50px rgb(8 16 20 / 0.14);
+  --shadow-dialog: 0 30px 80px rgb(8 16 20 / 0.22);
+  --scrim: rgb(8 16 20 / 0.36);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #081014;
-    --panel: #101b20;
     --sunk: #050b0d;
+    --bg: #081014;
+    --side: #0b161a;
+    --panel: #101b20;
+    --hover: #13262c;
     --line: #1a2a30;
     --line2: #263c44;
+    --line-faint: #14232a;
     --ink: #f0fdfa;
+    --ink-dim: #d4e6e3;
     --ink2: #a9c2c0;
     --ink3: #76918f;
+    --ink4: #4d6563;
     --acc: #14b8a6;
     --acc-ink: #04201d;
     --acc-soft: #0f2e2c;
+    --acc-text: #5eead4;
+    --acc-line: #2b5a55;
     --ok: #5eead4;
     --ok-soft: #0e2a28;
     --warn: #f2b866;
     --warn-soft: #2a2112;
     --bad: #f38b7a;
     --bad-soft: #2d1a17;
+    --add-bg: #0c201e;
+    --add-bg-strong: #12332f;
+    --del-bg: #221413;
+    --hl-bg: #2d1a17;
+    --shadow-pop: 0 20px 50px rgb(0 0 0 / 0.5);
+    --shadow-dialog: 0 30px 80px rgb(0 0 0 / 0.6);
+    --scrim: rgb(5 11 13 / 0.72);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #081014;
-  --panel: #101b20;
   --sunk: #050b0d;
+  --bg: #081014;
+  --side: #0b161a;
+  --panel: #101b20;
+  --hover: #13262c;
   --line: #1a2a30;
   --line2: #263c44;
+  --line-faint: #14232a;
   --ink: #f0fdfa;
+  --ink-dim: #d4e6e3;
   --ink2: #a9c2c0;
   --ink3: #76918f;
+  --ink4: #4d6563;
   --acc: #14b8a6;
   --acc-ink: #04201d;
   --acc-soft: #0f2e2c;
+  --acc-text: #5eead4;
+  --acc-line: #2b5a55;
   --ok: #5eead4;
   --ok-soft: #0e2a28;
   --warn: #f2b866;
   --warn-soft: #2a2112;
   --bad: #f38b7a;
   --bad-soft: #2d1a17;
+  --add-bg: #0c201e;
+  --add-bg-strong: #12332f;
+  --del-bg: #221413;
+  --hl-bg: #2d1a17;
+  --shadow-pop: 0 20px 50px rgb(0 0 0 / 0.5);
+  --shadow-dialog: 0 30px 80px rgb(0 0 0 / 0.6);
+  --scrim: rgb(5 11 13 / 0.72);
   color-scheme: dark;
 }
 
@@ -425,22 +506,31 @@ textarea.input {
   display: flex;
   flex-direction: column;
 }
+/* The top bar, 44px: the mark, the views, today's spend and the avatar. In the desktop app it's the title bar too. */
 .topbar {
-  height: 48px;
+  height: var(--topbar-height);
   flex: none;
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 0 16px;
+  gap: 22px;
+  padding: 0 14px 0 16px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
+  position: relative;
+  z-index: 40;
+}
+/* Room for the window's buttons (the title bar is the top bar), as the design's window shows it. */
+.topbar.desktop {
+  padding-left: 82px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .brand {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--ink);
-  font: 600 19px / 1 var(--font-ui);
+  font: 600 18px / 1 var(--font-ui);
   letter-spacing: -0.045em;
 }
 .brand:hover {
@@ -453,42 +543,41 @@ textarea.input {
 .nav a {
   white-space: nowrap;
   flex: none;
-  height: 30px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 10px;
+  padding: 5px 10px;
   border-radius: var(--r-md);
-  font: 600 13px var(--font-ui);
-  color: var(--ink2);
+  font: 500 13px var(--font-ui);
+  color: var(--ink3);
 }
 .nav a:hover {
   text-decoration: none;
-  color: var(--ink);
+  color: var(--ink2);
 }
 .nav a[aria-current="page"] {
   color: var(--ink);
-  background: var(--sunk);
-}
-.nav .count {
-  font: 500 11px var(--font-mono);
-  color: var(--ink3);
+  background: var(--acc-soft);
 }
 .topbar-meta {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   font: 500 12px var(--font-mono);
   color: var(--ink3);
   min-width: 0;
 }
+.spend {
+  white-space: nowrap;
+}
 .avatar {
   width: 26px;
   height: 26px;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
   background: var(--acc-soft);
-  color: var(--acc);
+  color: var(--acc-text);
   display: grid;
   place-items: center;
   font: 600 11px var(--font-ui);
@@ -499,17 +588,88 @@ textarea.input {
   background: var(--bad-soft);
   color: var(--bad);
 }
+.avatar.current,
+.avatar[aria-expanded="true"] {
+  box-shadow: 0 0 0 2px var(--acc);
+}
+.account {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.account-note {
+  color: var(--ink2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
+}
+.account-menu {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 50;
+  min-width: 220px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  font: 13px var(--font-ui);
+  color: var(--ink);
+}
+.account-menu:focus {
+  outline: none;
+}
+.account-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font: 500 12px var(--font-mono);
+  color: var(--ink2);
+}
+.account-menu [role="menuitem"] {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  font: 500 13px var(--font-ui);
+  white-space: nowrap;
+}
+.account-menu [role="menuitem"]:hover,
+.account-menu [role="menuitem"]:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+.account-menu .hint {
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
+}
 
 .workspace {
   flex: 1;
   display: flex;
   min-height: 0;
 }
+/* The queue column, 340px: its tools stay put and the list scrolls under them. */
 .side {
   width: var(--list-width);
   flex: none;
   border-right: 1px solid var(--line);
-  background: var(--panel);
+  background: var(--side);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -539,12 +699,13 @@ textarea.input {
 .back-link {
   display: none;
   font: 500 12px var(--font-mono);
+  margin-right: 12px;
 }
 
 /* Below 960px, one pane at a time. */
 @media (max-width: 959px) {
-  .nav .count,
-  .topbar-meta .spend {
+  .topbar-meta .spend,
+  .account-note {
     display: none;
   }
   .topbar {
@@ -590,53 +751,149 @@ textarea.input {
   font: 500 11px var(--font-mono);
   color: var(--ink3);
 }
-.list-tools {
+/* The queue: search, Filter and [ on one line, then how it's sorted and how old it is. */
+.queue {
+  flex: 1 1 auto;
+  min-height: 240px;
   display: flex;
+  flex-direction: column;
+}
+.queue-tools {
+  flex: none;
+  padding: 12px 12px 10px;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: center;
-  padding: 12px 16px 0;
+  border-bottom: 1px solid var(--line);
 }
-.list-tools .search {
+.queue-list {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
-/* The refresh glyph turns while the queue loads (the keyframes are the state card's). */
-.list-tools .spin {
-  display: inline-block;
-  animation: spin 1s linear infinite;
+.list-tools {
+  position: relative;
+  display: flex;
+  gap: 6px;
 }
-@media (prefers-reduced-motion: reduce) {
-  .list-tools .spin {
-    animation: none;
-  }
-}
-.list-tools .search {
-  height: 30px;
+.search-box {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: var(--sunk);
+  border: 1px solid var(--line);
   font-size: 13px;
+  color: var(--ink3);
+}
+.search-box:focus-within {
+  border-color: var(--acc);
+}
+.search-box .key {
+  font: 500 11px var(--font-mono);
+  padding: 1px 5px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-sm);
+  opacity: 1;
+  color: var(--ink3);
+}
+.search-box .search {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 13px var(--font-ui);
+}
+.search-box .search:focus {
+  outline: none;
+}
+.search-box .search::placeholder {
+  color: var(--ink3);
+}
+.tool-btn {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink2);
+  font: 500 12px var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.tool-btn:hover {
+  color: var(--ink);
+  border-color: var(--line2);
+}
+.tool-btn.icon {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+  color: var(--ink3);
+  font: 500 12px var(--font-mono);
+}
+.tool-btn.on,
+.tool-btn[aria-expanded="true"] {
+  color: var(--ink);
+  border-color: var(--line2);
+  background: var(--panel);
+}
+.tool-btn .n {
+  font: 500 11px var(--font-mono);
+  color: var(--acc-text);
+}
+.count-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
+}
+.as-of {
+  margin-left: auto;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  white-space: nowrap;
+}
+.as-of:hover:not(:disabled) {
+  color: var(--ink2);
+}
+.as-of:disabled {
+  cursor: default;
+}
+.sort-note {
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
 }
 
-/* One row of filter menus, each a chip: its name when off, its value (highlighted) when on. */
-.filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-  padding: 8px 16px 0;
-}
 .chip-select {
   appearance: none;
-  height: 24px;
+  height: 30px;
   /* As wide as the chosen value, not the longest option; capped where that isn't supported. */
   field-sizing: content;
   max-width: 160px;
-  padding: 0 15px 0 5px;
+  padding: 0 22px 0 8px;
   border: 1px solid var(--line2);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   color: var(--ink2);
   font: 500 12px var(--font-ui);
   text-overflow: ellipsis;
   background:
-    linear-gradient(45deg, transparent 50%, currentColor 50%) right 8px top 55% / 4px 4px no-repeat,
-    linear-gradient(-45deg, transparent 50%, currentColor 50%) right 4px top 55% / 4px 4px no-repeat,
-    var(--panel);
+    linear-gradient(45deg, transparent 50%, currentColor 50%) right 12px top 55% / 4px 4px no-repeat,
+    linear-gradient(-45deg, transparent 50%, currentColor 50%) right 8px top 55% / 4px 4px no-repeat,
+    var(--sunk);
 }
 .chip-select:hover {
   border-color: var(--ink3);
@@ -644,37 +901,61 @@ textarea.input {
 .chip-select.on {
   border-color: var(--acc);
   color: var(--ink);
-  font-weight: 600;
   background-color: var(--acc-soft);
-}
-.list-tools .chip-select {
-  height: 30px;
 }
 .chip-select option {
   background: var(--panel);
   color: var(--ink);
 }
-.count-row {
+
+/* Filter: every filter and the sort, in a popover under the tools. */
+.filter-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 25;
+  padding: 14px;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px 0;
-  font: 500 12px var(--font-mono);
+  flex-direction: column;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+}
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font: 500 12px var(--font-ui);
   color: var(--ink2);
 }
-.count-row .sort {
-  margin-left: auto;
-  display: inline-flex;
+.filter-field .chip-select {
+  width: 100%;
+  max-width: none;
+  field-sizing: fixed;
+}
+.filter-foot {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
   font: 500 12px var(--font-ui);
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
 }
-.sort-note {
-  padding: 4px 16px 0;
+.filter-foot .faint {
   font: 500 11px var(--font-mono);
-  color: var(--ink3);
 }
-
+.filter-foot .done {
+  margin-left: auto;
+}
 /* Collapsed (wide windows only): a thin rail, and the briefing takes the width. Narrow windows keep one pane. */
 .queue-rail {
   display: none;
@@ -700,7 +981,7 @@ textarea.input {
     font: 600 13px var(--font-ui);
   }
   .queue-rail:hover {
-    background: color-mix(in srgb, var(--sunk) 60%, transparent);
+    background: var(--panel);
     color: var(--ink);
   }
   .queue-rail .rail-label {
@@ -720,27 +1001,175 @@ textarea.input {
   margin: 0;
   padding: 0;
 }
+
+/* A group's heading: "Your turn 3" in teal with its dot, "Ranked for you 139", "Fast-track 4". */
+.queue-group {
+  margin: 0;
+  padding: 14px 14px 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 11px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+ol + .queue-group {
+  padding-top: 18px;
+}
+.queue-group.turn {
+  color: var(--acc-text);
+}
+.queue-group .turn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--acc-text);
+}
+.queue-group .n {
+  color: var(--ink3);
+}
+
+/* Rows that scan at 140: the title and its wait, then one mono line; the open row says why and takes a reaction. */
 .pr-row {
   position: relative;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  gap: 10px;
-  padding: 11px 16px 11px 14px;
-  border-top: 1px solid var(--line);
-  color: var(--ink);
-  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 14px 10px;
+  cursor: pointer;
   transition: opacity 0.2s;
 }
 .pr-row:hover {
-  background: color-mix(in srgb, var(--sunk) 60%, transparent);
+  background: color-mix(in srgb, var(--hover) 55%, transparent);
 }
 .pr-row.selected {
-  background: var(--acc-soft);
-  box-shadow: inset 3px 0 0 var(--acc);
+  background: var(--hover);
 }
-/* The title's link covers the row; the reaction buttons sit above it. */
-.stretch {
+.pr-row.dismissed {
+  opacity: 0.5;
+}
+.pr-row.dismissed-row {
+  cursor: default;
+}
+.row-top {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.row-title {
+  flex: 1;
+  min-width: 0;
+  font: 500 13.5px / 1.35 var(--font-ui);
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pr-row.turn .row-title,
+.pr-row.selected .row-title {
   color: var(--ink);
+}
+.row-age {
+  flex: none;
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
+}
+.row-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font: 500 11.5px var(--font-mono);
+  color: var(--ink3);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ci-glyph {
+  width: 10px;
+  flex: none;
+  color: var(--ink3);
+}
+.ci-glyph.success {
+  color: var(--acc-text);
+}
+.ci-glyph.failure {
+  color: var(--bad);
+}
+.ci-glyph.pending {
+  color: var(--warn);
+}
+/* A long repo or author gives way to the flags. */
+.row-meta > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flag {
+  flex: none;
+  color: var(--ink2);
+}
+.flag.ok {
+  color: var(--acc-text);
+}
+.flag.rank {
+  color: var(--ink3);
+}
+.row-why {
+  padding-left: 20px;
+  font-size: 12.5px;
+  color: var(--acc-text);
+}
+.row-open {
+  padding: 2px 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.row-learned {
+  font-size: 12.5px;
+  color: var(--ink2);
+}
+.row-reasons {
+  font-size: 12.5px;
+  color: var(--ink3);
+}
+/* The reactions sit above the title's link, which covers the row. */
+.reactions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font: 500 11.5px var(--font-ui);
+}
+.row-act {
+  position: relative;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: 500 11.5px var(--font-ui);
+  color: var(--ink3);
+}
+.reactions .row-act:first-child {
+  color: var(--ink2);
+}
+.row-act:hover,
+.reactions .row-act:first-child:hover {
+  color: var(--ink);
+}
+.row-act[aria-pressed="true"],
+.reactions .row-act[aria-pressed="true"]:first-child {
+  color: var(--acc-text);
+}
+.react-note {
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
+}
+/* The title's link covers the row. */
+.stretch {
+  color: inherit;
 }
 .stretch:hover {
   text-decoration: none;
@@ -757,138 +1186,14 @@ textarea.input {
   outline: 2px solid var(--acc);
   outline-offset: -2px;
 }
-.pr-row.dismissed {
-  opacity: 0.5;
-}
-.pr-rank {
-  font: 600 12px / 20px var(--font-mono);
-  color: var(--ink3);
-}
-.pr-row.selected .pr-rank {
-  color: var(--acc);
-}
-.pr-body {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-.pr-title {
-  font: 600 14px / 1.35 var(--font-ui);
-  text-wrap: pretty;
-  overflow-wrap: anywhere;
-}
-.pr-meta {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+.queue-foot {
+  padding: 14px;
   font: 500 12px var(--font-mono);
   color: var(--ink3);
 }
-.pr-chips {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-.learned-line {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  font: 500 12px / 1.4 var(--font-mono);
-  color: var(--acc);
-}
-.learned-line.down {
-  color: var(--ink2);
-}
-/* A PR you reviewed before: "Re-review" and when you last reviewed. */
-.followup-line {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  font: 500 12px / 1.4 var(--font-ui);
-  color: var(--ink2);
-}
-.chip.rereview {
-  color: var(--warn);
-  background: var(--warn-soft);
-}
-/* News you haven't seen on a PR you reviewed: on its row, and in Your turn. */
-.followup-line.news {
-  color: var(--ink);
-}
-.chip.new {
-  color: var(--acc);
-  background: var(--acc-soft);
-}
-.turn-news {
-  font: 500 12px / 1.4 var(--font-ui);
-  color: var(--ink2);
-}
-.reactions {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: 2px;
-}
-.react-note {
-  margin-left: 4px;
-  font: 500 11px var(--font-mono);
-  color: var(--ink3);
-}
-.pr-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  padding-top: 2px;
-}
-.ci {
-  font: 600 12px var(--font-ui);
-  white-space: nowrap;
-  color: var(--ink3);
-}
-.ci.success {
-  color: var(--ok);
-}
-.ci.failure {
-  color: var(--bad);
-}
-.wait {
-  font: 600 12px var(--font-mono);
-  color: var(--ink3);
-}
-.wait.hot {
-  color: var(--warn);
-}
-.fast-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  padding: 9px 16px 9px 48px;
-  border-top: 1px solid var(--line);
-  color: var(--ink);
-}
-.fast-row:hover {
-  text-decoration: none;
-  background: color-mix(in srgb, var(--sunk) 60%, transparent);
-}
-.fast-row[aria-current="true"] {
-  background: var(--acc-soft);
-  box-shadow: inset 3px 0 0 var(--acc);
-}
-.fast-title {
-  font: 500 13px / 1.35 var(--font-ui);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .list-foot {
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
-  font: 500 12px var(--font-ui);
+  padding: 14px 14px 6px;
+  font: 500 12px var(--font-mono);
   color: var(--ink3);
   display: flex;
   gap: 6px;
@@ -952,22 +1257,38 @@ textarea.input {
 
 /* ---- Briefing ---------------------------------------------------------------------------------------------- */
 
-.brief-head {
-  padding: 24px 32px 20px;
-  border-bottom: 1px solid var(--line);
+/* The PR header: the mono meta line, the title, the reading steps with Comments and Draft my review, the age line. */
+.review-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+}
+.pr-head {
+  flex: none;
+  padding: 22px 36px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   background: var(--bg);
 }
-.brief-head .crumbs {
+.pr-meta {
   display: flex;
-  gap: 12px;
   flex-wrap: wrap;
   align-items: center;
   font: 500 12px var(--font-mono);
   color: var(--ink3);
   overflow-wrap: anywhere;
+}
+.pr-meta a {
+  color: inherit;
+}
+.pr-meta a:hover {
+  color: var(--ink2);
+  text-decoration: none;
+}
+.pr-meta .back-link {
+  color: var(--acc-text);
 }
 /* The bell on a PR: its notification level, at the end of the line above the title. */
 .watch-bell {
@@ -982,60 +1303,473 @@ textarea.input {
     display: none;
   }
 }
-.brief-title {
-  font: 500 28px / 1.2 var(--font-ui);
-  letter-spacing: -0.01em;
+.pr-title {
+  margin: -10px 0 0;
+  font: 600 24px / 1.25 var(--font-ui);
+  letter-spacing: -0.015em;
   text-wrap: pretty;
-  max-width: 860px;
+  max-width: 900px;
   overflow-wrap: anywhere;
 }
-.why {
+.pr-actions {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.why-label {
-  font: 600 12px var(--font-ui);
-  color: var(--ink3);
-  margin-right: 2px;
-}
-.why .chip {
-  padding: 2px 8px;
-}
-.brief-age {
+/* "1 Brief · 2 Walk through g · 3 Diff d": the numbered steps of one read. */
+.steps-control {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
   align-items: center;
-  font: 500 12px var(--font-ui);
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.steps-control [role="tab"] {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  border: 0;
+  background: transparent;
+  color: var(--ink2);
+  font: 500 13px var(--font-ui);
+  white-space: nowrap;
+}
+.steps-control [role="tab"]:hover:not(:disabled) {
+  color: var(--ink);
+}
+.steps-control [role="tab"][aria-selected="true"] {
+  background: var(--acc-soft);
+  color: var(--ink);
+}
+.steps-control [role="tab"]:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.steps-control .step-n {
+  font: 500 11px var(--font-mono);
+  color: var(--ink4);
+}
+.steps-control [aria-selected="true"] .step-n {
+  color: var(--acc-text);
+}
+.steps-control kbd {
+  font: 500 11px var(--font-mono);
   color: var(--ink3);
+  opacity: 1;
+}
+.pr-actions-end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.ghost-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--line2);
+  color: var(--ink);
+  font: 500 13px var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.ghost-btn:hover {
+  border-color: var(--ink3);
+}
+.ghost-btn.on {
+  background: var(--panel);
+}
+.ghost-btn .count {
+  font: 500 11px var(--font-mono);
+  color: var(--acc-text);
+}
+.ghost-btn kbd {
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
+  opacity: 1;
+}
+.pr-actions .btn.primary {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 0;
+  font: 600 13px var(--font-ui);
+}
+/* "briefed 30m ago · main +4 commits  Brief again B" … "sonnet-5 · medium ▾  Export" */
+.age-line {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  font: 500 12px var(--font-mono);
+  color: var(--ink3);
+}
+.age-line > span {
+  white-space: nowrap;
 }
 .brief-age .stale {
   color: var(--warn);
 }
-.toolbar {
-  padding: 12px 32px;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  background: var(--panel);
+.age-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--acc-text);
+  white-space: nowrap;
 }
-.toolbar .divider {
-  width: 1px;
-  height: 20px;
-  background: var(--line);
-  margin: 0 4px;
+.age-link:hover {
+  color: var(--ink);
 }
-.toolbar .cap {
+.age-link kbd {
+  font-size: 12px;
+  opacity: 1;
+}
+.age-end {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.age-line .export .btn {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
   font: 500 12px var(--font-mono);
   color: var(--ink3);
 }
+.age-line .export .btn:hover {
+  color: var(--ink2);
+}
+.age-line .export .btn kbd {
+  display: none;
+}
+.review-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.brief-empty {
+  padding: 22px 36px;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+/* The Tune popover, from the model line: model, tone, effort, callers, the cap, and a question for the model. */
+.tune {
+  position: relative;
+  display: inline-flex;
+}
+.model-line {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: 500 12px var(--font-mono);
+  color: var(--ink3);
+  white-space: nowrap;
+}
+.model-line:hover,
+.model-line.on {
+  color: var(--acc-text);
+}
+.tune-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: -6px;
+  z-index: 25;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  font: 13px / 1.45 var(--font-ui);
+  color: var(--ink);
+  white-space: normal;
+  text-align: left;
+}
+.tune-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+.tune-head .esc {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: 500 12px var(--font-mono);
+  color: var(--ink3);
+}
+.tune-head .esc:hover {
+  color: var(--ink);
+}
+.tune-field {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.tune-field.column {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.tune-label {
+  color: var(--ink2);
+  font: 13px var(--font-ui);
+}
+.tune-pick {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--ink);
+  font: 500 12px var(--font-mono);
+  white-space: nowrap;
+}
+.tune-pick:hover {
+  border-color: var(--ink3);
+}
+.tune-pick .prov {
+  color: var(--ink3);
+}
+.model-list {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  z-index: 26;
+  width: 250px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  background: var(--side);
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  box-shadow: var(--shadow-pop);
+}
+.model-group {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 8px 4px;
+  font: 600 10.5px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.model-group .via {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--ink4);
+}
+.model-list [role="menuitemradio"] {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--ink);
+  font: 500 12.5px var(--font-mono);
+  text-align: left;
+}
+.model-list [role="menuitemradio"][aria-checked="true"] {
+  background: var(--acc-soft);
+}
+.model-list [role="menuitemradio"]:hover:not(:disabled),
+.model-list [role="menuitemradio"]:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+.model-list [role="menuitemradio"]:disabled {
+  color: var(--ink4);
+  cursor: default;
+}
+.model-list .note {
+  font: 500 11px var(--font-mono);
+  color: var(--ink3);
+}
+.model-foot {
+  margin-top: 4px;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  font: 500 11.5px var(--font-ui);
+  color: var(--ink3);
+}
+.model-foot .link-button {
+  color: var(--acc-text);
+}
+.tune-select {
+  appearance: none;
+  padding: 4px 22px 4px 8px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-md);
+  color: var(--ink);
+  font: 500 12px var(--font-mono);
+  background:
+    linear-gradient(45deg, transparent 50%, currentColor 50%) right 12px top 55% / 4px 4px no-repeat,
+    linear-gradient(-45deg, transparent 50%, currentColor 50%) right 8px top 55% / 4px 4px no-repeat,
+    transparent;
+}
+.tune-select option {
+  background: var(--panel);
+}
+.tune-seg {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  border-radius: 7px;
+  background: var(--sunk);
+}
+.tune-seg button {
+  padding: 5px 2px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink3);
+  font: 500 12px var(--font-ui);
+  text-align: center;
+  white-space: nowrap;
+}
+.tune-seg button:hover:not(:disabled) {
+  color: var(--ink);
+}
+.tune-seg button[aria-pressed="true"] {
+  background: var(--acc-soft);
+  color: var(--ink);
+}
+.tune-seg button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.tune .switch {
+  gap: 0;
+}
+.tune .switch .track {
+  width: 30px;
+  height: 18px;
+  border-radius: 9px;
+}
+.tune .switch .knob {
+  width: 14px;
+  height: 14px;
+}
+.tune .switch[aria-checked="true"] .knob {
+  left: 14px;
+  background: var(--acc-ink);
+}
+.tune-cap {
+  font: 500 12px var(--font-mono);
+  white-space: nowrap;
+}
+.tune-cap input {
+  width: auto;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dashed var(--line2);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: right;
+}
+.tune-cap input:focus {
+  outline: none;
+  border-bottom-color: var(--acc);
+}
+.tune-problem,
+.tune-note {
+  font-size: 12.5px;
+}
+.tune-note {
+  color: var(--ink3);
+}
+.tune-note .link-button {
+  color: var(--acc-text);
+}
+.ask {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ask-input {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font: 13px var(--font-ui);
+}
+.ask-input::placeholder {
+  color: var(--ink3);
+}
+.ask-input:focus {
+  outline: none;
+  border-color: var(--acc);
+}
+.ask-answer {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 8px;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+}
+.ask-q {
+  font: 500 12px var(--font-mono);
+  color: var(--ink3);
+}
+.ask-text {
+  font: 13.5px / 1.55 var(--font-ui);
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ask-foot {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font: 500 11.5px var(--font-mono);
+  color: var(--ink3);
+}
 .notice {
-  margin: 16px 32px 0;
+  margin: 16px 36px 0;
   display: flex;
   gap: 12px;
   align-items: center;
@@ -1608,11 +2342,38 @@ textarea.input {
   .missed-form {
     grid-template-columns: 1fr;
   }
-  .brief-head,
-  .toolbar,
-  .brief-body {
+  .pr-head,
+  .brief-body,
+  .brief-empty {
     padding-left: 16px;
     padding-right: 16px;
+  }
+  .pr-head {
+    padding-top: 16px;
+  }
+  .pr-title {
+    font-size: 20px;
+  }
+  .steps-control kbd,
+  .ghost-btn kbd {
+    display: none;
+  }
+  .steps-control [role="tab"] {
+    padding: 0 9px;
+    gap: 6px;
+  }
+  .pr-actions-end {
+    margin-left: 0;
+  }
+  /* The popover spans the age line rather than hanging off the model line, which may sit at the left. */
+  .tune {
+    position: static;
+  }
+  .tune-popover {
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
   }
   .notice {
     margin-left: 16px;
@@ -2275,16 +3036,6 @@ details > summary {
     box-shadow: -16px 0 40px rgb(0 0 0 / 0.18);
   }
 }
-.review-main {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-.drawer-toggle kbd {
-  margin-left: 2px;
-}
 .comments-drawer {
   width: 380px;
   flex: none;
@@ -2535,20 +3286,8 @@ details > summary {
 }
 
 /* State overrides, last so they win over the base rules above. */
-.pr-row.dismissed .pr-title {
+.pr-row.dismissed .row-title {
   text-decoration: line-through;
-}
-.pr-row.selected .chip {
-  background: var(--panel);
-}
-.pr-row.selected .chip.ready {
-  background: var(--ok-soft);
-}
-.pr-row.selected .chip.rereview {
-  background: var(--warn-soft);
-}
-.pr-row.selected .chip.new {
-  background: var(--panel);
 }
 .mem-item.gone .text {
   text-decoration: line-through;
@@ -2667,14 +3406,18 @@ details > summary {
 }
 .export-menu {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   right: 0;
   z-index: 20;
   min-width: 220px;
-  padding: 4px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  background: var(--panel);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow-pop);
+  font-family: var(--font-ui);
+  color: var(--ink);
 }
 .export-menu [role="menuitem"] {
   display: flex;
@@ -2691,7 +3434,7 @@ details > summary {
 }
 .export-menu [role="menuitem"]:hover,
 .export-menu [role="menuitem"]:focus-visible {
-  background: var(--sunk);
+  background: var(--hover);
   outline: none;
 }
 
@@ -2733,6 +3476,7 @@ details > summary {
   .main-pane,
   .review-pane,
   .review-main,
+  .review-scroll,
   .page {
     height: auto;
     overflow: visible;
@@ -2748,7 +3492,8 @@ details > summary {
     :is(
       .topbar,
       .side,
-      .toolbar,
+      .pr-actions,
+      .age-line,
       .notice,
       .back-link,
       .btn,
@@ -2765,7 +3510,7 @@ details > summary {
     ) {
     display: none;
   }
-  .brief-head,
+  .pr-head,
   .brief-body {
     padding: 0 0 16px;
     max-width: none;
@@ -2774,7 +3519,7 @@ details > summary {
     padding-top: 16px;
     gap: 20px;
   }
-  .brief-head .crumbs a[href^="http"]::after {
+  .pr-meta a[href^="http"]::after {
     content: " " attr(href);
   }
   .card,
@@ -2936,32 +3681,6 @@ details > summary {
 }
 
 /* ---- Briefing | Diff ------------------------------------------------------------------------------------------ */
-
-.pane-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 0 32px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-}
-.pane-tabs [role="tab"] {
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--ink2);
-  padding: 10px 10px 8px;
-  font: 600 13px var(--font-ui);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.pane-tabs [role="tab"]:hover {
-  color: var(--ink);
-}
-.pane-tabs [role="tab"][aria-selected="true"] {
-  color: var(--ink);
-  border-bottom-color: var(--acc);
-}
 
 /* A place in the briefing: its file:line opens the Diff tab there; GitHub's diff is the link beside it. */
 .place-links {
@@ -3259,9 +3978,6 @@ details > summary {
 }
 
 @media (max-width: 720px) {
-  .pane-tabs {
-    padding: 0 16px;
-  }
   .diff-panel {
     padding: 16px 16px 40px;
   }
@@ -3280,7 +3996,6 @@ details > summary {
 }
 
 @media print {
-  .pane-tabs,
   .diff-panel {
     display: none;
   }

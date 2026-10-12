@@ -74,11 +74,12 @@ describe("searching and filtering the queue", () => {
     const { container } = render(
       <QueueView queue={queue} error={undefined} loading={false} onRefresh={() => {}} selected={undefined} />,
     );
-    expect(screen.getByText("4 PRs")).toBeTruthy();
     const search = screen.getByRole("searchbox", { name: "Search the queue" });
+    expect(search.getAttribute("placeholder")).toBe("Search 4 PRs");
+    expect(screen.getByRole("status").textContent).toBe("Sorted by rank");
     fireEvent.change(search, { target: { value: "cents" } });
     expect(prs(container)).toEqual(["acme/api#1"]);
-    expect(screen.getByText("1 of 4")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("Sorted by rank · 1 of 4");
     fireEvent.change(search, { target: { value: "#3" } });
     expect(prs(container)).toEqual(["acme/api#3"]);
     fireEvent.change(search, { target: { value: "npm/zod" } });
@@ -96,10 +97,13 @@ describe("searching and filtering the queue", () => {
     expect(window.location.pathname).toBe("/pr/acme/api/4");
   });
 
-  it("combines filters, shows which are on, and clears them in one click", () => {
+  it("combines filters in the Filter popover, shows which are on, and clears them in one click", () => {
     const { container } = render(
       <QueueView queue={queue} error={undefined} loading={false} onRefresh={() => {}} selected={undefined} />,
     );
+    const filter = screen.getByRole("button", { name: "Filter" });
+    fireEvent.click(filter);
+    expect(screen.getByRole("dialog", { name: "Filters" })).toBeTruthy();
     const author = screen.getByRole("combobox", { name: "Author" });
     fireEvent.change(author, { target: { value: "bots" } });
     expect(prs(container)).toEqual(["acme/web#2"]);
@@ -116,17 +120,27 @@ describe("searching and filtering the queue", () => {
     expect(prs(container)).toEqual(["acme/api#3"]);
     fireEvent.change(screen.getByRole("combobox", { name: "Label" }), { target: { value: "billing" } });
     expect(prs(container)).toEqual([]);
+    // The button says how many are on; Esc closes the popover and the line under it can still clear them.
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Label" }), { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Filters" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Filter, 2 on" })).toBe(document.activeElement);
+    // Nothing matches, so the empty list offers it too.
+    expect(screen.getAllByRole("button", { name: "Clear filters" })).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole("button", { name: "Clear filters" })[0] as HTMLElement);
+    expect(prs(container)).toHaveLength(4);
   });
 
-  it("sorts inside each lane, keeps Alden's rank on each row, and says so", () => {
+  it("sorts inside each group, keeps Alden's rank on each row, and says so", () => {
     const { container } = render(
       <QueueView queue={queue} error={undefined} loading={false} onRefresh={() => {}} selected={undefined} />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), { target: { value: "size" } });
-    // Needs you by size, then Fast-track: the lanes stay apart.
+    // Ranked for you by size, then Fast-track: the groups stay apart.
     expect(prs(container)).toEqual(["acme/web#2", "acme/api#3", "acme/api#1", "acme/api#4"]);
-    expect(within(container.querySelector('[data-pr="acme/api#1"]') as HTMLElement).getByText("01")).toBeTruthy();
-    expect(screen.getByText(/within each lane/)).toBeTruthy();
+    expect(within(container.querySelector('[data-pr="acme/api#1"]') as HTMLElement).getByText("rank 1")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("Sorted by size");
+    expect(screen.getByText(/within each group/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Reset sort" }));
     expect(prs(container)).toEqual(["acme/api#1", "acme/web#2", "acme/api#3", "acme/api#4"]);
   });
@@ -191,7 +205,9 @@ describe("the queue pane in the app", () => {
     fireEvent.change(search, { target: { value: "acme/api" } });
     await waitFor(() => expect(prs(container)).toEqual(["acme/api#1", "acme/api#3", "acme/api#4"]));
     fireEvent.keyDown(search, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Repository" }), { target: { value: "acme/api" } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     key("j");
     expect(window.location.pathname).toBe("/pr/acme/api/1");
     key("j");
@@ -203,6 +219,7 @@ describe("the queue pane in the app", () => {
   it("remembers filters and sort across reloads, and resets them in one click", async () => {
     const first = render(<App api={api} />);
     await waitFor(() => expect(prs(first.container)).toHaveLength(4));
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Author" }), { target: { value: "bots" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), { target: { value: "updated" } });
     expect(readQueueNav()).toEqual({ filters: { author: "bots" }, sort: "updated" });
@@ -210,6 +227,8 @@ describe("the queue pane in the app", () => {
 
     const { container } = render(<App api={api} />);
     await waitFor(() => expect(prs(container)).toEqual(["acme/web#2"]));
+    expect(screen.getByRole("status").textContent).toBe("Sorted by last update · 1 of 4");
+    fireEvent.click(screen.getByRole("button", { name: "Filter, 1 on" }));
     expect((screen.getByRole("combobox", { name: "Sort" }) as HTMLSelectElement).value).toBe("updated");
     fireEvent.click(screen.getByRole("button", { name: "Reset filters and sort" }));
     expect(prs(container)).toHaveLength(4);
@@ -258,14 +277,14 @@ describe("Your turn in the app", () => {
       },
     ) as unknown as Api;
     const { container } = render(<App api={withTurn} />);
-    await waitFor(() => expect(screen.getByText("Your turn · 1")).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Your turn 1" })).toBeTruthy());
     // Filters narrow the queue, not Your turn.
     expect(prs(container)).toEqual(["acme/shop#12", "acme/api#1", "acme/web#2", "acme/api#3", "acme/api#4"]);
-    fireEvent.click(container.querySelector('[data-pr="acme/shop#12"]') as HTMLElement);
+    fireEvent.click(within(container.querySelector('[data-pr="acme/shop#12"]') as HTMLElement).getByRole("link"));
     expect(window.location.pathname).toBe("/pr/acme/shop/12");
     await waitFor(() => expect(seen).toEqual(["acme/shop#12"]));
     // Still there while it's open.
-    expect(screen.getByText("Your turn · 1")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Your turn 1" })).toBeTruthy();
     key("j");
     await waitFor(() => expect(screen.queryByRole("heading", { name: /^Your turn/ })).toBeNull());
     expect(seen).toEqual(["acme/shop#12"]);

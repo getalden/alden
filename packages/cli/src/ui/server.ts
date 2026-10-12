@@ -73,6 +73,8 @@ export interface UiApi {
   signInStatus(): Promise<unknown>;
   openSignIn(): Promise<unknown>;
   useGitHubCli(): Promise<unknown>;
+  /** Removes the GitHub sign-in Alden stored (the avatar menu's Sign out); says what still signs you in. */
+  signOut(): Promise<{ remaining: string | null }>;
   /**
    * Stores an API key in the keychain, as `alden auth model` does: Anthropic's or OpenAI's, told apart by its shape.
    * `null` removes the stored key of `provider` (Anthropic's unless said). Write-only: the answer says whose key it was
@@ -753,6 +755,9 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         return;
       case "POST /api/auth/gh":
         send(res, 200, await api.useGitHubCli());
+        return;
+      case "POST /api/auth/sign-out":
+        send(res, 200, await api.signOut());
         return;
       case "PUT /api/model-key": {
         const body = await readJsonBody(req);

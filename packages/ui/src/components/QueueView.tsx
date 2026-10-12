@@ -1,4 +1,11 @@
-import type { CiState, FollowUpSummary, RankedPullRequest, RankedQueue, YourTurnItem } from "@alden/schema";
+import {
+  type CiState,
+  type FollowUpSummary,
+  prAuthor,
+  type RankedPullRequest,
+  type RankedQueue,
+  type YourTurnItem,
+} from "@alden/schema";
 import {
   activeFilterCount,
   DEFAULT_QUEUE_NAV,
@@ -10,7 +17,16 @@ import {
   queueFacets,
   withFilter,
 } from "@alden/schema/queue-nav";
-import { type KeyboardEvent, type ReactNode, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { fetchedAgo, formatWait, plural, waitingSince } from "../format";
 import { navigate, onLinkClick, routePath } from "../router";
 import { Mark } from "./Mark";
@@ -18,13 +34,20 @@ import { StateCard } from "./StateCard";
 
 export type Reaction = "up" | "down" | "dismiss";
 
+/** The CI glyph at the start of a row's mono line, and what it says to a screen reader. */
 const CI: Record<CiState, { glyph: string; label: string }> = {
-  success: { glyph: "✓", label: "CI" },
-  failure: { glyph: "✕", label: "CI" },
-  pending: { glyph: "◌", label: "CI" },
+  success: { glyph: "✓", label: "CI passing" },
+  failure: { glyph: "✕", label: "CI failing" },
+  pending: { glyph: "●", label: "CI running" },
   cancelled: { glyph: "⊘", label: "CI cancelled" },
-  none: { glyph: "–", label: "no CI" },
+  none: { glyph: "", label: "no CI" },
 };
+
+/** A PR's size as a row flag: L from 400 changed lines, XL from 1,000. Smaller PRs don't say. */
+export function sizeFlag(pr: { additions: number; deletions: number }): "L" | "XL" | undefined {
+  const lines = pr.additions + pr.deletions;
+  return lines >= 1000 ? "XL" : lines >= 400 ? "L" : undefined;
+}
 
 /** Until the server says how close a lesson is. */
 const REACTED: Record<Reaction, string> = {
@@ -85,6 +108,15 @@ export function visibleTurns(
 ): YourTurnItem[] {
   return (items ?? []).filter((i) => unseen(i.news, seen) || prKey(i) === selected);
 }
+
+/** "Sorted by rank": the sort order in the line under the search. */
+export const SORT_SHORT: Record<QueueSort, string> = {
+  rank: "rank",
+  age: "age",
+  waiting: "wait",
+  updated: "last update",
+  size: "size",
+};
 
 /** Sort orders as the menu names them; the note under the tools says the rest. */
 export const SORT_LABELS: Record<QueueSort, string> = {
@@ -151,8 +183,9 @@ interface QueueViewProps {
 }
 
 /**
- * The PRs waiting on you: "Your turn" (news on PRs you reviewed that aren't in the queue), "Needs you", ranked, then
- * "Fast-track". Every row says why it ranks where it does.
+ * The queue column: the search and filters, then "Your turn" (news on PRs you reviewed), "Ranked for you", and
+ * "Fast-track". Two lines a row: the title and its wait, then a mono line with CI, repo, author and plain flags. The
+ * selected row also says why it's there and takes Useful, Not useful and Dismiss.
  */
 export function QueueView({
   queue,
@@ -189,7 +222,6 @@ export function QueueView({
   const deferredSearch = useDeferredValue(search);
   const ownView = useNavigatedQueue(viewProp ? undefined : queue, nav, deferredSearch, now);
   const view = viewProp ?? ownView;
-  const ago = queue ? fetchedAgo(queue.fetchedAt, now) : undefined;
   const needsYou = view?.needsYou ?? [];
   const fastTrack = view?.fastTrack ?? [];
   const dismissed = view?.dismissed ?? [];
@@ -197,6 +229,7 @@ export function QueueView({
   const listRef = useRef<HTMLElement>(null);
   // Filters and search narrow the queue, not Your turn: it's short, and it's news.
   const turns = visibleTurns(queue?.yourTurn, seen, selected);
+  const sorted = nav.sort !== "rank";
 
   if (signedOut && signIn) return <>{signIn}</>;
   if (signedOut) {
@@ -218,8 +251,8 @@ export function QueueView({
   if (!queue && loading) {
     return (
       <div aria-busy="true" role="status">
-        <div className="list-head">
-          <span className="label">Reading your queue…</span>
+        <div className="queue-group">
+          <span>Reading your queue…</span>
         </div>
         {[0, 1, 2, 3, 4].map((i) => (
           <div key={i} className="skeleton" />
@@ -252,21 +285,7 @@ export function QueueView({
       : undefined;
 
   return (
-    <section aria-labelledby="needs-you" ref={listRef}>
-      {scopeNote && (
-        <p className="side-note faint small scope-note">
-          {scopeNote} on this machine.{" "}
-          <a href="/settings" onClick={onLinkClick({ view: "settings" })}>
-            Change
-          </a>
-        </p>
-      )}
-      {ago && (
-        <p className="side-note faint small" role="status">
-          As of {ago}
-          {loading ? ", refreshing…" : ""}
-        </p>
-      )}
+    <section className="queue" aria-labelledby={needsYou.length > 0 ? "needs-you" : undefined} ref={listRef}>
       {queue && (
         <QueueTools
           queue={queue}
@@ -282,194 +301,212 @@ export function QueueView({
           loading={loading}
           list={listRef}
           first={needsYou[0] ?? fastTrack[0]}
+          now={now}
         />
       )}
-      {error && <p className="banner error side-note">{error}</p>}
-      {queue?.warnings.map((w) => (
-        <p key={w} className="banner side-note">
-          {w}
-        </p>
-      ))}
-
-      {queue && narrowed && needsYou.length === 0 && fastTrack.length === 0 && (view?.total ?? 0) > 0 && (
-        <div className="empty-list">
-          <span className="big">No PRs match.</span>
-          <span className="muted small">
-            {plural(view?.total ?? 0, "PR")} waiting on you, none of them{" "}
-            {search.trim() ? `matching "${search.trim()}"` : "matching these filters"}.
-          </span>
-          <button
-            type="button"
-            className="link-button small"
-            onClick={() => {
-              setSearch("");
-              setNav({ ...nav, filters: {} });
-            }}
-          >
-            Clear filters
-          </button>
-        </div>
-      )}
-
-      {queue && (view?.total ?? 0) === 0 && (
-        <div className="empty-list">
-          <Mark size={40} outline />
-          <span className="big">Nothing is waiting on you.</span>
-          <span className="muted small">No open PRs request your review, directly or through your teams.</span>
-          <button type="button" className="link-button small" onClick={onRefresh} disabled={loading}>
-            {loading ? "Checking…" : "r to refresh now"}
-          </button>
-        </div>
-      )}
-
-      {turns.length > 0 && (
-        <>
-          <div className="list-head">
-            <h2 className="label" id="your-turn">
-              Your turn · {turns.length}
-            </h2>
-            <span className="hint">news on PRs you reviewed</span>
-          </div>
-          <ol className="visually-plain" aria-labelledby="your-turn">
-            {turns.map((item) => {
-              const route = { view: "queue" as const, pr: { repo: item.repo, number: item.number } };
-              return (
-                <li key={item.pr}>
-                  <a
-                    className="fast-row turn-row"
-                    href={routePath(route)}
-                    onClick={onLinkClick(route)}
-                    aria-current={selected === prKey(item) ? "true" : undefined}
-                    data-pr={prKey(item)}
-                  >
-                    <span className="pr-body" style={{ gap: 3 }}>
-                      <span className="fast-title" title={item.title}>
-                        {item.title}
-                      </span>
-                      <span className="turn-news">{item.news.text}</span>
-                      <span className="pr-meta">
-                        <span>
-                          {item.repo} #{item.number}
-                        </span>
-                      </span>
-                    </span>
-                    <span className="wait" title={new Date(item.news.at).toLocaleString()}>
-                      {newsAgo(item.news.at, now)}
-                    </span>
-                  </a>
-                </li>
-              );
-            })}
-          </ol>
-        </>
-      )}
-
-      {needsYou.length > 0 && (
-        <>
-          <div className={`list-head${turns.length > 0 ? " lane" : ""}`}>
-            <h2 className="label" id="needs-you">
-              Needs you · {needsYou.length}
-            </h2>
-            <span className="hint">j k move · b brief · + − x react</span>
-          </div>
-          <ol className="visually-plain" aria-labelledby="needs-you">
-            {needsYou.map((row, i) => (
-              <li key={prKey(row.pr)}>
-                <PrRow
-                  row={row}
-                  rank={view?.rank.get(prKey(row.pr)) ?? i + 1}
-                  selected={selected === prKey(row.pr)}
-                  reaction={reactions[prKey(row.pr)]}
-                  note={reactionNotes[prKey(row.pr)]}
-                  onReact={onReact}
-                  ready={ready?.has(prKey(row.pr).toLowerCase()) ?? false}
-                  drafts={drafts[prKey(row.pr)] ?? 0}
-                  seen={!unseen(row.followUp?.news, seen)}
-                  now={now}
-                />
-              </li>
-            ))}
-          </ol>
-        </>
-      )}
-
-      {fastTrack.length > 0 && (
-        <>
-          <div className="list-head lane">
-            <h2 className="label" id="fast-track">
-              Fast-track · {fastTrack.length}
-            </h2>
-            <span className="hint">small, low risk, CI green</span>
-          </div>
-          <ol className="visually-plain" aria-labelledby="fast-track">
-            {fastTrack.map((row) => {
-              const route = { view: "queue" as const, pr: { repo: row.pr.repo, number: row.pr.number } };
-              return (
-                <li key={prKey(row.pr)}>
-                  <a
-                    className="fast-row"
-                    href={routePath(route)}
-                    onClick={onLinkClick(route)}
-                    aria-current={selected === prKey(row.pr) ? "true" : undefined}
-                    data-pr={prKey(row.pr)}
-                  >
-                    <span className="pr-body" style={{ gap: 3 }}>
-                      <span className="fast-title" title={row.pr.title}>
-                        {row.pr.title}
-                      </span>
-                      <span className="pr-meta">
-                        <span>
-                          {row.pr.repo} #{row.pr.number} · {row.fastTrack}
-                        </span>
-                        {(drafts[prKey(row.pr)] ?? 0) > 0 && (
-                          <span className="chip drafts">{plural(drafts[prKey(row.pr)] ?? 0, "draft")}</span>
-                        )}
-                        <span>
-                          <span className="add">+{row.pr.additions}</span>{" "}
-                          <span className="del">−{row.pr.deletions}</span>
-                        </span>
-                      </span>
-                    </span>
-                    <span className="wait">{formatWait(row.waitingHours)}</span>
-                  </a>
-                </li>
-              );
-            })}
-          </ol>
-        </>
-      )}
-
-      {dismissed.length > 0 && (
-        <div className="list-foot">
-          <span>{dismissed.length} dismissed, until they change ·</span>
-          <button type="button" className="link-button" onClick={() => setShowDismissed((v) => !v)}>
-            {showDismissed ? "hide" : "show"}
-          </button>
-        </div>
-      )}
-      {showDismissed &&
-        dismissed.map((row) => (
-          <div key={prKey(row.pr)} className="fast-row">
-            <span className="pr-body" style={{ gap: 3 }}>
-              <span className="fast-title">{row.pr.title}</span>
-              <span className="pr-meta">
-                {row.pr.repo} #{row.pr.number}
-              </span>
-            </span>
-            {onReact && (
-              <button type="button" className="btn xs" onClick={() => onReact(prKey(row.pr), "dismiss")}>
-                Undo
-              </button>
-            )}
-          </div>
+      <div className="queue-list">
+        {scopeNote && (
+          <p className="side-note faint small scope-note">
+            {scopeNote} on this machine.{" "}
+            <a href="/settings" onClick={onLinkClick({ view: "settings" })}>
+              Change
+            </a>
+          </p>
+        )}
+        {error && <p className="banner error side-note">{error}</p>}
+        {queue?.warnings.map((w) => (
+          <p key={w} className="banner side-note">
+            {w}
+          </p>
         ))}
+
+        {queue && narrowed && needsYou.length === 0 && fastTrack.length === 0 && (view?.total ?? 0) > 0 && (
+          <div className="empty-list">
+            <span className="big">No PRs match.</span>
+            <span className="muted small">
+              {plural(view?.total ?? 0, "PR")} waiting on you, none of them{" "}
+              {search.trim() ? `matching "${search.trim()}"` : "matching these filters"}.
+            </span>
+            <button
+              type="button"
+              className="link-button small"
+              onClick={() => {
+                setSearch("");
+                setNav({ ...nav, filters: {} });
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        {queue && (view?.total ?? 0) === 0 && (
+          <div className="empty-list">
+            <Mark size={40} outline />
+            <span className="big">Nothing is waiting on you.</span>
+            <span className="muted small">No open PRs request your review, directly or through your teams.</span>
+            <button type="button" className="link-button small" onClick={onRefresh} disabled={loading}>
+              {loading ? "Checking…" : "r to refresh now"}
+            </button>
+          </div>
+        )}
+
+        {turns.length > 0 && (
+          <>
+            <h2 className="queue-group turn" id="your-turn" title="News on PRs you reviewed">
+              <span className="turn-dot" aria-hidden="true" />
+              Your turn <span className="n">{turns.length}</span>
+            </h2>
+            <ol className="visually-plain" aria-labelledby="your-turn">
+              {turns.map((item) => (
+                <li key={item.pr}>
+                  <TurnRow item={item} selected={selected === prKey(item)} now={now} />
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+
+        {needsYou.length > 0 && (
+          <>
+            <h2 className="queue-group" id="needs-you">
+              Ranked for you <span className="n">{needsYou.length}</span>
+            </h2>
+            <ol className="visually-plain" aria-labelledby="needs-you">
+              {needsYou.map((row, i) => (
+                <li key={prKey(row.pr)}>
+                  <PrRow
+                    row={row}
+                    rank={sorted ? (view?.rank.get(prKey(row.pr)) ?? i + 1) : undefined}
+                    selected={selected === prKey(row.pr)}
+                    reaction={reactions[prKey(row.pr)]}
+                    note={reactionNotes[prKey(row.pr)]}
+                    onReact={onReact}
+                    ready={ready?.has(prKey(row.pr).toLowerCase()) ?? false}
+                    drafts={drafts[prKey(row.pr)] ?? 0}
+                    seen={!unseen(row.followUp?.news, seen)}
+                    viewer={queue?.viewer}
+                    now={now}
+                  />
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+
+        {fastTrack.length > 0 && (
+          <>
+            <h2 className="queue-group" id="fast-track" title="Small, low risk, CI green">
+              Fast-track <span className="n">{fastTrack.length}</span>
+            </h2>
+            <ol className="visually-plain" aria-labelledby="fast-track">
+              {fastTrack.map((row) => (
+                <li key={prKey(row.pr)}>
+                  <PrRow
+                    row={row}
+                    selected={selected === prKey(row.pr)}
+                    reaction={undefined}
+                    onReact={undefined}
+                    drafts={drafts[prKey(row.pr)] ?? 0}
+                    viewer={queue?.viewer}
+                    fastTrack
+                    now={now}
+                  />
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+
+        {dismissed.length > 0 && (
+          <div className="list-foot">
+            <span>{dismissed.length} dismissed, until they change ·</span>
+            <button type="button" className="link-button" onClick={() => setShowDismissed((v) => !v)}>
+              {showDismissed ? "hide" : "show"}
+            </button>
+          </div>
+        )}
+        {showDismissed &&
+          dismissed.map((row) => (
+            <div key={prKey(row.pr)} className="pr-row dismissed-row">
+              <span className="row-top">
+                <span className="row-title">{row.pr.title}</span>
+                {onReact && (
+                  <button type="button" className="row-act" onClick={() => onReact(prKey(row.pr), "dismiss")}>
+                    Undo
+                  </button>
+                )}
+              </span>
+              <span className="row-meta">
+                <span className="ci-glyph" aria-hidden="true" />
+                <span>
+                  {row.pr.repo} #{row.pr.number} · {row.pr.author ?? "ghost"}
+                </span>
+              </span>
+            </div>
+          ))}
+        {queue && (view?.total ?? 0) > 0 && <p className="queue-foot">j k move · b brief · + − x react</p>}
+      </div>
     </section>
   );
 }
 
+/** A Your turn row: the PR's title, when the news came, and the news itself in teal. */
+function TurnRow({ item, selected, now }: { item: YourTurnItem; selected: boolean; now: number | undefined }) {
+  const route = { view: "queue" as const, pr: { repo: item.repo, number: item.number } };
+  return (
+    <div className={`pr-row turn${selected ? " selected" : ""}`} data-pr={prKey(item)}>
+      <span className="row-top">
+        <a
+          className="row-title stretch"
+          href={routePath(route)}
+          onClick={onLinkClick(route)}
+          aria-current={selected ? "true" : undefined}
+          title={item.title}
+        >
+          {item.title}
+        </a>
+        <span className="row-age" title={new Date(item.news.at).toLocaleString()}>
+          {newsAgo(item.news.at, now).replace(/ ago$/, "")}
+        </span>
+      </span>
+      <span className="row-meta">
+        <span className="ci-glyph" aria-hidden="true" />
+        <span>
+          {item.repo} #{item.number}
+        </span>
+      </span>
+      <span className="row-why">{item.news.text}</span>
+    </div>
+  );
+}
+
+/** The plain flags at the end of a row's mono line. */
+function rowFlags(
+  row: RankedPullRequest,
+  options: { drafts: number; ready: boolean; viewer: string | undefined; fastTrack: boolean },
+) {
+  const { pr } = row;
+  const flags: { text: string; className?: string; title?: string }[] = [];
+  if (options.fastTrack && row.fastTrack) flags.push({ text: row.fastTrack });
+  if (row.followUp?.rereviewRequestedAt !== undefined) flags.push({ text: "re-review", className: "warn" });
+  if (options.drafts > 0) flags.push({ text: `✎ ${options.drafts}`, title: plural(options.drafts, "draft") });
+  const size = sizeFlag(pr);
+  if (size) flags.push({ text: size, title: `${pr.additions + pr.deletions} lines changed` });
+  if (pr.isDraft) flags.push({ text: "draft" });
+  const author = prAuthor(pr, options.viewer);
+  if (author?.kind === "agent") flags.push({ text: "agent" });
+  else if (author?.kind === "bot") flags.push({ text: "bot" });
+  if (row.waitingOnAuthor && pr.author)
+    flags.push({ text: `ping @${pr.author}`, title: "CI failing: ping the author" });
+  if (options.ready) flags.push({ text: "✓ briefed", className: "ok", title: "Briefing ready" });
+  return flags;
+}
+
 function PrRow(props: {
   row: RankedPullRequest;
-  rank: number;
+  /** Alden's rank, shown when the queue is sorted some other way. */
+  rank?: number | undefined;
   selected: boolean;
   reaction: Reaction | undefined;
   note?: string | undefined;
@@ -478,6 +515,8 @@ function PrRow(props: {
   drafts?: number;
   /** Opened in this window: its news is seen. */
   seen?: boolean;
+  viewer?: string | undefined;
+  fastTrack?: boolean;
   now?: number | undefined;
 }) {
   const { row, rank, selected, reaction, note, onReact, ready = false, drafts = 0 } = props;
@@ -491,113 +530,106 @@ function PrRow(props: {
     (r) => !/^waiting \d/.test(r) && !/^CI failing/.test(r) && !isLearnedReason(r) && !isRereviewReason(r),
   );
   const { followUp } = row;
-  const rereview = followUp?.rereviewRequestedAt !== undefined;
-  // What you haven't seen since your review replaces the counts; it stays on the row open now.
+  // What you haven't seen since your review: in teal under the row, as on Your turn. It stays on the row open now.
   const news = followUp?.news && (!props.seen || selected) ? followUp.news : undefined;
   const reviewedLine =
     followUp &&
     (news ? `reviewed ${reviewedAgo(followUp.lastReviewedAt, props.now)}` : followUpLine(followUp, props.now));
+  const flags = rowFlags(row, { drafts, ready, viewer: props.viewer, fastTrack: props.fastTrack === true });
   const react = (r: Reaction) => () => onReact?.(key, r);
+  const open = selected || reaction !== undefined;
   return (
     <div className={`pr-row${selected ? " selected" : ""}${reaction === "dismiss" ? " dismissed" : ""}`} data-pr={key}>
-      <span className="pr-rank">{String(rank).padStart(2, "0")}</span>
-      <span className="pr-body">
+      <span className="row-top">
         <a
-          className="pr-title stretch"
+          className="row-title stretch"
           href={routePath(route)}
           onClick={onLinkClick(route)}
           aria-current={selected ? "true" : undefined}
+          title={pr.title}
         >
-          {pr.isDraft && <span className="chip">Draft</span>} {pr.title}
+          {pr.title}
         </a>
-        <span className="pr-meta">
-          <span>
-            {pr.repo} #{pr.number}
-          </span>
-          <span>{pr.author ?? "ghost"}</span>
-          <span>
-            <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
-          </span>
-        </span>
-        {followUp && reviewedLine && (
-          <span className="followup-line">
-            {rereview && <span className="chip rereview">Re-review</span>}
-            <span>{rereview ? reviewedLine : capitalised(reviewedLine)}</span>
-          </span>
-        )}
-        {news && (
-          <span className="followup-line news">
-            <span className="chip new">New</span>
-            <span>{news.text}</span>
-          </span>
-        )}
-        {(reasons.length > 0 || row.waitingOnAuthor || ready || drafts > 0) && (
-          <span className="pr-chips">
-            {ready && <span className="chip ready">✓ Briefing ready</span>}
-            {drafts > 0 && <span className="chip drafts">{plural(drafts, "draft")}</span>}
-            {row.waitingOnAuthor && pr.author && <span className="chip">CI failing: ping @{pr.author}</span>}
-            {reasons.map((reason) => (
-              <span key={reason} className={isRuleReason(reason) ? "chip rule" : "chip"}>
-                {reason}
-              </span>
-            ))}
-          </span>
-        )}
-        {learned && (
-          <span className={`learned-line${learned.startsWith("ranked lower") ? " down" : ""}`}>
-            <span aria-hidden="true">{learned.startsWith("ranked lower") ? "↓" : "↑"}</span>
-            <span>{learned}</span>
-          </span>
-        )}
-        {onReact && (selected || reaction) && (
-          <span className="reactions">
-            <button
-              type="button"
-              className={`btn xs${reaction === "up" ? " on" : ""}`}
-              aria-pressed={reaction === "up"}
-              onClick={react("up")}
-            >
-              ↑ Useful
-            </button>
-            <button
-              type="button"
-              className={`btn xs${reaction === "down" ? " on" : ""}`}
-              aria-pressed={reaction === "down"}
-              onClick={react("down")}
-            >
-              ↓ Not useful
-            </button>
-            <button
-              type="button"
-              className={`btn xs${reaction === "dismiss" ? " on" : ""}`}
-              aria-pressed={reaction === "dismiss"}
-              onClick={react("dismiss")}
-            >
-              × Dismiss
-            </button>
-            {reaction && (
-              <span className="react-note" role="status">
-                {(reaction !== "dismiss" && note) || REACTED[reaction]}
-              </span>
-            )}
-          </span>
-        )}
-      </span>
-      <span className="pr-side">
-        <span className={`ci ${pr.ci}`} title={`CI ${pr.ci === "none" ? "not set up" : pr.ci}`}>
-          {ci.glyph} {ci.label}
-        </span>
-        <span className={`wait${row.waitingHours >= 24 ? " hot" : ""}`} title={`Waiting ${waitingSince(row)}`}>
+        <span className={`row-age${row.waitingHours >= 24 ? " hot" : ""}`} title={`Waiting ${waitingSince(row)}`}>
           {formatWait(row.waitingHours)}
         </span>
       </span>
+      <span className="row-meta">
+        <span className={`ci-glyph ${pr.ci}`} title={ci.label}>
+          {ci.glyph}
+          <span className="visually-hidden">{ci.label}</span>
+        </span>
+        <span>
+          {pr.repo} #{pr.number} · {pr.author ?? "ghost"}
+        </span>
+        {flags.map((f) => (
+          <span key={f.text} className={`flag${f.className ? ` ${f.className}` : ""}`} title={f.title}>
+            {f.text}
+          </span>
+        ))}
+        {rank !== undefined && (
+          <span className="flag rank" title="Alden's rank">
+            rank {rank}
+          </span>
+        )}
+      </span>
+      {news && <span className="row-why">{news.text}</span>}
+      {open && (
+        <span className="row-open">
+          {selected && learned && (
+            <span className={`row-learned${learned.startsWith("ranked lower") ? " down" : ""}`}>
+              <span aria-hidden="true">{learned.startsWith("ranked lower") ? "↓" : "↑"}</span> {learned}
+            </span>
+          )}
+          {selected && reasons.length > 0 && <span className="row-reasons">{reasons.join(" · ")}</span>}
+          {selected && followUp && reviewedLine && (
+            <span className="row-reasons">{news ? reviewedLine : capitalised(reviewedLine)}</span>
+          )}
+          {onReact && (
+            <span className="reactions">
+              <button
+                type="button"
+                className="row-act"
+                aria-pressed={reaction === "up"}
+                aria-keyshortcuts="+"
+                onClick={react("up")}
+              >
+                Useful
+              </button>
+              <button
+                type="button"
+                className="row-act"
+                aria-pressed={reaction === "down"}
+                aria-keyshortcuts="-"
+                onClick={react("down")}
+              >
+                Not useful
+              </button>
+              <button
+                type="button"
+                className="row-act"
+                aria-pressed={reaction === "dismiss"}
+                aria-keyshortcuts="x"
+                onClick={react("dismiss")}
+              >
+                Dismiss
+              </button>
+              {reaction && (
+                <span className="react-note" role="status">
+                  {(reaction !== "dismiss" && note) || REACTED[reaction]}
+                </span>
+              )}
+            </span>
+          )}
+        </span>
+      )}
     </div>
   );
 }
 
 const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
-/** One filter menu, styled as a chip: its name when off, its value (highlighted) when on. */
+/** One filter: its name beside a menu of values, highlighted when on. */
 function FilterMenu(props: {
   label: string;
   name: string;
@@ -612,19 +644,22 @@ function FilterMenu(props: {
       ? [...props.options, [value, value] as [string, string]]
       : props.options;
   return (
-    <select
-      className={`chip-select${value ? " on" : ""}`}
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">{name}</option>
-      {options.map(([v, text]) => (
-        <option key={v} value={v}>
-          {text}
-        </option>
-      ))}
-    </select>
+    <label className="filter-field">
+      <span>{name}</span>
+      <select
+        className={`chip-select${value ? " on" : ""}`}
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">Any</option>
+        {options.map(([v, text]) => (
+          <option key={v} value={v}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -651,8 +686,8 @@ const DRAFT_OPTIONS: [string, string][] = [
 ];
 
 /**
- * Above the list: the search box (`/`), the filter menus in one row, and a line with the count, the sort and the way
- * back to everything.
+ * Above the list: the search box (`/`), one Filter button whose popover holds every filter and the sort, the collapse
+ * button (`[`), and a line saying how the list is sorted and how old it is (click it, or press r, to refresh).
  */
 function QueueTools(props: {
   queue: RankedQueue;
@@ -668,13 +703,28 @@ function QueueTools(props: {
   loading: boolean;
   list: { current: HTMLElement | null };
   first: RankedPullRequest | undefined;
+  now: number | undefined;
 }) {
   const { queue, nav, onNav, search, onSearch, shown, total, focusSearch, list, first } = props;
   const facets = useMemo(() => queueFacets(queue), [queue]);
   const input = useRef<HTMLInputElement>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterButton = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (focusSearch) input.current?.focus();
   }, [focusSearch]);
+  useEffect(() => {
+    if (!filtersOpen) return;
+    popover.current?.querySelector<HTMLElement>("select")?.focus();
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (popover.current?.contains(target) || filterButton.current?.contains(target)) return;
+      setFiltersOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [filtersOpen]);
   const set =
     <K extends keyof QueueFilters>(key: K) =>
     (value: string) =>
@@ -682,6 +732,7 @@ function QueueTools(props: {
   const filtersOn = activeFilterCount(nav.filters);
   const narrowed = filtersOn > 0 || search.trim() !== "";
   const changed = narrowed || nav.sort !== "rank";
+  const ago = fetchedAgo(queue.fetchedAt, props.now);
 
   // Back to the list: the open PR's row if it's still shown, else the first one. The list may still be catching up
   // with the search (it's deferred), so this waits for a render that has rows, for a moment at most.
@@ -689,8 +740,8 @@ function QueueTools(props: {
   const focusList = () => {
     const root = list.current;
     const target =
-      root?.querySelector<HTMLElement>('[aria-current="true"]') ??
-      root?.querySelector<HTMLElement>(".pr-title, .fast-row");
+      root?.querySelector<HTMLElement>('.queue-list [aria-current="true"]') ??
+      root?.querySelector<HTMLElement>(".queue-list .row-title.stretch");
     target?.focus();
     return target !== null && target !== undefined;
   };
@@ -714,6 +765,18 @@ function QueueTools(props: {
       navigate({ view: "queue", pr: { repo: first.pr.repo, number: first.pr.number } });
     }
   };
+  const closeFilters = () => {
+    setFiltersOpen(false);
+    filterButton.current?.focus();
+  };
+  const onPopoverKey = (event: ReactKeyboardEvent) => {
+    // Keys in the popover stay in it: j, k and [ mean other things on the page.
+    if (event.key !== "Tab") event.nativeEvent.stopPropagation();
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeFilters();
+    }
+  };
 
   const reviewerOptions: [string, string][] = [
     ["direct", "Asked you directly"],
@@ -731,105 +794,165 @@ function QueueTools(props: {
   return (
     <div className="queue-tools">
       <div className="list-tools">
-        <input
-          ref={input}
-          id="queue-search"
-          className="input search"
-          type="search"
-          placeholder="Search title, repo, #, author, branch"
-          aria-label="Search the queue"
-          aria-keyshortcuts="/"
-          value={search}
-          onChange={(e) => onSearch(e.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        {facets.repos.length > 1 && (
-          <FilterMenu
-            label="Repository"
-            name="Repo"
-            value={nav.filters.repo}
-            options={facets.repos.map((r) => [r, r])}
-            onChange={set("repo")}
-          />
-        )}
-        <button
-          type="button"
-          className="btn sm icon"
-          onClick={props.onRefresh}
-          disabled={props.loading}
-          aria-label={props.loading ? "Refreshing…" : "Refresh"}
-          aria-keyshortcuts="r"
-          title="Refresh  r"
-        >
-          <span aria-hidden="true" className={props.loading ? "spin" : undefined}>
-            ↻
+        <span className="search-box">
+          <span className="key" aria-hidden="true">
+            /
           </span>
+          <input
+            ref={input}
+            id="queue-search"
+            className="search"
+            type="search"
+            placeholder={`Search ${plural(total, "PR")}`}
+            aria-label="Search the queue"
+            aria-keyshortcuts="/"
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            onKeyDown={onKeyDown}
+          />
+        </span>
+        <button
+          ref={filterButton}
+          type="button"
+          className={`tool-btn${filtersOn > 0 ? " on" : ""}`}
+          aria-label={filtersOn > 0 ? `Filter, ${filtersOn} on` : undefined}
+          aria-haspopup="dialog"
+          aria-expanded={filtersOpen}
+          aria-controls={filtersOpen ? "queue-filters" : undefined}
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          Filter
+          {filtersOn > 0 && <span className="n">{filtersOn}</span>}
         </button>
         {props.onCollapse && (
           <button
             type="button"
-            className="btn sm icon collapse-queue"
+            className="tool-btn icon collapse-queue"
             onClick={props.onCollapse}
             aria-label="Collapse the queue"
             aria-keyshortcuts="["
             title="Collapse the queue  ["
           >
-            «
+            [
           </button>
         )}
-      </div>
-      {/* biome-ignore lint/a11y/useSemanticElements: a fieldset lays its children out in an anonymous box (see Segmented). */}
-      <div className="filter-row" role="group" aria-label="Filters">
-        <FilterMenu
-          label="Author"
-          name="Author"
-          value={nav.filters.author}
-          options={AUTHOR_OPTIONS}
-          onChange={set("author")}
-        />
-        <FilterMenu
-          label="Review requested of"
-          name="Asked"
-          value={nav.filters.reviewer}
-          options={reviewerOptions}
-          onChange={set("reviewer")}
-        />
-        <FilterMenu
-          label="Assignee"
-          name="Assignee"
-          value={nav.filters.assignee}
-          options={assigneeOptions}
-          onChange={set("assignee")}
-        />
-        {(facets.labels.length > 0 || nav.filters.label) && (
-          <FilterMenu
-            label="Label"
-            name="Label"
-            value={nav.filters.label}
-            options={facets.labels.map((l) => [l, l])}
-            onChange={set("label")}
-          />
+        {filtersOpen && (
+          <div
+            ref={popover}
+            id="queue-filters"
+            className="filter-popover"
+            role="dialog"
+            aria-label="Filters"
+            onKeyDown={onPopoverKey}
+          >
+            {/* biome-ignore lint/a11y/useSemanticElements: a fieldset lays its children out in an anonymous box (see Segmented). */}
+            <div className="filter-grid" role="group" aria-label="Filters">
+              <FilterMenu
+                label="Author"
+                name="Author"
+                value={nav.filters.author}
+                options={AUTHOR_OPTIONS}
+                onChange={set("author")}
+              />
+              <FilterMenu
+                label="Review requested of"
+                name="Asked"
+                value={nav.filters.reviewer}
+                options={reviewerOptions}
+                onChange={set("reviewer")}
+              />
+              <FilterMenu
+                label="Assignee"
+                name="Assignee"
+                value={nav.filters.assignee}
+                options={assigneeOptions}
+                onChange={set("assignee")}
+              />
+              {(facets.labels.length > 0 || nav.filters.label) && (
+                <FilterMenu
+                  label="Label"
+                  name="Label"
+                  value={nav.filters.label}
+                  options={facets.labels.map((l) => [l, l])}
+                  onChange={set("label")}
+                />
+              )}
+              <FilterMenu label="CI" name="CI" value={nav.filters.ci} options={CI_OPTIONS} onChange={set("ci")} />
+              <FilterMenu
+                label="Opened"
+                name="Age"
+                value={nav.filters.age}
+                options={AGE_OPTIONS}
+                onChange={set("age")}
+              />
+              {(facets.repos.length > 1 || nav.filters.repo) && (
+                <FilterMenu
+                  label="Repository"
+                  name="Repo"
+                  value={nav.filters.repo}
+                  options={facets.repos.map((r) => [r, r])}
+                  onChange={set("repo")}
+                />
+              )}
+              {(facets.hasDrafts || nav.filters.drafts) && (
+                <FilterMenu
+                  label="Drafts"
+                  name="Drafts"
+                  value={nav.filters.drafts}
+                  options={DRAFT_OPTIONS}
+                  onChange={set("drafts")}
+                />
+              )}
+              <label className="filter-field">
+                <span>Sort</span>
+                <select
+                  className={`chip-select${nav.sort !== "rank" ? " on" : ""}`}
+                  aria-label="Sort"
+                  value={nav.sort}
+                  onChange={(e) => onNav({ ...nav, sort: e.target.value as QueueSort })}
+                >
+                  {(Object.keys(SORT_LABELS) as QueueSort[]).map((s) => (
+                    <option key={s} value={s}>
+                      {SORT_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="filter-foot">
+              <span className="faint">{narrowed ? `${shown} of ${total}` : plural(total, "PR")}</span>
+              {changed && (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => {
+                    onSearch("");
+                    onNav(DEFAULT_QUEUE_NAV);
+                  }}
+                >
+                  {narrowed && nav.sort !== "rank"
+                    ? "Reset filters and sort"
+                    : narrowed
+                      ? "Clear filters"
+                      : "Reset sort"}
+                </button>
+              )}
+              <button type="button" className="link-button done" onClick={closeFilters}>
+                Done
+              </button>
+            </div>
+          </div>
         )}
-        {(facets.hasDrafts || nav.filters.drafts) && (
-          <FilterMenu
-            label="Drafts"
-            name="Drafts"
-            value={nav.filters.drafts}
-            options={DRAFT_OPTIONS}
-            onChange={set("drafts")}
-          />
-        )}
-        <FilterMenu label="CI" name="CI" value={nav.filters.ci} options={CI_OPTIONS} onChange={set("ci")} />
-        <FilterMenu label="Opened" name="Age" value={nav.filters.age} options={AGE_OPTIONS} onChange={set("age")} />
       </div>
       <div className="count-row">
         <span className="count" role="status">
-          {narrowed ? `${shown} of ${total}` : plural(total, "PR")}
+          Sorted by {SORT_SHORT[nav.sort]}
+          {narrowed ? ` · ${shown} of ${total}` : ""}
         </span>
-        {changed && (
+        {changed && !filtersOpen && (
           <button
             type="button"
-            className="link-button small"
+            className="link-button"
             onClick={() => {
               onSearch("");
               onNav(DEFAULT_QUEUE_NAV);
@@ -838,23 +961,18 @@ function QueueTools(props: {
             {narrowed && nav.sort !== "rank" ? "Reset filters and sort" : narrowed ? "Clear filters" : "Reset sort"}
           </button>
         )}
-        <label className="sort">
-          <span className="faint">Sort</span>
-          <select
-            className={`chip-select${nav.sort !== "rank" ? " on" : ""}`}
-            aria-label="Sort"
-            value={nav.sort}
-            onChange={(e) => onNav({ ...nav, sort: e.target.value as QueueSort })}
-          >
-            {(Object.keys(SORT_LABELS) as QueueSort[]).map((s) => (
-              <option key={s} value={s}>
-                {SORT_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <button
+          type="button"
+          className="as-of"
+          onClick={props.onRefresh}
+          disabled={props.loading}
+          aria-keyshortcuts="r"
+          title="Refresh  r"
+        >
+          {props.loading ? (ago ? `as of ${ago}, refreshing…` : "refreshing…") : `as of ${ago ?? "just now"}`}
+        </button>
       </div>
-      {nav.sort !== "rank" && <p className="sort-note">Sorted within each lane; dismissed stay last.</p>}
+      {nav.sort !== "rank" && <p className="sort-note">Sorted within each group; dismissed stay last.</p>}
     </div>
   );
 }

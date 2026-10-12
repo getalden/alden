@@ -1100,7 +1100,7 @@ describe("sending from the drawer", () => {
 });
 
 describe("drafts on the queue", () => {
-  it("shows a chip on a PR with drafts", () => {
+  it("flags a PR with drafts on its row", () => {
     const row = {
       pr: {
         repo: "acme/api",
@@ -1150,7 +1150,7 @@ describe("drafts on the queue", () => {
         drafts={{ "acme/api#1": 2 }}
       />,
     );
-    expect(screen.getByText("2 drafts")).toBeTruthy();
+    expect(screen.getByText("✎ 2").title).toBe("2 drafts");
   });
 });
 
