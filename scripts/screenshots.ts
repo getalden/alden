@@ -246,7 +246,7 @@ try {
   await shot("guided-dark", {
     path: "/pr/cli/cli/10513",
     brief: true,
-    steps: `await s.key("s"); await s.click("Start guided review"); await s.sleep(800);`,
+    steps: `await s.key("s"); await s.key("g"); await s.sleep(800);`,
   });
   await shot("comments-dark", { path: "/pr/cli/cli/10513", height: 1100, brief: true, steps: `await s.key("[");` });
   await shot("comments-light", {
