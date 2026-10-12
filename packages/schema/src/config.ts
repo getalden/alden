@@ -103,6 +103,17 @@ export const AldenConfigSchema = z.object({
       fromReviews: z.boolean().default(true),
     })
     .prefault({}),
+  stats: z
+    .object({
+      /**
+       * Whether Alden records how long your reviews take, on this machine: when you first open a PR's briefing, active
+       * time, how many flagged places you saw, comments drafted, kept and sent, whether its model helped, the verdict,
+       * and when you sent. Durations and counts only, never what the PR or your comments say. Off records nothing new.
+       * Read from your user config only.
+       */
+      reviewTime: z.boolean().default(true),
+    })
+    .prefault({}),
   updates: z
     .object({
       /** Whether `alden --version` and `alden doctor` say when a newer Alden exists (checked at most once a day). */

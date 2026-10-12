@@ -271,7 +271,7 @@ describe("drafts written before 0.6", () => {
     const { DatabaseSync } = await import("node:sqlite");
     const old = new DatabaseSync(path);
     old.exec("DROP TABLE seen_places; DROP TABLE sent_comments; DROP TABLE outcome_checks;");
-    old.exec("DROP TABLE pr_watch; DROP TABLE follow_ups; DROP TABLE follow_up_events;");
+    old.exec("DROP TABLE pr_watch; DROP TABLE follow_ups; DROP TABLE follow_up_events; DROP TABLE review_sessions;");
     old.exec("ALTER TABLE drafts DROP COLUMN in_reply_to; ALTER TABLE drafts DROP COLUMN resolve;");
     old.exec("ALTER TABLE drafts DROP COLUMN drafted;");
     old.exec("ALTER TABLE drafts DROP COLUMN start_line; ALTER TABLE drafts DROP COLUMN suggestion;");

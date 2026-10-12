@@ -5,6 +5,7 @@ import { MEMORY_SCHEMA_VERSION, MemoryItemSchema } from "./memory.js";
 import { QUEUE_SCHEMA_VERSION, RankedQueueSchema } from "./queue.js";
 import { RANK_SETTINGS_SCHEMA_VERSION, RankSettingsSchema } from "./rank.js";
 import { REVIEW_SCHEMA_VERSION, ReviewDraftSchema } from "./review.js";
+import { REVIEW_TIME_SCHEMA_VERSION, ReviewTimeStatsSchema } from "./review-time.js";
 import { RepoStatsSchema, STATS_SCHEMA_VERSION } from "./stats.js";
 import { TELEMETRY_SCHEMA_VERSION, TelemetryCommonSchema, TelemetryEventSchema } from "./telemetry.js";
 
@@ -52,6 +53,11 @@ export function jsonSchemas(): Record<string, unknown> {
       $id: `https://getalden.dev/schema/repo-stats.v${STATS_SCHEMA_VERSION}.json`,
       title: "Alden repo review stats",
       ...z.toJSONSchema(RepoStatsSchema, { target: "draft-2020-12" }),
+    },
+    [`review-time-stats.v${REVIEW_TIME_SCHEMA_VERSION}.json`]: {
+      $id: `https://getalden.dev/schema/review-time-stats.v${REVIEW_TIME_SCHEMA_VERSION}.json`,
+      title: "Alden time to review (your reviews with Alden, recorded on your machine)",
+      ...z.toJSONSchema(ReviewTimeStatsSchema, { target: "draft-2020-12" }),
     },
     [`review-draft.v${REVIEW_SCHEMA_VERSION}.json`]: {
       $id: `https://getalden.dev/schema/review-draft.v${REVIEW_SCHEMA_VERSION}.json`,

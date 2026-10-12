@@ -12,6 +12,11 @@ export const TELEMETRY_SCHEMA_VERSION = 1;
 const count = z.number().int().min(0);
 const hours = z.number().min(0).nullable();
 
+/** Active minutes on one review, coarsely: the upper bound of each bucket, "60+" for an hour or more. */
+export const ACTIVE_MINUTES_BUCKETS = ["0-2", "2-5", "5-10", "10-20", "20-30", "30-60", "60+"] as const;
+/** From first opening a briefing to sending the review, coarsely. */
+export const WALL_TIME_BUCKETS = ["0-15m", "15-60m", "1-4h", "4-24h", "1-3d", "3d+"] as const;
+
 /** Added to every event. */
 export const TelemetryCommonSchema = z.object({
   schema: z.literal(TELEMETRY_SCHEMA_VERSION),
@@ -150,6 +155,20 @@ export const TelemetryEventSchema = z.discriminatedUnion("event", [
       miss: count.describe("comments where Alden had flagged nothing"),
       applied: count,
       resolved: count,
+    }),
+  }),
+  z.object({
+    event: z.literal("review_timed"),
+    properties: z.object({
+      active_minutes: z.enum(ACTIVE_MINUTES_BUCKETS).describe("active time on the review, as a bucket of minutes"),
+      wall_time: z.enum(WALL_TIME_BUCKETS).describe("first opening the briefing to sending, as a bucket"),
+      measured: z
+        .boolean()
+        .describe("active time measured in the UI; false: from a terminal or AI tool, briefing to send, capped"),
+      places_seen: count.describe("places Alden flagged that were in front of you"),
+      comments: count.describe("comments and replies sent"),
+      model: z.boolean().describe("Alden's model briefed or drafted during the review"),
+      verdict: z.enum(["comment", "approve", "request_changes"]),
     }),
   }),
   z.object({

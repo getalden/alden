@@ -343,6 +343,24 @@ export {
 export { type Declaration, declarationIn, type SignatureChange, signatureChanges } from "./review/signatures.js";
 export { type Check, type CheckOutcome, type GraphContext, type ReviewContext, symbolKey } from "./review/types.js";
 export {
+  addActiveTime,
+  closeReviewSession,
+  dropReviewSession,
+  IDLE_MS,
+  MAX_ACTIVE_REPORT_MS,
+  noteDrafted,
+  noteKept,
+  noteModelUsed,
+  openReviewSession,
+  REVIEW_TIME_HORIZON_HOURS,
+  REVIEW_TIME_KEEP_DAYS,
+  type ReviewSurface,
+  type ReviewTiming,
+  reviewTimeStats,
+  SESSION_STALE_DAYS,
+  TERMINAL_ACTIVE_CAP_MS,
+} from "./stats/review-time.js";
+export {
   DEFAULT_HORIZON_HOURS,
   distribution,
   fetchPullRequestsOpened,
@@ -355,7 +373,15 @@ export {
 } from "./stats/stats.js";
 export { UsageLog } from "./stats/usage.js";
 export { AldenStore, closeStores, MIGRATION_COUNT, openStore } from "./store/db.js";
-export { queueEvent, reviewEvent, signalsEvent, statsEvent } from "./telemetry/events.js";
+export {
+  activeBucket,
+  queueEvent,
+  reviewEvent,
+  reviewTimedEvent,
+  signalsEvent,
+  statsEvent,
+  wallBucket,
+} from "./telemetry/events.js";
 export {
   type Consent,
   configureTelemetry,
@@ -367,6 +393,7 @@ export {
   TELEMETRY_HOST,
   telemetryBlocked,
   telemetryConsent,
+  telemetrySurface,
   track,
 } from "./telemetry/telemetry.js";
 export { checkForUpdate, newerVersion } from "./updates.js";

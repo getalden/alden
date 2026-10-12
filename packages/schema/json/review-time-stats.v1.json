@@ -1,0 +1,217 @@
+{
+  "$id": "https://getalden.dev/schema/review-time-stats.v1.json",
+  "title": "Alden time to review (your reviews with Alden, recorded on your machine)",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "stats.reviewTime: whether Alden is recording review sessions"
+    },
+    "horizonHours": {
+      "type": "number"
+    },
+    "windows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "all": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "reviews sent, opened in the window and old enough to judge"
+              },
+              "activeMedianMinutes": {
+                "description": "median active minutes per review; null without reviews",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "wallMedianMinutes": {
+                "description": "median minutes from first opening the briefing to sending, capped at the horizon",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "estimated": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "reviews whose active time is the terminal's estimate (briefing to send, capped), not measured in the UI"
+              },
+              "small": {
+                "type": "boolean",
+                "description": "fewer than 10 reviews: too few to read much into"
+              }
+            },
+            "required": [
+              "count",
+              "activeMedianMinutes",
+              "wallMedianMinutes",
+              "estimated",
+              "small"
+            ],
+            "additionalProperties": false
+          },
+          "withModel": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "reviews sent, opened in the window and old enough to judge"
+              },
+              "activeMedianMinutes": {
+                "description": "median active minutes per review; null without reviews",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "wallMedianMinutes": {
+                "description": "median minutes from first opening the briefing to sending, capped at the horizon",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "estimated": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "reviews whose active time is the terminal's estimate (briefing to send, capped), not measured in the UI"
+              },
+              "small": {
+                "type": "boolean",
+                "description": "fewer than 10 reviews: too few to read much into"
+              }
+            },
+            "required": [
+              "count",
+              "activeMedianMinutes",
+              "wallMedianMinutes",
+              "estimated",
+              "small"
+            ],
+            "additionalProperties": false,
+            "description": "Alden's model briefed the PR, or drafted for it, during the session"
+          },
+          "withoutModel": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "reviews sent, opened in the window and old enough to judge"
+              },
+              "activeMedianMinutes": {
+                "description": "median active minutes per review; null without reviews",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "wallMedianMinutes": {
+                "description": "median minutes from first opening the briefing to sending, capped at the horizon",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "estimated": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "reviews whose active time is the terminal's estimate (briefing to send, capped), not measured in the UI"
+              },
+              "small": {
+                "type": "boolean",
+                "description": "fewer than 10 reviews: too few to read much into"
+              }
+            },
+            "required": [
+              "count",
+              "activeMedianMinutes",
+              "wallMedianMinutes",
+              "estimated",
+              "small"
+            ],
+            "additionalProperties": false
+          },
+          "excluded": {
+            "type": "object",
+            "properties": {
+              "tooRecent": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "opened less than the horizon ago, sent or not: judged once they're older"
+              },
+              "notSent": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "opened at least the horizon ago and never sent from Alden"
+              }
+            },
+            "required": [
+              "tooRecent",
+              "notSent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "days",
+          "from",
+          "to",
+          "all",
+          "withModel",
+          "withoutModel",
+          "excluded"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "enabled",
+    "horizonHours",
+    "windows"
+  ],
+  "additionalProperties": false
+}

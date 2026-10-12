@@ -96,6 +96,11 @@ export function configureTelemetry(options: { version: string; surface: Telemetr
   context.consent = undefined;
 }
 
+/** Where this process runs, as `configureTelemetry` was told: which surface a briefing was opened on, too. */
+export function telemetrySurface(): TelemetryCommon["surface"] {
+  return context.surface;
+}
+
 function common(store: AldenStore): TelemetryCommon {
   const first = meta(store, "installed_at", () => new Date().toISOString());
   const os = process.platform === "darwin" || process.platform === "linux" || process.platform === "win32";

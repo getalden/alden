@@ -738,6 +738,88 @@
           "properties": {
             "event": {
               "type": "string",
+              "const": "review_timed"
+            },
+            "properties": {
+              "type": "object",
+              "properties": {
+                "active_minutes": {
+                  "type": "string",
+                  "enum": [
+                    "0-2",
+                    "2-5",
+                    "5-10",
+                    "10-20",
+                    "20-30",
+                    "30-60",
+                    "60+"
+                  ],
+                  "description": "active time on the review, as a bucket of minutes"
+                },
+                "wall_time": {
+                  "type": "string",
+                  "enum": [
+                    "0-15m",
+                    "15-60m",
+                    "1-4h",
+                    "4-24h",
+                    "1-3d",
+                    "3d+"
+                  ],
+                  "description": "first opening the briefing to sending, as a bucket"
+                },
+                "measured": {
+                  "type": "boolean",
+                  "description": "active time measured in the UI; false: from a terminal or AI tool, briefing to send, capped"
+                },
+                "places_seen": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "places Alden flagged that were in front of you"
+                },
+                "comments": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "comments and replies sent"
+                },
+                "model": {
+                  "type": "boolean",
+                  "description": "Alden's model briefed or drafted during the review"
+                },
+                "verdict": {
+                  "type": "string",
+                  "enum": [
+                    "comment",
+                    "approve",
+                    "request_changes"
+                  ]
+                }
+              },
+              "required": [
+                "active_minutes",
+                "wall_time",
+                "measured",
+                "places_seen",
+                "comments",
+                "model",
+                "verdict"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event",
+            "properties"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
               "const": "stats_viewed"
             },
             "properties": {

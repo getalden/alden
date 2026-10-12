@@ -24,6 +24,7 @@ import type { GitHubClient } from "../github/client.js";
 import { rememberSentComments, type SentCommentInput } from "../github/outcomes.js";
 import { fetchReviewThreads } from "../github/threads.js";
 import { loadLearning, reviewProgress } from "../learn/learn.js";
+import { closeReviewSession, dropReviewSession, noteDrafted, type ReviewTiming } from "../stats/review-time.js";
 import type { AldenStore } from "../store/db.js";
 import { type StoreSource, storeFrom } from "../store/source.js";
 import { isNear } from "./near.js";
@@ -492,7 +493,17 @@ export class ReviewDrafts {
       at,
       at,
     );
+    this.counted(input.pr, input.source, now);
     return this.get(id) as StoredDraft;
+  }
+
+  /** Counts a new draft in the PR's review session under way, for time to review. Never stops the draft. */
+  private counted(pr: string, source: ReviewDraft["source"], now: Date): void {
+    try {
+      noteDrafted(this.store, pr, source, now);
+    } catch {
+      // only the count is lost
+    }
   }
 
   /**
@@ -630,6 +641,7 @@ export class ReviewDrafts {
       at,
       at,
     );
+    this.counted(input.pr, input.source, now);
     return this.get(id) as StoredDraft;
   }
 
@@ -1172,10 +1184,15 @@ export interface SentCounts {
   signals: Record<ReviewSignalKind, number>;
 }
 
-/** How a sent review teaches Alden: `fromReviews` is the `learning.fromReviews` setting, `seen` what you saw. */
+/**
+ * How a sent review teaches Alden: `fromReviews` is the `learning.fromReviews` setting, `seen` what you saw.
+ * `reviewTime` is the `stats.reviewTime` setting: on (the default), the send ends the PR's review session and the
+ * result carries its `timing`; off, the session under way is dropped.
+ */
 export interface SendLearning {
   fromReviews?: boolean;
   seen?: SeenReader;
+  reviewTime?: boolean;
 }
 
 /**
@@ -1193,7 +1210,7 @@ export async function sendReview(
   input: { repo: string; number: number; event: ReviewEvent; body?: string },
   now: Date = new Date(),
   learning: SendLearning = {},
-): Promise<SendReviewResult & { counts: SentCounts }> {
+): Promise<SendReviewResult & { counts: SentCounts; timing?: ReviewTiming }> {
   const pr = prName(input.repo, input.number);
   const drafts = new ReviewDrafts(store);
   const { headSha, files } = await fetchPullRequestState(client, input.repo, input.number);
@@ -1286,6 +1303,19 @@ export async function sendReview(
     body: { pr, number: input.number, headSha, review: input.event, url, at: now.toISOString(), ...counts },
   });
   drafts.clear(pr);
+  // How long the review took (stats.reviewTime): the session ends here. Never fails the send, which has posted.
+  let timing: ReviewTiming | undefined;
+  try {
+    if (learning.reviewTime === false) dropReviewSession(store, pr, now);
+    else
+      timing = closeReviewSession(
+        store,
+        { pr, verdict: input.event, comments: pending.length + (threads?.replied ?? 0) },
+        now,
+      );
+  } catch {
+    // the review is sent; only its timing is lost
+  }
   return {
     url,
     posted: pending.length + (threads?.replied ?? 0),
@@ -1294,6 +1324,7 @@ export async function sendReview(
     ...(threads?.notResolved.length ? { notResolved: threads.notResolved } : {}),
     ...(lines.length > 0 ? { learning: lines } : {}),
     counts,
+    ...(timing ? { timing } : {}),
   };
 }
 

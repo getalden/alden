@@ -1,6 +1,15 @@
-import type { Briefing, RankedQueue, RepoStats, ReviewSignalEvent, TelemetryProperties } from "@alden/schema";
+import {
+  ACTIVE_MINUTES_BUCKETS,
+  type Briefing,
+  type RankedQueue,
+  type RepoStats,
+  type ReviewSignalEvent,
+  type TelemetryProperties,
+  WALL_TIME_BUCKETS,
+} from "@alden/schema";
 import { signalCounts } from "../feedback/log.js";
 import { languageOf } from "../graph/parser.js";
+import type { ReviewTiming } from "../stats/review-time.js";
 import { repoHash } from "./telemetry.js";
 
 /** A briefing as telemetry: sizes, counts and outcomes, never what the change says or where it is. */
@@ -68,5 +77,37 @@ export function statsEvent(stats: RepoStats): TelemetryProperties<"stats_viewed"
     first_review_after_h: rounded(stats.timeToFirstReview.after?.medianHours),
     cycle_before_h: rounded(stats.cycleTime.before?.medianHours),
     cycle_after_h: rounded(stats.cycleTime.after?.medianHours),
+  };
+}
+
+const MINUTE = 60_000;
+
+/** Active minutes as a coarse bucket: under 2, 2–5, 5–10, 10–20, 20–30, 30–60, an hour or more. */
+export function activeBucket(ms: number): (typeof ACTIVE_MINUTES_BUCKETS)[number] {
+  const bounds = [2, 5, 10, 20, 30, 60];
+  const i = bounds.findIndex((b) => ms < b * MINUTE);
+  return ACTIVE_MINUTES_BUCKETS[
+    i === -1 ? ACTIVE_MINUTES_BUCKETS.length - 1 : i
+  ] as (typeof ACTIVE_MINUTES_BUCKETS)[number];
+}
+
+/** Open-to-send as a coarse bucket: under 15 min, under an hour, 4 hours, a day, 3 days, or more. */
+export function wallBucket(ms: number): (typeof WALL_TIME_BUCKETS)[number] {
+  const bounds = [15, 60, 4 * 60, 24 * 60, 3 * 24 * 60];
+  const i = bounds.findIndex((b) => ms < b * MINUTE);
+  return WALL_TIME_BUCKETS[i === -1 ? WALL_TIME_BUCKETS.length - 1 : i] as (typeof WALL_TIME_BUCKETS)[number];
+}
+
+/** A sent review's timing, in coarse buckets and counts: never which PR, repo or what it said. */
+export function reviewTimedEvent(timing: ReviewTiming): TelemetryProperties<"review_timed"> {
+  return {
+    active_minutes: activeBucket(timing.activeMs),
+    wall_time: wallBucket(timing.wallMs),
+    measured: timing.measured,
+    places_seen: timing.placesSeen,
+    comments: timing.comments,
+    model: timing.model,
+    verdict:
+      timing.verdict === "APPROVE" ? "approve" : timing.verdict === "REQUEST_CHANGES" ? "request_changes" : "comment",
   };
 }
