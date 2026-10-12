@@ -80,7 +80,7 @@ function body(state: State, options: ViewOptions): string[] {
       if (q.error) return problem(q.error, "r tries again · q quits");
       return q.busy ? [`  ${spinner(q.busy, state, now)}`] : [];
     }
-    const { lines, rows } = queueLayout(q.data, q.search, state.width, color);
+    const { lines, rows } = queueLayout(q.data, q.search, state.width, color, now);
     const row = rows[q.selected];
     const marked = lines.map((line, i) => {
       if (row && i === row.start) return `${paint("›", "bold", color)} ${color ? `\u001b[7m${line}\u001b[27m` : line}`;

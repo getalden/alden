@@ -32,6 +32,11 @@ export interface ReviewRequest {
   graph?: boolean;
   model?: string;
   effort?: string;
+  /**
+   * Where you opened it, for learning which queue rows you open: the web UI unless said. The interactive terminal
+   * says "cli". Never taken from the HTTP request.
+   */
+  opened?: "cli" | "ui";
 }
 
 /** One line of a streamed review. */

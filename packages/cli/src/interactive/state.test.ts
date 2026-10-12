@@ -1,6 +1,6 @@
 import type { RankedQueue } from "@alden/schema";
 import { describe, expect, it } from "vitest";
-import { briefing, draft, queue, row, withModel } from "./__fixtures__/fake.js";
+import { briefing, draft, queue, queueWithYourTurn, row, withModel } from "./__fixtures__/fake.js";
 import { wantsInteractive } from "./app.js";
 import { keyFrom } from "./keys.js";
 import { queueLayout } from "./layout.js";
@@ -64,7 +64,7 @@ describe("the queue screen", () => {
   it("searches as you type, by title, repo, #number or author; Esc puts the search back", () => {
     const [typing] = play(loaded(), "/", "l", "e", "e");
     expect(typing.prompt).toEqual({ kind: "search", text: "lee", before: "" });
-    expect(queueLayout(queue, typing.queue.search, 80, false).rows.map((r) => r.item.pr.number)).toEqual([7]);
+    expect(queueLayout(queue, typing.queue.search, 80, false).rows.map((r) => r.pr)).toEqual(["acme/web#7"]);
     expect(play(loaded(), "/", "#", "3", "1", "enter")[0].queue.search).toBe("#31");
     const [kept] = play(loaded(), "/", "a", "p", "i", "enter");
     expect(kept.prompt).toBeUndefined();
@@ -79,6 +79,25 @@ describe("the queue screen", () => {
     expect(state.queue.selected).toBe(0);
     const [, effects] = play(state, "enter", "enter");
     expect(effects).toEqual([{ type: "brief", id: 1, pr: "acme/api#15", llm: false }]);
+  });
+
+  it("puts Your turn first, and briefs one of its PRs on Enter", () => {
+    const state = play(start(), { type: "queue-loaded", queue: queueWithYourTurn })[0];
+    const rows = queueLayout(queueWithYourTurn, "", 80, false).rows;
+    expect(rows.map((r) => [r.pr, r.yourTurn])).toEqual([
+      ["acme/api#3", true],
+      ["acme/api#12", false],
+      ["acme/web#7", false],
+      ["acme/api#31", false],
+      ["acme/api#15", false],
+    ]);
+    expect(play(state, "enter")[1]).toEqual([{ type: "brief", id: 1, pr: "acme/api#3", llm: false }]);
+    expect(play(state, "o")[1]).toEqual([{ type: "open", url: "https://github.com/acme/api/pull/3" }]);
+    // The search covers Your turn too.
+    const [searched] = play(state, "/", "#", "3", "enter");
+    expect(queueLayout(queueWithYourTurn, searched.queue.search, 80, false).rows.map((r) => r.pr)).toEqual([
+      "acme/api#3",
+    ]);
   });
 
   it("says why when the queue couldn't load, and keeps a queue it has when a refresh fails", () => {

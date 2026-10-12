@@ -69,6 +69,21 @@ export const queue: RankedQueue = {
   warnings: [],
 };
 
+/** The queue with Your turn: a PR you reviewed where the author replied. */
+export const queueWithYourTurn: RankedQueue = {
+  ...queue,
+  yourTurn: [
+    {
+      pr: "acme/api#3",
+      repo: "acme/api",
+      number: 3,
+      title: "Cache the price list",
+      url: "https://github.com/acme/api/pull/3",
+      news: { text: "@sam replied to your comment", at: "2026-10-12T08:00:00Z", replies: 1, resolved: 0, outdated: 0, events: ["reply"] },
+    },
+  ],
+};
+
 export function briefing(overrides: Partial<Briefing> = {}): Briefing {
   return {
     schemaVersion: 1,
