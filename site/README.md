@@ -15,6 +15,11 @@ The landing page and the docs, built into `site/dist` and served by Cloudflare P
 - `site/src/assets/og.png` is the social card (1200x630), for the site's `og:image` and GitHub's social preview:
   `pnpm og` renders `scripts/og.html` in headless Chrome with the site's font and `screens/briefing-dark.png`, so
   retake it after the screenshots. GitHub's copy is uploaded by hand: the repo's Settings → General → Social preview.
+- `site/src/assets/demo.gif` is the README's demo (960x600, about 14 s, under 1 MB): `pnpm demo:gif` plays one review
+  over the demo data in headless Chrome (queue, a PR's brief, Walk through, the Comments drawer, the send dialog and
+  Back), samples screenshots at 11 fps and encodes them with gifenc, in pure JS. The README links it at
+  `https://getalden.dev/assets/demo.gif` (the npm package carries the README, so its images need full URLs): it shows
+  once the site is deployed.
 
 ```sh
 pnpm site:build                       # site/dist

@@ -1,12 +1,12 @@
 # Alden
 
+![A 14-second loop of Alden in the browser over recorded public PRs: the ranked queue with Your turn, a cli/cli PR's brief, walking through two places, the Comments drawer, and the send dialog, closed with Back so nothing is sent](https://getalden.dev/assets/demo.gif)
+
 The review companion that knows what you look for. Alden ranks the PRs waiting on you, shows what the diff doesn't (who calls the changed code), and points you at the few places that need your eyes. It learns from your feedback as you go, and it runs on your machine.
 
 > **Status: open beta.** Anyone can install it, and it's free during the beta. Commands and output formats may still
 > change before 1.0. Questions and ideas: the
 > [Alden Community on Discord](https://discord.gg/ZtXFX7sxTu).
-
-![Alden's queue beside a briefing for a Django PR](https://getalden.dev/assets/screens/briefing-dark.png)
 
 ## Install
 
