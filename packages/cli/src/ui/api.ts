@@ -1068,9 +1068,18 @@ export function createUiApi(options: {
     } catch {
       // the database is locked or damaged: the review still stands
     }
-    // Comments drafted from the model's findings, for you to keep, edit or drop: never sent on their own.
+    // Comments drafted from the model's findings, for you to keep, edit or drop: never sent on their own. Not beside
+    // a review thread already on the PR; drafted as before when the threads can't be read.
     try {
-      const { made } = makeAldenDrafts(briefing, diff, { enabled: config.drafts.auto });
+      const { target } = briefing;
+      const threads =
+        target.kind === "pr" && config.drafts.auto && briefing.llm?.status === "ok"
+          ? (await threadsOf({ ...target, name: prName(target.repo, target.number) }).catch(() => undefined))?.threads
+          : undefined;
+      const { made } = makeAldenDrafts(briefing, diff, {
+        enabled: config.drafts.auto,
+        ...(threads ? { threads } : {}),
+      });
       for (const draft of made) void track("draft_changed", { action: "add", source: "alden", inline: inline(draft) });
     } catch {
       // the review stands without drafts

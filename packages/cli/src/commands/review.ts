@@ -5,6 +5,7 @@ import {
   createGitHubClient,
   type DiffFile,
   type Effort,
+  fetchReviewThreads,
   JsonCache,
   loadConfig,
   makeAldenDrafts,
@@ -110,7 +111,8 @@ export function registerReviewCommand(program: Command): void {
           source = resolved.source;
           const learning = await learningFor(ref.repo);
           let diff: DiffFile[] | undefined;
-          briefing = await reviewPullRequest(createGitHubClient(resolved.token), ref.repo, ref.number, config, model, {
+          const client = createGitHubClient(resolved.token);
+          briefing = await reviewPullRequest(client, ref.repo, ref.number, config, model, {
             enabled: options.graph,
             ...(learning ? { learning } : {}),
             onDiff: (files) => {
@@ -125,8 +127,16 @@ export function registerReviewCommand(program: Command): void {
             // the database is locked or damaged: the review still stands
           }
           // Comments drafted from the model's findings, kept until you keep, edit or drop them: never sent on their own.
+          // Not beside a review thread already on the PR; drafted as before when the threads can't be read.
           try {
-            const { made } = makeAldenDrafts(briefing, diff, { enabled: config.drafts.auto });
+            const threads =
+              config.drafts.auto && briefing.llm?.status === "ok"
+                ? (await fetchReviewThreads(client, ref.repo, ref.number, "").catch(() => undefined))?.threads
+                : undefined;
+            const { made } = makeAldenDrafts(briefing, diff, {
+              enabled: config.drafts.auto,
+              ...(threads ? { threads } : {}),
+            });
             drafted = aldenDraftsLine(made.length, `${ref.repo}#${ref.number}`);
           } catch {
             // the review stands without drafts

@@ -1,11 +1,19 @@
 import { createHash } from "node:crypto";
-import type { Briefing, LlmFinding, ReviewDraft, ReviewSignalEvent, ReviewSignalInput, Severity } from "@alden/schema";
+import type {
+  Briefing,
+  LlmFinding,
+  ReviewDraft,
+  ReviewSignalEvent,
+  ReviewSignalInput,
+  ReviewThread,
+  Severity,
+} from "@alden/schema";
 import type { DiffFile } from "../diff/parse.js";
 import { recordReviewSignals } from "../feedback/log.js";
 import { neverQuietened } from "../learn/learn.js";
 import { type StoreSource, storeFrom } from "../store/source.js";
 import { placeOnDiff, prName, ReviewDrafts, type StoredDraft } from "./drafts.js";
-import { isNear } from "./near.js";
+import { isNear, NEAR_LINES } from "./near.js";
 import { SIGNAL_WEIGHTS } from "./signals.js";
 
 /**
@@ -46,10 +54,22 @@ function candidate(finding: LlmFinding, briefing: Briefing) {
   return { finding, draft: finding.draft, path: anchor.path, line: anchor.line };
 }
 
+/** Where a review thread is, for `makeAldenDrafts`: its line now, or the line it started on when it's outdated. */
+export type ThreadPlace = Pick<ReviewThread, "path" | "line" | "originalLine">;
+
+/** Whether a review thread on the PR is near a line: a conversation is already going on there. */
+const threadNear = (threads: ThreadPlace[], path: string, line: number) =>
+  threads.some((t) => {
+    const at = t.line ?? t.originalLine;
+    return t.path === path && at !== null && Math.abs(at - line) <= NEAR_LINES;
+  });
+
 /**
  * Makes the drafts for a PR from its model briefing: for each medium or high finding the model drafted a comment for,
  * highest severity first, a draft on its first anchored line, when that line is one GitHub takes a comment on (see
- * `placeOnDiff`) and no draft of anyone's is near it already (see `isNear`). At most `MAX_ALDEN_DRAFTS`. Alden's
+ * `placeOnDiff`), no draft of anyone's is near it already (see `isNear`), and no review thread on the PR (`threads`,
+ * outdated ones by the line they started on) is near it: a comment there was already said, perhaps by you, and a
+ * second one beside a thread you're replying in is easy to send by mistake. At most `MAX_ALDEN_DRAFTS`. Alden's
  * untouched drafts from the PR's previous briefing are replaced; drafts you kept or edited are yours and never
  * touched. Does nothing unless `enabled` (`drafts.auto`, from your user config), the briefing is a PR's at a known
  * head, and the model's answer came back; and for a PR the injection check flagged it makes none (the briefing says
@@ -58,7 +78,7 @@ function candidate(finding: LlmFinding, briefing: Briefing) {
 export function makeAldenDrafts(
   briefing: Briefing,
   files: DiffFile[] | undefined,
-  options: { enabled: boolean; store?: StoreSource; now?: Date },
+  options: { enabled: boolean; store?: StoreSource; now?: Date; threads?: ThreadPlace[] },
 ): AldenDraftsMade {
   const none = { made: [], replaced: 0 };
   const { target } = briefing;
@@ -87,7 +107,7 @@ export function makeAldenDrafts(
       const place = placeOnDiff(files, c.path, c.line, "RIGHT");
       if ("problem" in place) continue;
       const at = { title: c.finding.title, reason: "", anchor: { path: c.path, line: c.line } };
-      if (drafts.list(pr).some((d) => isNear(d, at))) continue;
+      if (drafts.list(pr).some((d) => isNear(d, at)) || threadNear(options.threads ?? [], c.path, c.line)) continue;
       let draft: StoredDraft;
       try {
         draft = drafts.add(

@@ -200,7 +200,9 @@ Alden**, and the briefing marks each finding it drafted for **Draft ready**. The
 
 - **At most five per PR**, most severe first: only medium and high findings, each on the first line it points at, and
   only on a changed line GitHub takes a comment on. A finding your feedback quietened or dismissed gets none, and none
-  goes where a comment (yours, Claude Code's or Alden's) is already within three lines.
+  goes where a comment (yours, Claude Code's or Alden's) is already within three lines, nor within three lines of a
+  review thread already on the PR (an outdated one by the line it started on): something was said there already,
+  perhaps the same comment you sent last time.
 - **A suggested change** comes with one only when the fix is a small, certain replacement of that line. Alden checks it
   the way it checks yours: it must change the line, apply to it, and be a few lines at most.
 - **Keep**, **Edit** or **Drop** each in the drawer, or **Keep all** / **Drop all** at its top. Keeping or editing one

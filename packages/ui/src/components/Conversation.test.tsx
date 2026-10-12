@@ -214,6 +214,37 @@ describe("the conversation in the Comments drawer", () => {
     await waitFor(() => expect(state.calls).toContain(`THREADS ${PR} refresh`));
   });
 
+  it("starts a reply empty and saves only what you wrote, with Alden's drafts on the thread's line", async () => {
+    const alden = "Log the amount, not the cents.";
+    const { state } = await setup([
+      draft("a1", { path: "src/charge.ts", line: 3, side: "RIGHT", body: alden, source: "alden" }),
+      draft("a2", { path: "src/charge.ts", line: 3, side: "RIGHT", body: alden, source: "you" }),
+    ]);
+    fireEvent.click(within(conversation()).getByRole("button", { name: "Reply in the thread on src/charge.ts:3" }));
+    const box = within(conversation()).getByRole("textbox", { name: "Reply in the thread on src/charge.ts:3" });
+    expect((box as HTMLTextAreaElement).value).toBe("");
+    fireEvent.change(box, { target: { value: "nevermind all good on this one." } });
+    fireEvent.click(within(conversation()).getByRole("button", { name: "Save reply" }));
+    const tick = () => within(conversation()).getAllByRole("checkbox", { name: "Resolve when sent" })[1] as HTMLElement;
+    await waitFor(() => expect(conversation().textContent).toContain("Your reply · posts with your review"));
+    fireEvent.click(tick());
+    await waitFor(() => expect(state.calls.some((c) => c.startsWith("PATCH"))).toBe(true));
+    expect(state.calls.filter((c) => !c.startsWith("THREADS"))).toEqual([
+      `POST ${JSON.stringify({ pr: PR, inReplyTo: "T_others", body: "nevermind all good on this one." })}`,
+      `PATCH r0 ${JSON.stringify({ body: "nevermind all good on this one.", resolve: true })}`,
+    ]);
+    fireEvent.click(
+      within(conversation()).getByRole("button", { name: "Edit your reply in the thread on src/charge.ts:3" }),
+    );
+    expect(
+      (
+        within(conversation()).getByRole("textbox", {
+          name: "Reply in the thread on src/charge.ts:3",
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toBe("nevermind all good on this one.");
+  });
+
   it("drops a reply when its text is discarded and Resolve isn't ticked", async () => {
     const { state } = await setup([draft("r9", { inReplyTo: "T_others", body: "Hm", resolve: false })]);
     await waitFor(() => expect(conversation().textContent).toContain("Your reply · posts with your review"));
