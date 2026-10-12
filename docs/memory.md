@@ -47,8 +47,10 @@ What counts as "PRs like that":
   root for a root-level file), up to the three with the most changed lines. Lockfiles don't count.
 - The **sensitive directories** it touches (from `queue.sensitivePaths`) and **dependency changes**.
 - **Who wrote it**: you, people, bots or AI agents ("you usually skip bot PRs"), and which bot or agent ("you usually
-  open Copilot PRs first"), or which person. See [Bots and AI agents](queue.md#bots-and-ai-agents) for how they're told
-  apart.
+  open Claude PRs first"), or which person. An agent's PR a person opened (from the agent's branch, or with the
+  agent's marker in its description or last commit) counts for the agent and for that person. When a PR teaches two
+  lessons equally, the reason names who wrote it ("Dependabot PRs") over where it changes ("PRs touching web"). See
+  [Bots and AI agents](queue.md#bots-and-ai-agents) for how they're told apart.
 - Its **labels**.
 
 PRs opened before code areas and authors were learned keep what they were recorded with, so lessons learned before
