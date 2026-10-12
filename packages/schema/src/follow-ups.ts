@@ -54,6 +54,30 @@ export const ReviewThreadsSchema = z.object({
   threads: z.array(ReviewThreadSchema),
 });
 
+/**
+ * What happened on a PR you reviewed that you haven't seen yet (you haven't opened the PR in Alden since), at the PR's
+ * follow-up level: the "Your turn" group in the queue, or the line on its row when the PR is in the queue already.
+ */
+export const FollowUpNewsSchema = z.object({
+  text: z.string().describe("one plain line, e.g. 'Ana replied to 2 of your comments · 1 resolved'"),
+  at: z.iso.datetime().describe("when the newest of it happened, or when Alden saw it (GitHub gives resolves no time)"),
+  replies: z.number().int().min(0).describe("your threads with a reply you haven't seen"),
+  resolved: z.number().int().min(0).describe("your threads resolved by someone else"),
+  outdated: z.number().int().min(0).describe("your threads a push made outdated"),
+  thread: z.string().optional().describe("the review thread the newest of it is in (its node id), to open on"),
+  events: z.array(z.string()).describe("the follow-up event ids it covers"),
+});
+
+/** A PR in the queue's "Your turn" group: you reviewed it, it isn't in your queue, and something happened since. */
+export const YourTurnItemSchema = z.object({
+  pr: z.string().describe('"owner/repo#123"'),
+  repo: z.string(),
+  number: z.number().int(),
+  title: z.string(),
+  url: z.string(),
+  news: FollowUpNewsSchema,
+});
+
 /** The state of a PR you reviewed, for the queue row and the briefing header. */
 export const FollowUpSummarySchema = z.object({
   pr: z.string().describe('"owner/repo#123"'),
@@ -68,6 +92,7 @@ export const FollowUpSummarySchema = z.object({
     .int()
     .min(0)
     .describe("of yours, unresolved but with a reply from someone else after your last word"),
+  news: FollowUpNewsSchema.optional().describe("what happened since that you haven't seen, at the PR's level"),
 });
 
 export const FollowUpEventKindSchema = z.enum(["rereview", "reply", "resolved", "outdated", "your-turn"]);
@@ -81,6 +106,8 @@ export const FollowUpEventSchema = z.object({
   kind: FollowUpEventKindSchema,
   at: z.iso.datetime(),
   text: z.string().describe("one plain line, e.g. 'Ana replied to your comment on src/pay.ts:40'"),
+  thread: z.string().optional().describe("the review thread it's in (its node id); absent on re-reviews"),
+  by: z.string().optional().describe("who replied, on a reply"),
 });
 
 /** One notification: every event a check found on one PR, already filtered by that PR's level. */
@@ -112,6 +139,8 @@ export type ReviewThreadComment = z.infer<typeof ReviewThreadCommentSchema>;
 export type ReviewThread = z.infer<typeof ReviewThreadSchema>;
 export type ReviewThreads = z.infer<typeof ReviewThreadsSchema>;
 export type FollowUpSummary = z.infer<typeof FollowUpSummarySchema>;
+export type FollowUpNews = z.infer<typeof FollowUpNewsSchema>;
+export type YourTurnItem = z.infer<typeof YourTurnItemSchema>;
 export type FollowUpEventKind = z.infer<typeof FollowUpEventKindSchema>;
 export type FollowUpEvent = z.infer<typeof FollowUpEventSchema>;
 export type FollowUpNotification = z.infer<typeof FollowUpNotificationSchema>;

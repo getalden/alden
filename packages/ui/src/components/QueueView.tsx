@@ -1,4 +1,4 @@
-import type { CiState, FollowUpSummary, RankedPullRequest, RankedQueue } from "@alden/schema";
+import type { CiState, FollowUpSummary, RankedPullRequest, RankedQueue, YourTurnItem } from "@alden/schema";
 import {
   activeFilterCount,
   DEFAULT_QUEUE_NAV,
@@ -66,6 +66,26 @@ export function followUpLine(followUp: FollowUpSummary, now?: number): string {
   return parts.join(" · ");
 }
 
+/** "3h ago": when the newest of a PR's news happened (or, for a resolve, when Alden saw it). */
+export const newsAgo = (at: string, now: number = Date.now()) =>
+  `${formatWait(Math.max(0, (now - Date.parse(at)) / 3_600_000))} ago`;
+
+/** Whether news has something not seen in this window (`seen`: the follow-up event ids of the PRs opened here). */
+export const unseen = (news: { events: string[] } | undefined, seen: ReadonlySet<string> | undefined) =>
+  news?.events.some((id) => !seen?.has(id)) === true;
+
+/**
+ * Your turn as the window shows it: a PR you opened here leaves it (the server has its news as seen), except the one
+ * open now, which stays put until you move on. Anything newer brings it back.
+ */
+export function visibleTurns(
+  items: YourTurnItem[] | undefined,
+  seen: ReadonlySet<string> | undefined,
+  selected: string | undefined,
+): YourTurnItem[] {
+  return (items ?? []).filter((i) => unseen(i.news, seen) || prKey(i) === selected);
+}
+
 /** Sort orders as the menu names them; the note under the tools says the rest. */
 export const SORT_LABELS: Record<QueueSort, string> = {
   rank: "Alden's rank",
@@ -122,13 +142,18 @@ interface QueueViewProps {
   ready?: Set<string>;
   /** Unsent comments by PR ("owner/repo#12"), for the PRs opened in this window. */
   drafts?: Record<string, number>;
+  /** The follow-up events of the PRs opened in this window: seen, so their news leaves Your turn and the rows. */
+  seen?: ReadonlySet<string>;
   /** This machine's queue scope, shown so a narrowed queue never looks like an empty one. */
   scope?: { orgs: string[]; repos: string[]; ignore: string[] } | undefined;
   /** For tests: the time the queue's age is measured from. */
   now?: number;
 }
 
-/** The PRs waiting on you: "Needs you", ranked, then "Fast-track". Every row says why it ranks where it does. */
+/**
+ * The PRs waiting on you: "Your turn" (news on PRs you reviewed that aren't in the queue), "Needs you", ranked, then
+ * "Fast-track". Every row says why it ranks where it does.
+ */
 export function QueueView({
   queue,
   error,
@@ -149,6 +174,7 @@ export function QueueView({
   reactionNotes = {},
   ready,
   drafts = {},
+  seen,
   scope,
   now,
 }: QueueViewProps) {
@@ -169,6 +195,8 @@ export function QueueView({
   const dismissed = view?.dismissed ?? [];
   const narrowed = activeFilterCount(nav.filters) > 0 || search.trim() !== "";
   const listRef = useRef<HTMLElement>(null);
+  // Filters and search narrow the queue, not Your turn: it's short, and it's news.
+  const turns = visibleTurns(queue?.yourTurn, seen, selected);
 
   if (signedOut && signIn) return <>{signIn}</>;
   if (signedOut) {
@@ -294,9 +322,51 @@ export function QueueView({
         </div>
       )}
 
-      {needsYou.length > 0 && (
+      {turns.length > 0 && (
         <>
           <div className="list-head">
+            <h2 className="label" id="your-turn">
+              Your turn · {turns.length}
+            </h2>
+            <span className="hint">news on PRs you reviewed</span>
+          </div>
+          <ol className="visually-plain" aria-labelledby="your-turn">
+            {turns.map((item) => {
+              const route = { view: "queue" as const, pr: { repo: item.repo, number: item.number } };
+              return (
+                <li key={item.pr}>
+                  <a
+                    className="fast-row turn-row"
+                    href={routePath(route)}
+                    onClick={onLinkClick(route)}
+                    aria-current={selected === prKey(item) ? "true" : undefined}
+                    data-pr={prKey(item)}
+                  >
+                    <span className="pr-body" style={{ gap: 3 }}>
+                      <span className="fast-title" title={item.title}>
+                        {item.title}
+                      </span>
+                      <span className="turn-news">{item.news.text}</span>
+                      <span className="pr-meta">
+                        <span>
+                          {item.repo} #{item.number}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="wait" title={new Date(item.news.at).toLocaleString()}>
+                      {newsAgo(item.news.at, now)}
+                    </span>
+                  </a>
+                </li>
+              );
+            })}
+          </ol>
+        </>
+      )}
+
+      {needsYou.length > 0 && (
+        <>
+          <div className={`list-head${turns.length > 0 ? " lane" : ""}`}>
             <h2 className="label" id="needs-you">
               Needs you · {needsYou.length}
             </h2>
@@ -314,6 +384,7 @@ export function QueueView({
                   onReact={onReact}
                   ready={ready?.has(prKey(row.pr).toLowerCase()) ?? false}
                   drafts={drafts[prKey(row.pr)] ?? 0}
+                  seen={!unseen(row.followUp?.news, seen)}
                   now={now}
                 />
               </li>
@@ -405,6 +476,8 @@ function PrRow(props: {
   onReact: ((key: string, reaction: Reaction) => void) | undefined;
   ready?: boolean;
   drafts?: number;
+  /** Opened in this window: its news is seen. */
+  seen?: boolean;
   now?: number | undefined;
 }) {
   const { row, rank, selected, reaction, note, onReact, ready = false, drafts = 0 } = props;
@@ -419,6 +492,11 @@ function PrRow(props: {
   );
   const { followUp } = row;
   const rereview = followUp?.rereviewRequestedAt !== undefined;
+  // What you haven't seen since your review replaces the counts; it stays on the row open now.
+  const news = followUp?.news && (!props.seen || selected) ? followUp.news : undefined;
+  const reviewedLine =
+    followUp &&
+    (news ? `reviewed ${reviewedAgo(followUp.lastReviewedAt, props.now)}` : followUpLine(followUp, props.now));
   const react = (r: Reaction) => () => onReact?.(key, r);
   return (
     <div className={`pr-row${selected ? " selected" : ""}${reaction === "dismiss" ? " dismissed" : ""}`} data-pr={key}>
@@ -441,10 +519,16 @@ function PrRow(props: {
             <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
           </span>
         </span>
-        {followUp && (
+        {followUp && reviewedLine && (
           <span className="followup-line">
             {rereview && <span className="chip rereview">Re-review</span>}
-            <span>{rereview ? followUpLine(followUp, props.now) : capitalised(followUpLine(followUp, props.now))}</span>
+            <span>{rereview ? reviewedLine : capitalised(reviewedLine)}</span>
+          </span>
+        )}
+        {news && (
+          <span className="followup-line news">
+            <span className="chip new">New</span>
+            <span>{news.text}</span>
           </span>
         )}
         {(reasons.length > 0 || row.waitingOnAuthor || ready || drafts > 0) && (

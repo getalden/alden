@@ -3,7 +3,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { type Api, ApiError, type CloneInfo, type Session } from "./api";
 import { MemoryView } from "./components/MemoryView";
 import { ModelSetupDialog } from "./components/ModelSetup";
-import { isLearnedReason, prKey, QueueView, type Reaction, useNavigatedQueue } from "./components/QueueView";
+import { isLearnedReason, prKey, QueueView, type Reaction, unseen, useNavigatedQueue } from "./components/QueueView";
 import { type Choices, initialChoices, ReviewOptions, toRequest } from "./components/ReviewOptions";
 import { ReviewPane } from "./components/ReviewPane";
 import { SettingsView } from "./components/SettingsView";
@@ -53,6 +53,10 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
     [],
   );
   const [settingUpModel, setSettingUpModel] = useState(false);
+  // The follow-up events of the PRs opened in this window: seen, so they leave Your turn (the server keeps it too).
+  const [seenNews, setSeenNews] = useState<ReadonlySet<string>>(new Set());
+  // Opening a PR with news opens the Comments drawer's Conversation on the thread it's in, once.
+  const [openThread, setOpenThread] = useState<{ pr: string; threadId: string; n: number }>();
   // The flagged places you see, sent to the local API a few at a time (and before the page goes away).
   const seen = useMemo(() => (api ? new SeenBatcher(api.recordSeen) : undefined), [api]);
   useEffect(() => {
@@ -190,6 +194,23 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
   );
 
   const all = [...(queue?.needsYou ?? []), ...(queue?.fastTrack ?? [])];
+  // A PR opened with news you haven't seen: the news is seen now, and its thread opens in the Conversation.
+  const openPr = route.view === "queue" ? route.pr : undefined;
+  const news = openPr
+    ? (queue?.yourTurn?.find((i) => i.repo === openPr.repo && i.number === openPr.number)?.news ??
+      all.find((r) => r.pr.repo === openPr.repo && r.pr.number === openPr.number)?.followUp?.news)
+    : undefined;
+  const newsToSee = unseen(news, seenNews) ? news : undefined;
+  useEffect(() => {
+    if (!api || !openPr || !newsToSee) return;
+    const key = `${openPr.repo}#${openPr.number}`;
+    setSeenNews((all) => new Set([...all, ...newsToSee.events]));
+    if (newsToSee.thread) {
+      const threadId = newsToSee.thread;
+      setOpenThread((was) => ({ pr: key, threadId, n: (was?.n ?? 0) + 1 }));
+    }
+    api.followUpsSeen(key).catch(() => {});
+  }, [api, openPr, newsToSee]);
   // j/k walk the queue as it's shown: filtered, searched and sorted.
   const view = useNavigatedQueue(queue, nav, useDeferredValue(search));
   const visible = view ? [...view.needsYou, ...view.fastTrack] : [];
@@ -297,6 +318,7 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
                 onReact={react}
                 ready={ready}
                 drafts={draftCounts}
+                seen={seenNews}
                 scope={session?.queueScope}
               />
             </aside>
@@ -305,6 +327,7 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
                 <PrPane
                   prRef={current}
                   row={all.find((r) => r.pr.repo === current.repo && r.pr.number === current.number)}
+                  turn={queue?.yourTurn?.find((i) => i.repo === current.repo && i.number === current.number)}
                   session={session}
                   choices={choicesNow}
                   onChoices={setChoices}
@@ -316,6 +339,11 @@ export function App({ api, choseFolder = false }: { api: Api | undefined; choseF
                   cloneOf={api.clone}
                   freshness={api.freshness}
                   onSetUpModel={() => setSettingUpModel(true)}
+                  openThread={
+                    openThread?.pr === `${current.repo}#${current.number}`
+                      ? { threadId: openThread.threadId, n: openThread.n }
+                      : undefined
+                  }
                 />
               ) : (
                 <p className="faint" style={{ margin: "auto", padding: "120px 0", fontSize: 13 }}>
@@ -451,6 +479,8 @@ export function FolderNotice(props: { note: FolderNote; filtered: boolean; onSho
 function PrPane(props: {
   prRef: { repo: string; number: number };
   row: RankedPullRequest | undefined;
+  /** The PR under Your turn, when it's not in the queue: its title and link until the briefing has them. */
+  turn?: { title: string; url: string } | undefined;
   session: Session | undefined;
   choices: Choices;
   onChoices: (choices: Choices) => void;
@@ -466,6 +496,8 @@ function PrPane(props: {
   onSetUpModel?: () => void;
   /** Whether a briefing still matches its PR on GitHub. */
   freshness?: ((target: BriefingTarget) => Promise<BriefingFreshness>) | undefined;
+  /** A review thread to open the Comments drawer's Conversation on: where the news you opened the PR for is. */
+  openThread?: { threadId: string; n: number } | undefined;
 }) {
   const { prRef, row, reviews, session, api, cloneOf, onDraftCount } = props;
   const key = `${prRef.repo}#${prRef.number}`;
@@ -515,7 +547,11 @@ function PrPane(props: {
     <ReviewPane
       crumbs={
         <>
-          <a href={pr?.url ?? `https://github.com/${prRef.repo}/pull/${prRef.number}`} target="_blank" rel="noreferrer">
+          <a
+            href={pr?.url ?? props.turn?.url ?? `https://github.com/${prRef.repo}/pull/${prRef.number}`}
+            target="_blank"
+            rel="noreferrer"
+          >
             {prRef.repo} #{prRef.number} ↗
           </a>
           {pr && (
@@ -526,7 +562,7 @@ function PrPane(props: {
           {props.draftsApi && <WatchBell api={props.draftsApi} pr={key} global={session?.notifications?.followUps} />}
         </>
       }
-      title={pr?.title ?? key}
+      title={pr?.title ?? props.turn?.title ?? key}
       why={
         row
           ? {
@@ -574,6 +610,7 @@ function PrPane(props: {
       guided={props.draftsApi ? { loadDiff: props.draftsApi.diff } : undefined}
       loadDiff={props.draftsApi?.diff}
       reviewedHead={row?.followUp?.lastReviewedHead}
+      openThread={props.openThread}
       assist={
         props.draftsApi
           ? {

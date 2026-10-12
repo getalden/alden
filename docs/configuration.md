@@ -181,7 +181,7 @@ Everything is under `~/.alden` (or `ALDEN_HOME`):
 | `cache/` | GitHub responses, cached briefly, and your last queue (for `alden open` and `alden review <#>`). |
 | `index/` | The code graph's per-file cache. Around 100 MB for a repo the size of Kubernetes. |
 | `worktrees/` | Checkouts of PRs for the code graph, one per repo. |
-| `alden.db` | The local database: feedback, the PRs you open, your notes, your draft comments, the places you saw (90 days), where your sent line comments went (30 days, without their text), model spending, first use per repo, the follow-ups on PRs you reviewed (each thread of yours as last seen, and the news not yet shown; 30 days) and the PRs you gave their own level, queued usage stats, the clone Alden last saw for each repo, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
+| `alden.db` | The local database: feedback, the PRs you open, your notes, your draft comments, the places you saw (90 days), where your sent line comments went (30 days, without their text), model spending, first use per repo, the follow-ups on PRs you reviewed (each thread of yours as last seen, and the news not yet shown or seen in Your turn; 30 days) and the PRs you gave their own level, queued usage stats, the clone Alden last saw for each repo, and this install's anonymous id and salt. See [Learning and memory](memory.md). |
 | `legacy/` | Files from before the database, kept after their one-time import. Safe to delete. |
 
 Deleting any of these is safe, but deleting `alden.db` also deletes your feedback, notes and what Alden learned, and

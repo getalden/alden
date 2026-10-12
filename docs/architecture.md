@@ -40,7 +40,7 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | Method and path | What it does |
 | --- | --- |
 | `GET /api/session` | Alden's version, the folder and repo it runs in, the GitHub user (or, signed out, why: the keychain refused or there's no sign-in), the model and where its key comes from, the budget, and whether it's the desktop app and background briefings are on. |
-| `GET /api/queue` | The ranked queue. `refresh=1` skips the cache; `cached=1` answers with the last queue (up to a day old) at once, if there is one; `repo` and `org` (repeatable) narrow it. |
+| `GET /api/queue` | The ranked queue. `refresh=1` skips the cache; `cached=1` answers with the last queue (up to a day old) at once, if there is one; `repo` and `org` (repeatable) narrow it. A fresh one runs the follow-up check first (as `GET /api/follow-ups` does, sharing its once-a-minute limit; at most 8 seconds) and carries [Your turn](queue.md#your-turn) as `yourTurn`. |
 | `POST /api/review` | Runs a review of `{ pr?, llm?, graph?, model?, effort? }` and streams it as above. No `pr` reviews local changes. A PR's model briefing also makes [Alden's drafts](comments.md#aldens-drafts) unless `drafts.auto` is off. |
 | `POST /api/prepare` | Briefs the next of the top `background.prepare` (3) PRs in Needs you, in your ranked order, in the background. Acts only when started with `--json` (the desktop app) and `background.enabled` is on; asks the model only if `background.model` is true in the user config. |
 | `GET /api/prepared` | Briefings prepared in the background; with `pr=owner/repo#12`, that PR's briefing, unless the PR changed since. |
@@ -71,6 +71,7 @@ core's `onStage` callback), then the `briefing` or an `error`. Any path outside 
 | `POST /api/open` | Desktop app: opens `{ url }` (http or https, never Alden's own page) in the default browser. |
 | `GET /api/follow-ups` | Desktop app: checks the open PRs you reviewed in the last 14 days (one GitHub request to find them, then one per PR whose `updatedAt` moved; at most once a minute) and answers `{ notifications: [{ pr, title, url, text, events }], sound }`: one per PR with news not yet shown, at its level. Read only. |
 | `POST /api/follow-ups/ack` | Marks `{ events }` (the ids a notification covered) shown, so they're never shown again. |
+| `POST /api/follow-ups/seen` | Marks everything on `{ pr }` seen (and shown): you opened it, so it leaves the queue's [Your turn](queue.md#your-turn). |
 | `GET /api/watch` | `pr=owner/repo#12`'s notification level: `{ pr, override?, level }` (`PrWatchSchema`). |
 | `PUT /api/watch` | Sets `pr`'s own level, `{ level: off \| rereview \| your-turn \| every-reply }`, or `{ level: null }` for the global one. |
 | `GET /api/rank` | Settings → Ranking: your weights, rules and `background.prepare`. |

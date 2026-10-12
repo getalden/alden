@@ -60,6 +60,12 @@ and `queue.ignore`; see [Configuration](configuration.md#queue)). See [The revie
 While it works, a spinner on standard error says what it's doing ("Checking acme/shop (2 of 5)…"). It shows only in a
 terminal, and never on standard output, so scripts reading the queue get only the queue.
 
+Above Needs you, **Your turn** lists the PRs you reviewed where something happened you haven't seen, with what and
+when ("Ana replied to 2 of your comments · 1 resolved", "3h ago"). Its rows aren't numbered: open one by name with
+`alden open acme/shop#12` or `alden review acme/shop#12`, and it leaves the list. Finding it costs at most one
+read-only request a minute, shared with the web UI and the desktop app, plus one per PR that changed. See
+[Your turn](queue.md#your-turn).
+
 | Flag | What it does |
 | --- | --- |
 | `--repo <owner/name>` | Only this repo, instead of your queue settings for this run. Repeat for more. |
@@ -71,7 +77,7 @@ terminal, and never on standard output, so scripts reading the queue get only th
 | `--label <name>` | Only PRs with this label (any case). |
 | `--search <text>` | Only PRs whose title, repo, `#number`, author or branch names contain every word. |
 | `--sort <order>` | `rank` (the default), `age` (open longest first), `waiting` (waited on you longest first), `updated` (most recent first) or `size` (smallest first). Sorts inside Needs you and Fast-track separately. |
-| `--json` | Print the ranked queue as JSON. Schema: `packages/schema/json/ranked-queue.v1.json`. With the flags above, only what they leave. |
+| `--json` | Print the ranked queue as JSON. Schema: `packages/schema/json/ranked-queue.v1.json`. With the flags above, only what they leave (`--repo` and `--org` narrow `yourTurn` too; the others don't). |
 | `--explain` | Under each row, its score by weight and rule, named as `[queue.rank]` names them: `score 6: waiting +3 · risk +2 · ↑ your rule: payments/ first`. See [Your ranking](queue.md#your-ranking). |
 
 With `--author`, `--label`, `--search` or `--sort`, a line above the table says what's shown ("12 of 144 PRs: label
@@ -81,9 +87,12 @@ db"), and `alden open` and `alden review` take the numbers as shown.
 
 ```sh
 alden open <#>
+alden open <pr>
 ```
 
-Opens a PR from your last `alden queue` in the browser, by its number in that list.
+Opens a PR in the browser: from your last `alden queue` by its number in that list, or by name (`owner/repo#123` or
+its URL), as you open one under [Your turn](queue.md#your-turn). Either way, what happened on it since your review is
+seen, and it leaves Your turn. `alden review <pr>` does the same.
 
 ## alden review
 

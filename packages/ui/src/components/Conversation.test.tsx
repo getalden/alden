@@ -77,14 +77,14 @@ const draft = (id: string, extra: Partial<ReviewDraft> = {}): ReviewDraft => ({
 });
 
 /** The local API's drafts and threads routes, in memory. */
-function fakeApi(start: ReviewDraft[] = []) {
+function fakeApi(start: ReviewDraft[] = [], threads: ReviewThread[] = THREADS) {
   const state = { drafts: [...start], calls: [] as string[] };
   let next = 0;
   const api = {
     drafts: async () => ({ drafts: [...state.drafts], unaddressed: [] }),
     threads: async (pr: string, refresh = false) => {
       state.calls.push(`THREADS ${pr}${refresh ? " refresh" : ""}`);
-      return { schemaVersion: 1, pr, headSha: "abc", viewer: "me", threads: THREADS };
+      return { schemaVersion: 1, pr, headSha: "abc", viewer: "me", threads };
     },
     addDraft: async (input: NewDraft & { pr: string }) => {
       state.calls.push(`POST ${JSON.stringify(input)}`);
@@ -112,7 +112,7 @@ function fakeApi(start: ReviewDraft[] = []) {
   return { api, state };
 }
 
-function Harness({ api }: { api: Api }) {
+function Harness({ api, openThread }: { api: Api; openThread?: { threadId: string; n: number } | undefined }) {
   const comments = useDrafts(api, PR);
   const request = { pr: PR } as ReviewRequest;
   return (
@@ -126,6 +126,7 @@ function Harness({ api }: { api: Api }) {
       request={request}
       emptyHint=""
       comments={comments}
+      openThread={openThread}
     />
   );
 }
@@ -133,9 +134,13 @@ function Harness({ api }: { api: Api }) {
 const drawer = () => screen.getByRole("complementary", { name: "Comments" });
 const conversation = () => within(drawer()).getByRole("region", { name: /^Conversation/ });
 
-async function setup(start: ReviewDraft[] = []) {
-  const fake = fakeApi(start);
-  render(<Harness api={fake.api} />);
+async function setup(
+  start: ReviewDraft[] = [],
+  threads: ReviewThread[] = THREADS,
+  openThread?: { threadId: string; n: number },
+) {
+  const fake = fakeApi(start, threads);
+  render(<Harness api={fake.api} openThread={openThread} />);
   await waitFor(() => expect(within(conversation()).getAllByRole("listitem").length).toBeGreaterThan(0));
   return fake;
 }
@@ -243,6 +248,23 @@ describe("the conversation in the Comments drawer", () => {
         }) as HTMLTextAreaElement
       ).value,
     ).toBe("nevermind all good on this one.");
+  });
+
+  it("opens on the thread a PR was opened for from the queue's news, without starting a reply", async () => {
+    window.sessionStorage.removeItem("alden.comments.drawer");
+    await setup([], THREADS, { threadId: "T_done", n: 1 });
+    // The drawer opens, the resolved thread unfolds, and it's brought into view and focused.
+    const shown = () => conversation().querySelector(".thread.shown");
+    await waitFor(
+      () => {
+        expect(shown()).not.toBeNull();
+        expect(document.activeElement).toBe(shown());
+      },
+      { timeout: 3000 },
+    );
+    expect(shown()?.textContent).toContain("Resolved");
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(within(conversation()).queryByRole("textbox")).toBeNull();
   });
 
   it("drops a reply when its text is discarded and Resolve isn't ticked", async () => {

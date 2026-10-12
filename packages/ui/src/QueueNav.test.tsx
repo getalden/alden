@@ -222,3 +222,52 @@ describe("the queue pane in the app", () => {
     await waitFor(() => expect(prs(container)).toHaveLength(4));
   });
 });
+
+describe("Your turn in the app", () => {
+  it("marks a PR's news seen when you open it, and drops it from Your turn once you move on", async () => {
+    const turn = {
+      pr: "acme/shop#12",
+      repo: "acme/shop",
+      number: 12,
+      title: "Charge in cents",
+      url: "https://github.com/acme/shop/pull/12",
+      news: {
+        text: "Ana replied to your comment",
+        at: "2026-09-28T10:00:00Z",
+        replies: 1,
+        resolved: 0,
+        outdated: 0,
+        thread: "T1",
+        events: ["e1"],
+      },
+    };
+    const seen: string[] = [];
+    const withTurn = new Proxy(
+      {},
+      {
+        get: (_, name) => {
+          if (name === "queue") return async () => ({ ...queue, yourTurn: [turn] });
+          if (name === "followUpsSeen") {
+            return async (pr: string) => {
+              seen.push(pr);
+              return { seen: 1 };
+            };
+          }
+          return (api as unknown as Record<string | symbol, unknown>)[name];
+        },
+      },
+    ) as unknown as Api;
+    const { container } = render(<App api={withTurn} />);
+    await waitFor(() => expect(screen.getByText("Your turn · 1")).toBeTruthy());
+    // Filters narrow the queue, not Your turn.
+    expect(prs(container)).toEqual(["acme/shop#12", "acme/api#1", "acme/web#2", "acme/api#3", "acme/api#4"]);
+    fireEvent.click(container.querySelector('[data-pr="acme/shop#12"]') as HTMLElement);
+    expect(window.location.pathname).toBe("/pr/acme/shop/12");
+    await waitFor(() => expect(seen).toEqual(["acme/shop#12"]));
+    // Still there while it's open.
+    expect(screen.getByText("Your turn · 1")).toBeTruthy();
+    key("j");
+    await waitFor(() => expect(screen.queryByRole("heading", { name: /^Your turn/ })).toBeNull());
+    expect(seen).toEqual(["acme/shop#12"]);
+  });
+});

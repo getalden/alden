@@ -85,7 +85,12 @@ const api: UiApi = {
       calls.push({ method: "followUps.setWatch", args: { pr, level } });
       return { pr, ...(level ? { override: level } : {}), level: level ?? "your-turn" };
     },
-    noteQueue: (queue) => queue,
+    refresh: async () => {},
+    noteQueue: async (queue) => queue,
+    seen: async (pr) => {
+      calls.push({ method: "followUps.seen", args: pr });
+      return { seen: 2 };
+    },
   },
   // Settings → Ranking has its own tests, in rank.test.ts.
   ranking: {
@@ -482,6 +487,15 @@ describe("alden ui server", () => {
       { method: "followUps.setWatch", args: { pr: "a/b#1", level: "every-reply" } },
       { method: "followUps.setWatch", args: { pr: "a/b#1", level: null } },
     ]);
+  });
+
+  it("marks a PR's follow-ups seen when you open it", async () => {
+    const seen = await call("/api/follow-ups/seen", { method: "POST", headers: authed, body: { pr: " a/b#1 " } });
+    expect(JSON.parse(seen.text)).toEqual({ seen: 2 });
+    for (const body of [{}, { pr: "" }, { pr: 12 }]) {
+      expect((await call("/api/follow-ups/seen", { method: "POST", headers: authed, body })).status).toBe(400);
+    }
+    expect(calls).toEqual([{ method: "followUps.seen", args: "a/b#1" }]);
   });
 
   it("validates config changes and reports the engine's errors", async () => {

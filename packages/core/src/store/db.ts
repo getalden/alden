@@ -192,6 +192,15 @@ const MIGRATIONS: ((store: AldenStore) => void)[] = [
       CREATE INDEX follow_up_events_pending ON follow_up_events (notified, at);
     `);
   },
+  (store) => {
+    store.exec(`
+      -- seen once you've opened the PR in Alden: until then it's in the queue's Your turn group, notified or not. What
+      -- happened before this version is taken as seen, so the group starts empty rather than with weeks of news.
+      ALTER TABLE follow_up_events ADD COLUMN seen INTEGER NOT NULL DEFAULT 0;
+      UPDATE follow_up_events SET seen = 1;
+      CREATE INDEX follow_up_events_unseen ON follow_up_events (pr_key, seen);
+    `);
+  },
 ];
 
 /** How many schema changes there are: the database's `user_version` once it's up to date. */

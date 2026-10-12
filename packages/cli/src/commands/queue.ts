@@ -1,6 +1,9 @@
 import {
+  type AldenStore,
   createGitHubClient,
   fetchReviewQueue,
+  fillFollowUpCounts,
+  followUpRows,
   JsonCache,
   loadConfig,
   openStore,
@@ -8,8 +11,10 @@ import {
   queueRows,
   queueScope,
   rankQueue,
+  refreshFollowUps,
   resolveToken,
   track,
+  withYourTurn,
 } from "@alden/core";
 import {
   activeFilterCount,
@@ -30,6 +35,9 @@ import { renderQueue, shouldColor } from "../render/queue.js";
 import { LAST_QUEUE_KEY, type LastQueue } from "./open.js";
 
 const collect = (value: string, previous: string[]) => [...previous, value];
+
+/** How long the queue waits for the follow-up check before it shows what's stored (the check still finishes). */
+const FOLLOW_UP_WAIT_MS = 8_000;
 
 interface QueueCommandOptions {
   json?: boolean;
@@ -140,6 +148,25 @@ export function registerQueueCommand(program: Command): void {
       let ranked: ReturnType<typeof rankQueue>;
       try {
         ranked = rankQueue(queue, config.queue, Date.now(), await learningForQueue(queue));
+        // What happened on the PRs you reviewed: the follow-up check the desktop app runs, with its limits (only PRs
+        // GitHub says changed, at most once a minute). Never fails the queue: what's stored still shows.
+        let store: AldenStore | undefined;
+        try {
+          store = openStore();
+        } catch {
+          // the database is locked or damaged: the queue still stands
+        }
+        if (store) {
+          const global = config.notifications.followUps;
+          progress.update("Checking the PRs you reviewed…");
+          await refreshFollowUps(client, store, { global, queue: followUpRows(ranked), waitMs: FOLLOW_UP_WAIT_MS });
+          try {
+            const scope = queueScope(config, { repos: options.repo, orgs: options.org });
+            ranked = withYourTurn(store, fillFollowUpCounts(store, ranked), { global, scope });
+          } catch {
+            // as above
+          }
+        }
       } finally {
         progress.stop();
       }

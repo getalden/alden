@@ -398,6 +398,10 @@ export class Api {
   /** The desktop app's follow-up check: what to tell you about PRs you reviewed, one notification per PR. */
   followUps = () => this.request<FollowUpNotifications>("/api/follow-ups");
 
+  /** You opened a PR ("owner/repo#12"): what happened on it is seen, and it leaves Your turn. */
+  followUpsSeen = (pr: string) =>
+    this.request<{ seen: number }>("/api/follow-ups/seen", { method: "POST", body: JSON.stringify({ pr }) });
+
   /** A PR's drafts ("owner/repo#12"), and the places Alden flagged that have no comment near them. */
   drafts = (pr: string) => this.request<DraftsResponse>(`/api/drafts?pr=${encodeURIComponent(pr)}`);
 

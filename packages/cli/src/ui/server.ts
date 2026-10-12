@@ -773,6 +773,14 @@ export async function startUiServer(options: UiServerOptions): Promise<UiServer>
         send(res, 200, await api.followUps.ack(events as string[]));
         return;
       }
+      case "POST /api/follow-ups/seen": {
+        const { pr } = await readJsonBody(req);
+        if (typeof pr !== "string" || !pr.trim() || pr.length > 300) {
+          throw new ApiError(400, "Send { pr: owner/repo#12 }, the PR you opened.");
+        }
+        send(res, 200, await api.followUps.seen(pr.trim()));
+        return;
+      }
       case "GET /api/watch":
       case "PUT /api/watch": {
         const pr = url.searchParams.get("pr")?.trim();

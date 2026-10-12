@@ -417,8 +417,26 @@ const api: UiApi = {
       Date.now(),
       (repo) => learned.get(repo.toLowerCase()),
     );
-    lastRows = queueRows(ranked, queueConfig);
-    return ranked;
+    // Your turn: the last Needs you PR, as if you'd reviewed it and Ana answered since (it leaves the queue for it).
+    const turn = ranked.needsYou.at(-1);
+    const shown = turn ? { ...ranked, needsYou: ranked.needsYou.slice(0, -1) } : ranked;
+    lastRows = queueRows(shown, queueConfig);
+    if (!turn) return shown;
+    const at = new Date(Date.now() - 3 * 3_600_000).toISOString();
+    const news = { text: "Ana replied to 2 of your comments · 1 resolved", at, replies: 2, resolved: 1, outdated: 0 };
+    return {
+      ...shown,
+      yourTurn: [
+        {
+          pr: `${turn.pr.repo}#${turn.pr.number}`,
+          repo: turn.pr.repo,
+          number: turn.pr.number,
+          title: turn.pr.title,
+          url: turn.pr.url,
+          news: { ...news, events: ["demo-turn"] },
+        },
+      ],
+    };
   },
   review: async (request, onStage) => {
     const ref = PR_REF.exec(request.pr ?? "");

@@ -158,6 +158,61 @@ describe("QueueView", () => {
     expect(screen.getByText("reviewed 2 days ago · 3 of your 5 comments resolved · 1 reply to you")).toBeTruthy();
   });
 
+  it("puts Your turn above Needs you, and news on a queue row, until you've opened the PR here", () => {
+    const now = Date.parse("2026-09-30T10:00:00Z");
+    const news = (text: string, events: string[]) => ({
+      text,
+      at: "2026-09-30T07:00:00Z",
+      replies: 1,
+      resolved: 0,
+      outdated: 0,
+      events,
+    });
+    const followUp = {
+      pr: "acme/api#1",
+      lastReviewedAt: "2026-09-28T09:00:00Z",
+      rereviewRequestedAt: "2026-09-29T10:00:00Z",
+      yourThreads: 2,
+      resolved: 1,
+      replied: 1,
+      news: news("Bo replied to your comment", ["e2"]),
+    };
+    const turn = {
+      pr: "acme/shop#12",
+      repo: "acme/shop",
+      number: 12,
+      title: "Charge in cents",
+      url: "https://github.com/acme/shop/pull/12",
+      news: news("Ana replied to 2 of your comments · 1 resolved", ["e1"]),
+    };
+    const withNews = { ...queue, needsYou: [row("acme/api", 1, { followUp })], yourTurn: [turn] };
+    const props = { error: undefined, loading: false, onRefresh: noop, now };
+    const { container, rerender } = render(<QueueView {...props} queue={withNews} selected={undefined} />);
+    const headings = screen.getAllByRole("heading").map((h) => h.textContent);
+    expect(headings.slice(0, 2)).toEqual(["Your turn · 1", "Needs you · 1"]);
+    const [first, second] = [...container.querySelectorAll("[data-pr]")] as HTMLElement[];
+    expect(first?.getAttribute("href")).toBe("/pr/acme/shop/12");
+    expect(first?.textContent).toContain("Ana replied to 2 of your comments · 1 resolved");
+    expect(first?.textContent).toContain("3h ago");
+    // The re-review stays in Needs you, with its news on the row instead of the counts.
+    expect(within(second as HTMLElement).getByText("Re-review")).toBeTruthy();
+    expect(within(second as HTMLElement).getByText("reviewed 2 days ago")).toBeTruthy();
+    expect(within(second as HTMLElement).getByText("New").className).toBe("chip new");
+    expect(within(second as HTMLElement).getByText("Bo replied to your comment")).toBeTruthy();
+
+    // Opened here: the open one stays put, the other's news is gone.
+    const seen = new Set(["e1", "e2"]);
+    rerender(<QueueView {...props} queue={withNews} selected="acme/shop#12" seen={seen} />);
+    expect(screen.getByText("Your turn · 1")).toBeTruthy();
+    expect(screen.queryByText("Bo replied to your comment")).toBeNull();
+    rerender(<QueueView {...props} queue={withNews} selected={undefined} seen={seen} />);
+    expect(screen.queryByText(/Your turn/)).toBeNull();
+    // Something newer brings it back.
+    const newer = { ...withNews, yourTurn: [{ ...turn, news: news("Ana replied to your comment", ["e1", "e3"]) }] };
+    rerender(<QueueView {...props} queue={newer} selected={undefined} seen={seen} />);
+    expect(screen.getByText("Ana replied to your comment")).toBeTruthy();
+  });
+
   it("takes Useful, Not useful and Dismiss on the selected row, and says what each does", () => {
     const reactions: string[] = [];
     const { rerender } = render(

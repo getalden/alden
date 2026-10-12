@@ -33,7 +33,7 @@ import { startProgress } from "../progress.js";
 import { renderBriefing } from "../render/briefing.js";
 import { briefingMarkdown } from "../render/markdown.js";
 import { shouldColor } from "../render/style.js";
-import { LAST_QUEUE_KEY, type LastQueue } from "./open.js";
+import { LAST_QUEUE_KEY, type LastQueue, noteFollowUpsSeen } from "./open.js";
 
 interface ReviewOptions {
   json?: boolean;
@@ -121,6 +121,7 @@ export function registerReviewCommand(program: Command): void {
             },
           });
           if (briefing.target.kind === "pr") noteOpened(last?.rows, briefing.target.url, "cli");
+          noteFollowUpsSeen(ref.repo, ref.number);
           // Its places to look, for `alden send` ("you didn't comment on…") and learning from comments.
           try {
             new ReviewDrafts().rememberBriefing(briefing);

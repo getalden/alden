@@ -35,3 +35,16 @@ export {
   type WatchOverride,
   watchOverride,
 } from "./watch.js";
+export {
+  type FollowUpRefresh,
+  followUpRows,
+  followUpsWanted,
+  levelShowsNews,
+  markFollowUpsSeen,
+  newsOf,
+  newsText,
+  refreshFollowUps,
+  repoInScope,
+  unseenNews,
+  withYourTurn,
+} from "./your-turn.js";
