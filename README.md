@@ -1,12 +1,12 @@
 # Alden
 
+![A 14-second loop of Alden in the browser over recorded public PRs: the ranked queue with Your turn, a cli/cli PR's brief, walking through two places, the Comments drawer, and the send dialog, closed with Back so nothing is sent](https://getalden.dev/assets/demo.gif)
+
 The review companion that knows what you look for. Alden ranks the PRs waiting on you, shows what the diff doesn't (who calls the changed code), and points you at the few places that need your eyes. It learns from your feedback as you go, and it runs on your machine.
 
 > **Status: open beta.** Anyone can install it, and it's free during the beta. Commands and output formats may still
 > change before 1.0. Questions and ideas: the
 > [Alden Community on Discord](https://discord.gg/ZtXFX7sxTu).
-
-![Alden's queue beside a briefing for a Django PR](https://getalden.dev/assets/screens/briefing-dark.png)
 
 ## Install
 
@@ -26,8 +26,8 @@ Or download the desktop app's .dmg or a standalone binary for macOS, Linux or Wi
 ## Quickstart
 
 ```sh
-alden auth login   # reuses your GitHub CLI sign-in if you have one
-alden              # the interactive view: queue, briefings, feedback and sending, on one screen
+alden              # first time: sign in, pick a model, see your queue; then the interactive view
+alden auth login   # or sign in on its own (reuses your GitHub CLI sign-in if you have one)
 alden queue        # the PRs waiting on your review, ranked
 alden open 1       # open the top one in your browser
 
@@ -50,11 +50,12 @@ relationships, Blade templates and service config. Local reviews use your workin
 a clone of the PR's repo: the one you run it in, one it has seen you use, or one under `clones.folders`. It fetches the PR into its own worktree under `~/.alden/worktrees`
 (your checkout is never touched). `--no-graph` skips it.
 
-With a model (`alden setup` checks and stores an Anthropic API key, or sets up a local one through Ollama;
-`ANTHROPIC_API_KEY` works too), the review also asks a model what the change
+With a model (`alden setup` checks and stores an Anthropic or OpenAI API key, or sets up a local one through Ollama;
+`ANTHROPIC_API_KEY` or `OPENAI_API_KEY` works too), the review also asks a model what the change
 does, whether it matches its title, and what else deserves a look. Alden keeps only findings that point at real lines
 in the diff, and never lets them displace high-severity checks. Use `--model opus` for one review, or `--no-llm` to
 skip the model. Every call is checked against your caps before it's sent; `alden spend` shows what you've spent.
+`alden ask 1 "Is the retry safe?"` asks it a question about a briefed PR.
 
 ```text
 Needs your eyes

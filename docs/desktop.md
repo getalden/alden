@@ -29,6 +29,8 @@ thinks, and land in your ranked queue. **Skip setup** leaves at any step, and Se
 them back (from the model step, when you're signed in). The terminal's `alden`, signed out, asks the same in the same
 order.
 
+![The first run's first step: Start with the reviews waiting on you, and Continue with GitHub](../site/src/assets/screens/first-run-signin-dark.png)
+
 1. **Sign in.** **Continue with GitHub** shows a one-time code and opens GitHub's page in your browser; the app picks
    up your approval by itself and moves on. Alden asks GitHub for the `repo` and `read:org` scopes: `repo` is read and
    write access to your repositories (Alden only reads PRs, and posts only the reviews you send), `read:org` lets it
@@ -37,8 +39,13 @@ order.
 2. **Model.** "How should Alden think?": your API key (paste an Anthropic or an OpenAI key and Alden detects which,
    checks it with one tiny request and keeps it in your keychain), a local model through Ollama, or checks only. When a
    model already works, **Continue** keeps it. Alden Cloud (beta) has a link to join the list.
+
+   ![How should Alden think? Your API key (Anthropic or OpenAI), a local model through Ollama, or checks only](../site/src/assets/screens/first-run-model-dark.png)
+
 3. **Queue.** How many PRs are waiting on you and the top four, ranked; with background briefings on, the desktop app
    says it's briefing the top ones. **Open the queue** goes there.
+
+   ![32 PRs are waiting on you: the top four, ranked, and Open the queue](../site/src/assets/screens/first-run-queue-dark.png)
 
 ### Sign in
 

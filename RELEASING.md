@@ -48,6 +48,28 @@ to the public [getalden/homebrew-tap](https://github.com/getalden/homebrew-tap) 
    `npm i -g alden@next`, then `alden --version` and `alden doctor`; `brew install --cask getalden/tap/alden-desktop`
    and open Alden from Applications (no Gatekeeper warning, the menu bar shows your queue).
 
+## Launch day
+
+The public launch of 0.9, in order. Nothing here has been done yet; each step is by hand.
+
+1. **Tag.** Version and tag as in [Each release](#each-release) (`pnpm release:version`, commit, `pnpm release:dry-run`,
+   then `git tag v0.9.0 && git push origin v0.9.0`), and wait for the Release workflow.
+2. **Verify.** `pnpm release:verify 0.9.0`, then the checks by hand from step 5 above (Homebrew, npm, the desktop app).
+3. **Flip the repo public.** github.com/getalden/alden → Settings → General → Danger Zone → Change visibility →
+   Public. Look over what becomes public first: the history, issues, Actions logs.
+4. **Merge `launch/open-source`.** That branch holds the README's "Open source" section, as one commit; merge it into
+   main (rebase it first if main has moved).
+5. **Deploy the site with the open-source switch:** `ALDEN_OPEN_SOURCE=1 pnpm site:deploy`. The home page then says
+   "open source, Apache-2.0" and links the repo, and every page's header and footer has a GitHub link (see
+   [site/README.md](site/README.md#open-source-on-launch-day)). Check getalden.dev, and that
+   https://getalden.dev/assets/demo.gif loads, since the README shows it from there. Every deploy after this needs the
+   flag too, until the open-source wording is made the page's own and the switch is removed.
+6. **Upload the social card.** `site/src/assets/og.png` (1200x630, `pnpm og` makes it) in the repo's Settings →
+   General → Social preview.
+7. **Show HN.** Post it once the above is live. Claim only what's built and measured: the benchmark numbers as
+   `/benchmarks/` states them, and nothing about faster reviews (time to review is measured on each machine, and there's
+   no data yet). Alden reviews with you; it doesn't write as you.
+
 ## Locally
 
 ```sh

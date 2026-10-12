@@ -6,9 +6,20 @@ The landing page and the docs, built into `site/dist` and served by Cloudflare P
   its animations (still under reduced motion). Fonts are the same bundled Geist files as the app.
 - The docs are the repo's own `docs/*.md`, rendered by `site/build.ts` in the order `docs/README.md` lists them.
 - `site/src/assets/screens` are real screenshots of `alden ui` over the demo data (checks only, no model), for the home
-  page, the README and the docs: `pnpm screenshots` retakes them; `site/src/assets/og.png` is the social card made from
-  one. Docs pages show them with a relative link, `![alt](../site/src/assets/screens/x.png)`, which works on GitHub and
-  which `build.ts` turns into `/assets/screens/x.png` on the site.
+  page, the README and the docs: `pnpm screenshots` retakes them all (`scripts/screenshots.ts` lists each one and how
+  it's set up; the first run's three steps come from a demo that starts signed out with no model,
+  `ALDEN_DEMO_FIRST_RUN=1 ALDEN_DEMO_NO_MODEL=1 pnpm ui:demo`). Docs pages show them with a relative link,
+  `![alt](../site/src/assets/screens/x.png)`, which works on GitHub and which `build.ts` turns into
+  `/assets/screens/x.png` on the site. After retaking them, check the alt text where each is used still says what it
+  shows (`git grep screens/`).
+- `site/src/assets/og.png` is the social card (1200x630), for the site's `og:image` and GitHub's social preview:
+  `pnpm og` renders `scripts/og.html` in headless Chrome with the site's font and `screens/briefing-dark.png`, so
+  retake it after the screenshots. GitHub's copy is uploaded by hand: the repo's Settings → General → Social preview.
+- `site/src/assets/demo.gif` is the README's demo (960x600, about 14 s, under 1 MB): `pnpm demo:gif` plays one review
+  over the demo data in headless Chrome (queue, a PR's brief, Walk through, the Comments drawer, the send dialog and
+  Back), samples screenshots at 11 fps and encodes them with gifenc, in pure JS. The README links it at
+  `https://getalden.dev/assets/demo.gif` (the npm package carries the README, so its images need full URLs): it shows
+  once the site is deployed.
 
 ```sh
 pnpm site:build                       # site/dist
@@ -30,6 +41,25 @@ If the project ever has to be recreated: `cd site && pnpm dlx wrangler@4 pages p
 
 `_headers` sets a strict Content-Security-Policy: everything is served from the site itself, and the only other host
 a page may talk to is PostHog's EU ingest (`connect-src https://eu.i.posthog.com`), for the page view counts.
+
+## Open source, on launch day
+
+Until launch the site says Alden is "open source after the beta". One switch changes that, at build time:
+
+```sh
+pnpm site:build                       # today: "open source after the beta", no GitHub links
+ALDEN_OPEN_SOURCE=1 pnpm site:build   # launch day: "open source, Apache-2.0" and links to github.com/getalden/alden
+ALDEN_OPEN_SOURCE=1 pnpm site:deploy  # what RELEASING.md's "Launch day" runs, once the repo is public
+```
+
+`HOME_SWAPS` in `build.ts` lists each change to `src/index.html` as exact text, today's and launch day's: the hero's
+kicker, the "source" line under 03 / yours, and a GitHub link in the header and the footer. The docs, benchmarks and
+Alden Cloud pages get the same header and footer link. Without the flag the built home page is `src/index.html` as is,
+and the build stops if any of today's texts can't be found, with or without the flag, so editing that copy means
+updating `HOME_SWAPS` too. The README's own "Open source" section waits on the branch `launch/open-source`.
+
+After launch, make the open-source wording the page's own text and remove the switch, so a deploy without the flag
+can't bring the old wording back.
 
 ## Page view counts
 

@@ -944,6 +944,10 @@ h2.huge {
   padding: 16px 18px;
   overflow-x: auto;
 }
+/* A long path in running text breaks rather than widening a phone's page. */
+.prose :not(pre) > code {
+  overflow-wrap: anywhere;
+}
 .prose pre code {
   background: none;
   border: 0;
@@ -1268,4 +1272,11 @@ pre.has-copy > .copy-btn {
 }
 .cloud .actions {
   margin: 8px 0 16px;
+}
+
+/* The header's GitHub link (ALDEN_OPEN_SOURCE=1 builds) gives way on a phone; the footer has it too. */
+@media (max-width: 480px) {
+  .top nav .wide-only {
+    display: none;
+  }
 }
