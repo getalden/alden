@@ -140,6 +140,13 @@ Settings live in `~/.alden/config.toml`. A repo can override them in `.alden.tom
 [Models, providers and budgets](https://getalden.dev/docs/models/) and
 [Configuration](https://getalden.dev/docs/configuration/).
 
+## Open source
+
+Alden is open source under the [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) license, and developed in the
+open here. Issues, ideas and pull requests are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) has the setup and the
+conventions, and every commit is signed off under the [Developer Certificate of Origin](https://developercertificate.org).
+The single-developer app stays free.
+
 ## Roadmap
 
 The roadmap is the issue tracker: [now](https://github.com/getalden/alden/labels/roadmap%3A%20now),
