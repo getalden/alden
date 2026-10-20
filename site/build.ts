@@ -151,9 +151,17 @@ ${searchDialog}
 const slugOf = (file: string) => (file === "README.md" ? "" : file.replace(/\.md$/, ""));
 const hrefOf = (file: string) => (file === "README.md" ? "/docs/" : `/docs/${slugOf(file)}/`);
 const ASSETS = "../site/src/assets/";
+/** Rendered HTML as its text: tags removed until none are left, and any stray < or > with them. */
+const stripTags = (html: string) => {
+  let text = html;
+  for (let prev = ""; prev !== text; ) {
+    prev = text;
+    text = text.replace(/<[^<>]*>/g, "");
+  }
+  return text.replace(/[<>]/g, "");
+};
 const idOf = (html: string) =>
-  html
-    .replace(/<[^>]+>/g, "")
+  stripTags(html)
     .replace(/&[#\w]+;/g, "")
     .toLowerCase()
     .replace(/[^\w\s-]/g, "")
@@ -225,7 +233,7 @@ const marked = new Marked({
     heading({ tokens, depth }) {
       const text = this.parser.parseInline(tokens);
       const id = idOf(text);
-      if (depth === 2) toc.push({ id, text: text.replace(/<[^>]+>/g, "") });
+      if (depth === 2) toc.push({ id, text: stripTags(text) });
       return `<h${depth} id="${id}">${text}</h${depth}>\n`;
     },
     // A quote that opens with bold words is a callout: a warning for "Warning", "Caution", "Important" or "At a
