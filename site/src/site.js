@@ -84,8 +84,13 @@ for (const box of document.querySelectorAll("[data-copy], .prose pre")) {
       () => {},
     );
   });
-  box.classList.add("has-copy");
-  box.append(button);
+  // A docs code block with a head ("Terminal", "JSON"…) carries its button there.
+  const head = box.closest(".code")?.querySelector(".code-head");
+  if (head) head.append(button);
+  else {
+    box.classList.add("has-copy");
+    box.append(button);
+  }
 }
 
 // --- The landing page's moving parts ------------------------------------------------------------------------------

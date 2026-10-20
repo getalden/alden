@@ -4,7 +4,13 @@ The landing page and the docs, built into `site/dist` and served by Cloudflare P
 
 - `site/src` is the landing page from the "Alden Site v2" Claude Design project: static HTML, CSS and a small script for
   its animations (still under reduced motion). Fonts are the same bundled Geist files as the app.
-- The docs are the repo's own `docs/*.md`, rendered by `site/build.ts` in the order `docs/README.md` lists them.
+- The docs are the repo's own `docs/*.md`, rendered by `site/build.ts` into the frame from the "Alden Docs v3" Claude
+  Design project (`src/docs.css`, `src/docs.js`, `src/theme.js`): the sidebar is the groups under "All pages" in
+  `docs/README.md`, in that order, and the build stops if a doc isn't in one. The rest of `docs/README.md` is the docs
+  home, where its "Start here" list becomes the pathway cards. Search is `/docs/search.json`, built with the site and
+  searched in the browser; "Copy page" copies each page's Markdown from `/docs/<page>/index.md`. The docs, benchmarks
+  and Alden Cloud pages have light and dark themes (the system's, unless the footer's switch picks one); the home
+  page is still dark only.
 - `site/src/assets/screens` are real screenshots of `alden ui` over the demo data (checks only, no model), for the home
   page, the README and the docs: `pnpm screenshots` retakes them all (`scripts/screenshots.ts` lists each one and how
   it's set up; the first run's three steps come from a demo that starts signed out with no model,
