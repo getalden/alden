@@ -1,0 +1,1071 @@
+/*
+  The docs frame, from the "Alden Docs v3" Claude Design project: the docs, /benchmarks/ and /cloud/ (html.dframe).
+  Light and dark, following the system unless the footer's switch picked one (theme.js sets data-theme). The landing
+  page keeps site.css alone. The frame's tokens also answer to site.css's names (--panel, --line2, --acc2…), so the
+  benchmark and Alden Cloud bodies follow the theme too.
+*/
+
+html.dframe {
+  --bg: #121413;
+  --raised: #191c1b;
+  --raised2: #202423;
+  --line: #2b302e;
+  --ink: #eceeec;
+  --ink2: #a7aeaa;
+  --ink3: #858c88;
+  --acc: #2fc7b4;
+  --btn: #14b8a6;
+  --btn-ink: #03201c;
+  --acc-soft: rgba(20, 184, 166, 0.12);
+  --warn: #f2b866;
+  --warn-soft: rgba(242, 184, 102, 0.1);
+  --bad: #f38b7a;
+  --code: #0d0f0e;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.6);
+  --bd:
+    repeating-radial-gradient(ellipse 140% 100% at 18% 120%, transparent 0 21px, rgba(160, 210, 200, 0.075) 21px 22px),
+    repeating-radial-gradient(ellipse 90% 80% at 92% -20%, transparent 0 27px, rgba(160, 210, 200, 0.06) 27px 28px),
+    linear-gradient(160deg, #1d2826, #151b1a);
+  /* site.css's names, for the benchmark and Alden Cloud bodies */
+  --panel: var(--raised);
+  --sunk: var(--code);
+  --line2: var(--line);
+  --acc2: var(--acc);
+  --acc-ink: var(--btn-ink);
+  color-scheme: dark;
+}
+html.dframe[data-theme="light"] {
+  --bg: #f6f5f1;
+  --raised: #edece7;
+  --raised2: #e3e1db;
+  --line: #d8d5ce;
+  --ink: #171a19;
+  --ink2: #4c5450;
+  --ink3: #646b67;
+  --acc: #0b6f67;
+  --btn: #0f766e;
+  --btn-ink: #ffffff;
+  --acc-soft: rgba(15, 118, 110, 0.09);
+  --warn: #8a5300;
+  --warn-soft: rgba(180, 110, 0, 0.09);
+  --bad: #b42318;
+  --code: #fbfaf7;
+  --scrim: rgba(20, 22, 21, 0.35);
+  --shadow: 0 30px 80px -20px rgba(20, 30, 28, 0.25);
+  --bd:
+    repeating-radial-gradient(ellipse 140% 100% at 18% 120%, transparent 0 21px, rgba(15, 90, 80, 0.09) 21px 22px),
+    repeating-radial-gradient(ellipse 90% 80% at 92% -20%, transparent 0 27px, rgba(15, 90, 80, 0.07) 27px 28px),
+    linear-gradient(160deg, #e3ebe8, #d9e3df);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  html.dframe:not([data-theme="dark"]) {
+    --bg: #f6f5f1;
+    --raised: #edece7;
+    --raised2: #e3e1db;
+    --line: #d8d5ce;
+    --ink: #171a19;
+    --ink2: #4c5450;
+    --ink3: #646b67;
+    --acc: #0b6f67;
+    --btn: #0f766e;
+    --btn-ink: #ffffff;
+    --acc-soft: rgba(15, 118, 110, 0.09);
+    --warn: #8a5300;
+    --warn-soft: rgba(180, 110, 0, 0.09);
+    --bad: #b42318;
+    --code: #fbfaf7;
+    --scrim: rgba(20, 22, 21, 0.35);
+    --shadow: 0 30px 80px -20px rgba(20, 30, 28, 0.25);
+    --bd:
+      repeating-radial-gradient(ellipse 140% 100% at 18% 120%, transparent 0 21px, rgba(15, 90, 80, 0.09) 21px 22px),
+      repeating-radial-gradient(ellipse 90% 80% at 92% -20%, transparent 0 27px, rgba(15, 90, 80, 0.07) 27px 28px),
+      linear-gradient(160deg, #e3ebe8, #d9e3df);
+    color-scheme: light;
+  }
+}
+
+/* A -dark screenshot with a -light twin shows the one for the theme. */
+.dframe .shot .on-light {
+  display: none;
+}
+.dframe[data-theme="light"] .shot .on-light {
+  display: block;
+}
+.dframe[data-theme="light"] .shot .on-dark {
+  display: none;
+}
+@media (prefers-color-scheme: light) {
+  .dframe:not([data-theme="dark"]) .shot .on-light {
+    display: block;
+  }
+  .dframe:not([data-theme="dark"]) .shot .on-dark {
+    display: none;
+  }
+}
+
+.dframe body {
+  background: var(--bg);
+  color: var(--ink);
+}
+.dframe a {
+  color: var(--acc);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+.dframe a:hover {
+  color: var(--ink);
+}
+/* site.css's .btn (the Alden Cloud page's), in the frame's colours: the link colour above would otherwise win. */
+.dframe .btn,
+.dframe .btn:hover {
+  background: var(--btn);
+  color: var(--btn-ink);
+  font-weight: 500;
+}
+.dframe .btn.ghost,
+.dframe .btn.ghost:hover {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.dframe .btn.ghost:hover {
+  box-shadow: inset 0 0 0 1px var(--ink3);
+}
+.dframe :focus-visible {
+  outline: 2px solid var(--btn);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.dframe ::selection {
+  background: var(--btn);
+  color: var(--btn-ink);
+}
+.dframe.search-open body {
+  overflow: hidden;
+}
+.dframe [hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: hidden has to win over the display of the search dialog and scrim */
+  display: none !important;
+}
+.icon {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---- Header ------------------------------------------------------------------------------------------------ */
+
+.dtop {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 56px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 20px;
+}
+.dbrand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+}
+.dframe .dbrand,
+.dframe .dbrand:hover {
+  color: var(--ink);
+}
+.dbrand span {
+  font: 600 19px / 1 var(--sans);
+  letter-spacing: -0.04em;
+}
+.dbrand .m-bg {
+  fill: var(--raised);
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+.dbrand .m-a,
+.dbrand .m-in {
+  fill: none;
+  stroke: var(--btn);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dbrand .m-in {
+  stroke-width: 1;
+  opacity: 0.55;
+}
+.dbrand .m-dot {
+  fill: var(--btn);
+}
+.dbrand .m-core {
+  fill: var(--ink);
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  align-self: stretch;
+}
+.dframe .tabs a {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font: 400 14px var(--sans);
+  color: var(--ink2);
+  text-decoration: none;
+}
+.dframe .tabs a:hover {
+  color: var(--ink);
+}
+.dframe .tabs a[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 500;
+  box-shadow: inset 0 -2px 0 var(--btn);
+}
+.search-btn {
+  margin: 0 auto;
+  flex: 0 1 340px;
+  min-width: 0;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  color: var(--ink3);
+  font: 400 13.5px var(--sans);
+  cursor: pointer;
+  text-align: left;
+}
+.search-btn:hover {
+  color: var(--ink2);
+}
+.search-btn span {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dframe kbd {
+  font: 400 11px var(--mono);
+  color: var(--ink3);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+.dtop-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dframe .dtop-end > a:not(.dbtn) {
+  font: 400 14px var(--sans);
+  color: var(--ink2);
+  text-decoration: none;
+  padding: 0 10px;
+}
+.dframe .dtop-end > a:not(.dbtn):hover {
+  color: var(--ink);
+}
+.dframe .dbtn {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: var(--btn);
+  color: var(--btn-ink);
+  font: 500 13.5px var(--sans);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.dframe .dbtn:hover {
+  color: var(--btn-ink);
+  filter: brightness(1.08);
+}
+.menu-btn {
+  display: none;
+  flex: none;
+  height: 34px;
+  width: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  place-items: center;
+  cursor: pointer;
+}
+@media (max-width: 1079px) {
+  .tabs,
+  .dtop-end .wide-only {
+    display: none;
+  }
+}
+@media (max-width: 899px) {
+  .menu-btn {
+    display: grid;
+  }
+}
+@media (max-width: 600px) {
+  .dtop {
+    gap: 12px;
+    padding: 0 16px;
+  }
+  .dbrand span {
+    display: none;
+  }
+  .search-btn kbd {
+    display: none;
+  }
+}
+
+/* ---- Layout: sidebar, article, On this page ---------------------------------------------------------------- */
+
+.dlayout {
+  display: flex;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.docs-side {
+  width: 260px;
+  flex: none;
+  position: sticky;
+  top: 56px;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+  padding: 22px 14px 40px 20px;
+  border-right: 1px solid var(--line);
+}
+.side-head {
+  display: none;
+}
+.grp {
+  margin-bottom: 14px;
+}
+.grp summary {
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ink3);
+  font: 500 12px var(--sans);
+  letter-spacing: 0.02em;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.grp summary::-webkit-details-marker {
+  display: none;
+}
+.grp summary:hover {
+  color: var(--ink2);
+}
+.chev {
+  transition: transform 0.2s;
+}
+.grp[open] > summary .chev {
+  transform: rotate(90deg);
+}
+.grp-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.dframe .grp-items a {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font: 400 14px / 1.35 var(--sans);
+  color: var(--ink2);
+  text-decoration: none;
+}
+.dframe .grp-items a:hover {
+  color: var(--ink);
+}
+.dframe .grp-items a[aria-current="page"] {
+  font-weight: 500;
+  color: var(--acc);
+  background: var(--acc-soft);
+}
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--scrim);
+}
+@media (max-width: 899px) {
+  .docs-side {
+    position: fixed;
+    z-index: 41;
+    top: 0;
+    left: 0;
+    width: min(320px, 86vw);
+    height: 100%;
+    padding: 14px 14px 40px 16px;
+    background: var(--bg);
+    border-right: 1px solid var(--line);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform 0.2s,
+      visibility 0.2s;
+  }
+  .nav-open .docs-side {
+    transform: none;
+    visibility: visible;
+  }
+  .nav-open body {
+    overflow: hidden;
+  }
+  .side-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 4px 14px;
+    font: 500 15px var(--sans);
+  }
+  .side-close {
+    border: 0;
+    background: transparent;
+    color: var(--ink2);
+    font: 400 22px var(--sans);
+    cursor: pointer;
+    width: 44px;
+    height: 44px;
+  }
+  .dframe .grp-items a {
+    padding: 10px 8px;
+  }
+}
+
+.dmain {
+  flex: 1;
+  min-width: 0;
+  padding: clamp(28px, 4vw, 48px) clamp(20px, 4vw, 56px) 96px;
+}
+.rail {
+  width: 232px;
+  flex: none;
+  position: sticky;
+  top: 56px;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+  padding: 48px 20px 40px 8px;
+}
+.rail-t {
+  font: 500 12.5px var(--sans);
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+.rail-toc {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+}
+.dframe .rail-toc a {
+  font: 400 13px / 1.4 var(--sans);
+  color: var(--ink3);
+  text-decoration: none;
+  padding: 5px 0 5px 12px;
+  margin-left: -1px;
+  border-left: 1px solid transparent;
+}
+.dframe .rail-toc a:hover {
+  color: var(--ink);
+}
+.dframe .rail-toc a[aria-current="location"] {
+  color: var(--ink);
+  border-left-color: var(--btn);
+}
+.rail-rule {
+  height: 1px;
+  background: var(--line);
+  margin: 18px 0 14px;
+}
+.copy-page {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink2);
+  font: 400 13px var(--sans);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.copy-page:hover {
+  color: var(--ink);
+}
+.toc-drop {
+  display: none;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--raised);
+}
+.toc-drop summary {
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ink);
+  font: 500 14px var(--sans);
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.toc-drop summary::-webkit-details-marker {
+  display: none;
+}
+.toc-drop .chev {
+  transform: rotate(90deg);
+}
+.toc-drop[open] .chev {
+  transform: rotate(-90deg);
+}
+.toc-drop nav {
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px 12px;
+}
+.dframe .toc-drop nav a {
+  font: 400 14px var(--sans);
+  color: var(--ink2);
+  text-decoration: none;
+  padding: 7px 0;
+}
+@media (max-width: 1239px) {
+  .rail {
+    display: none;
+  }
+  .toc-drop {
+    display: block;
+  }
+}
+
+/* ---- The article ------------------------------------------------------------------------------------------- */
+
+.dframe .prose {
+  color: var(--ink2);
+}
+.dframe .prose h1,
+.dframe .prose h2,
+.dframe .prose h3 {
+  font-weight: 500;
+}
+.dframe .prose pre {
+  background: var(--code);
+  border-color: var(--line);
+}
+.prose.dprose {
+  max-width: 720px;
+  margin: 0 auto;
+  font-size: 16px;
+  line-height: 1.65;
+}
+.solo .prose.dprose {
+  min-height: 50vh;
+}
+.eyebrow {
+  font: 400 13px var(--sans);
+  color: var(--ink3);
+}
+.prose.dprose h1 {
+  margin: 8px 0 0;
+  font: 500 clamp(30px, 3.4vw, 38px) / 1.15 var(--sans);
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+.prose.dprose h1 + p {
+  margin-top: 16px;
+  font-size: 17px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+.prose.dprose h2 {
+  margin: 52px 0 12px;
+  font: 500 22px / 1.3 var(--sans);
+  letter-spacing: -0.015em;
+  scroll-margin-top: 80px;
+}
+.prose.dprose h3 {
+  margin: 32px 0 8px;
+  font: 500 17px / 1.35 var(--sans);
+  letter-spacing: -0.01em;
+  scroll-margin-top: 80px;
+}
+.prose.dprose h4 {
+  margin: 24px 0 6px;
+  font: 500 15px / 1.4 var(--sans);
+  color: var(--ink);
+  scroll-margin-top: 80px;
+}
+.prose.dprose p,
+.prose.dprose ul,
+.prose.dprose ol {
+  margin: 0 0 16px;
+  text-wrap: pretty;
+}
+.prose.dprose li {
+  margin: 5px 0;
+}
+.prose.dprose li::marker {
+  color: var(--ink3);
+}
+.prose.dprose strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+.prose.dprose :not(pre) > code {
+  font: 400 0.86em var(--mono);
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--raised2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.prose.dprose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 40px 0;
+}
+
+/* Code blocks: a head with what it is and the copy button, line numbers on shell blocks of more than one line */
+.prose.dprose .code {
+  position: relative;
+  margin: 0 0 18px;
+  background: var(--code);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.code-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--raised);
+  font: 400 12px var(--mono);
+  color: var(--ink2);
+}
+.dframe .code-head .copy-btn {
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--ink3);
+  font: 400 12px var(--sans);
+}
+.dframe .code-head .copy-btn:hover {
+  color: var(--ink);
+}
+.prose.dprose .code pre {
+  margin: 0;
+  padding: 12px 16px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  overflow-x: auto;
+}
+.prose.dprose .code pre.has-copy {
+  padding-right: 76px;
+}
+.dframe .copy-btn {
+  background: var(--raised);
+  border-color: var(--line);
+  color: var(--ink2);
+}
+.prose.dprose .code pre code {
+  display: block;
+  font: 400 13px / 1.75 var(--mono);
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
+}
+.code .numbered {
+  counter-reset: ln;
+}
+.code .numbered .line::before {
+  counter-increment: ln;
+  content: counter(ln);
+  display: inline-block;
+  width: 14px;
+  margin-right: 16px;
+  text-align: right;
+  color: var(--ink3);
+  user-select: none;
+}
+.code .cm {
+  color: var(--ink3);
+}
+
+/* Tables */
+.prose.dprose .table {
+  margin: 0 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+.prose.dprose .table table {
+  display: table;
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font: 400 14px / 1.5 var(--sans);
+}
+.prose.dprose th {
+  background: var(--raised);
+  font: 500 13px var(--sans);
+  color: var(--ink2);
+  padding: 10px 14px;
+  border: 0;
+}
+.prose.dprose td {
+  padding: 11px 14px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink2);
+}
+.prose.dprose td:first-child {
+  color: var(--ink);
+}
+
+/* Callouts and quotes */
+.callout {
+  position: relative;
+  margin: 0 0 18px;
+  padding: 14px 16px 14px 44px;
+  border-radius: 9px;
+  background: var(--acc-soft);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.callout::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 18px;
+  width: 16px;
+  height: 16px;
+  background: var(--acc);
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6.6' fill='none' stroke='black' stroke-width='1.3'/%3E%3Cpath d='M8 7v4.2M8 4.6v.2' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+.callout.tip::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.6 12.4h4.8M6.4 14.4h3.2M8 1.6a4.6 4.6 0 0 0-2.6 8.4c.5.4.8.9.8 1.5h3.6c0-.6.3-1.1.8-1.5A4.6 4.6 0 0 0 8 1.6Z' fill='none' stroke='black' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.callout.warn {
+  background: var(--warn-soft);
+}
+.callout.warn::before {
+  background: var(--warn);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.8L14.6 13.6H1.4Z' fill='none' stroke='black' stroke-width='1.3' stroke-linejoin='round'/%3E%3Cpath d='M8 6.4v3.4M8 11.6v.2' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.prose.dprose .callout p {
+  margin: 0 0 8px;
+}
+.prose.dprose .callout p:last-child {
+  margin: 0;
+}
+.prose.dprose blockquote {
+  margin: 0 0 18px;
+  border-left: 2px solid var(--line);
+  padding: 2px 0 2px 16px;
+}
+
+/* Screenshots, on the contour backdrop */
+.prose.dprose .shot {
+  display: block;
+  margin: 8px 0 20px;
+  padding: clamp(14px, 3vw, 28px);
+  background: var(--bd);
+  border-radius: 12px;
+}
+.prose.dprose .shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* The docs home's pathway cards */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: 10px;
+  margin: 0 0 16px;
+}
+.dframe .card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  text-decoration: none;
+  color: var(--ink);
+  overflow: hidden;
+}
+.dframe .card:hover {
+  color: var(--ink);
+  border-color: var(--ink3);
+}
+.card-t {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  font: 500 14.5px var(--sans);
+}
+.card-t .icon {
+  color: var(--acc);
+}
+.card-d {
+  padding: 12px 14px 16px;
+  font: 400 14px / 1.5 var(--sans);
+  color: var(--ink2);
+  text-wrap: pretty;
+}
+
+/* Edit on GitHub, the date, previous and next */
+.page-meta {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font: 400 13px var(--sans);
+  color: var(--ink3);
+}
+.dframe .page-meta a {
+  color: var(--ink3);
+  text-decoration: none;
+}
+.dframe .page-meta a:hover {
+  color: var(--ink);
+}
+.pager {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.dframe .pager a {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dframe .pager a:hover {
+  border-color: var(--ink3);
+}
+.pager .next {
+  grid-column: 2;
+  text-align: right;
+}
+.pager span {
+  font: 400 12.5px var(--sans);
+  color: var(--ink3);
+}
+.prose.dprose .pager strong {
+  font: 500 15px var(--sans);
+  color: var(--ink);
+}
+@media (max-width: 560px) {
+  .pager {
+    grid-template-columns: 1fr;
+  }
+  .pager .next {
+    grid-column: 1;
+  }
+}
+
+/* ---- Footer ------------------------------------------------------------------------------------------------ */
+
+.dfoot {
+  border-top: 1px solid var(--line);
+  padding: 28px 20px 40px;
+}
+.dfoot-in {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 28px;
+  font: 400 13px var(--sans);
+  color: var(--ink3);
+}
+.dfoot .word {
+  font: 600 16px var(--sans);
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+.dfoot .links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.dframe .dfoot .links a {
+  color: var(--ink3);
+  text-decoration: none;
+}
+.dframe .dfoot .links a:hover {
+  color: var(--ink);
+}
+.theme {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.theme button {
+  border: 0;
+  background: transparent;
+  color: var(--ink3);
+  font: 400 12.5px var(--sans);
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.theme button:hover {
+  color: var(--ink);
+}
+.theme button[aria-pressed="true"] {
+  background: var(--raised2);
+  color: var(--ink);
+}
+.dfoot .note {
+  margin-left: auto;
+}
+
+/* ---- Search ------------------------------------------------------------------------------------------------ */
+
+.search {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--scrim);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: min(18vh, 140px) 16px 16px;
+}
+.search-box {
+  width: 100%;
+  max-width: 580px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.search-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  height: 52px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink3);
+}
+.search-head input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 400 16px var(--sans);
+  appearance: none;
+}
+.search-head input:focus-visible {
+  outline: 0;
+}
+.search-head input::-webkit-search-cancel-button {
+  display: none;
+}
+.search-head input::placeholder {
+  color: var(--ink3);
+}
+.search-results {
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  padding: 6px;
+}
+.dframe .hit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+.dframe .hit[aria-selected="true"] {
+  background: var(--raised2);
+}
+.hit-crumb {
+  font: 400 12px var(--sans);
+  color: var(--ink3);
+}
+.hit-title {
+  font: 500 14.5px var(--sans);
+  color: var(--ink);
+}
+.hit-snip {
+  font: 400 13px / 1.45 var(--sans);
+  color: var(--ink2);
+}
+.hit mark {
+  background: none;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--acc);
+  text-underline-offset: 3px;
+}
+.hit-snip mark {
+  color: var(--ink);
+}
+.search-empty {
+  padding: 28px 12px;
+  text-align: center;
+  font: 400 14px var(--sans);
+  color: var(--ink3);
+}
+.search-foot {
+  display: flex;
+  gap: 16px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line);
+  font: 400 12px var(--sans);
+  color: var(--ink3);
+}
+.search-foot .right {
+  margin-left: auto;
+}
+@media (max-width: 560px) {
+  .search-foot span:not(.right) {
+    display: none;
+  }
+}
