@@ -1,0 +1,756 @@
+/*
+  The landing page, from the "Alden Site v3" Claude Design project (html.dframe.home). Its colours, the screenshot
+  backdrop, buttons and footer are docs.css's, so it has the same light and dark themes as the docs.
+*/
+
+.home body {
+  font-family: var(--sans);
+}
+.clip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home .acc {
+  color: var(--acc);
+}
+.home .warn {
+  color: var(--warn);
+}
+
+/* ---- Header ------------------------------------------------------------------------------------------------ */
+
+.htop {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in oklab, var(--bg) 86%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+}
+.htop-in {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+.hnav {
+  display: flex;
+  gap: 24px;
+  font: 400 14px var(--sans);
+}
+.dframe .hnav a {
+  color: var(--ink2);
+  text-decoration: none;
+}
+.dframe .hnav a:hover {
+  color: var(--ink);
+}
+.htop-end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.menu-btn.hmenu {
+  display: none;
+  height: 32px;
+}
+@media (max-width: 819px) {
+  .htop-in {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 56px;
+    row-gap: 0;
+  }
+  .htop-in > .dbrand,
+  .htop-end {
+    height: 56px;
+  }
+  .menu-btn.hmenu {
+    display: grid;
+  }
+  .hnav {
+    display: none;
+    order: 3;
+    width: calc(100% + 48px);
+    margin: 0 -24px;
+    padding: 8px 24px 18px;
+    flex-direction: column;
+    gap: 0;
+    font-size: 16px;
+    border-top: 1px solid var(--line);
+  }
+  .menu-open .hnav {
+    display: flex;
+  }
+  .dframe .hnav a {
+    color: var(--ink);
+    padding: 12px 0;
+  }
+}
+
+/* ---- Sections ---------------------------------------------------------------------------------------------- */
+
+.hmain {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.two-tone > span:last-child:not(:first-child) {
+  color: var(--ink2);
+}
+.dframe .hmain a:not(.hbtn):not(.change) {
+  text-decoration: none;
+}
+
+.hero {
+  padding: clamp(56px, 9vw, 104px) 0 40px;
+  max-width: 640px;
+}
+.hero h1 {
+  margin: 0;
+  font: 400 clamp(32px, 4.4vw, 46px) / 1.12 var(--sans);
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+.hero-lede {
+  margin: 18px 0 0;
+  max-width: 540px;
+  font: 400 clamp(16px, 1.6vw, 18px) / 1.55 var(--sans);
+  color: var(--ink2);
+  text-wrap: pretty;
+}
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 30px;
+}
+.hero-actions.center {
+  justify-content: center;
+  margin: 0;
+}
+.dframe .hbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 20px;
+  border-radius: 8px;
+  background: var(--raised2);
+  color: var(--ink);
+  font: 500 15px var(--sans);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.dframe .hbtn:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+.dframe .hbtn.primary {
+  background: var(--btn);
+  color: var(--btn-ink);
+}
+.dframe .hbtn.primary:hover {
+  background: var(--btn);
+  color: var(--btn-ink);
+  filter: brightness(1.08);
+}
+.hbtn .icon {
+  stroke-width: 1.5;
+}
+.hero-cmd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  font: 400 13px var(--mono);
+  color: var(--ink3);
+}
+.hero-cmd code {
+  font: inherit;
+  color: var(--ink2);
+}
+.dframe .hero-cmd .copy-btn {
+  height: auto;
+  border: 0;
+  background: transparent;
+  color: var(--acc);
+  font: 500 12.5px var(--sans);
+  padding: 4px 2px;
+}
+
+/* The big product frame: a real screenshot on the backdrop, cut off at the bottom edge */
+.frame {
+  margin: 0;
+}
+.frame-bd {
+  background: var(--bd);
+  border-radius: 14px;
+  padding: clamp(16px, 5vw, 64px) clamp(12px, 5vw, 64px) 0;
+  overflow: hidden;
+}
+.frame-bd img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.45);
+}
+.frame .on-light {
+  display: none;
+}
+.dframe[data-theme="light"] .frame .on-light {
+  display: block;
+}
+.dframe[data-theme="light"] .frame .on-dark {
+  display: none;
+}
+@media (prefers-color-scheme: light) {
+  .dframe:not([data-theme="dark"]) .frame .on-light {
+    display: block;
+  }
+  .dframe:not([data-theme="dark"]) .frame .on-dark {
+    display: none;
+  }
+}
+.frame figcaption,
+.art-cap {
+  margin-top: 10px;
+  font: 400 12px var(--sans);
+  color: var(--ink3);
+}
+
+/* Proof strip and changelog cards */
+.proof {
+  padding: 88px 0 0;
+}
+.sec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.proof h2,
+.changes h2 {
+  margin: 0;
+  font: 400 clamp(20px, 2.2vw, 24px) / 1.3 var(--sans);
+  letter-spacing: -0.01em;
+}
+.sec-head a,
+.feature-copy a,
+.changes .more {
+  font: 400 14px var(--sans);
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 8px;
+}
+.stat {
+  background: var(--raised);
+  border-radius: 10px;
+  padding: 22px 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stat .n {
+  font: 400 34px / 1 var(--sans);
+  letter-spacing: -0.03em;
+}
+.stat .d {
+  font: 400 14px / 1.5 var(--sans);
+  color: var(--ink2);
+  text-wrap: pretty;
+}
+
+/* Feature rows: copy and an illustration on the backdrop, alternating sides */
+.features {
+  padding: 96px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.feature {
+  background: var(--raised);
+  border-radius: 14px;
+  padding: clamp(16px, 2vw, 20px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: center;
+}
+.feature.flip {
+  flex-direction: row-reverse;
+}
+.feature-copy {
+  flex: 1 1 300px;
+  padding: clamp(4px, 1.6vw, 20px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+.feature-copy h3 {
+  margin: 0;
+  font: 400 clamp(19px, 1.9vw, 22px) / 1.35 var(--sans);
+  letter-spacing: -0.01em;
+  text-wrap: pretty;
+}
+.feature-copy h3 span {
+  display: block;
+}
+.langs {
+  font: 400 12.5px var(--mono);
+  color: var(--ink3);
+}
+.feature-art {
+  flex: 2 1 520px;
+  min-width: 0;
+  background: var(--bd);
+  border-radius: 10px;
+  padding: clamp(14px, 3vw, 36px);
+}
+.win {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.4);
+}
+.win-head {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font: 400 11.5px var(--mono);
+  color: var(--ink3);
+}
+
+.diff {
+  font: 400 12px / 1.75 var(--mono);
+  padding: 8px 0;
+  overflow-x: auto;
+  color: var(--ink2);
+}
+.diff > div {
+  display: flex;
+  gap: 14px;
+  padding: 0 14px;
+  white-space: pre;
+}
+.diff .ln {
+  color: var(--ink3);
+  width: 22px;
+  text-align: right;
+  flex: none;
+}
+.diff .del {
+  color: var(--bad);
+  background: color-mix(in oklab, var(--bad) 10%, transparent);
+}
+.diff .add {
+  color: var(--acc);
+  background: var(--acc-soft);
+}
+.callers {
+  border-top: 1px solid var(--line);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.callers-t {
+  font: 500 12px var(--sans);
+  color: var(--ink2);
+}
+.caller {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font: 400 12px var(--mono);
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--ink3);
+}
+.caller .clip {
+  color: var(--ink);
+}
+.caller > span:last-child {
+  flex: none;
+}
+
+.queue {
+  padding: 6px 0;
+}
+.q-head {
+  font: 500 11.5px var(--sans);
+  color: var(--ink3);
+  padding: 10px 14px 4px;
+}
+.q-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 14px;
+}
+.q-row.hot {
+  background: var(--acc-soft);
+}
+.q-what {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font: 400 13px var(--sans);
+  color: var(--ink);
+}
+.q-why {
+  font: 400 11.5px var(--mono);
+  color: var(--ink3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.q-bar {
+  display: block;
+  width: 64px;
+  height: 3px;
+  flex: none;
+}
+.q-bar .t {
+  fill: var(--line);
+}
+.q-bar .f {
+  fill: var(--btn);
+}
+.q-n {
+  font: 400 11.5px var(--mono);
+  color: var(--ink2);
+  width: 20px;
+  text-align: right;
+}
+
+.mem-stats {
+  padding: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 18px;
+}
+.mem-n {
+  font: 400 30px / 1 var(--sans);
+  letter-spacing: -0.03em;
+}
+.mem-l {
+  font: 400 12.5px var(--sans);
+  color: var(--ink3);
+  margin-top: 6px;
+}
+.mem-list {
+  padding: 0 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mem-item {
+  display: flex;
+  gap: 10px;
+  font: 400 12.5px / 1.45 var(--sans);
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--ink2);
+}
+.mem-item .k {
+  color: var(--ink3);
+  flex: none;
+  width: 68px;
+}
+.pills {
+  margin: 0;
+  min-width: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  padding: 12px 14px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.pills:empty {
+  display: none;
+}
+.pills button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink2);
+  font: 400 12px var(--mono);
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pills button[aria-pressed="true"] {
+  border-color: var(--btn);
+  background: var(--acc-soft);
+  color: var(--acc);
+}
+
+.seg {
+  margin: 0;
+  min-width: 0;
+  border: 0;
+  display: flex;
+  gap: 2px;
+  background: var(--raised);
+  border-radius: 7px;
+  padding: 2px;
+}
+.seg:empty {
+  display: none;
+}
+.seg button,
+.place-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--ink2);
+  font: 400 12px var(--sans);
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.seg button[aria-pressed="true"],
+.place-tabs button[aria-selected="true"] {
+  background: var(--bg);
+  color: var(--ink);
+}
+.draft {
+  padding: 16px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.draft code {
+  font: 400 12px var(--mono);
+}
+.draft p {
+  margin: 0;
+  min-height: 68px;
+  font: 400 14px / 1.6 var(--sans);
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.draft-acts {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.draft-acts span,
+.draft-foot .send {
+  font: 400 12.5px var(--sans);
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--ink2);
+}
+.draft-acts .keep {
+  font-weight: 500;
+  background: var(--acc-soft);
+  color: var(--acc);
+}
+.draft-foot {
+  border-top: 1px solid var(--line);
+  padding: 11px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font: 400 12px var(--sans);
+  color: var(--ink3);
+}
+.draft-foot .send {
+  font-weight: 500;
+  border-radius: 8px;
+  background: var(--btn);
+  color: var(--btn-ink);
+}
+
+/* Yours, and Works where you do */
+.yours,
+.install {
+  padding: 112px 0 0;
+  scroll-margin-top: 72px;
+}
+.two-tone.big {
+  margin: 0 0 22px;
+  font: 400 clamp(24px, 2.8vw, 32px) / 1.2 var(--sans);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.cards3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 8px;
+}
+.ycard {
+  background: var(--raised);
+  border-radius: 10px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ycard .t {
+  font: 500 15px var(--sans);
+}
+.ycard .d {
+  font: 400 14px / 1.55 var(--sans);
+  color: var(--ink2);
+  text-wrap: pretty;
+}
+.places {
+  background: var(--raised);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.place-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.place-tabs button {
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 8px;
+}
+.place {
+  padding: clamp(18px, 3vw, 32px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px 40px;
+  align-items: flex-start;
+}
+.place-copy {
+  flex: 1 1 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.place-copy .t {
+  font: 500 17px var(--sans);
+}
+.place-copy .d {
+  font: 400 15px / 1.55 var(--sans);
+  color: var(--ink2);
+  text-wrap: pretty;
+}
+.place-copy .req {
+  font: 400 13px var(--sans);
+  color: var(--ink3);
+}
+.place-copy code {
+  font: 400 0.9em var(--mono);
+}
+.place-cmd {
+  flex: 1.4 1 360px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.place-cmd pre {
+  position: relative;
+  align-self: stretch;
+  margin: 0;
+  background: var(--code);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 14px 16px;
+  font: 400 13px / 1.7 var(--mono);
+  color: var(--ink);
+  overflow-x: auto;
+}
+.place-cmd pre.has-copy {
+  padding-right: 76px;
+}
+.place-cmd pre code {
+  font: inherit;
+}
+.dframe .place-cmd .copy-btn {
+  font: 400 12px var(--sans);
+  height: 26px;
+}
+
+.changes {
+  padding: 112px 0 0;
+  scroll-margin-top: 72px;
+}
+.changes h2 {
+  margin-bottom: 18px;
+}
+.dframe .change {
+  background: var(--raised);
+  border-radius: 10px;
+  padding: 18px 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.dframe .change:hover {
+  background: var(--raised2);
+  color: var(--ink);
+}
+.change .when {
+  font: 400 13px var(--sans);
+  color: var(--ink3);
+}
+.change .what {
+  font: 400 15px / 1.4 var(--sans);
+  text-wrap: pretty;
+}
+.changes .more {
+  display: inline-block;
+  margin-top: 16px;
+}
+
+.closing {
+  padding: 144px 0 136px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+}
+.closing h2 {
+  margin: 0;
+  font: 400 clamp(34px, 5.4vw, 60px) / 1.08 var(--sans);
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.closing p {
+  margin: 0;
+  font: 400 14px var(--sans);
+  color: var(--ink3);
+}

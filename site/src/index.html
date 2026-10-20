@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dframe home">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -16,251 +16,243 @@
     <meta property="og:image" content="https://getalden.dev/assets/og.png" />
     <meta property="og:url" content="https://getalden.dev/" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="theme-color" content="#081014" />
+    <meta name="theme-color" content="#121413" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)" />
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/site.css" />
+    <link rel="stylesheet" href="/docs.css" />
+    <link rel="stylesheet" href="/home.css" />
+    <script src="/theme.js"></script>
   </head>
   <body>
-    <div class="hero-wrap">
-      <div class="grid-bg" aria-hidden="true"></div>
-      <div class="glow" aria-hidden="true"></div>
-
-      <header class="top">
-        <a class="brand" href="/" aria-label="Alden home">
-          <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
-            <rect x=".5" y=".5" width="31" height="31" rx="8" fill="#101B20" stroke="#263c44" />
-            <path d="M8 24 L16 8 L24 24" fill="none" stroke="#14B8A6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M8 24 L16 19 L24 24 M16 8 L16 19" fill="none" stroke="#5EEAD4" stroke-width="1" stroke-dasharray="1.5 2" opacity=".7" />
-            <circle class="pulse" cx="16" cy="19" r="3" fill="none" stroke="#5EEAD4" stroke-width="1" />
-            <circle cx="8" cy="24" r="2" fill="#5EEAD4" />
-            <circle cx="16" cy="8" r="2" fill="#5EEAD4" />
-            <circle cx="24" cy="24" r="2" fill="#5EEAD4" />
-            <circle cx="16" cy="19" r="2.4" fill="#F0FDFA" />
-          </svg>
+    <header class="htop">
+      <div class="htop-in">
+        <a class="dbrand" href="/" aria-label="Alden home">
+          <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><rect class="m-bg" x=".75" y=".75" width="30.5" height="30.5" rx="8" /><path class="m-a" d="M9 23.5 L16 8.5 L23 23.5" /><path class="m-in" d="M9 23.5 L16 19 L23 23.5 M16 8.5 V19" /><circle class="m-dot" cx="9" cy="23.5" r="1.9" /><circle class="m-dot" cx="16" cy="8.5" r="1.9" /><circle class="m-dot" cx="23" cy="23.5" r="1.9" /><circle class="m-core" cx="16" cy="19" r="2.2" /></svg>
           <span>alden</span>
         </a>
-        <nav>
+        <nav class="hnav" id="hnav" aria-label="Site">
           <a href="/docs/">Docs</a>
           <a href="/benchmarks/">Benchmarks</a>
+          <a href="/changelog/">Changelog</a>
           <a href="https://discord.gg/ZtXFX7sxTu" rel="noopener">Discord</a>
-          <a class="btn small" href="#install" data-track="install" data-label="nav">Install</a>
         </nav>
-      </header>
+        <div class="htop-end">
+          <a class="dbtn" href="#install" data-track="install" data-label="nav">Install</a>
+          <button class="menu-btn hmenu" type="button" aria-label="Menu" aria-controls="hnav" aria-expanded="false">
+            <svg class="icon" width="14" height="10" viewBox="0 0 14 10" aria-hidden="true"><path d="M0 1h14M0 5h14M0 9h14" /></svg>
+          </button>
+        </div>
+      </div>
+    </header>
 
+    <main class="hmain">
       <section class="hero">
-        <div class="hero-copy">
-          <span class="kicker"><span class="dot" aria-hidden="true"></span>open beta · open source after the beta · macOS, Linux and Windows</span>
-          <h1>The review companion that knows what you look for.</h1>
-          <p class="lede">
-            Alden ranks the PRs waiting on you and writes each one a briefing with the callers and checks the diff leaves
-            out. When someone answers your comments, the PR comes back under Your turn. Every place you mark useful or not
-            useful teaches it a little more about how you review.
-          </p>
-          <div class="actions">
-            <a class="btn big glow-btn" href="#install" data-track="install" data-label="hero">Install Alden</a>
-            <span class="cmd" data-copy="brew-cli"><span class="acc" aria-hidden="true">$</span><code>brew install getalden/tap/alden</code></span>
+        <h1>The review companion that knows what you look for.</h1>
+        <p class="hero-lede">
+          Alden ranks the PRs waiting on you and briefs each one with the callers and checks the diff leaves out. You
+          decide what matters.
+        </p>
+        <div class="hero-actions">
+          <a class="hbtn primary" id="download" href="https://github.com/getalden/homebrew-tap/releases" rel="noopener" data-track="install" data-label="hero"
+            ><span>Download for macOS</span
+            ><svg class="icon" width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><path d="M5.5 1v9M1.5 6.5l4 4 4-4" /></svg
+          ></a>
+          <a class="hbtn" href="/docs/">Read the docs →</a>
+        </div>
+        <div class="hero-cmd" data-copy="brew-cli"><span>or</span><code>brew install getalden/tap/alden</code></div>
+      </section>
+
+      <figure class="frame">
+        <div class="frame-bd">
+          <img class="on-dark" src="/assets/screens/briefing-dark.png" width="1440" height="900" alt="Alden's queue beside a briefing for a Django PR: one place needs your eyes, a migration that may lose data, with the code there, then the checks Alden ran." />
+          <img class="on-light" src="/assets/screens/briefing-light.png" width="1440" height="900" alt="Alden's queue beside a briefing for a Django PR: one place needs your eyes, a migration that may lose data, with the code there, then the checks Alden ran." loading="lazy" />
+        </div>
+        <figcaption>Real output on recorded public PRs from Next.js, Django, Laravel, Hugo and Grafana; checks only, no model.</figcaption>
+      </figure>
+
+      <section class="proof" aria-labelledby="proof-title">
+        <div class="sec-head">
+          <h2 id="proof-title" class="two-tone"><span>Tested on 150 seeded PRs and 33 real ones.</span> <span>Numbers from the published report.</span></h2>
+          <a href="/benchmarks/">Read the benchmark report →</a>
+        </div>
+        <div class="stats">
+          <div class="stat"><span class="n">10×</span><span class="d">more of the files that later broke flagged with a model than by the checks alone: 21 of 29 against 2 of 29</span></div>
+          <div class="stat"><span class="n">150 / 150</span><span class="d">seeded PRs ranked and checked as expected in four real repos, including Laravel and Grafana</span></div>
+          <div class="stat"><span class="n">0 of 104</span><span class="d">invented locations: none of the model's 104 findings pointed at code outside the diff</span></div>
+          <div class="stat"><span class="n">&lt; 5 s</span><span class="d">for a briefing without a model on a Grafana PR, with callers, before you open the diff</span></div>
+        </div>
+      </section>
+
+      <section class="features">
+        <div class="feature">
+          <div class="feature-copy">
+            <h3 class="two-tone"><span>See the code that calls what changed.</span><span>GitHub shows you the diff. Alden also finds every place in your local clone that calls the changed code, and points out the ones that might break.</span></h3>
+            <a href="/docs/code-graph/">How the code graph works →</a>
+            <span class="langs">TypeScript · JavaScript · Python · Go · PHP</span>
+          </div>
+          <div class="feature-art">
+            <div class="win">
+              <div class="win-head"><span class="clip">packages/next/src/server/invalidate.ts</span><span>+9 −3</span></div>
+              <div class="diff">
+                <div><span class="ln">22</span><span>export function invalidatePath(path: string) {</span></div>
+                <div><span class="ln">23</span><span>  const store = getStore()</span></div>
+                <div class="del"><span class="ln">24</span><span>- if (!store) return</span></div>
+                <div class="add"><span class="ln">24</span><span>+ if (!store) {</span></div>
+                <div class="add"><span class="ln">25</span><span>+   throw new InvariantError('invalidatePath outside a request')</span></div>
+                <div class="add"><span class="ln">26</span><span>+ }</span></div>
+                <div><span class="ln">27</span><span>  store.pendingRevalidates.add(normalize(path))</span></div>
+              </div>
+              <div class="callers">
+                <span class="callers-t">Callers outside the diff · 7 found, 3 don't catch</span>
+                <div class="caller"><span class="clip">app/action-handler.ts:207</span><span class="warn">no catch</span></div>
+                <div class="caller"><span class="clip">server/revalidate-job.ts:88</span><span class="warn">no catch</span></div>
+                <div class="caller"><span class="clip">lib/cache/tags.ts:41</span><span class="warn">no catch</span></div>
+                <div class="caller"><span class="clip">server/route-handler.ts:132</span><span>catches</span></div>
+              </div>
+            </div>
+            <div class="art-cap">Illustration.</div>
           </div>
         </div>
 
-        <div class="window" aria-label="An animation of Alden ranking a review queue" role="img">
-          <div class="window-bar">
-            <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="ink2">alden queue</span>
-            <span id="q-status" class="status">sorted by date</span>
+        <div class="feature flip">
+          <div class="feature-copy">
+            <h3 class="two-tone"><span>Your turn comes back to you.</span><span>The queue ranks what's waiting and says why. When someone answers your comment or pushes over it, the PR returns to the top with what changed.</span></h3>
+            <a href="/docs/queue/">How the queue ranks →</a>
           </div>
-          <div class="queue" id="queue">
-            <div class="scan" aria-hidden="true"></div>
+          <div class="feature-art">
+            <div class="win">
+              <div class="win-head"><span>alden queue</span><span>12 PRs · 4 repos</span></div>
+              <div class="queue">
+                <div class="q-head">Your turn</div>
+                <div class="q-row hot"><span class="q-what"><span class="clip">feat(router): prefetch on hover</span><span class="q-why acc">2 replies to your comments · new push</span></span><span class="q-bar"></span><span class="q-n"></span></div>
+                <div class="q-head">Needs you</div>
+                <div class="q-row"><span class="q-what"><span class="clip">Fixed lookup crashes after subquery annotations</span><span class="q-why">migration may lose data · waiting 5d</span></span><svg class="q-bar" viewBox="0 0 100 3" preserveAspectRatio="none" aria-hidden="true"><rect class="t" width="100" height="3" rx="1.5" /><rect class="f" width="91" height="3" rx="1.5" /></svg><span class="q-n">91</span></div>
+                <div class="q-row"><span class="q-what"><span class="clip">RecentlyDeleted: show when each dashboard was deleted</span><span class="q-why">large · 3 PRs waiting on you</span></span><svg class="q-bar" viewBox="0 0 100 3" preserveAspectRatio="none" aria-hidden="true"><rect class="t" width="100" height="3" rx="1.5" /><rect class="f" width="62" height="3" rx="1.5" /></svg><span class="q-n">62</span></div>
+                <div class="q-row"><span class="q-what"><span class="clip">[13.x] Run workflows on Ubuntu 26.04</span><span class="q-why">touches .github/workflows/</span></span><svg class="q-bar" viewBox="0 0 100 3" preserveAspectRatio="none" aria-hidden="true"><rect class="t" width="100" height="3" rx="1.5" /><rect class="f" width="48" height="3" rx="1.5" /></svg><span class="q-n">48</span></div>
+                <div class="q-row"><span class="q-what"><span class="clip">fix(swc): normalize codeFrameColumns options</span><span class="q-why">no test changes</span></span><svg class="q-bar" viewBox="0 0 100 3" preserveAspectRatio="none" aria-hidden="true"><rect class="t" width="100" height="3" rx="1.5" /><rect class="f" width="40" height="3" rx="1.5" /></svg><span class="q-n">40</span></div>
+                <div class="q-head">Fast-track</div>
+                <div class="q-row"><span class="q-what"><span class="clip">docs: fix the matcher example</span><span class="q-why">docs only</span></span><svg class="q-bar" viewBox="0 0 100 3" preserveAspectRatio="none" aria-hidden="true"><rect class="t" width="100" height="3" rx="1.5" /><rect class="f" width="6" height="3" rx="1.5" /></svg><span class="q-n">6</span></div>
+              </div>
+            </div>
+            <div class="art-cap">Illustration, with PRs from recorded public repos.</div>
+          </div>
+        </div>
+
+        <div class="feature">
+          <div class="feature-copy">
+            <h3 class="two-tone"><span>In week one it flags a lot. By week six it flags what you would.</span><span>Mark a place useful or not and Alden weighs that kind of flag next time. Everything it learns is listed, with where it came from, and yours to edit.</span></h3>
+            <a href="/docs/memory/">Learning and memory →</a>
+          </div>
+          <div class="feature-art">
+            <div class="win">
+              <div class="win-head"><span>Memory · vercel/next.js</span><span id="week-label">week 6</span></div>
+              <div class="mem-stats">
+                <div><div class="mem-n" id="per-pr">4.4</div><div class="mem-l">places flagged per PR</div></div>
+                <div><div class="mem-n acc" id="useful">42%</div><div class="mem-l">you marked useful</div></div>
+              </div>
+              <div class="mem-list" id="memory" aria-live="polite">
+                <div class="mem-item"><span class="k">look for</span><span>Migration changes, and callers that drop errors.</span></div>
+                <div class="mem-item"><span class="k">skip</span><span>Snapshot updates and lockfile-only diffs.</span></div>
+                <div class="mem-item"><span class="k">your note</span><span>"Ask for a test when a public API changes."</span></div>
+              </div>
+              <fieldset class="pills" id="weeks" aria-label="Pick a week"></fieldset>
+            </div>
+            <div class="art-cap">Illustration of one reviewer's first six weeks.</div>
+          </div>
+        </div>
+
+        <div class="feature flip">
+          <div class="feature-copy">
+            <h3 class="two-tone"><span>Drafts in your tone. Sent when you say.</span><span>With a model, Alden drafts comments on the places it flagged. Each one waits for you to keep, edit or drop, and goes to GitHub as one review when you choose.</span></h3>
+            <a href="/docs/comments/">Comments and sending →</a>
+          </div>
+          <div class="feature-art">
+            <div class="win">
+              <div class="win-head"><span>Drafts · 1 of 3</span><fieldset class="seg" id="tones" aria-label="Tone"></fieldset></div>
+              <div class="draft">
+                <code class="acc">app/action-handler.ts:207</code>
+                <p id="draft">invalidatePath now throws InvariantError outside a request, but this call has no catch, so a server action would fail with a 500. Should it handle that case?</p>
+                <div class="draft-acts"><span class="keep">Keep</span><span>Edit</span><span>Drop</span></div>
+              </div>
+              <div class="draft-foot"><span>Nothing is on GitHub yet.</span><span class="send">Send review · 2 comments</span></div>
+            </div>
+            <div class="art-cap">Illustration. Pick a tone to see the same draft rewritten.</div>
           </div>
         </div>
       </section>
-    </div>
 
-    <section class="shot">
-      <picture>
-        <img
-          src="/assets/screens/briefing-dark.png"
-          width="1440"
-          height="900"
-          alt="Alden's queue beside a briefing for a Django PR: one place needs your eyes, a migration that may lose data, with the code there, then the checks Alden ran."
-          loading="lazy"
-        />
-      </picture>
-      <span class="mono faint small">
-        Real output on recorded public PRs from Next.js, Django, Laravel, Hugo and Grafana; checks only, no model.
-      </span>
-    </section>
-
-    <section class="band proof" aria-labelledby="proof-title">
-      <div class="proof-head">
-        <span class="kicker-num">measured</span>
-        <h2 id="proof-title">Tested on 150 PRs in Laravel, Grafana and two more repos.</h2>
-        <p>
-          Numbers from our <a href="/benchmarks/">benchmark report</a>, with how to run them yourself.
-        </p>
-      </div>
-      <div class="tiles proof-tiles">
-        <div class="tile"><span class="num">10×</span><span class="what">more of the files that later broke flagged with a model than by checks alone</span></div>
-        <div class="tile"><span class="num">150 / 150</span><span class="what">seeded PRs ranked and checked as expected, across four real repos</span></div>
-        <div class="tile"><span class="num">0</span><span class="what">invented locations: none of the model's 104 findings pointed outside the diff</span></div>
-        <div class="tile"><span class="num">&lt; 5 s</span><span class="what">for a briefing on a Grafana PR, with callers, before you open the diff</span></div>
-      </div>
-    </section>
-
-    <section class="band">
-      <div class="split">
-        <div class="copy">
-          <span class="kicker-num">01 / beyond the diff</span>
-          <h2>Twelve lines changed. Seven places call them.</h2>
-          <p>
-            GitHub shows you the lines that moved. Alden reads your local clone and follows them out to every call site, so
-            you see that three of seven callers don't catch the new error before you approve.
-          </p>
-          <span class="mono faint">TypeScript · JavaScript · Python · Go · PHP</span>
+      <section class="yours" aria-labelledby="yours-title">
+        <h2 id="yours-title" class="two-tone big"><span>Runs on your machine, on your terms.</span> <span>Nothing reaches GitHub until you send it.</span></h2>
+        <div class="cards3">
+          <div class="ycard"><span class="t">On your machine</span><span class="d">The queue, briefings and what Alden learns about you stay in ~/.alden.</span></div>
+          <div class="ycard"><span class="t">Your GitHub sign-in</span><span class="d">Alden reads PRs as you and posts only the review you send. It never approves or pushes.</span></div>
+          <div class="ycard"><span class="t">Your model, or none</span><span class="d">An Anthropic or OpenAI key, Bedrock, Vertex, Foundry, or a local model through Ollama. Checks run without one. No key? <a href="/cloud/">Alden Cloud</a> is planned.</span></div>
+          <div class="ycard"><span class="t">Spend caps</span><span class="d">$0.50 per briefing and $10 per day by default, checked before every call.</span></div>
+          <div class="ycard"><span class="t">Drafts never sent untouched</span><span class="d">Every drafted comment waits for you to keep, edit or drop it.</span></div>
+          <div class="ycard"><span class="t">Open source</span><span class="d">Apache-2.0 when the beta ends. The single-developer app stays free.</span></div>
         </div>
-        <div class="demo-callers">
-          <div class="diff">
-            <div class="diff-head"><span>packages/next/src/server/revalidate.ts</span><span class="acc2">+9 −3</span></div>
-            <div class="diff-body" id="diff"></div>
+      </section>
+
+      <section class="install" id="install" aria-labelledby="install-title">
+        <h2 id="install-title" class="two-tone big"><span>Works where you do.</span> <span>Desktop app, terminal, browser, Claude Code and MCP.</span></h2>
+        <div class="places">
+          <div class="place-tabs" role="tablist" aria-label="Where you use Alden">
+            <button type="button" role="tab" id="tab-desktop" aria-controls="place-desktop" aria-selected="true">Desktop app</button>
+            <button type="button" role="tab" id="tab-terminal" aria-controls="place-terminal" aria-selected="false" tabindex="-1">Terminal</button>
+            <button type="button" role="tab" id="tab-browser" aria-controls="place-browser" aria-selected="false" tabindex="-1">Browser</button>
+            <button type="button" role="tab" id="tab-claude" aria-controls="place-claude" aria-selected="false" tabindex="-1">Claude Code</button>
+            <button type="button" role="tab" id="tab-mcp" aria-controls="place-mcp" aria-selected="false" tabindex="-1">MCP</button>
           </div>
-          <div class="trace"><span class="dash" aria-hidden="true"></span><span id="ctx">reading local clone…</span></div>
-          <div class="callers" id="callers"></div>
-          <span class="mono faint small">Illustration.</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="band tint">
-      <div class="split">
-        <div class="copy">
-          <span class="kicker-num">02 / learns you</span>
-          <h2>In week one it flags a lot. By week six it flags what you would.</h2>
-          <p>
-            Mark a place useful and Alden gives that kind of flag more weight next time. Mark it not useful and it backs
-            off. Keep opening PRs in one area of the code, or from one author, bot or AI agent, ahead of where Alden ranked
-            them, and PRs like that rank higher. A person's PR that Claude Code, Copilot, Cursor or another agent wrote
-            counts as that agent's too, and its row says how Alden knew. Everything it learns is listed, with where it came
-            from, and you can edit or forget any of it.
-          </p>
-          <fieldset class="weeks" id="weeks" aria-label="Pick a week"></fieldset>
-        </div>
-        <div class="panel">
-          <div class="panel-head"><span class="ink2">Memory · vercel/next.js</span><span id="week-label">week 1</span></div>
-          <div class="panel-stats">
-            <div><span class="big" id="per-pr">5</span><span class="mono faint small">places per PR</span></div>
-            <div><span class="big acc2" id="useful">31%</span><span class="mono faint small">you found useful</span></div>
+          <div class="place" role="tabpanel" id="place-desktop" aria-labelledby="tab-desktop">
+            <div class="place-copy"><span class="t">Desktop app</span><span class="d">Alden in a window and the menu bar. It briefs your top PRs while you're away and installs the <code>alden</code> command too.</span><span class="req">macOS 12 or later, Apple silicon and Intel</span></div>
+            <div class="place-cmd"><pre data-copy="brew-cask"><code>brew install --cask getalden/tap/alden-desktop</code></pre><a href="/docs/desktop/">The desktop app →</a></div>
           </div>
-          <ul class="memory" id="memory" aria-live="polite"></ul>
-          <div class="log" id="log"></div>
-          <span class="mono faint small pad">Illustration of one reviewer's first six weeks.</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="band">
-      <div class="split top">
-        <div class="copy">
-          <span class="kicker-num">03 / yours</span>
-          <h2>Runs on your machine, on your terms.</h2>
-          <p>Alden works from your local clone and your own GitHub sign-in. You pick the model and decide how much it can spend.</p>
-        </div>
-        <dl class="spec">
-          <div><dt>where</dt><dd>On your machine. The queue, briefings and what Alden learns about you stay in ~/.alden.</dd></div>
-          <div><dt>github</dt><dd>Your own sign-in. Alden reads PRs and posts only what you send: the comments you write in Alden go to GitHub as one review when you send it.</dd></div>
-          <div><dt>model</dt><dd>Your Anthropic or OpenAI key, Bedrock, Vertex, Foundry or a local model through Ollama. Pick it per PR, ask it a question about a PR, or run checks only. No key? <a href="/cloud/">Alden Cloud</a> is planned, with a waitlist.</dd></div>
-          <div><dt>drafts</dt><dd>Alden can draft comments on the places it flagged, in a tone you pick: terse, concise, detailed or teaching. Each one waits for you to keep, edit or drop it; none is sent untouched.</dd></div>
-          <div><dt>spend</dt><dd>Caps per briefing and per day, $0.50 and $10 by default, checked before every call.</dd></div>
-          <div><dt>source</dt><dd>Open source when the beta ends. The single-developer app stays free.</dd></div>
-        </dl>
-      </div>
-    </section>
-
-    <section class="band tint" id="install">
-      <div class="install">
-        <div class="copy">
-          <span class="kicker-num">04 / install</span>
-          <h2>Install it now. It's free during the beta.</h2>
-          <p>
-            Alden is in open beta: anyone can install it. Pick one of four ways, then open the app or run <code>alden</code>:
-            it signs you in with GitHub, asks how Alden should think, and shows your queue. Full steps are in
-            <a href="/docs/getting-started/">Getting started</a>.
-          </p>
-        </div>
-        <div class="ways">
-          <div class="way">
-            <h3>Desktop app <span class="mono faint small">macOS</span></h3>
-            <p>Signed and notarized, for Apple silicon and Intel. Your queue in a window and the menu bar, and the <code>alden</code> command too.</p>
-            <pre data-copy="brew-cask"><code>brew install --cask getalden/tap/alden-desktop</code></pre>
-            <p class="small faint">Or download the .dmg from the <a href="https://github.com/getalden/homebrew-tap/releases" rel="noopener" data-track="install" data-label="dmg">releases page</a>.</p>
+          <div class="place" role="tabpanel" id="place-terminal" aria-labelledby="tab-terminal" hidden>
+            <div class="place-copy"><span class="t">Terminal</span><span class="d">The <code>alden</code> command on its own. Your queue, briefings and drafts, in text.</span><span class="req">macOS and Linux with Homebrew; npm (<code>alden@next</code>) or a binary anywhere</span></div>
+            <div class="place-cmd"><pre data-copy="brew-cli"><code>brew install getalden/tap/alden
+alden queue</code></pre><a href="/docs/getting-started/">Every way to install →</a></div>
           </div>
-          <div class="way">
-            <h3>Homebrew <span class="mono faint small">macOS · Linux</span></h3>
-            <p>The <code>alden</code> command as a standalone binary. Needs nothing else.</p>
-            <pre data-copy="brew-cli"><code>brew install getalden/tap/alden</code></pre>
+          <div class="place" role="tabpanel" id="place-browser" aria-labelledby="tab-browser" hidden>
+            <div class="place-copy"><span class="t">Browser</span><span class="d">A local web page with the queue, briefings, the diff and the Comments drawer. Nothing is hosted.</span><span class="req">Runs from the <code>alden</code> command</span></div>
+            <div class="place-cmd"><pre data-copy="ui"><code>alden ui</code></pre><a href="/docs/web-ui/">Alden in your browser →</a></div>
           </div>
-          <div class="way">
-            <h3>npm <span class="mono faint small">Node 22.13+</span></h3>
-            <p>During the beta, releases are published under the <code>next</code> tag.</p>
-            <pre data-copy="npm"><code>npm install -g alden@next</code></pre>
+          <div class="place" role="tabpanel" id="place-claude" aria-labelledby="tab-claude" hidden>
+            <div class="place-copy"><span class="t">Claude Code</span><span class="d"><code>/alden:review</code> and <code>/alden:queue</code> inside Claude Code, using the Alden you already signed in to.</span><span class="req">Alden installed and signed in</span></div>
+            <div class="place-cmd"><pre data-copy="claude-plugin"><code>/plugin marketplace add getalden/claude-plugin
+/plugin install alden@getalden</code></pre><a href="/docs/claude-code/">Claude Code plugin →</a></div>
           </div>
-          <div class="way">
-            <h3>Binary <span class="mono faint small">macOS · Linux · Windows</span></h3>
-            <p>
-              For macOS (Apple silicon, Intel), Linux (x64, arm64) and Windows (x64). Unpack it and put <code>alden</code> on
-              your PATH.
-            </p>
-            <p><a class="btn" href="https://github.com/getalden/homebrew-tap/releases" rel="noopener" data-track="install" data-label="binaries">Download a binary</a></p>
+          <div class="place" role="tabpanel" id="place-mcp" aria-labelledby="tab-mcp" hidden>
+            <div class="place-copy"><span class="t">MCP</span><span class="d">Your queue and briefings in Cursor and other MCP clients. Read-only: it never posts for you.</span><span class="req">Any MCP client</span></div>
+            <div class="place-cmd"><pre data-copy="mcp"><code>alden mcp</code></pre><a href="/docs/mcp/">Alden in your AI coding tool →</a></div>
           </div>
         </div>
-        <div class="then">
-          <h3>Then</h3>
-          <pre data-copy="first-run"><code>alden                # sign in, pick a model, then your queue, in the terminal
-alden queue          # the PRs waiting on your review, ranked
-alden review 1       # a briefing on #1
-alden ask 1 "Is the retry safe?"   # a question about it, to your model
-alden ui             # or all of it in your browser</code></pre>
-          <h3>In Claude Code</h3>
-          <pre data-copy="claude-plugin"><code>/plugin marketplace add getalden/claude-plugin
-/plugin install alden@getalden</code></pre>
-          <p class="small faint">
-            Then <code>/alden:review</code> and <code>/alden:queue</code>. Alden itself must be installed and signed in first.
-            See <a href="/docs/claude-code/">Claude Code plugin</a>.
-          </p>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="band cta">
-      <div class="glow bottom" aria-hidden="true"></div>
-      <div class="split">
-        <div class="copy">
-          <h2 class="huge">Your next review is already waiting.</h2>
-          <p>
-            Alden is free while it's in beta. Tell us what works and what doesn't in the Alden Community on Discord, and see
-            how it did on 150 test PRs in the <a href="/benchmarks/">benchmarks</a>.
-          </p>
-          <div class="actions">
-            <a class="btn big light" href="#install" data-track="install" data-label="cta">Install Alden</a>
-            <a class="btn big ghost" href="https://discord.gg/ZtXFX7sxTu" rel="noopener" data-label="cta">Join the Discord</a>
-          </div>
-          <p class="contact">Questions, or want to talk? Email <a href="mailto:beta@getalden.dev" data-track="contact" data-label="cta">beta@getalden.dev</a>.</p>
+      <section class="changes" id="changelog" aria-labelledby="changes-title">
+        <h2 id="changes-title" class="two-tone">Changelog</h2>
+        <div class="stats">
+          <a class="change" href="/changelog/#090"><span class="when">12 Oct 2026 · 0.9</span><span class="what">First run in the app, and Your turn at the top of the queue</span></a>
+          <a class="change" href="/changelog/#080"><span class="when">12 Oct 2026 · 0.8</span><span class="what">Drafted reviews, replies, and re-review notifications</span></a>
+          <a class="change" href="/changelog/#070"><span class="when">8 Oct 2026 · 0.7</span><span class="what">Learning from the reviews you send</span></a>
+          <a class="change" href="/changelog/#060"><span class="when">7 Oct 2026 · 0.6</span><span class="what">The Comments drawer, the Diff tab and guided review</span></a>
         </div>
-        <div class="terminal" id="terminal" aria-label="A terminal running alden queue and alden review" role="img">
-          <div id="term-lines"></div>
-          <span class="cursor" aria-hidden="true"></span>
-        </div>
-      </div>
-    </section>
+        <a class="more" href="/changelog/">See what's new in Alden →</a>
+      </section>
 
-    <footer class="foot">
-      <span class="word">alden</span><span>This site counts page views, no cookies.</span>
-      <span class="links"
-        ><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="/cloud/">Alden Cloud</a
-        ><a href="https://discord.gg/ZtXFX7sxTu" rel="noopener" data-label="footer">Discord</a
-        ><a href="mailto:beta@getalden.dev" data-track="contact" data-label="footer">beta@getalden.dev</a
-        ><a href="/docs/privacy/#this-website">Privacy</a><span>getalden.dev</span></span
-      >
-    </footer>
+      <section class="closing">
+        <h2>Your next review is already waiting.</h2>
+        <div class="hero-actions center">
+          <a class="hbtn primary" href="#install" data-track="install" data-label="cta">Install Alden</a>
+          <a class="hbtn" href="https://discord.gg/ZtXFX7sxTu" rel="noopener" data-label="cta">Join the Discord</a>
+        </div>
+        <p>Questions, or want to talk? <a href="mailto:beta@getalden.dev" data-track="contact" data-label="cta">beta@getalden.dev</a></p>
+      </section>
+    </main>
+
+    <!--footer-->
 
     <script src="/site.js" defer></script>
+    <script src="/docs.js" defer></script>
   </body>
 </html>
