@@ -117,6 +117,22 @@ html.dframe[data-theme="light"] {
 .dframe a:hover {
   color: var(--ink);
 }
+/* site.css's .btn (the Alden Cloud page's), in the frame's colours: the link colour above would otherwise win. */
+.dframe .btn,
+.dframe .btn:hover {
+  background: var(--btn);
+  color: var(--btn-ink);
+  font-weight: 500;
+}
+.dframe .btn.ghost,
+.dframe .btn.ghost:hover {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.dframe .btn.ghost:hover {
+  box-shadow: inset 0 0 0 1px var(--ink3);
+}
 .dframe :focus-visible {
   outline: 2px solid var(--btn);
   outline-offset: 2px;
