@@ -25,9 +25,9 @@ const DISCORD = "https://discord.gg/ZtXFX7sxTu";
 
 /**
  * The open-source switch, for launch day: `ALDEN_OPEN_SOURCE=1 pnpm site:build` says Alden is open source and links its
- * repo from the home page and every page's header and footer, and each doc gets "Edit on GitHub". Without it the site
- * says "open source after the beta", exactly as today. Each swap is exact text in src/index.html, and the build stops
- * if one is missing, with or without the flag, so a copy change can't quietly turn the switch into a no-op.
+ * repo from every page's header and footer, and each doc gets "Edit on GitHub". Without it the site says "open source
+ * after the beta", exactly as today. The home page's swaps are exact text in src/index.html, and the build stops if one
+ * is missing, with or without the flag, so a copy change can't quietly turn the switch into a no-op.
  */
 const OPEN_SOURCE = process.env.ALDEN_OPEN_SOURCE === "1";
 // In the header it gives way on a phone, where the footer still has it.
@@ -35,20 +35,12 @@ const GITHUB_LINK = (label: "nav" | "footer") =>
   `<a href="${REPO}" rel="noopener" data-label="${label}"${label === "nav" ? ' class="wide-only"' : ""}>GitHub</a>`;
 const HOME_SWAPS: [today: string, openSource: string][] = [
   [
-    "open beta · open source after the beta · macOS, Linux and Windows",
-    "open beta · open source, Apache-2.0 · macOS, Linux and Windows",
-  ],
-  [
-    "<dd>Open source when the beta ends. The single-developer app stays free.</dd>",
-    `<dd>Open source under Apache-2.0: <a href="${REPO}" rel="noopener">the code is on GitHub</a>. The single-developer app stays free.</dd>`,
+    '<span class="d">Apache-2.0 when the beta ends. The single-developer app stays free.</span>',
+    `<span class="d">Apache-2.0: <a href="${REPO}" rel="noopener">the code is on GitHub</a>. The single-developer app stays free.</span>`,
   ],
   [
     `<a href="${DISCORD}" rel="noopener">Discord</a>`,
     `${GITHUB_LINK("nav")}\n          <a href="${DISCORD}" rel="noopener">Discord</a>`,
-  ],
-  [
-    `><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a`,
-    `>${GITHUB_LINK("footer").slice(0, -1)}\n        ><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a`,
   ],
 ];
 
@@ -56,6 +48,54 @@ rmSync(OUT, { recursive: true, force: true });
 // benchmarks.html and cloud.html are the bodies of /benchmarks/ and /cloud/, wrapped in the page below.
 const BODIES = ["benchmarks.html", "cloud.html"];
 cpSync(SRC, OUT, { recursive: true, filter: (path) => !BODIES.some((body) => path.endsWith(body)) });
+mkdirSync(join(OUT, "assets/fonts"), { recursive: true });
+for (const font of ["Geist-Variable.woff2", "GeistMono-Variable.woff2", "OFL.txt"]) {
+  cpSync(join(ROOT, "packages/ui/src/fonts", font), join(OUT, "assets/fonts", font));
+}
+
+// --- The frame: header, footer and search, shared by the docs, /benchmarks/, /changelog/ and /cloud/ ---------------
+
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+const ICON = {
+  search: `<svg class="icon" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><circle cx="6" cy="6" r="4.6"/><path d="M9.5 9.5L13 13"/></svg>`,
+  menu: `<svg class="icon" width="14" height="10" viewBox="0 0 14 10" aria-hidden="true"><path d="M0 1h14M0 5h14M0 9h14"/></svg>`,
+  chevron: `<svg class="icon chev" width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5L6.5 5 3 8.5"/></svg>`,
+  copy: `<svg class="icon" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><rect x="4.5" y="4.5" width="8" height="8" rx="1.5"/><path d="M9.5 2.6V2.5A1 1 0 0 0 8.5 1.5h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.1"/></svg>`,
+};
+
+type Tab = "docs" | "benchmarks" | "changelog" | "cloud" | null;
+
+function header(tab: Tab, withMenu: boolean): string {
+  const tabLink = (href: string, label: string, name: Tab) =>
+    `<a href="${href}"${tab === name ? ' aria-current="page"' : ""}>${label}</a>`;
+  return `<header class="dtop">
+  ${withMenu ? `<button class="menu-btn" type="button" aria-label="Open navigation" aria-controls="docs-side" aria-expanded="false">${ICON.menu}</button>` : ""}
+  <a class="dbrand" href="/" aria-label="Alden home">
+    <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><rect class="m-bg" x=".75" y=".75" width="30.5" height="30.5" rx="8"/><path class="m-a" d="M9 23.5 L16 8.5 L23 23.5"/><path class="m-in" d="M9 23.5 L16 19 L23 23.5 M16 8.5 V19"/><circle class="m-dot" cx="9" cy="23.5" r="1.9"/><circle class="m-dot" cx="16" cy="8.5" r="1.9"/><circle class="m-dot" cx="23" cy="23.5" r="1.9"/><circle class="m-core" cx="16" cy="19" r="2.2"/></svg>
+    <span>alden</span>
+  </a>
+  <nav class="tabs" aria-label="Site">${tabLink("/docs/", "Docs", "docs")}${tabLink("/benchmarks/", "Benchmarks", "benchmarks")}${tabLink("/changelog/", "Changelog", "changelog")}${tabLink("/cloud/", "Alden Cloud", "cloud")}</nav>
+  <button class="search-btn" type="button" aria-haspopup="dialog">${ICON.search}<span>Search docs…</span><kbd>⌘K</kbd></button>
+  <div class="dtop-end">${OPEN_SOURCE ? GITHUB_LINK("nav") : ""}<a class="dbtn" href="/docs/getting-started/" data-track="install" data-label="nav">Install</a></div>
+</header>`;
+}
+
+/** Every page's footer, the home page's too (at its <!--footer-->). */
+const footer = `<footer class="dfoot">
+  <div class="dfoot-in">
+    <div class="cols">
+      <div class="col"><span class="h">Product</span><a href="/docs/getting-started/">Install</a><a href="/docs/desktop/">Desktop app</a><a href="/docs/commands/">CLI</a><a href="/docs/claude-code/">Claude Code</a><a href="/cloud/">Alden Cloud</a></div>
+      <div class="col"><span class="h">Docs</span><a href="/docs/getting-started/">Getting started</a><a href="/docs/commands/">Commands</a><a href="/docs/privacy/">Privacy</a><a href="/docs/security/">Security</a></div>
+      <div class="col"><span class="h">Project</span>${OPEN_SOURCE ? GITHUB_LINK("footer") : ""}<a href="/benchmarks/">Benchmarks</a><a href="/changelog/">Changelog</a><a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a><a href="mailto:beta@getalden.dev" data-track="contact" data-label="footer">beta@getalden.dev</a></div>
+    </div>
+    <div class="dfoot-base">
+      <div class="meta"><span>${OPEN_SOURCE ? "Free · open source, Apache-2.0" : "Free during the beta · open source after the beta"} · macOS, Linux and Windows</span><span>This site counts page views, no cookies. <a href="/docs/privacy/#this-website">Privacy</a></span></div>
+      <span class="theme" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">System</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></span>
+    </div>
+  </div>
+</footer>`;
+
 {
   const file = join(OUT, "index.html");
   let home = readFileSync(file, "utf8");
@@ -67,50 +107,9 @@ cpSync(SRC, OUT, { recursive: true, filter: (path) => !BODIES.some((body) => pat
     }
     if (OPEN_SOURCE) home = home.replace(today, openSource);
   }
-  writeFileSync(file, home);
+  if (!home.includes("<!--footer-->")) throw new Error("src/index.html needs a <!--footer--> where the footer goes.");
+  writeFileSync(file, home.replace("<!--footer-->", footer));
 }
-mkdirSync(join(OUT, "assets/fonts"), { recursive: true });
-for (const font of ["Geist-Variable.woff2", "GeistMono-Variable.woff2", "OFL.txt"]) {
-  cpSync(join(ROOT, "packages/ui/src/fonts", font), join(OUT, "assets/fonts", font));
-}
-
-// --- The frame: header, footer and search, shared by the docs, /benchmarks/ and /cloud/ ---------------------------
-
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-const ICON = {
-  search: `<svg class="icon" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><circle cx="6" cy="6" r="4.6"/><path d="M9.5 9.5L13 13"/></svg>`,
-  menu: `<svg class="icon" width="14" height="10" viewBox="0 0 14 10" aria-hidden="true"><path d="M0 1h14M0 5h14M0 9h14"/></svg>`,
-  chevron: `<svg class="icon chev" width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5L6.5 5 3 8.5"/></svg>`,
-  copy: `<svg class="icon" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><rect x="4.5" y="4.5" width="8" height="8" rx="1.5"/><path d="M9.5 2.6V2.5A1 1 0 0 0 8.5 1.5h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.1"/></svg>`,
-};
-
-type Tab = "docs" | "benchmarks" | "cloud" | null;
-
-function header(tab: Tab, withMenu: boolean): string {
-  const tabLink = (href: string, label: string, name: Tab) =>
-    `<a href="${href}"${tab === name ? ' aria-current="page"' : ""}>${label}</a>`;
-  return `<header class="dtop">
-  ${withMenu ? `<button class="menu-btn" type="button" aria-label="Open navigation" aria-controls="docs-side" aria-expanded="false">${ICON.menu}</button>` : ""}
-  <a class="dbrand" href="/" aria-label="Alden home">
-    <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><rect class="m-bg" x=".75" y=".75" width="30.5" height="30.5" rx="8"/><path class="m-a" d="M9 23.5 L16 8.5 L23 23.5"/><path class="m-in" d="M9 23.5 L16 19 L23 23.5 M16 8.5 V19"/><circle class="m-dot" cx="9" cy="23.5" r="1.9"/><circle class="m-dot" cx="16" cy="8.5" r="1.9"/><circle class="m-dot" cx="23" cy="23.5" r="1.9"/><circle class="m-core" cx="16" cy="19" r="2.2"/></svg>
-    <span>alden</span>
-  </a>
-  <nav class="tabs" aria-label="Site">${tabLink("/docs/", "Docs", "docs")}${tabLink("/benchmarks/", "Benchmarks", "benchmarks")}${tabLink("/cloud/", "Alden Cloud", "cloud")}</nav>
-  <button class="search-btn" type="button" aria-haspopup="dialog">${ICON.search}<span>Search docs…</span><kbd>⌘K</kbd></button>
-  <div class="dtop-end">${OPEN_SOURCE ? GITHUB_LINK("nav") : ""}<a class="dbtn" href="/docs/getting-started/" data-track="install" data-label="nav">Install</a></div>
-</header>`;
-}
-
-const footer = `<footer class="dfoot">
-  <div class="dfoot-in">
-    <span class="word">alden</span>
-    <span class="links"><a href="/docs/">Docs</a><a href="/benchmarks/">Benchmarks</a><a href="/cloud/">Alden Cloud</a>${OPEN_SOURCE ? GITHUB_LINK("footer") : ""}<a href="${DISCORD}" rel="noopener" data-label="footer">Discord</a><a href="mailto:beta@getalden.dev" data-track="contact" data-label="footer">beta@getalden.dev</a><a href="/docs/privacy/#this-website">Privacy</a></span>
-    <span class="theme" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">System</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></span>
-    <span class="note">This site counts page views, no cookies.</span>
-  </div>
-</footer>`;
-
 const searchDialog = `<div class="search" hidden>
   <div class="search-box" role="dialog" aria-modal="true" aria-label="Search docs">
     <div class="search-head">${ICON.search}<input type="search" placeholder="Search docs" autocomplete="off" spellcheck="false" aria-label="Search docs" aria-controls="search-results" /><kbd>esc</kbd></div>
@@ -413,6 +412,47 @@ writeFileSync(
   ),
 );
 
+// --- Changelog ----------------------------------------------------------------------------------------------------
+
+/**
+ * /changelog/ is packages/cli/CHANGELOG.md, the release notes Changesets writes, with each version's date from its tag
+ * (v0.9.0…). The home page's Changelog cards link its versions (/changelog/#090) and are written by hand: update them
+ * with a release.
+ */
+const tagDate = (version: string) => {
+  try {
+    const day = execFileSync("git", ["for-each-ref", "--format=%(creatordate:short)", `refs/tags/v${version}`], {
+      cwd: ROOT,
+    })
+      .toString()
+      .trim();
+    return day ? DATE.format(new Date(`${day}T00:00:00Z`)) : "";
+  } catch {
+    return "";
+  }
+};
+const changelog = readFileSync(join(ROOT, "packages/cli/CHANGELOG.md"), "utf8")
+  .replace(/^# .+\n/, "")
+  .replace(/^- [0-9a-f]{7,40}: /gm, "- ")
+  .replace(/^### Minor Changes$/gm, "### New")
+  .replace(/^### Patch Changes$/gm, "### Fixes")
+  .replace(/^## (\d+\.\d+\.\d+)$/gm, (_, version: string) => {
+    const when = tagDate(version);
+    return `## ${version}${when ? `\n\n<p class="when">${when}</p>` : ""}`;
+  });
+toc = [];
+const changelogHtml = render(changelog);
+mkdirSync(join(OUT, "changelog"), { recursive: true });
+writeFileSync(
+  join(OUT, "changelog", "index.html"),
+  page(
+    "Changelog · Alden",
+    "Every release of Alden, newest first: what's new and what's fixed in the alden command, the web UI and the desktop app.",
+    `<main class="dmain solo"><article class="prose dprose changelog"><div class="eyebrow">Alden</div><h1>Changelog</h1><p>Every release of Alden, newest first: what's new and what's fixed in the <code>alden</code> command, the web UI and the desktop app.</p>${changelogHtml}</article></main>`,
+    "changelog",
+  ),
+);
+
 // --- Benchmarks ---------------------------------------------------------------------------------------------------
 
 mkdirSync(join(OUT, "benchmarks"), { recursive: true });
@@ -443,5 +483,5 @@ if (!existsSync(join(OUT, "assets/screens/briefing-dark.png"))) {
   throw new Error("site/src/assets/screens is missing its screenshots. Run `pnpm screenshots`.");
 }
 console.log(
-  `Built ${files.length} docs pages and their search index, the benchmarks, Alden Cloud and the home page into site/dist${OPEN_SOURCE ? ", saying Alden is open source (ALDEN_OPEN_SOURCE=1)" : ""}.`,
+  `Built ${files.length} docs pages and their search index, the changelog, the benchmarks, Alden Cloud and the home page into site/dist${OPEN_SOURCE ? ", saying Alden is open source (ALDEN_OPEN_SOURCE=1)" : ""}.`,
 );

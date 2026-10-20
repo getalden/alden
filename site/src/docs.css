@@ -1,8 +1,8 @@
 /*
-  The docs frame, from the "Alden Docs v3" Claude Design project: the docs, /benchmarks/ and /cloud/ (html.dframe).
-  Light and dark, following the system unless the footer's switch picked one (theme.js sets data-theme). The landing
-  page keeps site.css alone. The frame's tokens also answer to site.css's names (--panel, --line2, --acc2…), so the
-  benchmark and Alden Cloud bodies follow the theme too.
+  The frame, from the "Alden Docs v3" and "Alden Site v3" Claude Design projects, on every page (html.dframe): light
+  and dark tokens, the docs header and layout, the footer and search. Light or dark follows the system unless the
+  footer's switch picked one (theme.js sets data-theme). The landing page adds home.css. The tokens also answer to
+  site.css's names (--panel, --line2, --acc2…), so the benchmark and Alden Cloud bodies follow the theme too.
 */
 
 html.dframe {
@@ -901,42 +901,65 @@ html.dframe[data-theme="light"] {
   }
 }
 
-/* ---- Footer ------------------------------------------------------------------------------------------------ */
+/* ---- Footer, on every page --------------------------------------------------------------------------------- */
 
 .dfoot {
-  border-top: 1px solid var(--line);
-  padding: 28px 20px 40px;
+  background: var(--raised);
 }
 .dfoot-in {
-  max-width: 1440px;
+  max-width: 1200px;
   margin: 0 auto;
+  padding: 56px 24px 28px;
+}
+.dfoot .cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 32px 24px;
+}
+.dfoot .col {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.dfoot .h {
+  font: 400 13px var(--sans);
+  color: var(--ink3);
+  margin-bottom: 4px;
+}
+.dframe .dfoot .col a {
+  font: 400 14px var(--sans);
+  color: var(--ink);
+  text-decoration: none;
+}
+.dframe .dfoot .col a:hover {
+  color: var(--acc);
+}
+.dfoot-base {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 16px 28px;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 56px;
   font: 400 13px var(--sans);
   color: var(--ink3);
 }
-.dfoot .word {
-  font: 600 16px var(--sans);
-  letter-spacing: -0.04em;
-  color: var(--ink);
-}
-.dfoot .links {
+.dfoot-base .meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
+  flex-direction: column;
+  gap: 6px;
 }
-.dframe .dfoot .links a {
+.dframe .dfoot-base a {
   color: var(--ink3);
-  text-decoration: none;
 }
-.dframe .dfoot .links a:hover {
+.dframe .dfoot-base a:hover {
   color: var(--ink);
 }
 .theme {
   display: inline-flex;
-  padding: 2px;
+  gap: 2px;
+  padding: 3px;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -944,8 +967,8 @@ html.dframe[data-theme="light"] {
   border: 0;
   background: transparent;
   color: var(--ink3);
-  font: 400 12.5px var(--sans);
-  padding: 4px 10px;
+  font: 400 12px var(--sans);
+  padding: 5px 11px;
   border-radius: 6px;
   cursor: pointer;
 }
@@ -956,8 +979,25 @@ html.dframe[data-theme="light"] {
   background: var(--raised2);
   color: var(--ink);
 }
-.dfoot .note {
-  margin-left: auto;
+
+/* ---- Changelog --------------------------------------------------------------------------------------------- */
+
+.prose.dprose.changelog h2 {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.prose.dprose.changelog h2 + .when {
+  margin: -6px 0 8px;
+  font-size: 13px;
+  color: var(--ink3);
+}
+.prose.dprose.changelog h3 {
+  font-size: 15px;
+  color: var(--ink2);
+}
+.prose.dprose.changelog li {
+  margin: 10px 0;
 }
 
 /* ---- Search ------------------------------------------------------------------------------------------------ */

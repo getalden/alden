@@ -2,15 +2,19 @@
 
 The landing page and the docs, built into `site/dist` and served by Cloudflare Pages.
 
-- `site/src` is the landing page from the "Alden Site v2" Claude Design project: static HTML, CSS and a small script for
-  its animations (still under reduced motion). Fonts are the same bundled Geist files as the app.
+- `site/src/index.html` is the landing page from the "Alden Site v3" Claude Design project: static HTML with `home.css`
+  on top of the shared `site.css` and `docs.css`, so it has the same light, dark and system themes as the docs. The
+  three illustrations you can pick in (a week of Memory, a draft's tone, where you use Alden) and the OS on the
+  download button are in `site.js`; without JavaScript each shows its default. Its footer is the shared one from
+  `build.ts`, at `<!--footer-->`. The Changelog cards are written by hand from `packages/cli/CHANGELOG.md` and the
+  release tags' dates: update them with a release. Fonts are the same bundled Geist files as the app.
 - The docs are the repo's own `docs/*.md`, rendered by `site/build.ts` into the frame from the "Alden Docs v3" Claude
   Design project (`src/docs.css`, `src/docs.js`, `src/theme.js`): the sidebar is the groups under "All pages" in
   `docs/README.md`, in that order, and the build stops if a doc isn't in one. The rest of `docs/README.md` is the docs
   home, where its "Start here" list becomes the pathway cards. Search is `/docs/search.json`, built with the site and
   searched in the browser; "Copy page" copies each page's Markdown from `/docs/<page>/index.md`. The docs, benchmarks
   and Alden Cloud pages have light and dark themes (the system's, unless the footer's switch picks one); the home
-  page is still dark only.
+  page shares them.
 - `site/src/assets/screens` are real screenshots of `alden ui` over the demo data (checks only, no model), for the home
   page, the README and the docs: `pnpm screenshots` retakes them all (`scripts/screenshots.ts` lists each one and how
   it's set up; the first run's three steps come from a demo that starts signed out with no model,
@@ -58,9 +62,9 @@ ALDEN_OPEN_SOURCE=1 pnpm site:build   # launch day: "open source, Apache-2.0" an
 ALDEN_OPEN_SOURCE=1 pnpm site:deploy  # what RELEASING.md's "Launch day" runs, once the repo is public
 ```
 
-`HOME_SWAPS` in `build.ts` lists each change to `src/index.html` as exact text, today's and launch day's: the hero's
-kicker, the "source" line under 03 / yours, and a GitHub link in the header and the footer. The docs, benchmarks and
-Alden Cloud pages get the same header and footer link. Without the flag the built home page is `src/index.html` as is,
+`HOME_SWAPS` in `build.ts` lists each change to `src/index.html` as exact text, today's and launch day's: the "Open
+source" card and a GitHub link in the header. Every page's footer (the home page's too) gets the GitHub link and says
+"open source, Apache-2.0", and the docs, changelog, benchmarks and Alden Cloud header gets the link. Without the flag the built home page is `src/index.html` as is,
 and the build stops if any of today's texts can't be found, with or without the flag, so editing that copy means
 updating `HOME_SWAPS` too. The README's own "Open source" section waits on the branch `launch/open-source`.
 
@@ -76,6 +80,10 @@ random id per page load and `$process_person_profile: false`. Events are `$pagev
 `label`), with `$lib: "getalden.dev"`. It only runs on getalden.dev (not on localhost or pages.dev previews), and never
 with Do Not Track or Global Privacy Control. What it sends is disclosed in `docs/privacy.md` ("This website"); change
 both together.
+
+## Changelog
+
+`/changelog/` is `packages/cli/CHANGELOG.md`, which Changesets writes, with each version's date from its `v…` tag.
 
 ## Benchmarks
 

@@ -1,4 +1,4 @@
-// Every page of getalden.dev loads this: page view counts, copy buttons, and the landing page's moving parts.
+// Every page of getalden.dev loads this: page view counts, copy buttons, and the landing page's pickers.
 
 // --- Page view counts ---------------------------------------------------------------------------------------------
 // To help us improve the site, it counts page views and clicks on install, copy and Discord links, in PostHog's EU
@@ -93,13 +93,12 @@ for (const box of document.querySelectorAll("[data-copy], .prose pre")) {
   }
 }
 
-// --- The landing page's moving parts ------------------------------------------------------------------------------
-// Each one starts in a sensible still state, so with reduced motion (or without JavaScript) the page reads the same,
-// just without the motion. Other pages don't have them, and a doc's heading can share one of their ids (the
-// Configuration page's "queue" heading is #queue), so this checks for the landing page itself.
+// --- The landing page's parts you can pick -------------------------------------------------------------------------
+// The download button names your OS, the header folds into a menu on a phone, and three illustrations take a pick:
+// a week of Memory, a tone for the same draft, and where you use Alden. Without JavaScript each shows its default.
+// Other pages don't have them, so this checks for the landing page itself.
 (() => {
-  if (!document.querySelector(".hero-wrap")) return;
-  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!document.documentElement.classList.contains("home")) return;
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => {
     const node = document.createElement(tag);
@@ -108,233 +107,141 @@ for (const box of document.querySelectorAll("[data-copy], .prose pre")) {
     return node;
   };
 
-  // --- Hero: a queue sorted by date becomes a queue ranked for you ---------------------------------------------
-  const prs = [
-    ["Add worktree checkout to `gh issue develop`", "cli/cli#14136 · 2d", "large, tests changed", 34],
-    [
-      "RecentlyDeleted: show when each dashboard was deleted",
-      "grafana#133734 · 5d",
-      "large · 3 PRs waiting on you",
-      62,
-    ],
-    ["[13.x] Run workflows on Ubuntu 26.04", "laravel#60005 · 4d", "touches .github/workflows/", 48],
-    [
-      "Fixed lookup crashes after subquery annotations",
-      "django#19057 · 5d",
-      "migration may lose data · waiting 5d",
-      91,
-    ],
-    ["fix(swc): normalize codeFrameColumns options", "next.js#99367 · 3d", "no test changes", 40],
-    ["docs: fix the matcher example", "next.js#99371 · 2h", "docs only · fast-track", 6],
-  ];
-  const queue = $("queue");
-  const status = $("q-status");
-  const rows = prs.map(([title, sub, why, score]) => {
-    const row = el("div", "qrow");
-    row.append(el("span", "pos"));
-    const what = el("span", "what");
-    what.append(el("span", "title", title), el("span", "sub", sub));
-    const bar = el("span", "bar");
-    bar.append(el("span"));
-    row.append(what, bar, el("span", "score", "··"));
-    queue.append(row);
-    return { row, sub, why, score };
-  });
-  const order = rows.map((_, i) => i).sort((a, b) => rows[b].score - rows[a].score);
-  const drawQueue = (phase) => {
-    rows.forEach((r, i) => {
-      const pos = phase === 2 ? order.indexOf(i) : i;
-      r.row.style.top = `${pos * 66}px`;
-      r.row.classList.toggle("first", phase === 2 && pos === 0);
-      r.row.querySelector(".pos").textContent = String(pos + 1).padStart(2, "0");
-      r.row.querySelector(".sub").textContent = phase ? r.why : r.sub;
-      const fill = r.row.querySelector(".bar span");
-      fill.style.width = phase ? `${r.score}%` : "0";
-      fill.classList.toggle("hot", r.score > 70);
-      const score = r.row.querySelector(".score");
-      score.textContent = phase ? r.score : "··";
-      score.classList.toggle("hot", phase > 0 && r.score > 70);
+  // Download for macOS, Windows or Linux: all three are on the releases page.
+  const ua = navigator.userAgent;
+  const os = /Win/.test(ua) ? "Windows" : /Linux/.test(ua) && !/Android/.test(ua) ? "Linux" : "macOS";
+  const download = $("download")?.querySelector("span");
+  if (download) download.textContent = `Download for ${os}`;
+
+  // The header's menu, below 820 px.
+  const menu = document.querySelector(".hmenu");
+  const nav = $("hnav");
+  if (menu && nav) {
+    menu.addEventListener("click", () => {
+      const open = !document.documentElement.classList.contains("menu-open");
+      document.documentElement.classList.toggle("menu-open", open);
+      menu.setAttribute("aria-expanded", String(open));
     });
-    queue.classList.toggle("scoring", phase === 1);
-    status.textContent = ["sorted by date", "scoring 6 PRs…", "ranked for you"][phase];
-    status.classList.toggle("done", phase === 2);
+    nav.addEventListener("click", (e) => {
+      if (e.target instanceof Element && e.target.closest("a")) {
+        document.documentElement.classList.remove("menu-open");
+        menu.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  // Buttons that pick one of a few, as aria-pressed.
+  const picker = (box, labels, current, onPick) => {
+    const buttons = labels.map((label, i) => {
+      const b = el("button", "", label);
+      b.type = "button";
+      b.addEventListener("click", () => {
+        for (const [j, other] of buttons.entries()) other.setAttribute("aria-pressed", String(i === j));
+        onPick(i);
+      });
+      b.setAttribute("aria-pressed", String(i === current));
+      return b;
+    });
+    box.replaceChildren(...buttons);
   };
 
-  // --- Beyond the diff: the change, then its callers one by one ---------------------------------------------------
-  const diffLines = [
-    ["21", " ", "export function revalidatePath(originalPath, type) {"],
-    ["22", "−", "  if (!store) return"],
-    ["22", "+", "  if (!store) {"],
-    ["23", "+", "    throw new InvariantError('revalidatePath outside a request')"],
-    ["24", "+", "  }"],
-    ["25", " ", "  const path = normalize(originalPath, type)"],
-    ["26", "+", "  store.pendingRevalidates.add(routeKey(path))"],
-  ];
-  const diff = $("diff");
-  const lines = diffLines.map(([n, m, t]) => {
-    const line = el("div", `dl ${m === "+" ? "add" : m === "−" ? "del" : "ctx"}`);
-    line.append(el("span", "n", n), el("span", "m", m), el("span", "t", t));
-    diff.append(line);
-    return line;
-  });
-  const callerData = [
-    ["action-handler.ts:207", "await revalidatePath(path, 'page')", false],
-    ["router-server.ts:388", "try { revalidatePath(p) } catch {…}", true],
-    ["api-resolver.ts:142", "revalidatePath(req.query.path)", false],
-    ["cache-handler.ts:56", "revalidatePath(tag.path, 'layout')", false],
-  ];
-  const callersBox = $("callers");
-  const callers = callerData.map(([loc, code, ok]) => {
-    const card = el("div", `caller${ok ? "" : " miss"}`);
-    const top = el("span", "row");
-    top.append(el("span", "loc", loc), el("span", "tag", ok ? "catches" : "no catch"));
-    card.append(top, el("code", "", code));
-    callersBox.append(card);
-    return card;
-  });
-  const ctx = $("ctx");
-  const drawCallers = (step) => {
-    lines[3].classList.toggle("hot", step >= 2);
-    const shown = Math.max(0, Math.min(4, Math.floor((step - 4) / 2) + 1));
-    callers.forEach((card, i) => {
-      card.classList.toggle("shown", i < shown);
-    });
-    ctx.textContent =
-      shown === 0
-        ? "reading local clone…"
-        : shown < 4
-          ? `found ${shown} of 7 call sites`
-          : "7 call sites · 3 miss the new throw";
-  };
-
-  // --- Learns you: what one reviewer's Memory looks like, week by week -------------------------------------------
-  const learned = [
-    { per: 5, useful: 31, log: "marked 9 places across 4 PRs" },
+  // Learns you: one reviewer's Memory, week by week.
+  const weeks = [
+    { places: "11.2", useful: "12%", learned: [["learning", "Nothing yet. Mark places useful or not as you review."]] },
+    { places: "9.1", useful: "18%", learned: [["look for", "Migration changes. You marked 3 of 3 useful."]] },
     {
-      per: 4.4,
-      useful: 42,
-      item: ["look", "You care about migration flags", "you marked 3 of 3 useful"],
-      log: "kept 3 migration flags",
+      places: "7.4",
+      useful: "25%",
+      learned: [
+        ["look for", "Migration changes. You marked 5 of 5 useful."],
+        ["skip", "Snapshot-only test updates."],
+      ],
     },
     {
-      per: 3.6,
-      useful: 55,
-      item: ["skip", "You usually mark untested-change flags not useful", "marked 4 of 5 not useful"],
-      log: "untested-change flags now step aside",
+      places: "6.0",
+      useful: "31%",
+      learned: [
+        ["look for", "Migration changes, and callers that drop errors."],
+        ["skip", "Snapshot-only test updates."],
+      ],
     },
     {
-      per: 3.1,
-      useful: 63,
-      item: ["look", "You open PRs in app/api/ first", "opened ahead of their rank 4 times"],
-      log: "app/api/ PRs now rank higher",
+      places: "5.1",
+      useful: "37%",
+      learned: [
+        ["look for", "Migration changes, and callers that drop errors."],
+        ["skip", "Snapshot updates and lockfile-only diffs."],
+      ],
     },
     {
-      per: 2.7,
-      useful: 71,
-      item: ["you said", "Server actions must check the session first", "your note, given to the model"],
-      log: "added a note for the model",
-    },
-    {
-      per: 2.4,
-      useful: 78,
-      item: ["skip", "You skip PRs labelled docs", "marked not useful 3 times"],
-      log: "docs PRs now rank lower",
+      places: "4.4",
+      useful: "42%",
+      learned: [
+        ["look for", "Migration changes, and callers that drop errors."],
+        ["skip", "Snapshot updates and lockfile-only diffs."],
+        ["your note", '"Ask for a test when a public API changes."'],
+      ],
     },
   ];
   const weeksBox = $("weeks");
-  let pinned = null;
-  const weekButtons = learned.map((_, i) => {
-    const button = el("button", "", `wk ${i + 1}`);
-    button.type = "button";
-    button.addEventListener("click", () => {
-      pinned = pinned === i + 1 ? null : i + 1;
-      drawWeek(pinned ?? i + 1);
-    });
-    weeksBox.append(button);
-    return button;
-  });
-  const drawWeek = (week) => {
-    const w = learned[week - 1];
-    weekButtons.forEach((b, i) => {
-      b.setAttribute("aria-pressed", String(i + 1 === week));
-    });
-    $("week-label").textContent = `week ${week}`;
-    $("per-pr").textContent = String(w.per);
-    $("useful").textContent = `${w.useful}%`;
-    const list = $("memory");
-    list.replaceChildren();
-    const items = learned.slice(0, week).flatMap((x) => (x.item ? [x.item] : []));
-    if (items.length === 0) {
-      const li = el("li");
-      li.append(el("span", "empty", "Nothing yet. Alden waits for three reactions before it changes anything."));
-      list.append(li);
-    }
-    for (const [grp, text, ev] of items) {
-      const li = el("li");
-      const what = el("span", "", text);
-      what.append(el("span", "ev", ev));
-      li.append(
-        el(
-          "span",
-          `grp${grp === "skip" ? " skip" : ""}`,
-          grp === "skip" ? "skip" : grp === "you said" ? "you said" : "look for",
-        ),
-        what,
-      );
-      list.append(li);
-    }
-    const log = $("log");
-    log.replaceChildren();
-    for (let i = Math.max(0, week - 3); i < week; i++) {
-      const line = el("div");
-      line.append(el("b", "", `w${i + 1}`), document.createTextNode(learned[i].log));
-      log.append(line);
-    }
-  };
-
-  // --- The terminal ------------------------------------------------------------------------------------------------
-  const term = [
-    ["$ alden queue", "var(--ink)"],
-    ["", ""],
-    ["needs you · 4", "var(--ink3)"],
-    ["01  Fixed lookup crashes after subquery annotations  django#19057", "var(--acc2)"],
-    ["02  RecentlyDeleted: show when each dashboard was…    grafana#133734", "var(--ink)"],
-    ["03  [13.x] Run workflows on Ubuntu 26.04              laravel#60005", "var(--ink2)"],
-    ["04  fix(swc): normalize codeFrameColumns options      next.js#99367", "var(--ink2)"],
-    ["", ""],
-    ["$ alden review 1", "var(--ink)"],
-    ["Needs your eyes", "var(--ink3)"],
-    ["  1. Migration in tests/migrations/test_operations.py:2347", "var(--warn)"],
-  ];
-  const termBox = $("term-lines");
-  const drawTerm = (n) => {
-    termBox.replaceChildren(
-      ...term.slice(0, n).map(([t, c]) => {
-        const line = el("div", "", t || " ");
-        line.style.color = c;
-        return line;
-      }),
+  if (weeksBox) {
+    picker(
+      weeksBox,
+      weeks.map((_, i) => `wk ${i + 1}`),
+      weeks.length - 1,
+      (i) => {
+        const w = weeks[i];
+        $("week-label").textContent = `week ${i + 1}`;
+        $("per-pr").textContent = w.places;
+        $("useful").textContent = w.useful;
+        $("memory").replaceChildren(
+          ...w.learned.map(([k, v]) => {
+            const row = el("div", "mem-item");
+            row.append(el("span", "k", k), el("span", "", v));
+            return row;
+          }),
+        );
+      },
     );
-  };
-
-  if (still) {
-    drawQueue(2);
-    drawCallers(99);
-    drawWeek(6);
-    drawTerm(term.length);
-    return;
   }
-  let tick = 0;
-  drawQueue(0);
-  drawCallers(0);
-  drawWeek(1);
-  drawTerm(1);
-  setInterval(() => {
-    tick++;
-    const q = tick % 22;
-    drawQueue(q < 4 ? 0 : q < 9 ? 1 : 2);
-    drawCallers(tick % 26);
-    if (pinned === null) drawWeek((Math.floor(tick / 6) % 6) + 1);
-    drawTerm(Math.min(term.length, Math.max(1, (tick % 30) - 1)));
-  }, 450);
+
+  // Drafts in your tone: the same comment, four ways.
+  const drafts = {
+    Terse: "This throws InvariantError now and this caller has no catch. Handle it here?",
+    Concise:
+      "invalidatePath now throws InvariantError outside a request, but this call has no catch, so a server action would fail with a 500. Should it handle that case?",
+    Detailed:
+      "After this change invalidatePath throws InvariantError when it runs outside a request. This handler calls it without a try/catch, so a server action that revalidates during a background job would now surface a 500. Could we catch it here, or document that callers must be inside a request?",
+    Teaching:
+      "Worth a look: invalidatePath used to fail quietly outside a request and now throws. Code that called it from a background job (like this handler) was relying on the quiet version. A small catch here, or a note in the docs, keeps those callers working.",
+  };
+  const tonesBox = $("tones");
+  if (tonesBox) {
+    const names = Object.keys(drafts);
+    picker(tonesBox, names, 1, (i) => {
+      $("draft").textContent = drafts[names[i]];
+    });
+  }
+
+  // Works where you do: tabs, with the arrow keys moving between them.
+  const tabs = [...document.querySelectorAll('.place-tabs [role="tab"]')];
+  const select = (tab, focus) => {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
+      const panel = $(t.getAttribute("aria-controls"));
+      if (panel) panel.hidden = !on;
+    }
+    if (focus) tab.focus();
+  };
+  for (const [i, tab] of tabs.entries()) {
+    tab.addEventListener("click", () => select(tab, false));
+    tab.addEventListener("keydown", (e) => {
+      const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (!step) return;
+      e.preventDefault();
+      select(tabs[(i + step + tabs.length) % tabs.length], true);
+    });
+  }
 })();
