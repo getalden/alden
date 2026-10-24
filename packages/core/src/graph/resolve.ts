@@ -79,6 +79,8 @@ export function createResolver(files: Iterable<string>, config: ResolverConfig):
 
   return (fromFile, specifier) => {
     if (fromFile.endsWith(".php")) return resolvePhp(specifier);
+    // Ruby and Swift share one namespace without imports; Java and Kotlin imports are matched in the graph itself.
+    if (/\.(rb|rake|swift|java|kts?)$/.test(fromFile)) return undefined;
     if (fromFile.endsWith(".go")) {
       for (const module of goModules) {
         if (specifier !== module.path && !specifier.startsWith(`${module.path}/`)) continue;

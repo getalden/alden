@@ -8,7 +8,7 @@ const names = (defs: { name: string; kind: string; exported: boolean; container?
   defs.map((d) => `${d.exported ? "+" : "-"}${d.container ? `${d.container}.` : ""}${d.name}:${d.kind}`);
 
 describe("languageOf", () => {
-  it("covers TS, JS (via the TSX grammar), Python, Go and PHP, and skips everything else", () => {
+  it("covers TS, JS (via the TSX grammar), Python, Go, PHP, Ruby, Swift, Java and Kotlin, and skips everything else", () => {
     expect(
       [
         "a.ts",
@@ -23,6 +23,12 @@ describe("languageOf", () => {
         "a.php",
         "a.blade.php",
         "a.rb",
+        "lib/tasks/rules.rake",
+        "a.swift",
+        "A.java",
+        "a.kt",
+        "build.gradle.kts",
+        "a.rs",
       ].map(languageOf),
     ).toEqual([
       "typescript",
@@ -36,6 +42,12 @@ describe("languageOf", () => {
       "go",
       "php",
       undefined,
+      "ruby",
+      "ruby",
+      "swift",
+      "java",
+      "kotlin",
+      "kotlin",
       undefined,
     ]);
   });
@@ -498,5 +510,5 @@ enum Status: string { case Active = 'a'; public function label(): string { retur
 });
 
 it("skips languages the graph doesn't cover", async () => {
-  expect(await extractSymbols("app.rb", "puts 1")).toBeUndefined();
+  expect(await extractSymbols("main.rs", "fn main() {}")).toBeUndefined();
 });

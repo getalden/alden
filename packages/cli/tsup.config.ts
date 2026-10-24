@@ -12,6 +12,11 @@ const GRAMMARS = [
   "tree-sitter-python/tree-sitter-python.wasm",
   "tree-sitter-go/tree-sitter-go.wasm",
   "tree-sitter-php/tree-sitter-php.wasm",
+  "tree-sitter-ruby/tree-sitter-ruby.wasm",
+  "tree-sitter-java/tree-sitter-java.wasm",
+  "@tree-sitter-grammars/tree-sitter-kotlin/tree-sitter-kotlin.wasm",
+  // tree-sitter-swift ships no .wasm; scripts/build-swift-grammar.ts builds this one.
+  "../core/grammars/tree-sitter-swift.wasm",
 ];
 
 export default defineConfig({
@@ -28,7 +33,7 @@ export default defineConfig({
   async onSuccess() {
     mkdirSync("dist/grammars", { recursive: true });
     for (const grammar of GRAMMARS) {
-      const source = require.resolve(grammar);
+      const source = grammar.startsWith(".") ? grammar : require.resolve(grammar);
       cpSync(source, join("dist/grammars", grammar.split("/").at(-1) as string));
     }
     // The web UI for `alden ui`, built by @alden/ui first (it's a devDependency, so pnpm builds it before this).

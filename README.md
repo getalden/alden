@@ -43,10 +43,10 @@ your eyes, every check Alden ran with its evidence (secrets, migrations, public 
 config, sensitive paths, CI), and what it did not check. Checks marked `~` infer from the diff alone. Add `--json` for
 the briefing as data.
 
-For TypeScript, JavaScript, Python, Go and PHP, Alden also builds a code graph of the repo and lists the callers
+For TypeScript, JavaScript, Python, Go, PHP, Ruby, Swift, Java and Kotlin, Alden also builds a code graph of the repo and lists the callers
 outside the diff of every changed public function, class and method, flagging removed or re-signed code that's still
 called. For PHP it follows Laravel's and Symfony's indirect calls too: container bindings, facades, Eloquent scopes and
-relationships, Blade templates and service config. Local reviews use your working tree. For PR reviews, Alden uses
+relationships, Blade templates and service config, and for Ruby, Rails' jobs, callbacks and concerns. Local reviews use your working tree. For PR reviews, Alden uses
 a clone of the PR's repo: the one you run it in, one it has seen you use, or one under `clones.folders`. It fetches the PR into its own worktree under `~/.alden/worktrees`
 (your checkout is never touched). `--no-graph` skips it.
 
@@ -124,7 +124,7 @@ work, the code graph, learning and memory, models and budgets, privacy, and trou
   `alden mcp` gives [any MCP client](https://getalden.dev/docs/mcp/) the same tools.
 - On macOS, the [desktop app](https://getalden.dev/docs/desktop/) keeps your queue in the menu bar.
 
-Alden is GitHub-only for now and supports TypeScript/JavaScript, Python, PHP (Laravel, Symfony) and Go.
+Alden is GitHub-only for now and supports TypeScript/JavaScript, Python, PHP (Laravel, Symfony), Go, Ruby (Rails), Swift, Java and Kotlin.
 
 ## Models and spending
 

@@ -67,6 +67,10 @@ const LANGUAGE_NAMES: Record<string, string> = {
   python: "Python",
   go: "Go",
   php: "PHP",
+  ruby: "Ruby",
+  swift: "Swift",
+  java: "Java",
+  kotlin: "Kotlin",
 };
 
 /** Which languages the code graph reads in a list of files, most files first: "TypeScript/JavaScript (812), Go (40)". */
@@ -322,7 +326,9 @@ export async function diagnose(version: string, cwd: string = process.cwd()): Pr
     add({
       area: "Code graph",
       status: languages ? "ok" : "warn",
-      detail: languages ? `reads ${languages}` : "no TypeScript, JavaScript, Python, Go or PHP files here",
+      detail: languages
+        ? `reads ${languages}`
+        : "no TypeScript, JavaScript, Python, Go, PHP, Ruby, Swift, Java or Kotlin files here",
       ...(languages ? {} : { fix: "Callers outside the diff need one of those languages." }),
     });
   } catch {
