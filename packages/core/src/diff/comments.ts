@@ -11,10 +11,10 @@ const C_LIKE: CommentSyntax = { line: ["//"], block: true, docstrings: false };
 const HASH: CommentSyntax = { line: ["#"], block: false, docstrings: false };
 
 function syntaxOf(path: string): CommentSyntax | undefined {
-  if (/\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|go|java|kt|swift|rs|dart|cs|c|cc|cpp|h|scss)$/.test(path)) return C_LIKE;
+  if (/\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|go|java|kts?|swift|rs|dart|cs|c|cc|cpp|h|scss)$/.test(path)) return C_LIKE;
   if (path.endsWith(".php")) return { line: ["//", "#"], block: true, docstrings: false };
   if (path.endsWith(".py")) return { line: ["#"], block: false, docstrings: true };
-  if (/\.(rb|sh|ya?ml|toml)$/.test(path)) return HASH;
+  if (/\.(rb|rake|sh|ya?ml|toml)$/.test(path)) return HASH;
   return undefined;
 }
 
@@ -50,6 +50,27 @@ function commentLines(lines: DiffLine[], syntax: CommentSyntax): Set<DiffLine> {
       if (!rest.includes(quote)) inDocstring = quote;
     }
     if (comment) out.add(line);
+  }
+  return out;
+}
+
+/** The added and removed lines of a file that are comments or blank, or none for languages it doesn't know. */
+export function commentChanges(file: DiffFile): Set<DiffLine> {
+  const out = new Set<DiffLine>();
+  const syntax = syntaxOf(file.path);
+  if (!syntax) return out;
+  for (const hunk of file.hunks) {
+    const before = commentLines(
+      hunk.lines.filter((l) => l.kind !== "add"),
+      syntax,
+    );
+    const after = commentLines(
+      hunk.lines.filter((l) => l.kind !== "del"),
+      syntax,
+    );
+    for (const line of hunk.lines) {
+      if ((line.kind === "del" && before.has(line)) || (line.kind === "add" && after.has(line))) out.add(line);
+    }
   }
   return out;
 }

@@ -3,7 +3,7 @@ import { graphLanguages, keysFinding, renderDoctor, reviewAccess } from "./docto
 
 describe("alden doctor", () => {
   it("names the languages the graph reads, most files first, skipping the rest", () => {
-    expect(graphLanguages(["a.ts", "b.tsx", "c.js", "d.go", "e.php", "f.blade.php", "README.md", "g.rb"])).toBe(
+    expect(graphLanguages(["a.ts", "b.tsx", "c.js", "d.go", "e.php", "f.blade.php", "README.md", "g.rs"])).toBe(
       "TypeScript/JavaScript (3), Go (1), PHP (1)",
     );
     expect(graphLanguages(["README.md"])).toBe("");

@@ -27,10 +27,13 @@
     "@anthropic-ai/bedrock-sdk": "^0.34.0",
     "@anthropic-ai/foundry-sdk": "^0.5.0",
     "@anthropic-ai/vertex-sdk": "^0.20.0",
+    "@tree-sitter-grammars/tree-sitter-kotlin": "^1.1.0",
     "@types/picomatch": "^4.0.3",
     "tree-sitter-go": "^0.25.0",
+    "tree-sitter-java": "^0.23.5",
     "tree-sitter-php": "^0.24.2",
     "tree-sitter-python": "^0.25.0",
+    "tree-sitter-ruby": "^0.23.1",
     "tree-sitter-typescript": "^0.23.2"
   }
 }
