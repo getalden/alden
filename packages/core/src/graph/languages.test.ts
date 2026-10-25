@@ -281,6 +281,12 @@ describe("Swift", () => {
   }
 }
 `,
+      "Tests/AppTests/StoreTests.swift": `final class StoreTests {
+  func testFetch() {
+    run(.fetch(id: 7))
+  }
+}
+`,
       "Sources/App/Debug.swift": `final class DebugView {
   weak var client: Store?
   let cache: Cache
@@ -297,6 +303,7 @@ describe("Swift", () => {
       "Sources/App/Feature.swift:5?",
       "Sources/App/Store.swift:4",
       "Sources/App/Store+Extra.swift:2",
+      "Tests/AppTests/StoreTests.swift:3?",
     ]);
     expect(sites(graph.callersOf({ path: "Sources/App/Store.swift", name: "init", container: "Store" }))).toEqual([
       "Sources/App/Feature.swift:2",

@@ -79,21 +79,21 @@ file importing a same-named function from elsewhere (`kotlin.concurrent.withLock
 blaming the graph.
 
 On 25 Oct 2026, 30 cases per repo since 2022, at the first version of the Ruby, Swift, Java and Kotlin support, after the
-namespace and import fixes, and after reading declared types:
+namespace and import fixes, after reading declared types, and after Swift leading-dot calls:
 
-| Repo | Language | First version | Namespaces, imports | Declared types |
-| --- | --- | --- | --- | --- |
-| we-promise/sure | Ruby (Rails) | 35/45 | 41/45 | 41/45 |
-| mastodon/mastodon | Ruby (Rails) | 16/59 | 45/59 | 55/59 |
-| Alamofire/Alamofire | Swift | 47/52 | 47/52 | 47/52 |
-| kickstarter/ios-oss | Swift | 40/51 | 40/51 | 40/51 |
-| android/nowinandroid | Kotlin | 49/67 | 56/67 | 52/67 |
-| square/okhttp | Kotlin, Java | 24/44 | 28/44 | 25/44 |
-| thunderbird/thunderbird-android | Kotlin, Java | 36/46 | 40/46 | 36/46 |
-| google/gson | Java | 14/17 | 16/17 | 16/17 |
-| square/retrofit | Java | 9/11 | 9/11 | 9/11 |
-| **All** | | **270/392 (69%)** | **322/392 (82%)** | **321/392 (82%)** |
-| Other files listed, all cases | | 1707 | 1557 | 1455 |
+| Repo | Language | First version | Namespaces, imports | Declared types | Swift `.member` |
+| --- | --- | --- | --- | --- | --- |
+| we-promise/sure | Ruby (Rails) | 35/45 | 41/45 | 41/45 | 41/45 |
+| mastodon/mastodon | Ruby (Rails) | 16/59 | 45/59 | 55/59 | 55/59 |
+| Alamofire/Alamofire | Swift | 47/52 | 47/52 | 47/52 | 49/52 |
+| kickstarter/ios-oss | Swift | 40/51 | 40/51 | 40/51 | 41/51 |
+| android/nowinandroid | Kotlin | 49/67 | 56/67 | 52/67 | 52/67 |
+| square/okhttp | Kotlin, Java | 24/44 | 28/44 | 25/44 | 25/44 |
+| thunderbird/thunderbird-android | Kotlin, Java | 36/46 | 40/46 | 36/46 | 36/46 |
+| google/gson | Java | 14/17 | 16/17 | 16/17 | 16/17 |
+| square/retrofit | Java | 9/11 | 9/11 | 9/11 | 9/11 |
+| **All** | | **270/392 (69%)** | **322/392 (82%)** | **321/392 (82%)** | **324/392 (83%)** |
+| Other files listed, all cases | | 1707 | 1557 | 1455 | 1473 |
 
 The namespace and import fixes: Ruby classes told apart by namespace (`PlaidAccount::Processor` vs
 `RedbarkAccount::Processor`), calls on `Namespace::Service.new`, a concern's private helpers, RSpec's `described_class`
@@ -108,6 +108,13 @@ has a same-named method (`commandDownloadMessage.downloadCompleteMessage` for `B
 `newsResourceDao.getNewsResources` for a repository's). The graph now leaves those out, which is also why it lists 7%
 fewer other files. Without them recall is 321/381 (84%). What's left is mostly calls through a variable with no written
 type (`provider.fetch(…)`, a function's return value) and more of the same noise.
+
+Swift's leading-dot calls (`.chunked(size)`, a static member or enum case of a type the context implies) count as name
+matches, which found 3 more Swift caller files.
+
+The summary also counts each caller file once per commit and name (`distinctCallers`), since overloads and same-named
+methods changed in one commit are a case each, and the same without test files (`distinctNonTestCallers`). For the last
+column those are 233/267 (87%) and 178/201 (89%).
 
 ## The recorded PRs
 

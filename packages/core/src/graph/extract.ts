@@ -1289,6 +1289,7 @@ const SWIFT_REFERENCES = `
   (call_expression (navigation_expression target: (_) @object suffix: (navigation_suffix suffix: (simple_identifier) @name)))
   (value_argument value: (simple_identifier) @name)
   (user_type (type_identifier) @type)
+  (call_expression (prefix_expression target: (simple_identifier) @implicit))
 `;
 
 function swiftVisibility(node: Node): string | undefined {
@@ -1791,6 +1792,12 @@ export async function extractSymbols(path: string, source: string): Promise<File
         imports.push({ local: lastSegment(fqn), imported: lastSegment(fqn), from: fqn, line: line(qualified) });
         const kind = phpKind(qualified);
         references.push({ name: lastSegment(fqn), line: line(qualified), ...(kind ? { kind } : {}) });
+        continue;
+      }
+      // Swift's `.chunked(size)`: a static member or enum case of a type the context implies, not a bare call.
+      const implicit = match.captures.find((c) => c.name === "implicit")?.node;
+      if (implicit) {
+        references.push({ name: implicit.text, object: ".", line: line(implicit) });
         continue;
       }
       const type = match.captures.find((c) => c.name === "type")?.node;

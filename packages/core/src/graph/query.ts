@@ -1301,6 +1301,8 @@ export class CodeGraph {
             else if (common.has(ref.name)) continue;
             else if (on(classNames, familyKeys) || namedLike(ref.object, classNames)) add(path, ref.line, "name");
             else if (importsClass) add(path, ref.line, "import");
+            // Swift's `.chunked(size)` names a member of a type only the context knows.
+            else if (ref.object === ".") add(path, ref.line, "name");
             else if (!moduleWide(symbol.path) || mentionsClass()) add(path, ref.line, "name");
             continue;
           }

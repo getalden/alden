@@ -214,6 +214,17 @@ const byLanguage = Object.fromEntries(
     return [language, `${list.reduce((n, c) => n + c.found.length, 0)}/${want} caller files in ${list.length} cases`];
   }),
 );
+// Overloads and same-named methods changed in one commit are one case each; count each caller file once per name too.
+const distinct = new Map<string, boolean>();
+for (const c of cases) {
+  const name = c.symbol.split(".").at(-1);
+  for (const e of c.expected) {
+    const id = `${c.commit} ${name} ${e.path}`;
+    distinct.set(id, distinct.get(id) === true || c.found.includes(e.path));
+  }
+}
+const isTest = (id: string) => /(^|\/)(test|tests|spec|androidTest)\/|Tests?\.\w+$|_spec\.rb$|_test\.\w+$/.test(id);
+const share = (ids: string[]) => `${ids.filter((id) => distinct.get(id)).length}/${ids.length}`;
 const summary = {
   clone,
   byLanguage,
@@ -221,6 +232,8 @@ const summary = {
   callerFiles: expected,
   found,
   recall: expected === 0 ? null : Number((found / expected).toFixed(3)),
+  distinctCallers: share([...distinct.keys()]),
+  distinctNonTestCallers: share([...distinct.keys()].filter((id) => !isTest(id.split(" ")[2] ?? ""))),
   casesFullyFound: cases.filter((c) => c.missed.length === 0).length,
   medianOtherFiles: [...cases.map((c) => c.others)].sort((a, b) => a - b)[Math.floor(cases.length / 2)] ?? 0,
   medianSeconds: [...cases.map((c) => c.seconds)].sort((a, b) => a - b)[Math.floor(cases.length / 2)] ?? 0,

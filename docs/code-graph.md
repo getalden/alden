@@ -118,6 +118,8 @@ With no type inference, a method call is matched by what it's called on:
   constructor (`val call = DnsCall()`, `var x = new Foo()`, `let request = DataRequest(…)`, Ruby's
   `client = Api::Client.new`). A call on one of the class's own types (itself, a subclass, an implementation) is sure;
   on a parent or interface it's a name match; on any other type it isn't listed, even when the name matches.
+- **Swift leading-dot calls.** `.chunked(size)` names a static member or enum case of a type only the context knows, so
+  it's a name match for any `chunked` that isn't too common a name.
 - **Name matches.** Other calls with the same method name, in files that use the class (Java and Kotlin: import it or
   share its package; Ruby and Swift: mention it) or reach it through a parent class. Very common names (`call`, `save`,
   `update`, `count`, `toString`…) count only as sure matches.
