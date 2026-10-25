@@ -29,6 +29,14 @@ export interface Definition {
   methods?: string[];
   /** PHP facades: the class `getFacadeAccessor` returns (`Foo::class`), as written. */
   facadeFor?: string;
+  /**
+   * Ruby classes and modules inside a namespace: the full constant path (`RedbarkAccount::Processor`), since apps
+   * often have a dozen classes named `Processor`. Java and Kotlin nested classes: the path from the top-level class
+   * (`MockResponse.Builder`).
+   */
+  qualified?: string;
+  /** Kotlin: a top-level extension function (`fun NavGraphBuilder.topicScreen()`), imported by its own name. */
+  extension?: boolean;
 }
 
 /** A name a file brings in from elsewhere. */
@@ -67,6 +75,8 @@ export interface Reference {
    * Ruby, Swift, Java and Kotlin: "new" constructs (`Foo.new`, `Foo(…)`, `new Foo()`), "type" names a type.
    */
   kind?: "new" | "type" | "property" | "value";
+  /** Ruby: the class as written with its namespace (`Rule::Runner` for `Rule::Runner.new`), when it was. */
+  qualified?: string;
 }
 
 export interface FileSymbols {
@@ -820,6 +830,16 @@ const rubyConstant = (node: Node): string | undefined =>
       ? node.childForFieldName("name")?.text
       : undefined;
 
+/** Ruby's `::Rule::Runner` as written, without the leading `::`, for constants and constant paths. */
+const rubyConstantPath = (node: Node): string | undefined =>
+  node.type === "constant" || node.type === "scope_resolution" ? node.text.replace(/^::/, "") : undefined;
+
+/** The namespace a constant was written with, as a reference's `qualified`. */
+const rubyQualified = (node: Node | null): { qualified?: string } => {
+  const path = node?.type === "scope_resolution" ? rubyConstantPath(node) : undefined;
+  return path ? { qualified: path } : {};
+};
+
 /** A receiver as text: constants by their own name, short expressions as written, long ones by their last call. */
 function rubyObject(node: Node): string {
   const constant = rubyConstant(node);
@@ -925,13 +945,15 @@ function rubyReferences(root: Node): Reference[] {
     const firstArg = args?.namedChild(0) ?? null;
 
     if (name === "new" && receiver && rubyConstant(receiver)) {
-      push(rubyConstant(receiver), method, { kind: "new" });
+      push(rubyConstant(receiver), method, { kind: "new", ...rubyQualified(receiver) });
     } else if (RUBY_ENQUEUE.has(name)) {
       push("perform", method, object ? { object } : {});
     } else if (RUBY_DYNAMIC.has(name) && symbolName(firstArg)) {
       push(symbolName(firstArg), firstArg ?? method, object ? { object } : {});
     } else {
-      push(name, method, object ? { object } : {});
+      // `Rule::Runner.new.call`: the class written in front of `new` (or `find`, …) is the receiver's.
+      const written = receiver?.type === "call" ? receiver.childForFieldName("receiver") : receiver;
+      push(name, method, object ? { object, ...rubyQualified(written ?? null) } : {});
     }
 
     // `before_action :set_entry, if: :ready?` in a class body names the methods it will call.
@@ -960,7 +982,10 @@ function rubyReferences(root: Node): Reference[] {
       if (holder?.type === "call" && holder.childForFieldName("receiver")?.startIndex === parent.startIndex) continue;
     }
     if (parent?.type === "call") continue;
-    push(constant.text, constant, { kind: "type" });
+    push(constant.text, constant, {
+      kind: "type",
+      ...rubyQualified(parent?.type === "scope_resolution" ? parent : null),
+    });
   }
 
   // Methods called without parentheses or arguments: a bare name that isn't a local variable.
@@ -976,7 +1001,33 @@ function rubyReferences(root: Node): Reference[] {
       push(id.text, id);
     }
   }
-  return references;
+  return rspecDescribed(root, references);
+}
+
+/**
+ * RSpec: in `RSpec.describe Rule::Runner do`, `described_class` and `subject` stand for Rule::Runner, which is how
+ * specs mostly call the code they test (`described_class.new(rule).call`, `subject.perform`).
+ */
+function rspecDescribed(root: Node, references: Reference[]): Reference[] {
+  let described: string | undefined;
+  for (const node of root.namedChildren) {
+    if (node?.type !== "call" || node.childForFieldName("method")?.text !== "describe") continue;
+    const receiver = node.childForFieldName("receiver")?.text;
+    if (receiver !== undefined && receiver !== "RSpec") continue;
+    const first = node.childForFieldName("arguments")?.namedChild(0);
+    described = first ? rubyConstantPath(first) : undefined;
+    if (described) break;
+  }
+  if (!described) return references;
+  const short = described.split("::").at(-1) ?? described;
+  const qualified = described.includes("::") ? { qualified: described } : {};
+  return references.map((ref) => {
+    const object = ref.object?.replace(/\.new(\(.*\))?$/, "");
+    if (object !== "described_class" && object !== "subject") return ref;
+    if (ref.name === "new" && ref.object === "described_class")
+      return { name: short, line: ref.line, kind: "new", ...qualified };
+    return { ...ref, object: ref.object === object ? short : `${short}.new`, ...qualified };
+  });
 }
 
 /** `def self.charge(user, amount:, currency: "EUR")`: what callers depend on, without the body. */
@@ -1006,8 +1057,11 @@ function extractRuby(root: Node): Omit<FileSymbols, "language"> {
     });
   };
 
-  /** A class or module body, or a block inside one (`included do`, `class_methods do`). */
-  const body = (node: Node | null, container: string, classMethods = false) => {
+  /**
+   * A class or module body, or a block inside one (`included do`, `class_methods do`). `namespace` is the body's full
+   * constant path. A module's private methods are still for the classes including it to call.
+   */
+  const body = (node: Node | null, container: string, namespace: string, classMethods = false, mixin = false) => {
     if (!node) return;
     let visibility = "public";
     const hidden = new Set<string>();
@@ -1020,18 +1074,18 @@ function extractRuby(root: Node): Omit<FileSymbols, "language"> {
           if (/^(private|protected|public)$/.test(child.text)) visibility = child.text;
           break;
         case "method":
-          method(child, container, visibility === "public" || classMethods);
+          method(child, container, visibility === "public" || classMethods || mixin);
           break;
         case "singleton_method":
           method(child, container, true);
           break;
         case "singleton_class":
           // class << self … end: class methods, public unless marked otherwise inside.
-          body(child.childForFieldName("body"), container, true);
+          body(child.childForFieldName("body"), container, namespace, true, mixin);
           break;
         case "class":
         case "module":
-          classLike(child);
+          classLike(child, namespace);
           break;
         case "assignment": {
           // `COLUMNS = %w[…].freeze`: its own definition, so changing it doesn't count as changing the whole class.
@@ -1054,8 +1108,9 @@ function extractRuby(root: Node): Omit<FileSymbols, "language"> {
           if (child.childForFieldName("receiver")) break;
           if (/^(private|protected|public|private_class_method)$/.test(name)) {
             for (const arg of args) {
-              if (arg?.type === "method" || arg?.type === "singleton_method") method(arg, container, name === "public");
-              else if (arg?.type === "simple_symbol" && name !== "public") hidden.add(arg.text.slice(1));
+              if (arg?.type === "method" || arg?.type === "singleton_method")
+                method(arg, container, name === "public" || mixin);
+              else if (arg?.type === "simple_symbol" && name !== "public" && !mixin) hidden.add(arg.text.slice(1));
             }
           } else if (name === "scope" && args[0]?.type === "simple_symbol") {
             // `scope :active, -> { … }` defines `Model.active`.
@@ -1071,7 +1126,7 @@ function extractRuby(root: Node): Omit<FileSymbols, "language"> {
           } else {
             // `included do`, `class_methods do`, `concerning :X do`: their defs belong to the class.
             const block = child.childForFieldName("block");
-            if (block) body(block.childForFieldName("body"), container, classMethods);
+            if (block) body(block.childForFieldName("body"), container, namespace, classMethods, mixin);
           }
           break;
         }
@@ -1080,20 +1135,23 @@ function extractRuby(root: Node): Omit<FileSymbols, "language"> {
     for (const def of definitions.slice(start)) if (hidden.has(def.name)) def.exported = false;
   };
 
-  const classLike = (node: Node) => {
+  const classLike = (node: Node, outer?: string) => {
     const nameNode = node.childForFieldName("name");
     const name = nameNode ? rubyConstant(nameNode) : undefined;
-    if (!name) return;
+    const written = nameNode ? rubyConstantPath(nameNode) : undefined;
+    if (!name || !written) return;
+    const qualified = outer ? `${outer}::${written}` : written;
     const superclass = node.childForFieldName("superclass")?.namedChild(0);
     const bases: string[] = [];
-    const parent = superclass ? rubyConstant(superclass) : undefined;
+    // As written (`Provider::Base`): the graph resolves it from this class's namespace, as Ruby does.
+    const parent = superclass ? rubyConstantPath(superclass) : undefined;
     if (parent) bases.push(parent);
     // Modules it mixes in: `include Transferable`, `extend Monetizable`.
     for (const child of node.childForFieldName("body")?.namedChildren ?? []) {
       if (child?.type !== "call" || child.childForFieldName("receiver")) continue;
       if (!/^(include|extend|prepend)$/.test(child.childForFieldName("method")?.text ?? "")) continue;
       for (const arg of child.childForFieldName("arguments")?.namedChildren ?? []) {
-        const mixin = arg ? rubyConstant(arg) : undefined;
+        const mixin = arg ? rubyConstantPath(arg) : undefined;
         if (mixin) bases.push(mixin);
       }
     }
@@ -1105,8 +1163,9 @@ function extractRuby(root: Node): Omit<FileSymbols, "language"> {
       endLine: endLine(node),
       signature: collapse(`${node.type} ${nameNode?.text ?? name}${parent ? ` < ${superclass?.text}` : ""}`),
       ...(bases.length > 0 ? { bases } : {}),
+      ...(qualified !== name ? { qualified } : {}),
     });
-    body(node.childForFieldName("body"), name);
+    body(node.childForFieldName("body"), name, qualified, false, node.type === "module");
   };
 
   for (const node of root.namedChildren) {
@@ -1249,10 +1308,9 @@ const javaHidden = (node: Node) =>
 function jvmImport(path: string, alias: string | undefined, line_: number, wildcard: boolean, isStatic: boolean) {
   const parts = path.split(".");
   if (wildcard) return { local: "*", imported: "*", from: path, line: line_ };
-  // A static import brings in a member; the graph binds the class it belongs to.
-  const from = isStatic ? parts.slice(0, -1).join(".") : path;
-  const name = from.split(".").at(-1) ?? from;
-  return { local: isStatic ? name : (alias ?? name), imported: name, from, line: line_ };
+  // A static import brings in a member by name (`import static pkg.Util.helper`), which the graph binds to its class.
+  const name = parts.at(-1) ?? path;
+  return { local: isStatic ? name : (alias ?? name), imported: name, from: path, line: line_ };
 }
 
 function extractJava(root: Node): Omit<FileSymbols, "language" | "references"> {
@@ -1262,9 +1320,10 @@ function extractJava(root: Node): Omit<FileSymbols, "language" | "references"> {
   const signatureOf = (node: Node) =>
     headSignature(node, ["block", "constructor_body", "class_body", "interface_body", "enum_body"]);
 
-  const typeLike = (node: Node, outerHidden: boolean) => {
+  const typeLike = (node: Node, outerHidden: boolean, outer?: string) => {
     const name = node.childForFieldName("name")?.text;
     if (!name) return;
+    const qualified = outer ? `${outer}.${name}` : name;
     const hidden = outerHidden || javaHidden(node);
     const bases: string[] = [];
     const superclass = node.childForFieldName("superclass")?.namedChild(0);
@@ -1291,7 +1350,7 @@ function extractJava(root: Node): Omit<FileSymbols, "language" | "references"> {
     for (const member of members) {
       if (!member) continue;
       if (/^(class|interface|enum|record|annotation_type)_declaration$/.test(member.type)) {
-        typeLike(member, hidden);
+        typeLike(member, hidden, qualified);
         continue;
       }
       if (member.type === "field_declaration" || member.type === "constant_declaration") {
@@ -1333,6 +1392,7 @@ function extractJava(root: Node): Omit<FileSymbols, "language" | "references"> {
       signature: signatureOf(node),
       ...(bases.length > 0 ? { bases } : {}),
       ...(methods.length > 0 ? { methods } : {}),
+      ...(outer ? { qualified } : {}),
     });
   };
 
@@ -1386,13 +1446,15 @@ function extractKotlin(root: Node): Omit<FileSymbols, "language" | "references">
       startLine: line(node),
       endLine: endLine(node),
       ...(owner ? { container: owner } : {}),
+      ...(!container && owner ? { extension: true } : {}),
       signature: signatureOf(node),
     });
   };
 
-  const typeLike = (node: Node, outerHidden: boolean) => {
+  const typeLike = (node: Node, outerHidden: boolean, outer?: string) => {
     const name = node.childForFieldName("name")?.text;
     if (!name) return;
+    const qualified = outer ? `${outer}.${name}` : name;
     const hidden = outerHidden || kotlinHidden(node);
     const bases = (node.namedChildren.find((c) => c?.type === "delegation_specifiers")?.namedChildren ?? [])
       .map((spec) => {
@@ -1435,7 +1497,7 @@ function extractKotlin(root: Node): Omit<FileSymbols, "language" | "references">
           // A companion's functions are called on the class: `Runner.make()`.
           members(member.namedChildren.find((c) => c?.type === "class_body"));
         } else if (member.type === "class_declaration" || member.type === "object_declaration") {
-          typeLike(member, hidden);
+          typeLike(member, hidden, qualified);
         }
       }
     };
@@ -1449,6 +1511,7 @@ function extractKotlin(root: Node): Omit<FileSymbols, "language" | "references">
       signature: signatureOf(node),
       ...(bases.length > 0 ? { bases } : {}),
       ...(methods.length > 0 ? { methods: methods.filter(Boolean) } : {}),
+      ...(outer ? { qualified } : {}),
     });
   };
 

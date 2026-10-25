@@ -158,6 +158,94 @@ end
       "app/services/sync.rb:4",
     ]);
   });
+
+  it("tells same-named classes in different namespaces apart, and follows a concern's private helpers", async () => {
+    const processor = (ns: string) => `class ${ns}::Processor
+  def initialize(account, strict: false)
+  end
+
+  def process
+    import_rows
+  end
+
+  def import_rows
+  end
+end
+`;
+    const graph = await repo({
+      "app/models/plaid_account/processor.rb": processor("PlaidAccount"),
+      "app/models/redbark_account/processor.rb": processor("RedbarkAccount"),
+      "app/models/plaid_item.rb": `class PlaidItem
+  def sync
+    PlaidAccount::Processor.new(account).process
+    RedbarkAccount::Processor.new(account)
+  end
+end
+`,
+      "app/models/redbark_account.rb": `module RedbarkAccount
+  class Syncer
+    def run
+      Processor.new(self)
+      RedbarkAccount::Processor.new(self).process
+    end
+  end
+end
+`,
+      "app/models/snaptrade_account/data_helpers.rb": `module SnaptradeAccount::DataHelpers
+  extend ActiveSupport::Concern
+
+  private
+
+    def resolve_security(ticker, account:)
+    end
+end
+`,
+      "spec/models/redbark_account/processor_spec.rb": `require "rails_helper"
+
+RSpec.describe RedbarkAccount::Processor do
+  subject { described_class.new(account) }
+
+  it "processes" do
+    described_class.new(account, strict: true).process
+    subject.process
+  end
+end
+`,
+      "app/models/snaptrade_account/holdings_processor.rb": `class SnaptradeAccount::HoldingsProcessor
+  include SnaptradeAccount::DataHelpers
+
+  def import
+    resolve_security("X", account: nil)
+  end
+end
+`,
+    });
+    const redbark = { path: "app/models/redbark_account/processor.rb", container: "Processor" };
+    expect(sites(graph.callersOf({ ...redbark, name: "initialize" }))).toEqual([
+      "app/models/plaid_item.rb:4",
+      "app/models/redbark_account.rb:4",
+      "app/models/redbark_account.rb:5",
+      "spec/models/redbark_account/processor_spec.rb:4",
+      "spec/models/redbark_account/processor_spec.rb:7",
+    ]);
+    expect(sites(graph.callersOf({ ...redbark, name: "process" }))).toEqual([
+      "app/models/redbark_account.rb:5",
+      "spec/models/redbark_account/processor_spec.rb:7",
+      "spec/models/redbark_account/processor_spec.rb:8",
+    ]);
+    expect(sites(graph.callersOf({ ...redbark, name: "import_rows" }))).toEqual([
+      "app/models/redbark_account/processor.rb:6",
+    ]);
+    expect(
+      sites(
+        graph.callersOf({
+          path: "app/models/snaptrade_account/data_helpers.rb",
+          name: "resolve_security",
+          container: "DataHelpers",
+        }),
+      ),
+    ).toEqual(["app/models/snaptrade_account/holdings_processor.rb:5"]);
+  });
 });
 
 describe("Swift", () => {
@@ -304,5 +392,115 @@ fun Runner.ext(y: Int) {}
       "Runner.ext:pub",
     ]);
     expect(symbols?.definitions[0]?.signature).toBe('fun run(a: Int, b: String = ""): Int');
+  });
+
+  it("reaches nested classes through their outer class's import, and members imported by name", async () => {
+    const graph = await repo({
+      "mockwebserver/src/main/kotlin/mockwebserver3/MockResponse.kt": `package mockwebserver3
+
+class MockResponse {
+  class Builder {
+    fun body(body: String): Builder = this
+    fun code(code: Int): Builder = this
+  }
+}
+`,
+      "okhttp/src/main/kotlin/okhttp3/internal/Locks.kt": `package okhttp3.internal
+
+object Locks {
+  inline fun <T> Lock.withLock(action: () -> T): T = action()
+}
+`,
+      "okhttp/src/main/java/okhttp3/internal/Util.java": `package okhttp3.internal;
+
+public final class Util {
+  public static void closeQuietly(Object o, boolean log) {}
+}
+`,
+      "okhttp/src/test/kotlin/okhttp3/CallTest.kt": `package okhttp3
+
+import mockwebserver3.MockResponse
+import okhttp3.internal.Locks.withLock
+
+class CallTest {
+  fun test() {
+    server.enqueue(MockResponse.Builder().code(200).body("abc").build())
+    lock.withLock { }
+  }
+}
+`,
+      "okhttp/src/main/java/okhttp3/Call.java": `package okhttp3;
+
+import static okhttp3.internal.Util.closeQuietly;
+
+class Call {
+  void cancel() {
+    closeQuietly(socket, false);
+  }
+}
+`,
+    });
+    expect(
+      sites(
+        graph.callersOf({
+          path: "mockwebserver/src/main/kotlin/mockwebserver3/MockResponse.kt",
+          name: "body",
+          container: "Builder",
+        }),
+      ),
+    ).toEqual(["okhttp/src/test/kotlin/okhttp3/CallTest.kt:8"]);
+    expect(
+      sites(
+        graph.callersOf({
+          path: "okhttp/src/main/kotlin/okhttp3/internal/Locks.kt",
+          name: "withLock",
+          container: "Locks",
+        }),
+      ),
+    ).toEqual(["okhttp/src/test/kotlin/okhttp3/CallTest.kt:9"]);
+    expect(
+      sites(
+        graph.callersOf({
+          path: "okhttp/src/main/java/okhttp3/internal/Util.java",
+          name: "closeQuietly",
+          container: "Util",
+        }),
+      ),
+    ).toEqual(["okhttp/src/main/java/okhttp3/Call.java:7"]);
+  });
+
+  it("follows Kotlin extension functions on outside types through their imports", async () => {
+    const graph = await repo({
+      "feature/topic/src/main/kotlin/com/acme/feature/topic/navigation/TopicNavigation.kt": `package com.acme.feature.topic.navigation
+
+fun NavGraphBuilder.topicScreen(onBackClick: () -> Unit) {
+}
+`,
+      "app/src/main/kotlin/com/acme/navigation/NavHost.kt": `package com.acme.navigation
+
+import com.acme.feature.topic.navigation.topicScreen
+
+fun AppNavHost() {
+  NavHost {
+    topicScreen(onBackClick = {})
+  }
+}
+`,
+      "app/src/main/kotlin/com/acme/other/Other.kt": `package com.acme.other
+
+fun other() {
+  topicScreen(onBackClick = {})
+}
+`,
+    });
+    expect(
+      sites(
+        graph.callersOf({
+          path: "feature/topic/src/main/kotlin/com/acme/feature/topic/navigation/TopicNavigation.kt",
+          name: "topicScreen",
+          container: "NavGraphBuilder",
+        }),
+      ),
+    ).toEqual(["app/src/main/kotlin/com/acme/navigation/NavHost.kt:7"]);
   });
 });

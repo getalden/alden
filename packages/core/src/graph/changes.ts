@@ -109,7 +109,8 @@ export function changedSymbols(
           name: def.name,
           kind: def.kind,
           ...(def.container ? { container: def.container } : {}),
-          exported: def.exported,
+          // Made private by this change: whatever called it from outside breaks, so it still counts as public.
+          exported: def.exported || oldByKey.get(key(def))?.exported === true,
           change: allNew || file.status === "added" ? "added" : "modified",
           startLine: def.startLine,
           endLine: def.endLine,

@@ -57,6 +57,46 @@ With labels, from `eval/expectations.json`:
 When Alden misses something that mattered in real use, add it to `expectations.json` so the next change is measured
 against it.
 
+## Callers: does the graph find what a signature change breaks?
+
+```sh
+pnpm eval:callers ~/src/mastodon --languages ruby       # last 40 cases since 2024
+pnpm eval:callers ~/src/okhttp --since 2022-01-01 --limit 30 --verbose --json out.json
+pnpm eval:callers ~/src/okhttp --commit 6b134f769a      # one commit
+```
+
+This one needs no labels, no GitHub access and no model, only a clone. It walks the repo's history for commits that
+changed a function's or method's signature and, in the same commit, edited other files calling it. Those edits are the
+answer key: the callers the author had to update. Each case replays the commit without them (the parent commit plus
+only the file defining the symbol, at its new version) and asks the graph for callers outside the diff. It reports how
+many of those caller files the graph listed, by language, and how many other files it listed besides.
+
+The key is a word match on the edited lines, so it's a little noisy: a same-named method of another class edited in the
+same commit counts as a caller too. Comments don't count, constructors count only where they're called (`Foo.new`,
+`Foo(`, `new Foo(`), and names every service has (`call`, `perform`) only in files naming the class. Read the misses
+(`--verbose`) before blaming the graph.
+
+On 25 Oct 2026, 30 cases per repo since 2022, before and after the fixes this eval turned up:
+
+| Repo | Language | Caller files found, before | After |
+| --- | --- | --- | --- |
+| we-promise/sure | Ruby (Rails) | 31/45 | 37/45 |
+| mastodon/mastodon | Ruby (Rails) | 17/57 | 43/57 |
+| Alamofire/Alamofire | Swift | 48/61 | 48/61 |
+| kickstarter/ios-oss | Swift | 40/60 | 40/60 |
+| android/nowinandroid | Kotlin | 34/52 | 41/52 |
+| square/okhttp | Kotlin, Java | 29/94 | 39/94 |
+| thunderbird/thunderbird-android | Kotlin, Java | 36/46 | 40/46 |
+| google/gson | Java | 14/19 | 16/19 |
+| square/retrofit | Java | 9/11 | 9/11 |
+| **All** | | **258/445 (58%)** | **313/445 (70%)** |
+
+The fixes: Ruby classes told apart by namespace (`PlaidAccount::Processor` vs `RedbarkAccount::Processor`), calls on
+`Namespace::Service.new`, a concern's private helpers, RSpec's `described_class` and `subject`; Java and Kotlin nested
+classes, members imported by name (Kotlin extensions, Java static imports) and Kotlin extension functions on outside
+types. What's left is mostly calls through a variable the graph can't type (`provider.fetch(…)` for an interface
+method, builder chains in okhttp's tests) and noise in the key.
+
 ## The recorded PRs
 
 `pnpm fixtures:record` records GitHub responses (PR details, descriptions and diffs) for a pinned list of public PRs

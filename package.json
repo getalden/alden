@@ -20,6 +20,7 @@
     "fixtures:record": "tsx scripts/record-fixtures.ts",
     "schema:generate": "tsx scripts/generate-schemas.ts",
     "eval": "tsx scripts/eval.ts",
+    "eval:callers": "tsx scripts/eval-callers.ts",
     "ui:demo": "tsx scripts/ui-demo.ts",
     "regressions:find": "tsx scripts/find-regressions.ts",
     "build:binary": "tsx scripts/build-binary.ts",

@@ -34,6 +34,8 @@ interface Binding {
   reexport: boolean;
   /** The import's line in the importing file. */
   line: number;
+  /** Java and Kotlin: a member imported by name (`import okhttp3.internal.Locks.withLock`); `imported` is its class. */
+  member?: boolean;
 }
 
 /**
@@ -430,13 +432,26 @@ const INSTANCE_GETTERS = new Set([
 
 /** Whether a call's receiver is one of the classes, or an instance one of them just handed back. */
 function onClass(object: string, classes: Set<string>): boolean {
+  // `Rule::Runner.new` is Runner's: the namespace in front of a class doesn't count as a step.
   const parts = object
     .replace(/\([^()]*\)/g, "")
-    .split(/&?\.|::/)
+    .split(/&?\./)
+    .map((part) => part.split("::").at(-1) ?? part)
     .filter(Boolean);
   const last = parts.at(-1) ?? object;
   if (classes.has(last)) return true;
   return parts.length === 2 && classes.has(parts[0] ?? "") && INSTANCE_GETTERS.has(last);
+}
+
+/** The class in a Ruby receiver that `onClass` matched: `Rule` in `Rule` or `Rule.find(id)`. */
+function rubyReceiverClass(object: string): string | undefined {
+  const parts = object
+    .replace(/\([^()]*\)/g, "")
+    .split(/&?\./)
+    .filter(Boolean);
+  const last = parts.at(-1) ?? object;
+  if (/^[A-Z]/.test(last)) return last;
+  return parts.length === 2 && /^[A-Z]/.test(parts[0] ?? "") ? parts[0] : undefined;
 }
 
 /**
@@ -537,8 +552,17 @@ export class CodeGraph {
   /** Java and Kotlin: "com.acme.Foo" → the file defining it, for every top-level class, object and function. */
   private readonly jvmNames = new Map<string, string>();
 
-  /** Ruby and Swift: "ruby#Name" → the files defining (or reopening, or extending) the type. */
+  /**
+   * Ruby and Swift: "ruby#Name" → the files defining (or reopening, or extending) the type. Ruby keys by the full
+   * constant path ("ruby#Rule::Runner").
+   */
   private readonly moduleTypes = new Map<string, string[]>();
+
+  /** Ruby: a class's own name → the full constant paths of every class and module with that name. */
+  private readonly rubyNames = new Map<string, string[]>();
+
+  /** Ruby: resolved constants, by file, line and constant as written. */
+  private readonly rubyResolved = new Map<string, SymbolRef | undefined>();
 
   constructor(
     private readonly files: Map<string, FileSymbols>,
@@ -546,15 +570,26 @@ export class CodeGraph {
   ) {
     for (const [path, symbols] of [...files].sort(([a], [b]) => a.localeCompare(b))) {
       for (const def of symbols.definitions) {
-        if (def.container) continue;
-        if (isJvm(path)) {
+        if (def.extension && isJvm(path)) {
           const fqn = symbols.jvmPackage ? `${symbols.jvmPackage}.${def.name}` : def.name;
           if (!this.jvmNames.has(fqn)) this.jvmNames.set(fqn, path);
+        }
+        if (def.container) continue;
+        if (isJvm(path)) {
+          const name = def.qualified ?? def.name;
+          const fqn = symbols.jvmPackage ? `${symbols.jvmPackage}.${name}` : name;
+          if (!this.jvmNames.has(fqn)) this.jvmNames.set(fqn, path);
         } else if (moduleWide(path) && def.kind !== "function") {
-          const key = `${moduleOf(path)}#${def.name}`;
+          const key = `${moduleOf(path)}#${def.qualified ?? def.name}`;
           const list = this.moduleTypes.get(key) ?? [];
           if (!list.includes(path)) list.push(path);
           this.moduleTypes.set(key, list);
+          if (moduleOf(path) === "ruby" && def.kind !== "variable") {
+            const qualified = def.qualified ?? def.name;
+            const names = this.rubyNames.get(def.name) ?? [];
+            if (!names.includes(qualified)) names.push(qualified);
+            this.rubyNames.set(def.name, names);
+          }
         }
       }
     }
@@ -621,7 +656,10 @@ export class CodeGraph {
           const parent = this.resolveClass(path, base);
           if (!parent) continue;
           const key = `${parent.path}#${parent.name}`;
-          this.descendants.set(key, [...(this.descendants.get(key) ?? []), { path, name: def.name }]);
+          const child = this.rubyCanonical(path, def) ?? { path, name: def.name };
+          const list = this.descendants.get(key) ?? [];
+          if (!list.some((c) => c.path === child.path && c.name === child.name)) list.push(child);
+          this.descendants.set(key, list);
         }
         if (!def.facadeFor) continue;
         const target = this.resolveClass(path, def.facadeFor);
@@ -648,7 +686,25 @@ export class CodeGraph {
         continue;
       }
       const target = this.jvmNames.get(imp.from);
-      if (target === undefined) continue;
+      const extension =
+        target !== undefined && this.files.get(target)?.definitions.some((d) => d.extension && d.name === imp.imported);
+      if (target === undefined || extension) {
+        // `import pkg.Locks.withLock` (Kotlin) or `import static pkg.Util.helper` (Java): a member of a class.
+        const owner = imp.from.slice(0, imp.from.lastIndexOf("."));
+        const ownerFile = extension ? target : this.jvmNames.get(owner);
+        if (ownerFile !== undefined) {
+          list.push({
+            local: imp.local,
+            namespace: false,
+            target: ownerFile,
+            imported: owner.split(".").at(-1) ?? owner,
+            reexport: false,
+            line: imp.line,
+            member: true,
+          });
+        }
+        continue;
+      }
       list.push({
         local: imp.local,
         namespace: false,
@@ -662,9 +718,11 @@ export class CodeGraph {
   }
 
   /** A class name as written in a PHP, Ruby, Swift, Java or Kotlin file → the file defining it. */
-  private resolveClass(fromFile: string, written: string): SymbolRef | undefined {
+  private resolveClass(fromFile: string, written: string, line?: number): SymbolRef | undefined {
     const symbols = this.files.get(fromFile);
     if (!symbols) return undefined;
+    if (moduleOf(fromFile) === "ruby" && moduleWide(fromFile))
+      return this.resolveRuby(fromFile, symbols, written, line);
     if (moduleWide(fromFile)) {
       const name = written.split(/::|\./).at(-1) ?? written;
       const path = this.moduleTypes.get(`${moduleOf(fromFile)}#${name}`)?.[0];
@@ -694,13 +752,75 @@ export class CodeGraph {
   }
 
   /**
+   * A Ruby constant as written at `line` (anywhere in the file without one) → the class or module it names, looked up
+   * as Ruby does: in the namespaces around it, innermost first, then at the top level. `Rule::Runner` matches a class
+   * whose full path ends with it. A name only one class in the repo has needs no namespace to match.
+   */
+  private resolveRuby(fromFile: string, symbols: FileSymbols, written: string, line?: number): SymbolRef | undefined {
+    const cacheKey = `${fromFile}:${line ?? ""}:${written}`;
+    if (this.rubyResolved.has(cacheKey)) return this.rubyResolved.get(cacheKey);
+    const path = written.replace(/^::/, "");
+    const short = path.split("::").at(-1) ?? path;
+    const candidates = this.rubyNames.get(short) ?? [];
+    let found: string | undefined;
+    if (candidates.length === 1) found = candidates[0];
+    else if (candidates.length > 1) {
+      // Namespaces around the reference: each enclosing class's full path and the namespaces above it.
+      const nesting: string[] = [];
+      const enclosing = symbols.definitions
+        .filter(
+          (d) =>
+            !d.container && d.kind === "class" && (line === undefined || (d.startLine <= line && line <= d.endLine)),
+        )
+        .sort((a, b) => b.startLine - a.startLine);
+      for (const d of enclosing) {
+        const parts = (d.qualified ?? d.name).split("::");
+        for (let i = parts.length; i > 0; i--) {
+          const ns = parts.slice(0, i).join("::");
+          if (!nesting.includes(ns)) nesting.push(ns);
+        }
+      }
+      for (const ns of nesting) {
+        if (candidates.includes(`${ns}::${path}`)) {
+          found = `${ns}::${path}`;
+          break;
+        }
+      }
+      found ??=
+        candidates.find((c) => c === path) ?? candidates.find((c) => path.includes("::") && c.endsWith(`::${path}`));
+    }
+    const file = found ? this.moduleTypes.get(`ruby#${found}`)?.[0] : undefined;
+    const ref = file ? { path: file, name: short } : undefined;
+    this.rubyResolved.set(cacheKey, ref);
+    return ref;
+  }
+
+  /** A Ruby class defined in `path` → the class as the graph keys it: the first file opening it. */
+  private rubyCanonical(path: string, def: Definition): SymbolRef | undefined {
+    if (moduleOf(path) !== "ruby" || !moduleWide(path)) return undefined;
+    const file = this.moduleTypes.get(`ruby#${def.qualified ?? def.name}`)?.[0];
+    return file ? { path: file, name: def.name } : undefined;
+  }
+
+  /** The class a Ruby method's container names, from the file defining the method. */
+  private rubyClassOf(path: string, container: string, line?: number): SymbolRef | undefined {
+    const defs = this.files.get(path)?.definitions ?? [];
+    const def =
+      defs.find(
+        (d) => !d.container && d.name === container && line !== undefined && d.startLine <= line && line <= d.endLine,
+      ) ?? defs.find((d) => !d.container && d.name === container);
+    return def ? this.rubyCanonical(path, def) : undefined;
+  }
+
+  /**
    * The classes whose name can stand for `container` at a call site: itself, the interfaces and parents it
    * extends (a container binding or a type hint calls through those), and facades pointing at it.
    */
   private classFamily(symbol: SymbolRef, container: string): SymbolRef[] {
     // A Ruby class or Swift type can be opened in several files; the graph keys it by the first.
     const start = moduleWide(symbol.path)
-      ? (this.resolveClass(symbol.path, container) ?? { path: symbol.path, name: container })
+      ? (this.rubyClassOf(symbol.path, container) ??
+        this.resolveClass(symbol.path, container) ?? { path: symbol.path, name: container })
       : { path: symbol.path, name: container };
     const family: SymbolRef[] = [start, ...this.parentsOf(start)];
     // Downwards too: subclasses and classes using it as a trait inherit the method, so `$song->album` reaches a
@@ -731,10 +851,22 @@ export class CodeGraph {
 
   /** What a class extends, implements or mixes in, across every file that opens it (Ruby, Swift). */
   private basesOf(ref: SymbolRef): string[] {
-    const paths = moduleWide(ref.path) ? (this.moduleTypes.get(`${moduleOf(ref.path)}#${ref.name}`) ?? []) : [ref.path];
+    const own = this.files.get(ref.path)?.definitions.find((d) => d.name === ref.name && !d.container);
+    const paths = moduleWide(ref.path)
+      ? (this.moduleTypes.get(`${moduleOf(ref.path)}#${own?.qualified ?? ref.name}`) ?? [])
+      : [ref.path];
     return paths.flatMap(
       (path) => this.files.get(path)?.definitions.find((d) => d.name === ref.name && !d.container)?.bases ?? [],
     );
+  }
+
+  /** Ruby: whether `line` is inside one of the classes, by the innermost class or module around it. */
+  private insideRubyClass(path: string, symbols: FileSymbols, line: number, keys: Set<string>): boolean {
+    const around = symbols.definitions
+      .filter((d) => !d.container && d.kind === "class" && d.startLine <= line && line <= d.endLine)
+      .sort((a, b) => b.startLine - a.startLine)[0];
+    const ref = around ? this.rubyCanonical(path, around) : undefined;
+    return ref !== undefined && keys.has(`${ref.path}#${ref.name}`);
   }
 
   /** Whether `line` is inside one of the classes (or a method declared for one, such as a Kotlin extension). */
@@ -1033,7 +1165,30 @@ export class CodeGraph {
     const parents =
       typed && isMethod ? new Set(this.parentsOf({ path: symbol.path, name: lookFor }).map((p) => p.name)) : undefined;
     const ownNames = new Set([...classNames].filter((n) => n === lookFor || !parents?.has(n)));
+    // Ruby: which classes those are, so `Plaid::Processor.new` doesn't count for `Redbark::Processor`.
+    const ruby = typed && moduleOf(symbol.path) === "ruby" && moduleWide(symbol.path);
+    const keyOf = (r: SymbolRef) => `${r.path}#${r.name}`;
+    const parentKeys = new Set(
+      typed && isMethod ? this.parentsOf(family[0] ?? { path: symbol.path, name: lookFor }).map(keyOf) : [],
+    );
+    const familyKeys = new Set(family.map(keyOf));
+    const ownKeys = new Set(family.filter((m, i) => i === 0 || !parentKeys.has(keyOf(m))).map(keyOf));
+    // Java and Kotlin: the classes a nested class sits in (`MockResponse` for `MockResponse.Builder`), which is what
+    // files import.
+    const outerNames = new Set(
+      family.flatMap(
+        (m) =>
+          this.files
+            .get(m.path)
+            ?.definitions.find((d) => d.name === m.name && !d.container)
+            ?.qualified?.split(".")
+            .slice(0, -1) ?? [],
+      ),
+    );
     const constructs = isMethod && isConstructor(symbol);
+    const extension = this.files
+      .get(symbol.path)
+      ?.definitions.some((d) => d.extension && d.name === symbol.name && d.container === symbol.container);
     const methodNames = !isMethod
       ? undefined
       : isPhp
@@ -1055,7 +1210,8 @@ export class CodeGraph {
         const names_ = exported.get(b.target);
         if (!names_) continue;
         if (b.namespace) namespaces.add(b.local);
-        else if (names_.has(b.imported)) names.add(b.local);
+        else if (names_.has(b.imported) || outerNames.has(b.imported)) names.add(b.local);
+        else if (b.member && b.local === symbol.name && familyPaths.has(b.target)) names.add(b.local);
       }
       if (names.size === 0 && namespaces.size === 0) continue;
       // Go: the closest way this file reaches the method, by its own package and the packages it imports.
@@ -1071,8 +1227,12 @@ export class CodeGraph {
 
       // Java and Kotlin: a file that imports the class by name (not just shares its package) uses it on purpose.
       const importsClass = (this.bindings.get(path) ?? []).some(
-        (b) => familyPaths.has(b.target) && classNames.has(b.imported),
+        (b) => familyPaths.has(b.target) && !b.member && (classNames.has(b.imported) || outerNames.has(b.imported)),
       );
+      // A method imported by name is called as itself: `withLock { … }`, `lock.withLock { … }` for an extension.
+      const importsMember =
+        typed &&
+        (this.bindings.get(path) ?? []).some((b) => b.member && familyPaths.has(b.target) && b.local === symbol.name);
       // Ruby and Swift: whether the file names the class at all, which a name match then needs.
       let mentions: boolean | undefined;
       const mentionsClass = () =>
@@ -1084,15 +1244,24 @@ export class CodeGraph {
         if (isMethod && methodNames) {
           // A constructor runs on `new Class(...)` (`Class.new`, `Class(...)`), and PHP's on `parent::__construct()`.
           if (constructs && ref.kind === "new" && names.has(ref.name)) {
-            add(path, ref.line, "import");
+            const made = ruby ? this.resolveClass(path, ref.qualified ?? ref.name, ref.line) : undefined;
+            if (!ruby || (made && ownKeys.has(keyOf(made)))) add(path, ref.line, "import");
             continue;
           }
           if (typed) {
             if (ref.kind === "type" || ref.kind === "new" || !methodNames.calls.has(ref.name)) continue;
+            // A Kotlin extension function is also called bare from its own package, on an implicit receiver.
+            if (importsMember || (extension && ref.object === undefined && this.samePackage(path, symbol.path))) {
+              add(path, ref.line, "import");
+              continue;
+            }
             // No receiver, or self/this: the class's own method only from inside the class (or a subclass, a
             // module including it, a Kotlin extension of it).
             if (ref.object === undefined || SELF_NAMES.has(ref.object)) {
-              if (this.insideClass(symbols, ref.line, ownNames)) add(path, ref.line, "import");
+              const inside = ruby
+                ? this.insideRubyClass(path, symbols, ref.line, ownKeys)
+                : this.insideClass(symbols, ref.line, ownNames);
+              if (inside) add(path, ref.line, "import");
               continue;
             }
             const common = isJvm(symbol.path)
@@ -1103,9 +1272,16 @@ export class CodeGraph {
             // `Rule.apply_all` or `rule.apply`: on the class, or on something named like it. Anything else is a name
             // match, and only for names rare enough to mean something: through a parent class, in a file importing
             // the class, or (where every file sees every class) in a file that at least names it.
-            if (onClass(ref.object, ownNames) || namedLike(ref.object, ownNames)) add(path, ref.line, "import");
+            const on = (names_: Set<string>, keys: Set<string>) => {
+              if (!onClass(ref.object ?? "", names_)) return false;
+              if (!ruby) return true;
+              const written = ref.qualified ?? rubyReceiverClass(ref.object ?? "");
+              const target = written ? this.resolveClass(path, written, ref.line) : undefined;
+              return target !== undefined && keys.has(keyOf(target));
+            };
+            if (on(ownNames, ownKeys) || namedLike(ref.object, ownNames)) add(path, ref.line, "import");
             else if (common.has(ref.name)) continue;
-            else if (onClass(ref.object, classNames) || namedLike(ref.object, classNames)) add(path, ref.line, "name");
+            else if (on(classNames, familyKeys) || namedLike(ref.object, classNames)) add(path, ref.line, "name");
             else if (importsClass) add(path, ref.line, "import");
             else if (!moduleWide(symbol.path) || mentionsClass()) add(path, ref.line, "name");
             continue;

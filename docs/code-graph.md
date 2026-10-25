@@ -119,9 +119,15 @@ With no type inference, a method call is matched by what it's called on:
 - **Constructors.** A changed `initialize` (Ruby), `init` (Swift), Java constructor or Kotlin `constructor` is called by
   every `Foo.new`, `Foo(...)` or `new Foo(...)`.
 - **Visibility.** Private methods (Ruby's `private` sections, `private def` and `private :name`; `private` and
-  `fileprivate` in Swift; `private` in Java; `private` and `protected` in Kotlin) aren't followed outside their file.
+  `fileprivate` in Swift; `private` in Java; `private` and `protected` in Kotlin) aren't followed outside their file,
+  except a Ruby module's: those are for the classes including it. A method the change makes private is still
+  followed, since its callers outside now break.
+- **Nested classes and imported members (Java, Kotlin).** `MockResponse.Builder`'s methods are reached from files
+  importing `MockResponse`. A member imported by name (Kotlin's `import okhttp3.internal.Locks.withLock`, Java's
+  `import static …Util.closeQuietly`) is reached wherever that file calls it.
 - **Swift extensions and Kotlin extension functions** belong to the type they extend; Kotlin `companion object` members
-  belong to the class.
+  belong to the class. A top-level Kotlin extension on a type from outside the repo (`fun NavGraphBuilder.topicScreen()`)
+  is reached where it's imported, and from its own package, called bare on an implicit receiver.
 
 ### Rails
 
@@ -132,6 +138,10 @@ With no type inference, a method call is matched by what it's called on:
 - **Concerns.** `include`, `extend` and `prepend` count as parents, so a concern's methods are reached through the
   models that include it. Methods in `included do` and `class_methods do` blocks belong to the concern.
 - **Scopes.** `scope :active, -> {…}` defines `active`.
+- **Namespaces.** Classes are told apart by their full name, so a change to `RedbarkAccount::Processor` doesn't list
+  every `PlaidAccount::Processor.new` in the app. A bare `Processor` is looked up as Ruby does: in the modules around
+  it, innermost first, then at the top level. `ActivityPub::FetchRepliesService.new.call` is a call on that service.
+- **RSpec.** In `RSpec.describe Rule::Runner do`, `described_class` and `subject` stand for `Rule::Runner`.
 
 `method_missing`, `define_method` and string-built calls aren't traced. Swift's protocol witnesses and Kotlin's and
 Java's interface calls are followed only by method name.
