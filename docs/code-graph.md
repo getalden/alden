@@ -113,6 +113,11 @@ With no type inference, a method call is matched by what it's called on:
 - **Sure matches.** Calls on the class itself (`Rule.find`, `Store.shared`), on a variable named like it (`rule.apply`,
   `ruleRunner.run`), on what a class-level getter returns (`Rule.find(1).apply`), and bare or `self` calls inside the
   class or its subclasses.
+- **Declared types.** A receiver declared with a type is that type, whatever it's named: fields, parameters and
+  locals (`val transport: Transport`, `Client client`, `weak var client: StatsigClientType?`), and values built by a
+  constructor (`val call = DnsCall()`, `var x = new Foo()`, `let request = DataRequest(…)`, Ruby's
+  `client = Api::Client.new`). A call on one of the class's own types (itself, a subclass, an implementation) is sure;
+  on a parent or interface it's a name match; on any other type it isn't listed, even when the name matches.
 - **Name matches.** Other calls with the same method name, in files that use the class (Java and Kotlin: import it or
   share its package; Ruby and Swift: mention it) or reach it through a parent class. Very common names (`call`, `save`,
   `update`, `count`, `toString`…) count only as sure matches.
@@ -142,9 +147,11 @@ With no type inference, a method call is matched by what it's called on:
   every `PlaidAccount::Processor.new` in the app. A bare `Processor` is looked up as Ruby does: in the modules around
   it, innermost first, then at the top level. `ActivityPub::FetchRepliesService.new.call` is a call on that service.
 - **RSpec.** In `RSpec.describe Rule::Runner do`, `described_class` and `subject` stand for `Rule::Runner`.
+  `let(:service) { instance_double(VerifyQuoteService) }` (or `Foo.new`, or `allow(Foo).to receive(:new).and_return(x)`)
+  types the variable, and `expect(service).to have_received(:call)` and `allow(…).to receive(:call)` count as calls.
 
 `method_missing`, `define_method` and string-built calls aren't traced. Swift's protocol witnesses and Kotlin's and
-Java's interface calls are followed only by method name.
+Java's interface calls are followed by method name, or by the receiver's declared type when it has one.
 
 ## Go
 

@@ -52,6 +52,9 @@ const GENERIC = new Set([
   "create",
   "update",
 ]);
+const IMPORT = /^\s*(import|require|use)\b/;
+const withoutStrings = (line: string) => line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const COMMENT = /^\s*(#|\/\/|\/?\*)/;
 const CONSTRUCTORS = new Set(["initialize", "init", "constructor", "__construct"]);
 
@@ -124,27 +127,40 @@ try {
       try {
         const files = parseUnifiedDiff(git(clone, "diff", "--no-color", `${sha}^`, sha, "--", def.path));
         const review = await buildGraphReview(worktree, files);
+        const defPackage = readFileSync(join(worktree, def.path), "utf8").match(/^package\s+([\w.]+)/m)?.[1] ?? "";
         for (const change of review.context.changes) {
           if (change.change !== "modified" || (change.kind !== "method" && change.kind !== "function")) continue;
           if (!change.signature || !change.previousSignature || change.signature === change.previousSignature) continue;
           const constructs = CONSTRUCTORS.has(change.name) || change.name === change.container;
           const word = constructs ? change.container : change.name;
           if (!word || word.length < 4) continue;
-          // A constructor is called as `Foo.new`, `Foo(` or `new Foo(`, not wherever the class is named.
-          const pattern = new RegExp(constructs ? `\\b${word}(\\.new\\b|\\s*\\()` : `\\b${word}\\b`);
+          // A constructor is called as `Foo.new`, `Foo(` or `new Foo(`, not wherever the class is named. A method
+          // only where it's called or referenced: `x.word`, `word(`, `word {`, Ruby's `word arg` and `:word`, Kotlin's
+          // `::word`. Not as a property, parameter or named argument (`word: …`, `word = …`).
+          const pattern = new RegExp(
+            constructs
+              ? `\\b${word}(\\.new\\b|\\s*\\()`
+              : `(?:\\.|::|:|&\\.|\\?\\.)${word}\\b(?!\\s*(?::[^:]|=[^=~]))|(?<![\\w.:$])${word}\\s*[({]|^\\s*${word}\\s+[\\w'"@:]`,
+          );
+          // The file calls a same-named function it imports from elsewhere (`kotlin.concurrent.withLock`).
+          const importsOther = (text: string) =>
+            new RegExp(`^import\\s+(static\\s+)?[\\w.]+\\.${word}\\s*;?\\s*$`, "m").test(text) &&
+            !new RegExp(`^import\\s+(static\\s+)?${escapeRegExp(defPackage)}\\.(\\w+\\.)?${word}\\b`, "m").test(text);
           // A name every service has (`call`, `perform`) only counts in files that name the class too.
           const classWord = change.container ? new RegExp(`\\b${change.container}\\b`) : undefined;
           const generic = GENERIC.has(change.name) && classWord !== undefined;
           const expected = code
             .filter((f) => f.path !== def.path)
             .filter((f) => !generic || classWord?.test(oldText(f.previousPath ?? f.path)))
+            .filter((f) => !importsOther(oldText(f.previousPath ?? f.path)))
             .map((f) => ({
               path: f.previousPath ?? f.path,
               lines: f.hunks.flatMap((h) =>
                 h.lines.flatMap((l) =>
                   l.kind === "del" &&
                   l.oldLine &&
-                  pattern.test(l.text) &&
+                  pattern.test(withoutStrings(l.text)) &&
+                  !IMPORT.test(l.text) &&
                   !DECLARATION.test(l.text) &&
                   !COMMENT.test(l.text)
                     ? [l.oldLine]

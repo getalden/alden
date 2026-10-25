@@ -1,4 +1,4 @@
-import type { Definition, FileSymbols } from "./extract.js";
+import type { Definition, FileSymbols, TypedVariable } from "./extract.js";
 import { dirOf, type Resolver } from "./resolve.js";
 
 /** A place that calls (or instantiates, or renders) a symbol. */
@@ -458,6 +458,17 @@ function rubyReceiverClass(object: string): string | undefined {
  * Whether a receiver is named after one of the classes: `rule`, `@rule`, `current_rule`, `self.rule` for Rule;
  * `ruleRunner` for RuleRunner. Where any file can reach any class, that's the best sign a call is on an instance.
  */
+/** The declared type of `transport`, `this.transport` or `self.client?` at a line, by the innermost declaration. */
+function declaredType(symbols: FileSymbols, object: string, line: number): string | undefined {
+  const name = object.replace(/^(self|this)\./, "").replace(/[?!]+$/, "");
+  let found: TypedVariable | undefined;
+  for (const v of symbols.variables ?? []) {
+    if (v.name === name && v.startLine <= line && line <= v.endLine && (!found || v.startLine >= found.startLine))
+      found = v;
+  }
+  return found?.type;
+}
+
 function namedLike(object: string, classes: Iterable<string>): boolean {
   const last = (object.split(/\.|::/).at(-1) ?? object)
     .replace(/^@+/, "")
@@ -1279,6 +1290,13 @@ export class CodeGraph {
               const target = written ? this.resolveClass(path, written, ref.line) : undefined;
               return target !== undefined && keys.has(keyOf(target));
             };
+            // Swift, Java, Kotlin: a receiver declared with a type is that type, whatever it's named.
+            const declared = ruby ? undefined : declaredType(symbols, ref.object, ref.line);
+            if (declared !== undefined) {
+              if (ownNames.has(declared)) add(path, ref.line, "import");
+              else if (classNames.has(declared) && !common.has(ref.name)) add(path, ref.line, "name");
+              continue;
+            }
             if (on(ownNames, ownKeys) || namedLike(ref.object, ownNames)) add(path, ref.line, "import");
             else if (common.has(ref.name)) continue;
             else if (on(classNames, familyKeys) || namedLike(ref.object, classNames)) add(path, ref.line, "name");

@@ -10,7 +10,7 @@ import { languageOf } from "./parser.js";
 const run = promisify(execFile);
 
 /** Bump when extraction output changes shape or meaning, so old caches are dropped instead of trusted. */
-export const EXTRACTOR_VERSION = 9;
+export const EXTRACTOR_VERSION = 10;
 
 /** Files bigger than this are usually generated or vendored; skipping keeps indexing predictable. */
 const MAX_FILE_BYTES = 512 * 1024;

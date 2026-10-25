@@ -72,30 +72,42 @@ only the file defining the symbol, at its new version) and asks the graph for ca
 many of those caller files the graph listed, by language, and how many other files it listed besides.
 
 The key is a word match on the edited lines, so it's a little noisy: a same-named method of another class edited in the
-same commit counts as a caller too. Comments don't count, constructors count only where they're called (`Foo.new`,
-`Foo(`, `new Foo(`), and names every service has (`call`, `perform`) only in files naming the class. Read the misses
-(`--verbose`) before blaming the graph.
+same commit counts as a caller too. Only call sites count (`x.name`, `name(`, `name {`, Ruby's `name arg`, `:name`), not
+properties, parameters, named arguments, imports, comments or strings; constructors only where they're called
+(`Foo.new`, `Foo(`, `new Foo(`); names every service has (`call`, `perform`) only in files naming the class; and not a
+file importing a same-named function from elsewhere (`kotlin.concurrent.withLock`). Read the misses (`--verbose`) before
+blaming the graph.
 
-On 25 Oct 2026, 30 cases per repo since 2022, before and after the fixes this eval turned up:
+On 25 Oct 2026, 30 cases per repo since 2022, at the first version of the Ruby, Swift, Java and Kotlin support, after the
+namespace and import fixes, and after reading declared types:
 
-| Repo | Language | Caller files found, before | After |
-| --- | --- | --- | --- |
-| we-promise/sure | Ruby (Rails) | 31/45 | 37/45 |
-| mastodon/mastodon | Ruby (Rails) | 17/57 | 43/57 |
-| Alamofire/Alamofire | Swift | 48/61 | 48/61 |
-| kickstarter/ios-oss | Swift | 40/60 | 40/60 |
-| android/nowinandroid | Kotlin | 34/52 | 41/52 |
-| square/okhttp | Kotlin, Java | 29/94 | 39/94 |
-| thunderbird/thunderbird-android | Kotlin, Java | 36/46 | 40/46 |
-| google/gson | Java | 14/19 | 16/19 |
-| square/retrofit | Java | 9/11 | 9/11 |
-| **All** | | **258/445 (58%)** | **313/445 (70%)** |
+| Repo | Language | First version | Namespaces, imports | Declared types |
+| --- | --- | --- | --- | --- |
+| we-promise/sure | Ruby (Rails) | 35/45 | 41/45 | 41/45 |
+| mastodon/mastodon | Ruby (Rails) | 16/59 | 45/59 | 55/59 |
+| Alamofire/Alamofire | Swift | 47/52 | 47/52 | 47/52 |
+| kickstarter/ios-oss | Swift | 40/51 | 40/51 | 40/51 |
+| android/nowinandroid | Kotlin | 49/67 | 56/67 | 52/67 |
+| square/okhttp | Kotlin, Java | 24/44 | 28/44 | 25/44 |
+| thunderbird/thunderbird-android | Kotlin, Java | 36/46 | 40/46 | 36/46 |
+| google/gson | Java | 14/17 | 16/17 | 16/17 |
+| square/retrofit | Java | 9/11 | 9/11 | 9/11 |
+| **All** | | **270/392 (69%)** | **322/392 (82%)** | **321/392 (82%)** |
+| Other files listed, all cases | | 1707 | 1557 | 1455 |
 
-The fixes: Ruby classes told apart by namespace (`PlaidAccount::Processor` vs `RedbarkAccount::Processor`), calls on
-`Namespace::Service.new`, a concern's private helpers, RSpec's `described_class` and `subject`; Java and Kotlin nested
-classes, members imported by name (Kotlin extensions, Java static imports) and Kotlin extension functions on outside
-types. What's left is mostly calls through a variable the graph can't type (`provider.fetch(…)` for an interface
-method, builder chains in okhttp's tests) and noise in the key.
+The namespace and import fixes: Ruby classes told apart by namespace (`PlaidAccount::Processor` vs
+`RedbarkAccount::Processor`), calls on `Namespace::Service.new`, a concern's private helpers, RSpec's `described_class`
+and `subject`; Java and Kotlin nested classes, members imported by name (Kotlin extensions, Java static imports) and
+Kotlin extension functions on outside types.
+
+Declared types: a receiver declared with a type (`val transport: Transport`, `Client client`, `let request =
+DataRequest(…)`, Ruby's `client = Api::Client.new` and RSpec's `let(:service) { instance_double(Service) }`) is that
+type, whatever it's named; and RSpec's `expect(service).to have_received(:call)` counts as a call. Ruby gained 10 caller
+files. The 11 Kotlin files it lost are all key noise, checked by hand: calls on a variable typed as another class that
+has a same-named method (`commandDownloadMessage.downloadCompleteMessage` for `Backend.downloadCompleteMessage`,
+`newsResourceDao.getNewsResources` for a repository's). The graph now leaves those out, which is also why it lists 7%
+fewer other files. Without them recall is 321/381 (84%). What's left is mostly calls through a variable with no written
+type (`provider.fetch(…)`, a function's return value) and more of the same noise.
 
 ## The recorded PRs
 

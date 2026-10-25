@@ -90,6 +90,18 @@ export interface FileSymbols {
   definitions: Definition[];
   imports: ImportBinding[];
   references: Reference[];
+  /** Swift, Java and Kotlin: variables declared with a type, or assigned a new instance of one. */
+  variables?: TypedVariable[];
+}
+
+/** `val transport: Transport`, `Client client`, `let request = DataRequest(…)`: a receiver whose type is known. */
+export interface TypedVariable {
+  name: string;
+  /** The type's last name, without generics or optionality: `Transport` for `Transport<T>?`. */
+  type: string;
+  /** Where the name means this variable: its class for fields, its function for parameters, its block for locals. */
+  startLine: number;
+  endLine: number;
 }
 
 const line = (node: Node) => node.startPosition.row + 1;
@@ -950,6 +962,10 @@ function rubyReferences(root: Node): Reference[] {
       push("perform", method, object ? { object } : {});
     } else if (RUBY_DYNAMIC.has(name) && symbolName(firstArg)) {
       push(symbolName(firstArg), firstArg ?? method, object ? { object } : {});
+    } else if (RSPEC_RECEIVE.has(name) && !receiver && symbolName(firstArg) && symbolName(firstArg) !== "new") {
+      // `expect(service).to have_received(:call)`: a spec stubbing or checking a call on `service`.
+      const target = rspecTarget(call);
+      push(symbolName(firstArg), firstArg ?? method, target ? { object: target } : {});
     } else {
       // `Rule::Runner.new.call`: the class written in front of `new` (or `find`, …) is the receiver's.
       const written = receiver?.type === "call" ? receiver.childForFieldName("receiver") : receiver;
@@ -1001,7 +1017,83 @@ function rubyReferences(root: Node): Reference[] {
       push(id.text, id);
     }
   }
-  return rspecDescribed(root, references);
+  return rspecDescribed(root, rubyTyped(root, references));
+}
+
+const RSPEC_RECEIVE = new Set(["receive", "have_received"]);
+const RSPEC_TARGETS = new Set(["expect", "allow", "expect_any_instance_of", "allow_any_instance_of"]);
+
+/** The object in `expect(x).to …` around a matcher, as a receiver: `Foo.new` for `allow_any_instance_of(Foo)`. */
+function rspecTarget(matcher: Node): string | undefined {
+  let node: Node | null = matcher.parent;
+  while (node && !(node.type === "call" && /^(to|not_to|to_not)$/.test(node.childForFieldName("method")?.text ?? "")))
+    node = node.parent;
+  const expectation = node?.childForFieldName("receiver");
+  const method = expectation?.childForFieldName("method")?.text ?? "";
+  const subject = expectation?.childForFieldName("arguments")?.namedChild(0);
+  if (!subject || !RSPEC_TARGETS.has(method)) return undefined;
+  return method.endsWith("any_instance_of") ? `${subject.text}.new` : rubyObject(subject);
+}
+
+/** `Foo.new`, `instance_double(Foo)`: the class a value is an instance of, as written. */
+function rubyInstanceOf(value: Node | null | undefined): string | undefined {
+  if (value?.type !== "call") return undefined;
+  const method = value.childForFieldName("method")?.text;
+  const receiver = value.childForFieldName("receiver");
+  if (method === "new" && receiver)
+    return receiver.text === "described_class" ? "described_class" : rubyConstantPath(receiver);
+  if (receiver || (method !== "instance_double" && method !== "instance_spy")) return undefined;
+  const first = value.childForFieldName("arguments")?.namedChild(0);
+  if (!first) return undefined;
+  return rubyConstantPath(first) ?? (first.type === "string" ? unquote(first.text).replace(/^::/, "") : undefined);
+}
+
+const RUBY_SCOPES = new Set(["method", "singleton_method", "do_block", "block", "class", "module"]);
+
+/**
+ * Variables holding an instance of a known class: `client = Api::Client.new`, `@client = …`, RSpec's
+ * `let(:service) { instance_double(VerifyQuoteService) }` and `allow(Foo).to receive(:new).and_return(service)`.
+ * Calls on them become calls on `Class.new`, which is how the graph reads an instance of the class.
+ */
+function rubyTyped(root: Node, references: Reference[]): Reference[] {
+  const variables: { name: string; written: string; start: number; end: number }[] = [];
+  const scopeOf = (node: Node, kinds: Set<string>) => {
+    let scope: Node | null = node.parent;
+    while (scope && !kinds.has(scope.type)) scope = scope.parent;
+    return scope ?? root;
+  };
+  const add = (name: string, written: string | undefined, scope: Node) => {
+    if (written) variables.push({ name, written, start: line(scope), end: endLine(scope) });
+  };
+  for (const assignment of root.descendantsOfType("assignment")) {
+    const left = assignment?.childForFieldName("left");
+    if (!assignment || (left?.type !== "identifier" && left?.type !== "instance_variable")) continue;
+    const kinds = left.type === "instance_variable" ? new Set(["class", "module"]) : RUBY_SCOPES;
+    add(left.text, rubyInstanceOf(assignment.childForFieldName("right")), scopeOf(assignment, kinds));
+  }
+  for (const call of root.descendantsOfType("call")) {
+    const method = call?.childForFieldName("method")?.text;
+    if (!call || !method) continue;
+    const first = call.childForFieldName("arguments")?.namedChild(0);
+    if (/^(let!?|subject)$/.test(method) && first?.type === "simple_symbol" && !call.childForFieldName("receiver")) {
+      const body = call.childForFieldName("block")?.childForFieldName("body");
+      const last = body?.namedChildren.filter((c): c is Node => c !== null).at(-1);
+      add(first.text.slice(1), rubyInstanceOf(last), scopeOf(call, RUBY_SCOPES));
+    } else if (method === "and_return" && first?.type === "identifier") {
+      const stub = call.childForFieldName("receiver");
+      const target = stub?.childForFieldName("method")?.text === "receive" ? rspecTarget(stub) : undefined;
+      if (target && stub?.childForFieldName("arguments")?.namedChild(0)?.text === ":new") add(first.text, target, root);
+    }
+  }
+  if (variables.length === 0) return references;
+  return references.map((ref) => {
+    const found = variables
+      .filter((v) => v.name === ref.object && v.start <= ref.line && ref.line <= v.end)
+      .sort((a, b) => b.start - a.start)[0];
+    if (!found) return ref;
+    const short = found.written.split("::").at(-1) ?? found.written;
+    return { ...ref, object: `${short}.new`, ...(found.written.includes("::") ? { qualified: found.written } : {}) };
+  });
 }
 
 /**
@@ -1540,6 +1632,94 @@ function extractKotlin(root: Node): Omit<FileSymbols, "language" | "references">
   return { definitions, imports, ...(jvmPackage ? { jvmPackage } : {}) };
 }
 
+// ─── Declared types (Swift, Java, Kotlin) ────────────────────────────────────────────────────────
+
+/** A type as written, if it names one type: not a function type, tuple or array. */
+function typeName(node: Node | null | undefined): string | undefined {
+  if (!node || /^[([]/.test(node.text)) return undefined;
+  const name = lastTypeName(node)?.replace(/[?!]+$/, "");
+  return name && /^[\p{L}_][\w]*$/u.test(name) ? name : undefined;
+}
+
+/** `Foo(…)` or `new Foo(…)`: the type a value builds, when it's a constructor call. */
+function builtType(language: GraphLanguage, value: Node | null | undefined): string | undefined {
+  if (!value) return undefined;
+  if (language === "java")
+    return value.type === "object_creation_expression" ? typeName(value.childForFieldName("type")) : undefined;
+  if (value.type !== "call_expression") return undefined;
+  const callee = value.namedChildren[0];
+  return callee && /identifier$/.test(callee.type) && /^\p{Lu}/u.test(callee.text) ? callee.text : undefined;
+}
+
+const KOTLIN_TYPES = new Set(["user_type", "nullable_type"]);
+const SWIFT_TYPES = new Set(["user_type", "optional_type", "implicitly_unwrapped_type"]);
+
+function declaredVariables(language: GraphLanguage, root: Node): TypedVariable[] {
+  const out: TypedVariable[] = [];
+  const add = (name: Node | null | undefined, type: string | undefined, scope: Node | null | undefined) => {
+    if (name && type && scope) out.push({ name: name.text, type, startLine: line(scope), endLine: endLine(scope) });
+  };
+  const visit = (node: Node) => {
+    const kids = node.namedChildren.filter((c): c is Node => c !== null);
+    if (language === "kotlin") {
+      if (node.type === "class_parameter")
+        add(
+          kids.find((c) => c.type === "identifier"),
+          typeName(kids.find((c) => KOTLIN_TYPES.has(c.type))),
+          node.parent?.parent?.parent,
+        );
+      else if (node.type === "parameter" && node.parent?.type === "function_value_parameters")
+        add(
+          kids.find((c) => c.type === "identifier"),
+          typeName(kids.find((c) => KOTLIN_TYPES.has(c.type))),
+          node.parent.parent,
+        );
+      else if (node.type === "property_declaration") {
+        const variable = kids.find((c) => c.type === "variable_declaration");
+        const parts = variable?.namedChildren.filter((c): c is Node => c !== null) ?? [];
+        const written = typeName(parts.find((c) => KOTLIN_TYPES.has(c.type)));
+        const scope = node.parent?.type === "class_body" ? node.parent.parent : node.parent;
+        add(
+          parts.find((c) => c.type === "identifier"),
+          written ?? builtType(language, kids.at(-1)),
+          scope,
+        );
+      }
+    } else if (language === "java") {
+      if (node.type === "field_declaration" || node.type === "local_variable_declaration") {
+        const written = node.childForFieldName("type");
+        const scope = node.type === "field_declaration" ? node.parent?.parent : node.parent;
+        for (const declarator of node.childrenForFieldName("declarator")) {
+          if (!declarator) continue;
+          const type =
+            written?.text === "var" ? builtType(language, declarator.childForFieldName("value")) : typeName(written);
+          add(declarator.childForFieldName("name"), type, scope);
+        }
+      } else if (node.type === "formal_parameter" || node.type === "enhanced_for_statement") {
+        const scope = node.type === "formal_parameter" ? node.parent?.parent : node;
+        add(node.childForFieldName("name"), typeName(node.childForFieldName("type")), scope);
+      }
+    } else if (language === "swift") {
+      if (node.type === "property_declaration") {
+        const name = node.childForFieldName("name")?.childForFieldName("bound_identifier");
+        const annotation = kids.find((c) => c.type === "type_annotation")?.childForFieldName("name");
+        const scope = node.parent?.type === "class_body" ? node.parent.parent : node.parent;
+        add(name, typeName(annotation) ?? builtType(language, node.childForFieldName("value")), scope);
+      } else if (node.type === "parameter") {
+        const names = node.childrenForFieldName("name").filter((c): c is Node => c !== null);
+        add(
+          names.find((c) => c.type === "simple_identifier"),
+          typeName(names.find((c) => SWIFT_TYPES.has(c.type))),
+          node.parent,
+        );
+      }
+    }
+    for (const kid of kids) visit(kid);
+  };
+  visit(root);
+  return out;
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────────────────────────
 
 const queries = new Map<string, Query>();
@@ -1649,6 +1829,9 @@ export async function extractSymbols(path: string, source: string): Promise<File
       definitions,
       imports,
       references,
+      ...(language === "swift" || language === "java" || language === "kotlin"
+        ? { variables: declaredVariables(language, root) }
+        : {}),
     };
   } finally {
     tree.delete();

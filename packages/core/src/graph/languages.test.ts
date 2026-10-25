@@ -211,6 +211,17 @@ RSpec.describe RedbarkAccount::Processor do
   end
 end
 `,
+      "spec/workers/sync_worker_spec.rb": `RSpec.describe SyncWorker do
+  let(:processor) { instance_double(RedbarkAccount::Processor, process: true) }
+  before { allow(RedbarkAccount::Processor).to receive(:new).and_return(processor) }
+
+  it "runs" do
+    expect(processor).to have_received(:process)
+    stubbed = PlaidAccount::Processor.new(item)
+    stubbed.process
+  end
+end
+`,
       "app/models/snaptrade_account/holdings_processor.rb": `class SnaptradeAccount::HoldingsProcessor
   include SnaptradeAccount::DataHelpers
 
@@ -232,6 +243,7 @@ end
       "app/models/redbark_account.rb:5",
       "spec/models/redbark_account/processor_spec.rb:7",
       "spec/models/redbark_account/processor_spec.rb:8",
+      "spec/workers/sync_worker_spec.rb:6",
     ]);
     expect(sites(graph.callersOf({ ...redbark, name: "import_rows" }))).toEqual([
       "app/models/redbark_account/processor.rb:6",
@@ -269,8 +281,18 @@ describe("Swift", () => {
   }
 }
 `,
+      "Sources/App/Debug.swift": `final class DebugView {
+  weak var client: Store?
+  let cache: Cache
+  func refresh() {
+    self.client?.fetch(id: 5)
+    cache.fetch(id: 6)
+  }
+}
+`,
     });
     expect(sites(graph.callersOf({ path: "Sources/App/Store.swift", name: "fetch", container: "Store" }))).toEqual([
+      "Sources/App/Debug.swift:5",
       "Sources/App/Feature.swift:4",
       "Sources/App/Feature.swift:5?",
       "Sources/App/Store.swift:4",
@@ -352,7 +374,7 @@ fun Transfer.describe(): String {
       "app/src/main/kotlin/com/acme/app/Screen.kt:14",
       "src/main/java/com/acme/billing/Runner.java:8",
       // Same package, so Ledger sees Transfer, but nothing says `t` is one.
-      "src/main/java/com/acme/core/Ledger.java:4?",
+      "src/main/java/com/acme/core/Ledger.java:4",
       "src/main/java/com/acme/core/Transfer.java:7",
     ]);
     expect(
@@ -502,5 +524,65 @@ fun other() {
         }),
       ),
     ).toEqual(["app/src/main/kotlin/com/acme/navigation/NavHost.kt:7"]);
+  });
+
+  it("knows a receiver's type from its declaration", async () => {
+    const graph = await repo({
+      "dns/src/main/kotlin/okhttp3/dns/Transport.kt": `package okhttp3.dns
+
+interface Transport {
+  fun enqueue(query: Query)
+}
+
+class DnsCall : Transport {
+  override fun enqueue(query: Query) {}
+}
+
+class Cache {
+  fun enqueue(query: Query) {}
+}
+`,
+      "dns/src/main/kotlin/okhttp3/dns/internal/Machine.kt": `package okhttp3.dns.internal
+
+import okhttp3.dns.Cache
+import okhttp3.dns.DnsCall
+import okhttp3.dns.Transport
+
+class Machine(private val transport: Transport, private val cache: Cache) {
+  fun go(query: Query) {
+    transport.enqueue(query)
+    cache.enqueue(query)
+    val call = DnsCall()
+    call.enqueue(query)
+  }
+}
+`,
+      "app/src/main/java/com/acme/Controller.java": `package com.acme;
+
+import okhttp3.dns.Transport;
+
+class Controller {
+  private Transport backend;
+
+  void sync(Other other) {
+    backend.enqueue(query);
+    other.enqueue(query);
+  }
+}
+`,
+    });
+    expect(
+      sites(
+        graph.callersOf({
+          path: "dns/src/main/kotlin/okhttp3/dns/Transport.kt",
+          name: "enqueue",
+          container: "Transport",
+        }),
+      ),
+    ).toEqual([
+      "app/src/main/java/com/acme/Controller.java:9",
+      "dns/src/main/kotlin/okhttp3/dns/internal/Machine.kt:9",
+      "dns/src/main/kotlin/okhttp3/dns/internal/Machine.kt:12",
+    ]);
   });
 });
