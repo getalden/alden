@@ -118,6 +118,11 @@ With no type inference, a method call is matched by what it's called on:
   constructor (`val call = DnsCall()`, `var x = new Foo()`, `let request = DataRequest(…)`, Ruby's
   `client = Api::Client.new`). A call on one of the class's own types (itself, a subclass, an implementation) is sure;
   on a parent or interface it's a name match; on any other type it isn't listed, even when the name matches.
+- **More receivers.** A parameter, field or local typed as a parent or interface reaches every implementation, as a
+  name match. Kotlin's `x::method` is a call on `x`, and bare calls in `Foo(…).apply { }`, `x.run { }` and
+  `with(x) { }` are on that receiver. Swift's `$state` is the property wrapper `@Protected var state` declares, in any
+  file. A call on what a function in the same file returns (`loadServiceMethod(m).invoke()`) is on its declared
+  return type.
 - **Swift leading-dot calls.** `.chunked(size)` names a static member or enum case of a type only the context knows, so
   it's a name match for any `chunked` that isn't too common a name.
 - **Name matches.** Other calls with the same method name, in files that use the class (Java and Kotlin: import it or
@@ -151,6 +156,8 @@ With no type inference, a method call is matched by what it's called on:
 - **RSpec.** In `RSpec.describe Rule::Runner do`, `described_class` and `subject` stand for `Rule::Runner`.
   `let(:service) { instance_double(VerifyQuoteService) }` (or `Foo.new`, or `allow(Foo).to receive(:new).and_return(x)`)
   types the variable, and `expect(service).to have_received(:call)` and `allow(…).to receive(:call)` count as calls.
+- **Policies and serializers.** In `StatusPolicy`, Pundit's `record` is a `Status`; in `REST::StatusSerializer`,
+  `object` is.
 
 `method_missing`, `define_method` and string-built calls aren't traced. Swift's protocol witnesses and Kotlin's and
 Java's interface calls are followed by method name, or by the receiver's declared type when it has one.

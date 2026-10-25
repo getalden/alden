@@ -469,6 +469,20 @@ function declaredType(symbols: FileSymbols, object: string, line: number): strin
   return found?.type;
 }
 
+/** `loadServiceMethod(m)` → `ServiceMethod`: what a function defined in the same file returns, by its signature. */
+function returnType(symbols: FileSymbols, object: string): string | undefined {
+  const called = object.replace(/^(self|this)\./, "").match(/^(\w+)\(.*\)[?!]*$/)?.[1];
+  if (!called || /^\p{Lu}/u.test(called)) return undefined;
+  const def = symbols.definitions.find((d) => d.name === called && (d.kind === "method" || d.kind === "function"));
+  const signature = def?.signature?.replace(/<[^<>]*>/g, "").replace(/\s+/g, " ") ?? "";
+  // Kotlin `fun f(): Foo`, Swift `func f() -> Foo`, Java `Foo f(Bar b)`.
+  const written =
+    signature.match(/\)\s*(?::|->)\s*([\w.]+)[?!]?\s*(?:where\b.*)?$/)?.[1] ??
+    signature.match(new RegExp(`([\\w.]+)(?:\\[\\])?\\s+${called}\\s*\\(`))?.[1];
+  const type = written?.split(".").at(-1);
+  return type && /^\p{Lu}/u.test(type) ? type : undefined;
+}
+
 function namedLike(object: string, classes: Iterable<string>): boolean {
   const last = (object.split(/\.|::/).at(-1) ?? object)
     .replace(/^@+/, "")
@@ -562,6 +576,8 @@ export class CodeGraph {
 
   /** Java and Kotlin: "com.acme.Foo" → the file defining it, for every top-level class, object and function. */
   private readonly jvmNames = new Map<string, string>();
+  /** Swift: `$state` → the property wrapper `@Protected var state` declares, from any file (extensions use it too). */
+  private readonly swiftWrappers = new Map<string, string>();
 
   /**
    * Ruby and Swift: "ruby#Name" → the files defining (or reopening, or extending) the type. Ruby keys by the full
@@ -580,6 +596,10 @@ export class CodeGraph {
     private readonly resolve: Resolver,
   ) {
     for (const [path, symbols] of [...files].sort(([a], [b]) => a.localeCompare(b))) {
+      for (const variable of symbols.variables ?? []) {
+        if (variable.name.startsWith("$") && !this.swiftWrappers.has(variable.name))
+          this.swiftWrappers.set(variable.name, variable.type);
+      }
       for (const def of symbols.definitions) {
         if (def.extension && isJvm(path)) {
           const fqn = symbols.jvmPackage ? `${symbols.jvmPackage}.${def.name}` : def.name;
@@ -741,6 +761,18 @@ export class CodeGraph {
     }
     if (isJvm(fromFile)) {
       const name = written.split(".").at(-1) ?? written;
+      // `DnsCallStateMachine.Transport`: a nested class, through its outer class.
+      const [first, ...rest] = written.split(".");
+      if (first && rest.length > 0 && /^\p{Lu}/u.test(first)) {
+        const outer = this.resolveClass(fromFile, first);
+        const qualified = [outer?.name, ...rest].join(".");
+        const nested =
+          outer && this.files.get(outer.path)?.definitions.find((d) => !d.container && d.qualified === qualified);
+        if (outer && nested) return { path: outer.path, name: nested.name };
+      }
+      // A class nested in this file, named bare.
+      if (symbols.definitions.some((d) => !d.container && d.name === name && d.qualified !== undefined))
+        return { path: fromFile, name };
       const imported = this.bindings.get(fromFile)?.find((b) => b.local === name);
       if (imported) return { path: imported.target, name: imported.imported };
       const path = this.jvmNames.get(symbols.jvmPackage ? `${symbols.jvmPackage}.${name}` : name);
@@ -1291,10 +1323,15 @@ export class CodeGraph {
               return target !== undefined && keys.has(keyOf(target));
             };
             // Swift, Java, Kotlin: a receiver declared with a type is that type, whatever it's named.
-            const declared = ruby ? undefined : declaredType(symbols, ref.object, ref.line);
+            const declared = ruby
+              ? undefined
+              : (declaredType(symbols, ref.object, ref.line) ??
+                this.swiftWrappers.get(ref.object.replace(/^self\./, "")) ??
+                returnType(symbols, ref.object));
             if (declared !== undefined) {
               if (ownNames.has(declared)) add(path, ref.line, "import");
-              else if (classNames.has(declared) && !common.has(ref.name)) add(path, ref.line, "name");
+              // Declared as a parent or interface: the call may dispatch to this class, however common the name.
+              else if (classNames.has(declared)) add(path, ref.line, "name");
               continue;
             }
             if (on(ownNames, ownKeys) || namedLike(ref.object, ownNames)) add(path, ref.line, "import");

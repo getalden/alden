@@ -211,6 +211,12 @@ RSpec.describe RedbarkAccount::Processor do
   end
 end
 `,
+      "app/policies/redbark_account/processor_policy.rb": `class RedbarkAccount::ProcessorPolicy < ApplicationPolicy
+  def show?
+    record.process
+  end
+end
+`,
       "spec/workers/sync_worker_spec.rb": `RSpec.describe SyncWorker do
   let(:processor) { instance_double(RedbarkAccount::Processor, process: true) }
   before { allow(RedbarkAccount::Processor).to receive(:new).and_return(processor) }
@@ -241,6 +247,7 @@ end
     ]);
     expect(sites(graph.callersOf({ ...redbark, name: "process" }))).toEqual([
       "app/models/redbark_account.rb:5",
+      "app/policies/redbark_account/processor_policy.rb:3",
       "spec/models/redbark_account/processor_spec.rb:7",
       "spec/models/redbark_account/processor_spec.rb:8",
       "spec/workers/sync_worker_spec.rb:6",
@@ -287,6 +294,18 @@ describe("Swift", () => {
   }
 }
 `,
+      "Sources/App/Wrapped.swift": `final class Wrapped {
+  @Store private var state = State()
+}
+`,
+      "Sources/App/Wrapped+Load.swift": `extension Wrapped {
+  func load() {
+    $state.fetch(id: 8)
+    let name = "x"
+    name.fetch(id: 9)
+  }
+}
+`,
       "Sources/App/Debug.swift": `final class DebugView {
   weak var client: Store?
   let cache: Cache
@@ -303,6 +322,7 @@ describe("Swift", () => {
       "Sources/App/Feature.swift:5?",
       "Sources/App/Store.swift:4",
       "Sources/App/Store+Extra.swift:2",
+      "Sources/App/Wrapped+Load.swift:3",
       "Tests/AppTests/StoreTests.swift:3?",
     ]);
     expect(sites(graph.callersOf({ path: "Sources/App/Store.swift", name: "init", container: "Store" }))).toEqual([
@@ -590,6 +610,54 @@ class Controller {
       "app/src/main/java/com/acme/Controller.java:9",
       "dns/src/main/kotlin/okhttp3/dns/internal/Machine.kt:9",
       "dns/src/main/kotlin/okhttp3/dns/internal/Machine.kt:12",
+    ]);
+  });
+
+  it("follows nested parents, bound references, scope functions and return types", async () => {
+    const graph = await repo({
+      "dns/src/main/kotlin/okhttp3/dns/Machine.kt": `package okhttp3.dns
+
+class Machine(private val transport: Transport) {
+  interface Transport {
+    fun enqueue(query: Query)
+  }
+
+  fun go(query: Query) {
+    transport.enqueue(query)
+  }
+}
+`,
+      "dns/src/main/kotlin/okhttp3/dns/HttpsCall.kt": `package okhttp3.dns
+
+class HttpsCall : Machine.Transport {
+  override fun enqueue(query: Query) {}
+  fun connect(client: Client) {}
+}
+`,
+      "dns/src/main/kotlin/okhttp3/dns/Calls.kt": `package okhttp3.dns
+
+fun open(client: Client) {
+  HttpsCall().apply {
+    connect(client)
+  }
+  later(onReady = call()::enqueue)
+}
+
+fun call(): HttpsCall = HttpsCall()
+
+fun other() {
+  call().enqueue(query)
+}
+`,
+    });
+    const call = { path: "dns/src/main/kotlin/okhttp3/dns/HttpsCall.kt", container: "HttpsCall" };
+    expect(sites(graph.callersOf({ ...call, name: "enqueue" }))).toEqual([
+      "dns/src/main/kotlin/okhttp3/dns/Calls.kt:7",
+      "dns/src/main/kotlin/okhttp3/dns/Calls.kt:13",
+      "dns/src/main/kotlin/okhttp3/dns/Machine.kt:9?",
+    ]);
+    expect(sites(graph.callersOf({ ...call, name: "connect" }))).toEqual([
+      "dns/src/main/kotlin/okhttp3/dns/Calls.kt:5",
     ]);
   });
 });

@@ -1,0 +1,355 @@
+{
+  "_doc": "Answer-key entries of pnpm eval:callers checked by hand and found not to call the changed symbol (a same-named method of another class edited in the same commit, a property read, a declaration). Only misses were reviewed.",
+  "notCallers": [
+    {
+      "repo": "sure",
+      "commit": "3366ac2234",
+      "symbol": "CurrentBalanceManager.set_current_balance",
+      "caller": "app/models/ibkr_account/processor.rb",
+      "reason": "account.set_current_balance is Account::Anchorable's method, not the manager's"
+    },
+    {
+      "repo": "sure",
+      "commit": "cc525da752",
+      "symbol": "Transferable.transfer_match_candidates",
+      "caller": "app/models/family/auto_transfer_matchable.rb",
+      "reason": "a bare call to Family::AutoTransferMatchable's own transfer_match_candidates"
+    },
+    {
+      "repo": "mastodon",
+      "commit": "15dbf8040e",
+      "symbol": "HttpSignature.verified?",
+      "caller": "app/controllers/concerns/signature_verification.rb",
+      "reason": "signed_request is a SignedRequest; its own verified? is the one called"
+    },
+    {
+      "repo": "mastodon",
+      "commit": "15dbf8040e",
+      "symbol": "HttpMessageSignature.verified?",
+      "caller": "app/controllers/concerns/signature_verification.rb",
+      "reason": "signed_request is a SignedRequest; its own verified? is the one called"
+    },
+    {
+      "repo": "Alamofire",
+      "commit": "1da2d91fa6",
+      "symbol": "Request.stream",
+      "caller": "Tests/DataStreamTests.swift",
+      "reason": "case let .stream(result) matches an enum case, it doesn't call the method"
+    },
+    {
+      "repo": "ios-oss",
+      "commit": "d1b2a1ba8b",
+      "symbol": "Project.project",
+      "caller": "KsApi/Sources/KsApi/ProjectPageFetcher.swift",
+      "reason": "reads a project property of another type"
+    },
+    {
+      "repo": "ios-oss",
+      "commit": "29bb160bca",
+      "symbol": "Project.project",
+      "caller": "KsApi/Sources/KsApi/MockService.swift",
+      "reason": "reads a project property of another type"
+    },
+    {
+      "repo": "ios-oss",
+      "commit": "37b9cc6244",
+      "symbol": "VideoFeedViewModelType.isSaved",
+      "caller": "LibraryTests/Library/ViewModels/VideoFeedViewModelTests.swift",
+      "reason": "reads the isSaved property of a feed item"
+    },
+    {
+      "repo": "ios-oss",
+      "commit": "37b9cc6244",
+      "symbol": "VideoFeedViewModel.isSaved",
+      "caller": "LibraryTests/Library/ViewModels/VideoFeedViewModelTests.swift",
+      "reason": "reads the isSaved property of a feed item"
+    },
+    {
+      "repo": "ios-oss",
+      "commit": "7891257a6d",
+      "symbol": "BackerDashboardViewController.configurePagesDataSource",
+      "caller": "LibraryTests/Library/ViewModels/BackerDashboardViewModelTests.swift",
+      "reason": "reads the view model's configurePagesDataSource output signal"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "ae58d1e1b0",
+      "symbol": "NewsResourceDao.getNewsResources",
+      "caller": "core/data/src/main/java/com/google/samples/apps/nowinandroid/core/data/repository/fake/FakeNewsRepository.kt",
+      "reason": "calls getNewsResources on a repository or network data source, not the DAO"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "ae58d1e1b0",
+      "symbol": "NewsResourceDao.getNewsResources",
+      "caller": "core/domain/src/main/java/com/google/samples/apps/nowinandroid/core/domain/GetUserNewsResourcesUseCase.kt",
+      "reason": "calls getNewsResources on a repository or network data source, not the DAO"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "ae58d1e1b0",
+      "symbol": "NewsResourceDao.getNewsResources",
+      "caller": "core/testing/src/main/java/com/google/samples/apps/nowinandroid/core/testing/repository/TestNewsRepository.kt",
+      "reason": "calls getNewsResources on a repository or network data source, not the DAO"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "ae58d1e1b0",
+      "symbol": "TestNewsRepository.getNewsResources",
+      "caller": "core/data/src/main/java/com/google/samples/apps/nowinandroid/core/data/repository/OfflineFirstNewsRepository.kt",
+      "reason": "calls getNewsResources on the DAO or network data source"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "ae58d1e1b0",
+      "symbol": "TestNewsRepository.getNewsResources",
+      "caller": "core/data/src/main/java/com/google/samples/apps/nowinandroid/core/data/repository/fake/FakeNewsRepository.kt",
+      "reason": "calls getNewsResources on the DAO or network data source"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "de2f07d1a4",
+      "symbol": "NewsResourceDao.getNewsResourcesStream",
+      "caller": "feature-topic/src/main/java/com/google/samples/apps/nowinandroid/feature/topic/TopicViewModel.kt",
+      "reason": "newsRepository is a NewsRepository, not the DAO"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "de2f07d1a4",
+      "symbol": "LocalNewsRepository.getNewsResourcesStream",
+      "caller": "core-database/src/androidTest/java/com/google/samples/apps/nowinandroid/core/database/dao/NewsResourceDaoTest.kt",
+      "reason": "newsResourceDao is the DAO"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "de2f07d1a4",
+      "symbol": "NewsRepository.getNewsResourcesStream",
+      "caller": "core-database/src/androidTest/java/com/google/samples/apps/nowinandroid/core/database/dao/NewsResourceDaoTest.kt",
+      "reason": "newsResourceDao is the DAO"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "de2f07d1a4",
+      "symbol": "NewsRepository.getNewsResourcesStream",
+      "caller": "core-domain/src/main/java/com/google/samples/apps/nowinandroid/core/domain/repository/LocalNewsRepository.kt",
+      "reason": "newsResourceDao is the DAO"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "de2f07d1a4",
+      "symbol": "FakeNewsRepository.getNewsResourcesStream",
+      "caller": "core-database/src/androidTest/java/com/google/samples/apps/nowinandroid/core/database/dao/NewsResourceDaoTest.kt",
+      "reason": "newsResourceDao is the DAO"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "de2f07d1a4",
+      "symbol": "FakeNewsRepository.getNewsResourcesStream",
+      "caller": "core-domain/src/main/java/com/google/samples/apps/nowinandroid/core/domain/repository/LocalNewsRepository.kt",
+      "reason": "newsResourceDao is the DAO"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "a3ddf12aa6",
+      "symbol": "RetrofitNiANetworkApi.getTopics",
+      "caller": "core-domain/src/main/java/com/google/samples/apps/nowinandroid/core/domain/repository/LocalTopicsRepository.kt",
+      "reason": "network is the NiaNetworkDataSource, not the Retrofit API interface"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "a3ddf12aa6",
+      "symbol": "RetrofitNiANetworkApi.getAuthors",
+      "caller": "core-domain/src/main/java/com/google/samples/apps/nowinandroid/core/domain/repository/LocalAuthorsRepository.kt",
+      "reason": "network is the NiaNetworkDataSource, not the Retrofit API interface"
+    },
+    {
+      "repo": "nowinandroid",
+      "commit": "a3ddf12aa6",
+      "symbol": "RetrofitNiANetworkApi.getNewsResources",
+      "caller": "core-domain/src/main/java/com/google/samples/apps/nowinandroid/core/domain/repository/LocalNewsRepository.kt",
+      "reason": "network is the NiaNetworkDataSource, not the Retrofit API interface"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "1682d9bac8",
+      "symbol": "State.cancel",
+      "caller": "okhttp-dnsoverhttps/src/main/kotlin/okhttp3/dnsoverhttps/internal/DnsOverHttpsTransport.kt",
+      "reason": "cancels an okhttp3.Call or an Android CancellationSignal"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "1682d9bac8",
+      "symbol": "State.cancel",
+      "caller": "okhttp/src/androidMain/kotlin/okhttp3/android/AndroidDns.kt",
+      "reason": "cancels an okhttp3.Call or an Android CancellationSignal"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "0f4e198d5f",
+      "symbol": "DnsOverHttpsCall.enqueue",
+      "caller": "okhttp/src/commonTest/kotlin/okhttp3/internal/dns/DnsCallStateMachineTest.kt",
+      "reason": "a bare enqueue() in the tester's lambda calls DnsCallStateMachineTester.enqueue"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "0f4e198d5f",
+      "symbol": "Transport.enqueue",
+      "caller": "okhttp-dnsoverhttps/src/main/kotlin/okhttp3/dnsoverhttps/internal/-DnsOverHttpsCall.kt",
+      "reason": "calls enqueue on a Call, Dns.Call or the tester, not a Transport"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "0f4e198d5f",
+      "symbol": "Transport.enqueue",
+      "caller": "okhttp/src/commonTest/kotlin/okhttp3/internal/dns/DnsCallStateMachineTest.kt",
+      "reason": "calls enqueue on a Call, Dns.Call or the tester, not a Transport"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "0f4e198d5f",
+      "symbol": "Transport.enqueue",
+      "caller": "okhttp/src/commonTest/kotlin/okhttp3/internal/dns/DnsCallStateMachineTester.kt",
+      "reason": "calls enqueue on a Call, Dns.Call or the tester, not a Transport"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "0f4e198d5f",
+      "symbol": "DnsMessage.query",
+      "caller": "okhttp/src/commonTest/kotlin/okhttp3/internal/dns/DnsCallStateMachineTest.kt",
+      "reason": "a named argument and a property read"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "6d0e76d0b9",
+      "symbol": "DnsOverHttps.newCall",
+      "caller": "okhttp/src/jvmTest/kotlin/okhttp3/DnsAsDns2Test.kt",
+      "reason": "dns2 is a DnsAsDns2"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "38ecc57eef",
+      "symbol": "DiskLruCacheTest.setUp",
+      "caller": "okhttp/src/jvmTest/kotlin/okhttp3/internal/http/CancelTest.kt",
+      "reason": "each test class calls its own setUp"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "38ecc57eef",
+      "symbol": "DiskLruCacheTest.setUp",
+      "caller": "okhttp/src/jvmTest/kotlin/okhttp3/internal/http2/HttpOverHttp2Test.kt",
+      "reason": "each test class calls its own setUp"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "38ecc57eef",
+      "symbol": "HttpOverHttp2Test.setUp",
+      "caller": "okhttp/src/jvmTest/kotlin/okhttp3/internal/cache/DiskLruCacheTest.kt",
+      "reason": "each test class calls its own setUp"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "38ecc57eef",
+      "symbol": "HttpOverHttp2Test.setUp",
+      "caller": "okhttp/src/jvmTest/kotlin/okhttp3/internal/http/CancelTest.kt",
+      "reason": "each test class calls its own setUp"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "6b134f769a",
+      "symbol": "MockWebServer.toString",
+      "caller": "mockwebserver/src/main/kotlin/mockwebserver3/MockResponse.kt",
+      "reason": "value.toString() on a String"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "6b134f769a",
+      "symbol": "RecordedRequest.toString",
+      "caller": "mockwebserver/src/main/kotlin/mockwebserver3/MockResponse.kt",
+      "reason": "value.toString() on a String"
+    },
+    {
+      "repo": "okhttp",
+      "commit": "cb1674309f",
+      "symbol": "TestStreams.close",
+      "caller": "okhttp/src/jvmTest/java/okhttp3/internal/ws/WebSocketHttpTest.java",
+      "reason": "webSocket is a WebSocket"
+    },
+    {
+      "repo": "thunderbird-android",
+      "commit": "d7c50bbb4d",
+      "symbol": "FakeFeatureFlagCatalogDataSource.load",
+      "caller": "core/featureflag/src/commonTest/kotlin/net/thunderbird/core/featureflag/data/BaseLocalFeatureFlagCatalogDataSourceTest.kt",
+      "reason": "testSubject is a LocalFeatureFlagCatalogDataSource"
+    },
+    {
+      "repo": "thunderbird-android",
+      "commit": "334848467e",
+      "symbol": "Backend.downloadCompleteMessage",
+      "caller": "backend/imap/src/main/java/com/fsck/k9/backend/imap/ImapBackend.kt",
+      "reason": "commandDownloadMessage is a CommandDownloadMessage"
+    },
+    {
+      "repo": "thunderbird-android",
+      "commit": "334848467e",
+      "symbol": "CommandSync.sync",
+      "caller": "backend/imap/src/main/java/com/fsck/k9/backend/imap/ImapBackend.kt",
+      "reason": "imapSync is an ImapSync"
+    },
+    {
+      "repo": "thunderbird-android",
+      "commit": "334848467e",
+      "symbol": "DemoBackend.downloadCompleteMessage",
+      "caller": "backend/imap/src/main/java/com/fsck/k9/backend/imap/ImapBackend.kt",
+      "reason": "commandDownloadMessage is a CommandDownloadMessage"
+    },
+    {
+      "repo": "thunderbird-android",
+      "commit": "334848467e",
+      "symbol": "CommandDownloadMessage.downloadCompleteMessage",
+      "caller": "legacy/core/src/main/java/com/fsck/k9/controller/MessagingController.java",
+      "reason": "calls it on a Backend, or on the other backend's CommandDownloadMessage"
+    },
+    {
+      "repo": "thunderbird-android",
+      "commit": "334848467e",
+      "symbol": "ImapSync.sync",
+      "caller": "backend/demo/src/main/kotlin/app/k9mail/backend/demo/DemoBackend.kt",
+      "reason": "commandSync is the demo backend's CommandSync"
+    },
+    {
+      "repo": "thunderbird-android",
+      "commit": "334848467e",
+      "symbol": "JmapBackend.downloadCompleteMessage",
+      "caller": "backend/imap/src/main/java/com/fsck/k9/backend/imap/ImapBackend.kt",
+      "reason": "commandDownloadMessage is a CommandDownloadMessage"
+    },
+    {
+      "repo": "thunderbird-android",
+      "commit": "334848467e",
+      "symbol": "CommandDownloadMessage.downloadCompleteMessage",
+      "caller": "backend/imap/src/main/java/com/fsck/k9/backend/imap/ImapBackend.kt",
+      "reason": "calls it on a Backend, or on the other backend's CommandDownloadMessage"
+    },
+    {
+      "repo": "thunderbird-android",
+      "commit": "334848467e",
+      "symbol": "Pop3Backend.downloadCompleteMessage",
+      "caller": "backend/imap/src/main/java/com/fsck/k9/backend/imap/ImapBackend.kt",
+      "reason": "commandDownloadMessage is a CommandDownloadMessage"
+    },
+    {
+      "repo": "gson",
+      "commit": "0a42c31efe",
+      "symbol": "Element.read",
+      "caller": "gson/src/main/java/com/google/gson/Gson.java",
+      "reason": "typeAdapter is a TypeAdapter"
+    },
+    {
+      "repo": "retrofit",
+      "commit": "0e45300022",
+      "symbol": "HttpServiceMethod.invoke",
+      "caller": "retrofit/src/main/java/retrofit2/ServiceMethod.java",
+      "reason": "the abstract declaration, not a call"
+    }
+  ]
+}

@@ -1085,6 +1085,16 @@ function rubyTyped(root: Node, references: Reference[]): Reference[] {
       if (target && stub?.childForFieldName("arguments")?.namedChild(0)?.text === ":new") add(first.text, target, root);
     }
   }
+  // Pundit's `record` in StatusPolicy and a serializer's `object` in REST::StatusSerializer are a Status.
+  for (const klass of root.descendantsOfType("class")) {
+    const written = klass ? rubyConstantPath(klass.childForFieldName("name") ?? klass) : undefined;
+    const model = written
+      ?.split("::")
+      .at(-1)
+      ?.match(/^(\w+?)(Policy|Serializer)$/);
+    if (!klass || !model?.[1]) continue;
+    add(model[2] === "Policy" ? "record" : "object", model[1], klass);
+  }
   if (variables.length === 0) return references;
   return references.map((ref) => {
     const found = variables
@@ -1277,6 +1287,15 @@ function headSignature(node: Node, bodyTypes: string[]): string {
   return collapse(head.replace(/@[\w.]+(\([^)]*\))?\s*/g, "").replace(/[;{]\s*$/, ""));
 }
 
+/** A type as written, without type arguments: `Dns.Call` for `Dns.Call`, `Base` for `Base<T>?`. */
+function writtenTypeName(node: Node | null | undefined): string | undefined {
+  const text = node?.text
+    .replace(/<[\s\S]*$/, "")
+    .replace(/\?$/, "")
+    .replace(/\s+/g, "");
+  return text || undefined;
+}
+
 /** The last name in a type as written: `Base`, `Foo.Bar`, `Other<String>`, `com.acme.Base`. */
 function lastTypeName(node: Node | null | undefined): string | undefined {
   if (!node) return undefined;
@@ -1420,7 +1439,7 @@ function extractJava(root: Node): Omit<FileSymbols, "language" | "references"> {
     const hidden = outerHidden || javaHidden(node);
     const bases: string[] = [];
     const superclass = node.childForFieldName("superclass")?.namedChild(0);
-    const parent = lastTypeName(superclass);
+    const parent = writtenTypeName(superclass);
     if (parent) bases.push(parent);
     const lists = [
       node.childForFieldName("interfaces"),
@@ -1428,7 +1447,7 @@ function extractJava(root: Node): Omit<FileSymbols, "language" | "references"> {
     ];
     for (const list of lists) {
       for (const type of list?.namedChildren.find((c) => c?.type === "type_list")?.namedChildren ?? []) {
-        const base = lastTypeName(type);
+        const base = writtenTypeName(type);
         if (base) bases.push(base);
       }
     }
@@ -1506,6 +1525,7 @@ const KOTLIN_REFERENCES = `
   (call_expression (identifier) @name)
   (call_expression (navigation_expression (_) @object (identifier) @name .))
   (callable_reference (identifier) @name)
+  (navigation_expression (_) @object "::" (identifier) @name)
   (user_type (identifier) @type)
 `;
 
@@ -1552,7 +1572,7 @@ function extractKotlin(root: Node): Omit<FileSymbols, "language" | "references">
     const bases = (node.namedChildren.find((c) => c?.type === "delegation_specifiers")?.namedChildren ?? [])
       .map((spec) => {
         const type = spec?.namedChildren.find((c) => c?.type === "user_type" || c?.type === "constructor_invocation");
-        return lastTypeName(type?.type === "constructor_invocation" ? type.namedChild(0) : type);
+        return writtenTypeName(type?.type === "constructor_invocation" ? type.namedChild(0) : type);
       })
       .filter((b): b is string => Boolean(b));
     const isInterface = node.children.some((c) => c?.type === "interface");
@@ -1705,7 +1725,21 @@ function declaredVariables(language: GraphLanguage, root: Node): TypedVariable[]
         const name = node.childForFieldName("name")?.childForFieldName("bound_identifier");
         const annotation = kids.find((c) => c.type === "type_annotation")?.childForFieldName("name");
         const scope = node.parent?.type === "class_body" ? node.parent.parent : node.parent;
-        add(name, typeName(annotation) ?? builtType(language, node.childForFieldName("value")), scope);
+        const value = node.childForFieldName("value");
+        const literal = value?.type === "line_string_literal" || value?.type === "multi_line_string_literal";
+        add(name, typeName(annotation) ?? builtType(language, value) ?? (literal ? "String" : undefined), scope);
+        // `@Protected var state`: `$state` is the wrapper itself.
+        const modifiers = kids.find((c) => c.type === "modifiers");
+        for (const attribute of modifiers?.namedChildren ?? []) {
+          const wrapper = attribute?.type === "attribute" ? typeName(attribute.namedChildren[0]) : undefined;
+          if (name && wrapper && /^\p{Lu}/u.test(wrapper))
+            out.push({
+              name: `$${name.text}`,
+              type: wrapper,
+              startLine: line(scope ?? node),
+              endLine: endLine(scope ?? node),
+            });
+        }
       } else if (node.type === "parameter") {
         const names = node.childrenForFieldName("name").filter((c): c is Node => c !== null);
         add(
@@ -1719,6 +1753,38 @@ function declaredVariables(language: GraphLanguage, root: Node): TypedVariable[]
   };
   visit(root);
   return out;
+}
+
+/**
+ * Kotlin's `Foo(x).apply { connect() }`, `builder.run { build() }` and `with(builder) { build() }`: a bare call in the
+ * lambda is on that receiver. Gives those calls the receiver as their object, the innermost lambda winning.
+ */
+function kotlinScopeReceivers(root: Node, references: Reference[]): void {
+  const receivers = new Map<string, string>();
+  const calls = root.descendantsOfType("call_expression").filter((c): c is Node => c !== null);
+  for (const call of calls.sort((a, b) => b.startIndex - a.startIndex)) {
+    const lambda = call.namedChildren.find((c) => c?.type === "annotated_lambda")?.namedChildren[0];
+    const callee = call.namedChildren[0];
+    if (!lambda || !callee) continue;
+    let receiver: Node | null | undefined;
+    if (callee.type === "navigation_expression" && /^(apply|run)$/.test(callee.namedChildren.at(-1)?.text ?? ""))
+      receiver = callee.namedChildren[0];
+    else if (callee.type === "call_expression" && callee.namedChildren[0]?.text === "with")
+      receiver = callee.namedChildren[1]?.namedChildren[0]?.namedChildren[0];
+    const text = receiver?.text.replace(/\s+/g, "");
+    if (!text || text.length > 60) continue;
+    for (const inner of lambda.descendantsOfType("call_expression")) {
+      const name = inner?.namedChildren[0];
+      if (name?.type !== "identifier") continue;
+      const key = `${line(name)}:${name.text}`;
+      if (!receivers.has(key)) receivers.set(key, text);
+    }
+  }
+  if (receivers.size === 0) return;
+  for (const ref of references) {
+    const receiver = ref.object === undefined ? receivers.get(`${ref.line}:${ref.name}`) : undefined;
+    if (receiver) ref.object = receiver;
+  }
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────────────────────────
@@ -1828,6 +1894,7 @@ export async function extractSymbols(path: string, source: string): Promise<File
         ...(kind ? { kind } : {}),
       });
     }
+    if (language === "kotlin") kotlinScopeReceivers(root, references);
     return {
       language,
       ...(goPackage ? { goPackage } : {}),

@@ -16,7 +16,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { buildGraphReview, fileKind, languageOf, parseUnifiedDiff } from "../packages/core/src/index.js";
 
 const args = process.argv.slice(2);
@@ -225,6 +225,23 @@ for (const c of cases) {
 }
 const isTest = (id: string) => /(^|\/)(test|tests|spec|androidTest)\/|Tests?\.\w+$|_spec\.rb$|_test\.\w+$/.test(id);
 const share = (ids: string[]) => `${ids.filter((id) => distinct.get(id)).length}/${ids.length}`;
+// Answer-key entries checked by hand and found not to be callers (eval/callers-key-review.json), for this repo.
+const repoName = basename(clone.replace(/\/+$/, ""));
+const review = (() => {
+  try {
+    const file = JSON.parse(readFileSync(join(import.meta.dirname, "../eval/callers-key-review.json"), "utf8")) as {
+      notCallers: { repo: string; commit: string; symbol: string; caller: string }[];
+    };
+    return new Set(
+      file.notCallers.filter((n) => n.repo === repoName).map((n) => `${n.commit} ${n.symbol} ${n.caller}`),
+    );
+  } catch {
+    return new Set<string>();
+  }
+})();
+const kept = cases.flatMap((c) =>
+  c.expected.filter((e) => !review.has(`${c.commit} ${c.symbol} ${e.path}`)).map((e) => c.found.includes(e.path)),
+);
 const summary = {
   clone,
   byLanguage,
@@ -232,6 +249,8 @@ const summary = {
   callerFiles: expected,
   found,
   recall: expected === 0 ? null : Number((found / expected).toFixed(3)),
+  reviewedRecall: kept.length === 0 ? null : Number((kept.filter(Boolean).length / kept.length).toFixed(3)),
+  reviewedCallers: `${kept.filter(Boolean).length}/${kept.length}`,
   distinctCallers: share([...distinct.keys()]),
   distinctNonTestCallers: share([...distinct.keys()].filter((id) => !isTest(id.split(" ")[2] ?? ""))),
   casesFullyFound: cases.filter((c) => c.missed.length === 0).length,
