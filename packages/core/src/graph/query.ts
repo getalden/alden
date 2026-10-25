@@ -469,12 +469,24 @@ function declaredType(symbols: FileSymbols, object: string, line: number): strin
   return found?.type;
 }
 
+/** `Map<String, List<Int>> f()` → `Map f()`: a signature without its type arguments, however deeply nested. */
+function withoutTypeArguments(signature: string): string {
+  let depth = 0;
+  let out = "";
+  for (const char of signature) {
+    if (char === "<") depth++;
+    else if (char === ">" && depth > 0) depth--;
+    else if (depth === 0) out += char;
+  }
+  return out;
+}
+
 /** `loadServiceMethod(m)` → `ServiceMethod`: what a function defined in the same file returns, by its signature. */
 function returnType(symbols: FileSymbols, object: string): string | undefined {
   const called = object.replace(/^(self|this)\./, "").match(/^(\w+)\(.*\)[?!]*$/)?.[1];
   if (!called || /^\p{Lu}/u.test(called)) return undefined;
   const def = symbols.definitions.find((d) => d.name === called && (d.kind === "method" || d.kind === "function"));
-  const signature = def?.signature?.replace(/<[^<>]*>/g, "").replace(/\s+/g, " ") ?? "";
+  const signature = withoutTypeArguments(def?.signature ?? "").replace(/\s+/g, " ");
   // Kotlin `fun f(): Foo`, Swift `func f() -> Foo`, Java `Foo f(Bar b)`.
   const written =
     signature.match(/\)\s*(?::|->)\s*([\w.]+)[?!]?\s*(?:where\b.*)?$/)?.[1] ??
