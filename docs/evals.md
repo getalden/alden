@@ -57,6 +57,68 @@ With labels, from `eval/expectations.json`:
 When Alden misses something that mattered in real use, add it to `expectations.json` so the next change is measured
 against it.
 
+## Callers: does the graph find what a signature change breaks?
+
+```sh
+pnpm eval:callers ~/src/mastodon --languages ruby       # last 40 cases since 2024
+pnpm eval:callers ~/src/okhttp --since 2022-01-01 --limit 30 --verbose --json out.json
+pnpm eval:callers ~/src/okhttp --commit 6b134f769a      # one commit
+```
+
+This one needs no labels, no GitHub access and no model, only a clone. It walks the repo's history for commits that
+changed a function's or method's signature and, in the same commit, edited other files calling it. Those edits are the
+answer key: the callers the author had to update. Each case replays the commit without them (the parent commit plus
+only the file defining the symbol, at its new version) and asks the graph for callers outside the diff. It reports how
+many of those caller files the graph listed, by language, and how many other files it listed besides.
+
+The key is a word match on the edited lines, so it's a little noisy: a same-named method of another class edited in the
+same commit counts as a caller too. Only call sites count (`x.name`, `name(`, `name {`, Ruby's `name arg`, `:name`), not
+properties, parameters, named arguments, imports, comments or strings; constructors only where they're called
+(`Foo.new`, `Foo(`, `new Foo(`); names every service has (`call`, `perform`) only in files naming the class; and not a
+file importing a same-named function from elsewhere (`kotlin.concurrent.withLock`). Read the misses (`--verbose`) before
+blaming the graph.
+
+On 25 Oct 2026, 30 cases per repo since 2022. Each column adds a round of fixes this eval turned up:
+
+| Repo | Language | First version | Namespaces, imports | Declared types | More receivers | Reviewed key |
+| --- | --- | --- | --- | --- | --- | --- |
+| we-promise/sure | Ruby (Rails) | 35/45 | 41/45 | 41/45 | 41/45 | 41/43 |
+| mastodon/mastodon | Ruby (Rails) | 16/59 | 45/59 | 55/59 | 56/59 | 56/57 |
+| Alamofire/Alamofire | Swift | 47/52 | 47/52 | 47/52 | 51/52 | 51/51 |
+| kickstarter/ios-oss | Swift | 40/51 | 40/51 | 40/51 | 44/51 | 44/46 |
+| android/nowinandroid | Kotlin | 49/67 | 56/67 | 52/67 | 53/67 | 53/53 |
+| square/okhttp | Kotlin, Java | 24/44 | 28/44 | 25/44 | 29/44 | 29/29 |
+| thunderbird/thunderbird-android | Kotlin, Java | 36/46 | 40/46 | 36/46 | 36/46 | 35/35 |
+| google/gson | Java | 14/17 | 16/17 | 16/17 | 16/17 | 16/16 |
+| square/retrofit | Java | 9/11 | 9/11 | 9/11 | 10/11 | 10/10 |
+| **All** | | **270/392 (69%)** | **322/392 (82%)** | **321/392 (82%)** | **336/392 (86%)** | **335/340 (99%)** |
+| Other files listed, all cases | | 1707 | 1557 | 1455 | 1467 | |
+
+- **Namespaces, imports:** Ruby classes told apart by namespace (`PlaidAccount::Processor` vs
+  `RedbarkAccount::Processor`), calls on `Namespace::Service.new`, a concern's private helpers, RSpec's
+  `described_class` and `subject`; Java and Kotlin nested classes, members imported by name (Kotlin extensions, Java
+  static imports) and Kotlin extension functions on outside types.
+- **Declared types:** a receiver declared with a type (`val transport: Transport`, `Client client`, `let request =
+  DataRequest(…)`, Ruby's `client = Api::Client.new` and RSpec's `let(:service) { instance_double(Service) }`) is that
+  type, whatever it's named; RSpec's `expect(service).to have_received(:call)` counts as a call. Kotlin's apparent
+  drop is the graph rightly leaving out calls on variables typed as another class with a same-named method, which is
+  also why it lists fewer other files.
+- **More receivers:** calls through a variable typed as a parent or interface, however common the method's name;
+  nested parents (`class DnsOverHttpsCall : Dns.Call`); Kotlin's `navController::navigateToTopic` and
+  `RealEventSource(…).apply { connect(client) }`; Swift's `$state` (a property wrapper), string literals and leading-dot
+  calls (`.chunked(size)`); Pundit's `record` and a serializer's `object`; and what a function in the same file returns
+  (`loadServiceMethod(method).invoke(args)`).
+- **Reviewed key:** every remaining miss was read against its commit. 50 aren't calls of the changed symbol: a
+  same-named method of another class edited in the same commit, a property read, a declaration. They're listed with the
+  reason in `eval/callers-key-review.json`, which the eval reads to report `reviewedRecall`. Only misses were reviewed,
+  so this is an upper bound. The 5 real misses left: `provider.fetch_property_valuation` (a provider looked up at run
+  time), `cell.configureWith(value:)` on a dequeued cell, and a view helper `vite_stylesheet_tag` that a gem extension
+  prepends.
+
+The summary also counts each caller file once per commit and name (`distinctCallers`), since overloads and same-named
+methods changed in one commit are a case each, and the same without test files (`distinctNonTestCallers`). For the
+"More receivers" column those are 242/267 (91%) and 186/201 (93%), before any review.
+
 ## The recorded PRs
 
 `pnpm fixtures:record` records GitHub responses (PR details, descriptions and diffs) for a pinned list of public PRs

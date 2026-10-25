@@ -52,9 +52,12 @@
     "@alden/core": "workspace:*",
     "@alden/schema": "workspace:*",
     "@alden/ui": "workspace:*",
+    "@tree-sitter-grammars/tree-sitter-kotlin": "^1.1.0",
     "tree-sitter-go": "^0.25.0",
+    "tree-sitter-java": "^0.23.5",
     "tree-sitter-php": "^0.24.2",
     "tree-sitter-python": "^0.25.0",
+    "tree-sitter-ruby": "^0.23.1",
     "tree-sitter-typescript": "^0.23.2"
   },
   "peerDependencies": {

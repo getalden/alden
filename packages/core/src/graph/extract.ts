@@ -29,6 +29,14 @@ export interface Definition {
   methods?: string[];
   /** PHP facades: the class `getFacadeAccessor` returns (`Foo::class`), as written. */
   facadeFor?: string;
+  /**
+   * Ruby classes and modules inside a namespace: the full constant path (`RedbarkAccount::Processor`), since apps
+   * often have a dozen classes named `Processor`. Java and Kotlin nested classes: the path from the top-level class
+   * (`MockResponse.Builder`).
+   */
+  qualified?: string;
+  /** Kotlin: a top-level extension function (`fun NavGraphBuilder.topicScreen()`), imported by its own name. */
+  extension?: boolean;
 }
 
 /** A name a file brings in from elsewhere. */
@@ -49,7 +57,10 @@ export interface ImportBinding {
   implicitName?: boolean;
 }
 
-/** A use of a name: a call, `new`, a JSX element, a base class, or passed as an argument (callbacks, Django urls). */
+/**
+ * A use of a name: a call, `new`, a JSX element, a base class, or passed as an argument (callbacks, Django urls). In
+ * Ruby, Swift, Java and Kotlin a call without a receiver has no `object`: inside a class it's usually `self`'s method.
+ */
 export interface Reference {
   name: string;
   /** For `obj.name(...)`, the object's text, e.g. "ns" or "self". */
@@ -59,9 +70,13 @@ export interface Reference {
    * PHP: what kind of use, when it isn't a call. "new" instantiates (so it calls the constructor), "type" is a type
    * hint, "property" reads a property (`$user->posts`), which Eloquent turns into a method call.
    * Go: "value" names a function or method without calling it (`Fetch: shared.FetchOptions`, `h := s.handle`,
-   * `return helper`), to be called later; `x.Name` there may just as well be a field read.
+   * `return helper`), to be called later; `x.Name` there may just as well be a field read. Ruby: "value" is a method
+   * named by a symbol (`before_action :set_entry`).
+   * Ruby, Swift, Java and Kotlin: "new" constructs (`Foo.new`, `Foo(…)`, `new Foo()`), "type" names a type.
    */
   kind?: "new" | "type" | "property" | "value";
+  /** Ruby: the class as written with its namespace (`Rule::Runner` for `Rule::Runner.new`), when it was. */
+  qualified?: string;
 }
 
 export interface FileSymbols {
@@ -70,9 +85,23 @@ export interface FileSymbols {
   goPackage?: string;
   /** PHP: the file's namespace, e.g. "App\\Models". */
   phpNamespace?: string;
+  /** Java and Kotlin: the file's `package`, e.g. "com.acme.billing". */
+  jvmPackage?: string;
   definitions: Definition[];
   imports: ImportBinding[];
   references: Reference[];
+  /** Swift, Java and Kotlin: variables declared with a type, or assigned a new instance of one. */
+  variables?: TypedVariable[];
+}
+
+/** `val transport: Transport`, `Client client`, `let request = DataRequest(…)`: a receiver whose type is known. */
+export interface TypedVariable {
+  name: string;
+  /** The type's last name, without generics or optionality: `Transport` for `Transport<T>?`. */
+  type: string;
+  /** Where the name means this variable: its class for fields, its function for parameters, its block for locals. */
+  startLine: number;
+  endLine: number;
 }
 
 const line = (node: Node) => node.startPosition.row + 1;
@@ -738,9 +767,1039 @@ function extractPhp(root: Node): Omit<FileSymbols, "language" | "references"> {
   return { definitions, imports, ...(namespace ? { phpNamespace: namespace } : {}) };
 }
 
+// ─── Ruby ────────────────────────────────────────────────────────────────────────────────────────
+
+/** Calls that enqueue a job: `SyncJob.perform_later(x)` runs `SyncJob#perform` (ActiveJob, Sidekiq). */
+const RUBY_ENQUEUE = new Set([
+  "perform_later",
+  "perform_now",
+  "perform_async",
+  "perform_in",
+  "perform_at",
+  "perform_inline",
+  "perform_bulk",
+]);
+
+/** Calls that call the method a symbol names: `send(:x)`, `record.try(:x)`, `method(:x)`. */
+const RUBY_DYNAMIC = new Set(["send", "public_send", "__send__", "try", "try!", "method", "public_method"]);
+
+/**
+ * Class-body macros whose symbols aren't methods of the class: associations, attributes and the like. Everything else
+ * (`before_action :x`, `validate :x`, `after_commit :x, if: :y`, `delegate … to: :x`) names methods it calls.
+ */
+const RUBY_SYMBOL_MACROS_SKIP = new Set([
+  "has_many",
+  "has_one",
+  "belongs_to",
+  "has_and_belongs_to_many",
+  "attr_accessor",
+  "attr_reader",
+  "attr_writer",
+  "attribute",
+  "attr_encrypted",
+  "encrypts",
+  "store_accessor",
+  "enum",
+  "scope",
+  "include",
+  "extend",
+  "prepend",
+  "require",
+  "require_relative",
+  "private",
+  "protected",
+  "public",
+  "private_class_method",
+  "public_class_method",
+  "module_function",
+  "private_constant",
+  "alias_method",
+  "define_method",
+  "validates",
+  "validates_presence_of",
+  "accepts_nested_attributes_for",
+  "has_one_attached",
+  "has_many_attached",
+  "has_rich_text",
+  "monetize",
+  "serialize",
+  "normalizes",
+  "broadcasts",
+  "queue_as",
+  "rescue_from",
+  "retry_on",
+  "discard_on",
+]);
+
+/** Options of a class-body macro whose symbol names a method: `if: :ready?`, `delegate … to: :account`. */
+const RUBY_METHOD_OPTIONS = new Set(["if", "unless", "to", "with", "method"]);
+
+/** Ruby's `Rule::Runner` or `Runner`: the constant's own name, which is what the graph keys classes by. */
+const rubyConstant = (node: Node): string | undefined =>
+  node.type === "constant"
+    ? node.text
+    : node.type === "scope_resolution"
+      ? node.childForFieldName("name")?.text
+      : undefined;
+
+/** Ruby's `::Rule::Runner` as written, without the leading `::`, for constants and constant paths. */
+const rubyConstantPath = (node: Node): string | undefined =>
+  node.type === "constant" || node.type === "scope_resolution" ? node.text.replace(/^::/, "") : undefined;
+
+/** The namespace a constant was written with, as a reference's `qualified`. */
+const rubyQualified = (node: Node | null): { qualified?: string } => {
+  const path = node?.type === "scope_resolution" ? rubyConstantPath(node) : undefined;
+  return path ? { qualified: path } : {};
+};
+
+/** A receiver as text: constants by their own name, short expressions as written, long ones by their last call. */
+function rubyObject(node: Node): string {
+  const constant = rubyConstant(node);
+  if (constant) return constant;
+  // `SyncJob.set(wait: 5.minutes).perform_later`: the job class is the receiver that matters.
+  if (node.type === "call" && node.childForFieldName("method")?.text === "set") {
+    const receiver = node.childForFieldName("receiver");
+    if (receiver) return rubyObject(receiver);
+  }
+  const text = node.text;
+  if (!text.includes("\n") && text.length <= 60) return text;
+  return node.type === "call" ? (node.childForFieldName("method")?.text ?? "") : node.type;
+}
+
+/** Whether a node sits in a class or module body rather than inside a method (where `before_action` can be called). */
+function inRubyClassBody(node: Node): boolean {
+  for (let p = node.parent; p; p = p.parent) {
+    if (p.type === "method" || p.type === "singleton_method" || p.type === "lambda") return false;
+    if (p.type === "class" || p.type === "module" || p.type === "singleton_class") return true;
+  }
+  return false;
+}
+
+const RUBY_PARAMETER_NODES = new Set([
+  "method_parameters",
+  "block_parameters",
+  "lambda_parameters",
+  "optional_parameter",
+  "keyword_parameter",
+  "splat_parameter",
+  "hash_splat_parameter",
+  "block_parameter",
+  "destructured_parameter",
+]);
+
+/** Whether `id` is the parameter's own name, not part of its default value (`scope: matching_scope`). */
+function rubyParameterName(param: Node, id: Node): boolean {
+  const name = param.childForFieldName("name");
+  return name ? name.startIndex === id.startIndex : true;
+}
+
+/**
+ * The local variables a method (or the file's top level) has: parameters, block parameters and assigned names. A bare
+ * identifier that isn't one of these is a call to a method without parentheses (`matching_scope`, `current_user`).
+ */
+function rubyLocals(scope: Node): Set<string> {
+  const locals = new Set<string>();
+  for (const id of scope.descendantsOfType("identifier")) {
+    if (!id) continue;
+    const parent = id.parent;
+    if (!parent) continue;
+    const isLeft =
+      ((parent.type === "assignment" || parent.type === "operator_assignment") &&
+        parent.childForFieldName("left")?.startIndex === id.startIndex) ||
+      parent.type === "left_assignment_list" ||
+      parent.type === "rest_assignment" ||
+      (parent.type === "for" && parent.childForFieldName("pattern")?.startIndex === id.startIndex) ||
+      (RUBY_PARAMETER_NODES.has(parent.type) && rubyParameterName(parent, id)) ||
+      parent.type === "exception_variable";
+    if (isLeft) locals.add(id.text);
+  }
+  return locals;
+}
+
+/** Positions where an identifier isn't a use: names of definitions, keys, the method part of a call. */
+function rubyIdentifierIsUse(id: Node): boolean {
+  const parent = id.parent;
+  if (!parent) return false;
+  if (RUBY_PARAMETER_NODES.has(parent.type) && rubyParameterName(parent, id)) return false;
+  if (parent.type === "alias") return false;
+  if (
+    (parent.type === "method" || parent.type === "singleton_method") &&
+    parent.childForFieldName("body")?.startIndex !== id.startIndex
+  )
+    return false;
+  if (parent.type === "call") return false; // the method (handled as a call) or the receiver (a local or a call)
+  if (parent.type === "pair" && parent.childForFieldName("key")?.startIndex === id.startIndex) return false;
+  if (parent.type === "left_assignment_list" || parent.type === "rest_assignment") return false;
+  if (
+    (parent.type === "assignment" || parent.type === "operator_assignment") &&
+    parent.childForFieldName("left")?.startIndex === id.startIndex
+  )
+    return false;
+  if (parent.type === "exception_variable" || parent.type === "for") return false;
+  return true;
+}
+
+function rubyReferences(root: Node): Reference[] {
+  const references: Reference[] = [];
+  const push = (name: string | undefined, node: Node, extra: Omit<Reference, "name" | "line"> = {}) => {
+    if (name) references.push({ name, line: line(node), ...extra });
+  };
+  const symbolName = (node: Node | null) => (node?.type === "simple_symbol" ? node.text.slice(1) : undefined);
+
+  for (const call of root.descendantsOfType("call")) {
+    if (!call) continue;
+    const method = call.childForFieldName("method");
+    if (!method || (method.type !== "identifier" && method.type !== "constant")) continue;
+    const name = method.text;
+    const receiver = call.childForFieldName("receiver");
+    const object = receiver ? rubyObject(receiver) : undefined;
+    const args = call.childForFieldName("arguments");
+    const firstArg = args?.namedChild(0) ?? null;
+
+    if (name === "new" && receiver && rubyConstant(receiver)) {
+      push(rubyConstant(receiver), method, { kind: "new", ...rubyQualified(receiver) });
+    } else if (RUBY_ENQUEUE.has(name)) {
+      push("perform", method, object ? { object } : {});
+    } else if (RUBY_DYNAMIC.has(name) && symbolName(firstArg)) {
+      push(symbolName(firstArg), firstArg ?? method, object ? { object } : {});
+    } else if (RSPEC_RECEIVE.has(name) && !receiver && symbolName(firstArg) && symbolName(firstArg) !== "new") {
+      // `expect(service).to have_received(:call)`: a spec stubbing or checking a call on `service`.
+      const target = rspecTarget(call);
+      push(symbolName(firstArg), firstArg ?? method, target ? { object: target } : {});
+    } else {
+      // `Rule::Runner.new.call`: the class written in front of `new` (or `find`, …) is the receiver's.
+      const written = receiver?.type === "call" ? receiver.childForFieldName("receiver") : receiver;
+      push(name, method, object ? { object, ...rubyQualified(written ?? null) } : {});
+    }
+
+    // `before_action :set_entry, if: :ready?` in a class body names the methods it will call.
+    if (!receiver && args && !RUBY_SYMBOL_MACROS_SKIP.has(name) && inRubyClassBody(call)) {
+      for (const arg of args.namedChildren) {
+        if (!arg) continue;
+        // `only: :update` names an action, not a method the macro calls.
+        if (arg.type === "pair" && !RUBY_METHOD_OPTIONS.has(arg.childForFieldName("key")?.text.replace(/:$/, "") ?? ""))
+          continue;
+        const value = arg.type === "pair" ? arg.childForFieldName("value") : arg;
+        push(symbolName(value), value ?? arg, { kind: "value" });
+      }
+    }
+  }
+
+  // Constants used anywhere other than as a call's receiver (handled above) or a definition's name.
+  for (const constant of root.descendantsOfType("constant")) {
+    if (!constant) continue;
+    const parent = constant.parent;
+    if (parent?.type === "class" || parent?.type === "module") continue;
+    if (parent?.type === "scope_resolution") {
+      // Only the last part of `A::B::C` is the class; `A::B` is its namespace.
+      if (parent.childForFieldName("name")?.startIndex !== constant.startIndex) continue;
+      const holder = parent.parent;
+      if (holder?.type === "class" || holder?.type === "module") continue;
+      if (holder?.type === "call" && holder.childForFieldName("receiver")?.startIndex === parent.startIndex) continue;
+    }
+    if (parent?.type === "call") continue;
+    push(constant.text, constant, {
+      kind: "type",
+      ...rubyQualified(parent?.type === "scope_resolution" ? parent : null),
+    });
+  }
+
+  // Methods called without parentheses or arguments: a bare name that isn't a local variable.
+  const scopes = [root, ...root.descendantsOfType(["method", "singleton_method"]).filter((n) => n !== null)];
+  for (const scope of scopes) {
+    const locals = rubyLocals(scope);
+    for (const id of scope.descendantsOfType("identifier")) {
+      if (!id || id.text.length <= 2 || locals.has(id.text) || !rubyIdentifierIsUse(id)) continue;
+      // Each identifier once: the innermost method that holds it.
+      let owner: Node | null = id.parent;
+      while (owner && owner.type !== "method" && owner.type !== "singleton_method") owner = owner.parent;
+      if ((owner?.startIndex ?? root.startIndex) !== scope.startIndex) continue;
+      push(id.text, id);
+    }
+  }
+  return rspecDescribed(root, rubyTyped(root, references));
+}
+
+const RSPEC_RECEIVE = new Set(["receive", "have_received"]);
+const RSPEC_TARGETS = new Set(["expect", "allow", "expect_any_instance_of", "allow_any_instance_of"]);
+
+/** The object in `expect(x).to …` around a matcher, as a receiver: `Foo.new` for `allow_any_instance_of(Foo)`. */
+function rspecTarget(matcher: Node): string | undefined {
+  let node: Node | null = matcher.parent;
+  while (node && !(node.type === "call" && /^(to|not_to|to_not)$/.test(node.childForFieldName("method")?.text ?? "")))
+    node = node.parent;
+  const expectation = node?.childForFieldName("receiver");
+  const method = expectation?.childForFieldName("method")?.text ?? "";
+  const subject = expectation?.childForFieldName("arguments")?.namedChild(0);
+  if (!subject || !RSPEC_TARGETS.has(method)) return undefined;
+  return method.endsWith("any_instance_of") ? `${subject.text}.new` : rubyObject(subject);
+}
+
+/** `Foo.new`, `instance_double(Foo)`: the class a value is an instance of, as written. */
+function rubyInstanceOf(value: Node | null | undefined): string | undefined {
+  if (value?.type !== "call") return undefined;
+  const method = value.childForFieldName("method")?.text;
+  const receiver = value.childForFieldName("receiver");
+  if (method === "new" && receiver)
+    return receiver.text === "described_class" ? "described_class" : rubyConstantPath(receiver);
+  if (receiver || (method !== "instance_double" && method !== "instance_spy")) return undefined;
+  const first = value.childForFieldName("arguments")?.namedChild(0);
+  if (!first) return undefined;
+  return rubyConstantPath(first) ?? (first.type === "string" ? unquote(first.text).replace(/^::/, "") : undefined);
+}
+
+const RUBY_SCOPES = new Set(["method", "singleton_method", "do_block", "block", "class", "module"]);
+
+/**
+ * Variables holding an instance of a known class: `client = Api::Client.new`, `@client = …`, RSpec's
+ * `let(:service) { instance_double(VerifyQuoteService) }` and `allow(Foo).to receive(:new).and_return(service)`.
+ * Calls on them become calls on `Class.new`, which is how the graph reads an instance of the class.
+ */
+function rubyTyped(root: Node, references: Reference[]): Reference[] {
+  const variables: { name: string; written: string; start: number; end: number }[] = [];
+  const scopeOf = (node: Node, kinds: Set<string>) => {
+    let scope: Node | null = node.parent;
+    while (scope && !kinds.has(scope.type)) scope = scope.parent;
+    return scope ?? root;
+  };
+  const add = (name: string, written: string | undefined, scope: Node) => {
+    if (written) variables.push({ name, written, start: line(scope), end: endLine(scope) });
+  };
+  for (const assignment of root.descendantsOfType("assignment")) {
+    const left = assignment?.childForFieldName("left");
+    if (!assignment || (left?.type !== "identifier" && left?.type !== "instance_variable")) continue;
+    const kinds = left.type === "instance_variable" ? new Set(["class", "module"]) : RUBY_SCOPES;
+    add(left.text, rubyInstanceOf(assignment.childForFieldName("right")), scopeOf(assignment, kinds));
+  }
+  for (const call of root.descendantsOfType("call")) {
+    const method = call?.childForFieldName("method")?.text;
+    if (!call || !method) continue;
+    const first = call.childForFieldName("arguments")?.namedChild(0);
+    if (/^(let!?|subject)$/.test(method) && first?.type === "simple_symbol" && !call.childForFieldName("receiver")) {
+      const body = call.childForFieldName("block")?.childForFieldName("body");
+      const last = body?.namedChildren.filter((c): c is Node => c !== null).at(-1);
+      add(first.text.slice(1), rubyInstanceOf(last), scopeOf(call, RUBY_SCOPES));
+    } else if (method === "and_return" && first?.type === "identifier") {
+      const stub = call.childForFieldName("receiver");
+      const target = stub?.childForFieldName("method")?.text === "receive" ? rspecTarget(stub) : undefined;
+      if (target && stub?.childForFieldName("arguments")?.namedChild(0)?.text === ":new") add(first.text, target, root);
+    }
+  }
+  // Pundit's `record` in StatusPolicy and a serializer's `object` in REST::StatusSerializer are a Status.
+  for (const klass of root.descendantsOfType("class")) {
+    const written = klass ? rubyConstantPath(klass.childForFieldName("name") ?? klass) : undefined;
+    const model = written
+      ?.split("::")
+      .at(-1)
+      ?.match(/^(\w+?)(Policy|Serializer)$/);
+    if (!klass || !model?.[1]) continue;
+    add(model[2] === "Policy" ? "record" : "object", model[1], klass);
+  }
+  if (variables.length === 0) return references;
+  return references.map((ref) => {
+    const found = variables
+      .filter((v) => v.name === ref.object && v.start <= ref.line && ref.line <= v.end)
+      .sort((a, b) => b.start - a.start)[0];
+    if (!found) return ref;
+    const short = found.written.split("::").at(-1) ?? found.written;
+    return { ...ref, object: `${short}.new`, ...(found.written.includes("::") ? { qualified: found.written } : {}) };
+  });
+}
+
+/**
+ * RSpec: in `RSpec.describe Rule::Runner do`, `described_class` and `subject` stand for Rule::Runner, which is how
+ * specs mostly call the code they test (`described_class.new(rule).call`, `subject.perform`).
+ */
+function rspecDescribed(root: Node, references: Reference[]): Reference[] {
+  let described: string | undefined;
+  for (const node of root.namedChildren) {
+    if (node?.type !== "call" || node.childForFieldName("method")?.text !== "describe") continue;
+    const receiver = node.childForFieldName("receiver")?.text;
+    if (receiver !== undefined && receiver !== "RSpec") continue;
+    const first = node.childForFieldName("arguments")?.namedChild(0);
+    described = first ? rubyConstantPath(first) : undefined;
+    if (described) break;
+  }
+  if (!described) return references;
+  const short = described.split("::").at(-1) ?? described;
+  const qualified = described.includes("::") ? { qualified: described } : {};
+  return references.map((ref) => {
+    const object = ref.object?.replace(/\.new(\(.*\))?$/, "");
+    if (object !== "described_class" && object !== "subject") return ref;
+    if (ref.name === "new" && ref.object === "described_class")
+      return { name: short, line: ref.line, kind: "new", ...qualified };
+    return { ...ref, object: ref.object === object ? short : `${short}.new`, ...qualified };
+  });
+}
+
+/** `def self.charge(user, amount:, currency: "EUR")`: what callers depend on, without the body. */
+function rubySignature(node: Node): string {
+  const name = node.childForFieldName("name")?.text ?? "";
+  const params = node.childForFieldName("parameters")?.text ?? "";
+  const self = node.type === "singleton_method" ? "self." : "";
+  // `def helper` and `def helper()` are the same method; the parentheses make adding a parameter comparable.
+  const list = params.startsWith("(") ? params : `(${params})`;
+  return collapse(`def ${self}${name}${list}`);
+}
+
+function extractRuby(root: Node): Omit<FileSymbols, "language"> {
+  const definitions: Definition[] = [];
+
+  const method = (node: Node, container: string | undefined, exported: boolean) => {
+    const name = node.childForFieldName("name")?.text;
+    if (!name) return;
+    definitions.push({
+      name,
+      kind: container ? "method" : "function",
+      exported,
+      startLine: line(node),
+      endLine: endLine(node),
+      ...(container ? { container } : {}),
+      signature: rubySignature(node),
+    });
+  };
+
+  /**
+   * A class or module body, or a block inside one (`included do`, `class_methods do`). `namespace` is the body's full
+   * constant path. A module's private methods are still for the classes including it to call.
+   */
+  const body = (node: Node | null, container: string, namespace: string, classMethods = false, mixin = false) => {
+    if (!node) return;
+    let visibility = "public";
+    const hidden = new Set<string>();
+    const start = definitions.length;
+    for (const child of node.namedChildren) {
+      if (!child) continue;
+      switch (child.type) {
+        case "identifier":
+          // A bare `private` makes the methods after it private.
+          if (/^(private|protected|public)$/.test(child.text)) visibility = child.text;
+          break;
+        case "method":
+          method(child, container, visibility === "public" || classMethods || mixin);
+          break;
+        case "singleton_method":
+          method(child, container, true);
+          break;
+        case "singleton_class":
+          // class << self … end: class methods, public unless marked otherwise inside.
+          body(child.childForFieldName("body"), container, namespace, true, mixin);
+          break;
+        case "class":
+        case "module":
+          classLike(child, namespace);
+          break;
+        case "assignment": {
+          // `COLUMNS = %w[…].freeze`: its own definition, so changing it doesn't count as changing the whole class.
+          const left = child.childForFieldName("left");
+          if (left?.type === "constant") {
+            definitions.push({
+              name: left.text,
+              kind: "variable",
+              exported: true,
+              startLine: line(child),
+              endLine: endLine(child),
+              container,
+            });
+          }
+          break;
+        }
+        case "call": {
+          const name = child.childForFieldName("method")?.text ?? "";
+          const args = child.childForFieldName("arguments")?.namedChildren ?? [];
+          if (child.childForFieldName("receiver")) break;
+          if (/^(private|protected|public|private_class_method)$/.test(name)) {
+            for (const arg of args) {
+              if (arg?.type === "method" || arg?.type === "singleton_method")
+                method(arg, container, name === "public" || mixin);
+              else if (arg?.type === "simple_symbol" && name !== "public" && !mixin) hidden.add(arg.text.slice(1));
+            }
+          } else if (name === "scope" && args[0]?.type === "simple_symbol") {
+            // `scope :active, -> { … }` defines `Model.active`.
+            definitions.push({
+              name: args[0].text.slice(1),
+              kind: "method",
+              exported: true,
+              startLine: line(child),
+              endLine: endLine(child),
+              container,
+              signature: collapse(child.text.split("->")[0]?.replace(/,\s*$/, "") ?? child.text),
+            });
+          } else {
+            // `included do`, `class_methods do`, `concerning :X do`: their defs belong to the class.
+            const block = child.childForFieldName("block");
+            if (block) body(block.childForFieldName("body"), container, namespace, classMethods, mixin);
+          }
+          break;
+        }
+      }
+    }
+    for (const def of definitions.slice(start)) if (hidden.has(def.name)) def.exported = false;
+  };
+
+  const classLike = (node: Node, outer?: string) => {
+    const nameNode = node.childForFieldName("name");
+    const name = nameNode ? rubyConstant(nameNode) : undefined;
+    const written = nameNode ? rubyConstantPath(nameNode) : undefined;
+    if (!name || !written) return;
+    const qualified = outer ? `${outer}::${written}` : written;
+    const superclass = node.childForFieldName("superclass")?.namedChild(0);
+    const bases: string[] = [];
+    // As written (`Provider::Base`): the graph resolves it from this class's namespace, as Ruby does.
+    const parent = superclass ? rubyConstantPath(superclass) : undefined;
+    if (parent) bases.push(parent);
+    // Modules it mixes in: `include Transferable`, `extend Monetizable`.
+    for (const child of node.childForFieldName("body")?.namedChildren ?? []) {
+      if (child?.type !== "call" || child.childForFieldName("receiver")) continue;
+      if (!/^(include|extend|prepend)$/.test(child.childForFieldName("method")?.text ?? "")) continue;
+      for (const arg of child.childForFieldName("arguments")?.namedChildren ?? []) {
+        const mixin = arg ? rubyConstantPath(arg) : undefined;
+        if (mixin) bases.push(mixin);
+      }
+    }
+    definitions.push({
+      name,
+      kind: "class",
+      exported: true,
+      startLine: line(node),
+      endLine: endLine(node),
+      signature: collapse(`${node.type} ${nameNode?.text ?? name}${parent ? ` < ${superclass?.text}` : ""}`),
+      ...(bases.length > 0 ? { bases } : {}),
+      ...(qualified !== name ? { qualified } : {}),
+    });
+    body(node.childForFieldName("body"), name, qualified, false, node.type === "module");
+  };
+
+  for (const node of root.namedChildren) {
+    if (!node) continue;
+    if (node.type === "class" || node.type === "module") classLike(node);
+    else if (node.type === "method") method(node, undefined, true);
+  }
+  return { definitions, imports: [], references: rubyReferences(root) };
+}
+
+// ─── Swift, Java and Kotlin ──────────────────────────────────────────────────────────────────────
+
+/** A declaration up to its body, without attributes or annotations: `public func fetch(id: Int) -> String`. */
+function headSignature(node: Node, bodyTypes: string[]): string {
+  const body = node.namedChildren.find((c) => c !== null && bodyTypes.includes(c.type));
+  const head = body ? node.text.slice(0, body.startIndex - node.startIndex) : node.text;
+  return collapse(head.replace(/@[\w.]+(\([^)]*\))?\s*/g, "").replace(/[;{]\s*$/, ""));
+}
+
+/** A type as written, without type arguments: `Dns.Call` for `Dns.Call`, `Base` for `Base<T>?`. */
+function writtenTypeName(node: Node | null | undefined): string | undefined {
+  const text = node?.text
+    .replace(/<[\s\S]*$/, "")
+    .replace(/\?$/, "")
+    .replace(/\s+/g, "");
+  return text || undefined;
+}
+
+/** The last name in a type as written: `Base`, `Foo.Bar`, `Other<String>`, `com.acme.Base`. */
+function lastTypeName(node: Node | null | undefined): string | undefined {
+  if (!node) return undefined;
+  const text = node.text.replace(/<[\s\S]*$/, "").replace(/\?$/, "");
+  return text.split(".").at(-1)?.trim() || undefined;
+}
+
+const SWIFT_REFERENCES = `
+  (call_expression (simple_identifier) @name)
+  (call_expression (navigation_expression target: (_) @object suffix: (navigation_suffix suffix: (simple_identifier) @name)))
+  (value_argument value: (simple_identifier) @name)
+  (user_type (type_identifier) @type)
+  (call_expression (prefix_expression target: (simple_identifier) @implicit))
+`;
+
+function swiftVisibility(node: Node): string | undefined {
+  const modifiers = node.namedChildren.find((c) => c?.type === "modifiers");
+  return modifiers?.namedChildren.find((c) => c?.type === "visibility_modifier")?.text;
+}
+
+const swiftHidden = (node: Node) => /^(private|fileprivate)/.test(swiftVisibility(node) ?? "");
+
+function extractSwift(root: Node): Omit<FileSymbols, "language" | "references"> {
+  const definitions: Definition[] = [];
+  const signatureOf = (node: Node) =>
+    headSignature(node, ["function_body", "class_body", "protocol_body", "enum_class_body"]);
+
+  const typeLike = (node: Node, outerHidden: boolean) => {
+    const nameNode = node.childForFieldName("name");
+    const name = lastTypeName(nameNode);
+    if (!name) return;
+    const hidden = outerHidden || swiftHidden(node);
+    const bases = node.namedChildren
+      .filter((c) => c?.type === "inheritance_specifier")
+      .map((c) => lastTypeName(c?.childForFieldName("inherits_from")))
+      .filter((b): b is string => Boolean(b));
+    const isProtocol = node.type === "protocol_declaration";
+    const methods: string[] = [];
+    const body = node.childForFieldName("body");
+    for (const member of body?.namedChildren ?? []) {
+      if (!member) continue;
+      if (member.type === "class_declaration" || member.type === "protocol_declaration") {
+        typeLike(member, hidden);
+        continue;
+      }
+      if (member.type === "property_declaration" || member.type === "protocol_property_declaration") {
+        // Stored and computed properties are their own definitions, so editing one isn't editing the whole type.
+        const property = member.descendantsOfType("simple_identifier").find((n) => n?.parent?.type === "pattern");
+        if (property) {
+          definitions.push({
+            name: property.text,
+            kind: "variable",
+            exported: !hidden && !swiftHidden(member),
+            startLine: line(member),
+            endLine: endLine(member),
+            container: name,
+          });
+        }
+        continue;
+      }
+      const isInit = member.type === "init_declaration";
+      if (member.type !== "function_declaration" && member.type !== "protocol_function_declaration" && !isInit)
+        continue;
+      const method = isInit ? "init" : member.childForFieldName("name")?.text;
+      if (!method) continue;
+      if (isProtocol) methods.push(method);
+      definitions.push({
+        name: method,
+        kind: "method",
+        exported: !hidden && !swiftHidden(member),
+        startLine: line(member),
+        endLine: endLine(member),
+        container: name,
+        signature: signatureOf(member),
+      });
+    }
+    definitions.push({
+      name,
+      kind: isProtocol ? "interface" : "class",
+      exported: !hidden,
+      startLine: line(node),
+      endLine: endLine(node),
+      signature: signatureOf(node),
+      ...(bases.length > 0 ? { bases } : {}),
+      ...(methods.length > 0 ? { methods } : {}),
+    });
+  };
+
+  for (const node of root.namedChildren) {
+    if (!node) continue;
+    if (node.type === "class_declaration" || node.type === "protocol_declaration") typeLike(node, false);
+    else if (node.type === "function_declaration") {
+      const name = node.childForFieldName("name")?.text;
+      if (!name) continue;
+      definitions.push({
+        name,
+        kind: "function",
+        exported: !swiftHidden(node),
+        startLine: line(node),
+        endLine: endLine(node),
+        signature: signatureOf(node),
+      });
+    }
+  }
+  return { definitions, imports: [] };
+}
+
+const JAVA_REFERENCES = `
+  (method_invocation object: (_) @object name: (identifier) @name)
+  (method_invocation !object name: (identifier) @name)
+  (object_creation_expression type: (type_identifier) @name)
+  (object_creation_expression type: (generic_type (type_identifier) @name))
+  (method_reference (_) @object (identifier) @name)
+  (field_access object: (identifier) @type)
+  (type_identifier) @type
+`;
+
+const javaHidden = (node: Node) =>
+  /\bprivate\b/.test(node.namedChildren.find((c) => c?.type === "modifiers")?.text ?? "");
+
+/** An import as written: `com.acme.Foo`, `com.acme.*`, `static com.acme.Strings.join`. */
+function jvmImport(path: string, alias: string | undefined, line_: number, wildcard: boolean, isStatic: boolean) {
+  const parts = path.split(".");
+  if (wildcard) return { local: "*", imported: "*", from: path, line: line_ };
+  // A static import brings in a member by name (`import static pkg.Util.helper`), which the graph binds to its class.
+  const name = parts.at(-1) ?? path;
+  return { local: isStatic ? name : (alias ?? name), imported: name, from: path, line: line_ };
+}
+
+function extractJava(root: Node): Omit<FileSymbols, "language" | "references"> {
+  const definitions: Definition[] = [];
+  const imports: ImportBinding[] = [];
+  let jvmPackage: string | undefined;
+  const signatureOf = (node: Node) =>
+    headSignature(node, ["block", "constructor_body", "class_body", "interface_body", "enum_body"]);
+
+  const typeLike = (node: Node, outerHidden: boolean, outer?: string) => {
+    const name = node.childForFieldName("name")?.text;
+    if (!name) return;
+    const qualified = outer ? `${outer}.${name}` : name;
+    const hidden = outerHidden || javaHidden(node);
+    const bases: string[] = [];
+    const superclass = node.childForFieldName("superclass")?.namedChild(0);
+    const parent = writtenTypeName(superclass);
+    if (parent) bases.push(parent);
+    const lists = [
+      node.childForFieldName("interfaces"),
+      node.namedChildren.find((c) => c?.type === "extends_interfaces"),
+    ];
+    for (const list of lists) {
+      for (const type of list?.namedChildren.find((c) => c?.type === "type_list")?.namedChildren ?? []) {
+        const base = writtenTypeName(type);
+        if (base) bases.push(base);
+      }
+    }
+    const isInterface = node.type === "interface_declaration" || node.type === "annotation_type_declaration";
+    const methods: string[] = [];
+    const body = node.childForFieldName("body");
+    const members = [
+      ...(body?.namedChildren ?? []),
+      // An enum's methods sit after its constants.
+      ...(body?.namedChildren.find((c) => c?.type === "enum_body_declarations")?.namedChildren ?? []),
+    ];
+    for (const member of members) {
+      if (!member) continue;
+      if (/^(class|interface|enum|record|annotation_type)_declaration$/.test(member.type)) {
+        typeLike(member, hidden, qualified);
+        continue;
+      }
+      if (member.type === "field_declaration" || member.type === "constant_declaration") {
+        // Fields are their own definitions, so changing one isn't changing the whole class.
+        for (const declarator of member.childrenForFieldName("declarator")) {
+          const field = declarator?.childForFieldName("name")?.text;
+          if (!field) continue;
+          definitions.push({
+            name: field,
+            kind: "variable",
+            exported: !hidden && !javaHidden(member),
+            startLine: line(member),
+            endLine: endLine(member),
+            container: name,
+          });
+        }
+        continue;
+      }
+      if (member.type !== "method_declaration" && member.type !== "constructor_declaration") continue;
+      const method = member.childForFieldName("name")?.text;
+      if (!method) continue;
+      if (isInterface) methods.push(method);
+      definitions.push({
+        name: method,
+        kind: "method",
+        exported: !hidden && !javaHidden(member),
+        startLine: line(member),
+        endLine: endLine(member),
+        container: name,
+        signature: signatureOf(member),
+      });
+    }
+    definitions.push({
+      name,
+      kind: isInterface ? "interface" : "class",
+      exported: !hidden,
+      startLine: line(node),
+      endLine: endLine(node),
+      signature: signatureOf(node),
+      ...(bases.length > 0 ? { bases } : {}),
+      ...(methods.length > 0 ? { methods } : {}),
+      ...(outer ? { qualified } : {}),
+    });
+  };
+
+  for (const node of root.namedChildren) {
+    if (!node) continue;
+    if (node.type === "package_declaration") jvmPackage = node.namedChild(0)?.text;
+    else if (node.type === "import_declaration") {
+      const path = node.namedChildren.find((c) => c?.type === "scoped_identifier" || c?.type === "identifier")?.text;
+      if (!path) continue;
+      const wildcard = node.namedChildren.some((c) => c?.type === "asterisk");
+      imports.push(jvmImport(path, undefined, line(node), wildcard, /^import\s+static\b/.test(node.text)));
+    } else if (/^(class|interface|enum|record|annotation_type)_declaration$/.test(node.type)) typeLike(node, false);
+  }
+  return { definitions, imports, ...(jvmPackage ? { jvmPackage } : {}) };
+}
+
+const KOTLIN_REFERENCES = `
+  (call_expression (identifier) @name)
+  (call_expression (navigation_expression (_) @object (identifier) @name .))
+  (callable_reference (identifier) @name)
+  (navigation_expression (_) @object "::" (identifier) @name)
+  (user_type (identifier) @type)
+`;
+
+function kotlinVisibility(node: Node): string {
+  const modifiers = node.namedChildren.find((c) => c?.type === "modifiers");
+  return modifiers?.namedChildren.find((c) => c?.type === "visibility_modifier")?.text ?? "public";
+}
+
+// `internal` is visible in the whole module, which is the repo as far as Alden can tell.
+const kotlinHidden = (node: Node) => /^(private|protected)$/.test(kotlinVisibility(node));
+
+function extractKotlin(root: Node): Omit<FileSymbols, "language" | "references"> {
+  const definitions: Definition[] = [];
+  const imports: ImportBinding[] = [];
+  let jvmPackage: string | undefined;
+  const signatureOf = (node: Node) => headSignature(node, ["function_body", "class_body", "enum_class_body"]);
+
+  const fn = (node: Node, container: string | undefined, hidden: boolean) => {
+    const name = node.childForFieldName("name")?.text;
+    if (!name) return;
+    // `fun Runner.ext()`: an extension function is called like a method of its receiver type.
+    const nameStart = node.childForFieldName("name")?.startIndex ?? 0;
+    const receiver = node.namedChildren.find(
+      (c) => c !== null && (c.type === "user_type" || c.type === "nullable_type") && c.startIndex < nameStart,
+    );
+    const owner = container ?? lastTypeName(receiver);
+    definitions.push({
+      name,
+      kind: owner ? "method" : "function",
+      exported: !hidden && !kotlinHidden(node),
+      startLine: line(node),
+      endLine: endLine(node),
+      ...(owner ? { container: owner } : {}),
+      ...(!container && owner ? { extension: true } : {}),
+      signature: signatureOf(node),
+    });
+  };
+
+  const typeLike = (node: Node, outerHidden: boolean, outer?: string) => {
+    const name = node.childForFieldName("name")?.text;
+    if (!name) return;
+    const qualified = outer ? `${outer}.${name}` : name;
+    const hidden = outerHidden || kotlinHidden(node);
+    const bases = (node.namedChildren.find((c) => c?.type === "delegation_specifiers")?.namedChildren ?? [])
+      .map((spec) => {
+        const type = spec?.namedChildren.find((c) => c?.type === "user_type" || c?.type === "constructor_invocation");
+        return writtenTypeName(type?.type === "constructor_invocation" ? type.namedChild(0) : type);
+      })
+      .filter((b): b is string => Boolean(b));
+    const isInterface = node.children.some((c) => c?.type === "interface");
+    const methods: string[] = [];
+    const members = (bodyNode: Node | null | undefined) => {
+      for (const member of bodyNode?.namedChildren ?? []) {
+        if (!member) continue;
+        if (member.type === "function_declaration") {
+          fn(member, name, hidden);
+          if (isInterface) methods.push(member.childForFieldName("name")?.text ?? "");
+        } else if (member.type === "secondary_constructor") {
+          definitions.push({
+            name: "constructor",
+            kind: "method",
+            exported: !hidden && !kotlinHidden(member),
+            startLine: line(member),
+            endLine: endLine(member),
+            container: name,
+            signature: collapse(member.text.replace(/\{[\s\S]*$/, "")),
+          });
+        } else if (member.type === "property_declaration") {
+          // Properties are their own definitions, so changing one isn't changing the whole class.
+          const property = member.descendantsOfType("variable_declaration")[0]?.namedChild(0)?.text;
+          if (property) {
+            definitions.push({
+              name: property,
+              kind: "variable",
+              exported: !hidden && !kotlinHidden(member),
+              startLine: line(member),
+              endLine: endLine(member),
+              container: name,
+            });
+          }
+        } else if (member.type === "companion_object") {
+          // A companion's functions are called on the class: `Runner.make()`.
+          members(member.namedChildren.find((c) => c?.type === "class_body"));
+        } else if (member.type === "class_declaration" || member.type === "object_declaration") {
+          typeLike(member, hidden, qualified);
+        }
+      }
+    };
+    members(node.namedChildren.find((c) => c?.type === "class_body" || c?.type === "enum_class_body"));
+    definitions.push({
+      name,
+      kind: isInterface ? "interface" : "class",
+      exported: !hidden,
+      startLine: line(node),
+      endLine: endLine(node),
+      signature: signatureOf(node),
+      ...(bases.length > 0 ? { bases } : {}),
+      ...(methods.length > 0 ? { methods: methods.filter(Boolean) } : {}),
+      ...(outer ? { qualified } : {}),
+    });
+  };
+
+  for (const node of root.namedChildren) {
+    if (!node) continue;
+    switch (node.type) {
+      case "package_header":
+        jvmPackage = node.namedChild(0)?.text;
+        break;
+      case "import": {
+        const path = node.namedChildren.find((c) => c?.type === "qualified_identifier")?.text;
+        if (!path) break;
+        const alias = node.namedChildren.find((c) => c?.type === "identifier")?.text;
+        imports.push(jvmImport(path, alias, line(node), /\.\*\s*$/.test(node.text), false));
+        break;
+      }
+      case "class_declaration":
+      case "object_declaration":
+        typeLike(node, false);
+        break;
+      case "function_declaration":
+        fn(node, undefined, false);
+        break;
+    }
+  }
+  return { definitions, imports, ...(jvmPackage ? { jvmPackage } : {}) };
+}
+
+// ─── Declared types (Swift, Java, Kotlin) ────────────────────────────────────────────────────────
+
+/** A type as written, if it names one type: not a function type, tuple or array. */
+function typeName(node: Node | null | undefined): string | undefined {
+  if (!node || /^[([]/.test(node.text)) return undefined;
+  const name = lastTypeName(node)?.replace(/[?!]+$/, "");
+  return name && /^[\p{L}_][\w]*$/u.test(name) ? name : undefined;
+}
+
+/** `Foo(…)` or `new Foo(…)`: the type a value builds, when it's a constructor call. */
+function builtType(language: GraphLanguage, value: Node | null | undefined): string | undefined {
+  if (!value) return undefined;
+  if (language === "java")
+    return value.type === "object_creation_expression" ? typeName(value.childForFieldName("type")) : undefined;
+  if (value.type !== "call_expression") return undefined;
+  const callee = value.namedChildren[0];
+  return callee && /identifier$/.test(callee.type) && /^\p{Lu}/u.test(callee.text) ? callee.text : undefined;
+}
+
+const KOTLIN_TYPES = new Set(["user_type", "nullable_type"]);
+const SWIFT_TYPES = new Set(["user_type", "optional_type", "implicitly_unwrapped_type"]);
+
+function declaredVariables(language: GraphLanguage, root: Node): TypedVariable[] {
+  const out: TypedVariable[] = [];
+  const add = (name: Node | null | undefined, type: string | undefined, scope: Node | null | undefined) => {
+    if (name && type && scope) out.push({ name: name.text, type, startLine: line(scope), endLine: endLine(scope) });
+  };
+  const visit = (node: Node) => {
+    const kids = node.namedChildren.filter((c): c is Node => c !== null);
+    if (language === "kotlin") {
+      if (node.type === "class_parameter")
+        add(
+          kids.find((c) => c.type === "identifier"),
+          typeName(kids.find((c) => KOTLIN_TYPES.has(c.type))),
+          node.parent?.parent?.parent,
+        );
+      else if (node.type === "parameter" && node.parent?.type === "function_value_parameters")
+        add(
+          kids.find((c) => c.type === "identifier"),
+          typeName(kids.find((c) => KOTLIN_TYPES.has(c.type))),
+          node.parent.parent,
+        );
+      else if (node.type === "property_declaration") {
+        const variable = kids.find((c) => c.type === "variable_declaration");
+        const parts = variable?.namedChildren.filter((c): c is Node => c !== null) ?? [];
+        const written = typeName(parts.find((c) => KOTLIN_TYPES.has(c.type)));
+        const scope = node.parent?.type === "class_body" ? node.parent.parent : node.parent;
+        add(
+          parts.find((c) => c.type === "identifier"),
+          written ?? builtType(language, kids.at(-1)),
+          scope,
+        );
+      }
+    } else if (language === "java") {
+      if (node.type === "field_declaration" || node.type === "local_variable_declaration") {
+        const written = node.childForFieldName("type");
+        const scope = node.type === "field_declaration" ? node.parent?.parent : node.parent;
+        for (const declarator of node.childrenForFieldName("declarator")) {
+          if (!declarator) continue;
+          const type =
+            written?.text === "var" ? builtType(language, declarator.childForFieldName("value")) : typeName(written);
+          add(declarator.childForFieldName("name"), type, scope);
+        }
+      } else if (node.type === "formal_parameter" || node.type === "enhanced_for_statement") {
+        const scope = node.type === "formal_parameter" ? node.parent?.parent : node;
+        add(node.childForFieldName("name"), typeName(node.childForFieldName("type")), scope);
+      }
+    } else if (language === "swift") {
+      if (node.type === "property_declaration") {
+        const name = node.childForFieldName("name")?.childForFieldName("bound_identifier");
+        const annotation = kids.find((c) => c.type === "type_annotation")?.childForFieldName("name");
+        const scope = node.parent?.type === "class_body" ? node.parent.parent : node.parent;
+        const value = node.childForFieldName("value");
+        const literal = value?.type === "line_string_literal" || value?.type === "multi_line_string_literal";
+        add(name, typeName(annotation) ?? builtType(language, value) ?? (literal ? "String" : undefined), scope);
+        // `@Protected var state`: `$state` is the wrapper itself.
+        const modifiers = kids.find((c) => c.type === "modifiers");
+        for (const attribute of modifiers?.namedChildren ?? []) {
+          const wrapper = attribute?.type === "attribute" ? typeName(attribute.namedChildren[0]) : undefined;
+          if (name && wrapper && /^\p{Lu}/u.test(wrapper))
+            out.push({
+              name: `$${name.text}`,
+              type: wrapper,
+              startLine: line(scope ?? node),
+              endLine: endLine(scope ?? node),
+            });
+        }
+      } else if (node.type === "parameter") {
+        const names = node.childrenForFieldName("name").filter((c): c is Node => c !== null);
+        add(
+          names.find((c) => c.type === "simple_identifier"),
+          typeName(names.find((c) => SWIFT_TYPES.has(c.type))),
+          node.parent,
+        );
+      }
+    }
+    for (const kid of kids) visit(kid);
+  };
+  visit(root);
+  return out;
+}
+
+/**
+ * Kotlin's `Foo(x).apply { connect() }`, `builder.run { build() }` and `with(builder) { build() }`: a bare call in the
+ * lambda is on that receiver. Gives those calls the receiver as their object, the innermost lambda winning.
+ */
+function kotlinScopeReceivers(root: Node, references: Reference[]): void {
+  const receivers = new Map<string, string>();
+  const calls = root.descendantsOfType("call_expression").filter((c): c is Node => c !== null);
+  for (const call of calls.sort((a, b) => b.startIndex - a.startIndex)) {
+    const lambda = call.namedChildren.find((c) => c?.type === "annotated_lambda")?.namedChildren[0];
+    const callee = call.namedChildren[0];
+    if (!lambda || !callee) continue;
+    let receiver: Node | null | undefined;
+    if (callee.type === "navigation_expression" && /^(apply|run)$/.test(callee.namedChildren.at(-1)?.text ?? ""))
+      receiver = callee.namedChildren[0];
+    else if (callee.type === "call_expression" && callee.namedChildren[0]?.text === "with")
+      receiver = callee.namedChildren[1]?.namedChildren[0]?.namedChildren[0];
+    const text = receiver?.text.replace(/\s+/g, "");
+    if (!text || text.length > 60) continue;
+    for (const inner of lambda.descendantsOfType("call_expression")) {
+      const name = inner?.namedChildren[0];
+      if (name?.type !== "identifier") continue;
+      const key = `${line(name)}:${name.text}`;
+      if (!receivers.has(key)) receivers.set(key, text);
+    }
+  }
+  if (receivers.size === 0) return;
+  for (const ref of references) {
+    const receiver = ref.object === undefined ? receivers.get(`${ref.line}:${ref.name}`) : undefined;
+    if (receiver) ref.object = receiver;
+  }
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────────────────────────
 
 const queries = new Map<string, Query>();
+
+/** `new Foo()` in Java; in Swift and Kotlin, calling a capitalised name without a receiver builds that type. */
+function constructs(language: GraphLanguage, name: Node, object: string | undefined): boolean {
+  if (language === "java")
+    return name.parent?.type === "object_creation_expression" || name.parent?.type === "generic_type";
+  if (language === "swift" || language === "kotlin") {
+    return object === undefined && name.parent?.type === "call_expression" && /^\p{Lu}/u.test(name.text);
+  }
+  return false;
+}
 
 /** Definitions, imports and references in one file, or undefined for languages the graph doesn't cover. */
 export async function extractSymbols(path: string, source: string): Promise<FileSymbols | undefined> {
@@ -751,30 +1810,44 @@ export async function extractSymbols(path: string, source: string): Promise<File
   if (!tree) return undefined;
   try {
     const root = tree.rootNode;
-    const extracted: Omit<FileSymbols, "language" | "references"> =
-      language === "python"
-        ? extractPython(root)
-        : language === "go"
-          ? extractGo(root)
-          : language === "php"
-            ? extractPhp(root)
-            : extractTs(root);
-    const { definitions, imports, goPackage, phpNamespace } = extracted;
+    const extractors: Record<
+      GraphLanguage,
+      (root: Node) => Omit<FileSymbols, "language" | "references"> & {
+        references?: Reference[];
+      }
+    > = {
+      python: extractPython,
+      go: extractGo,
+      php: extractPhp,
+      ruby: extractRuby,
+      swift: extractSwift,
+      java: extractJava,
+      kotlin: extractKotlin,
+      typescript: extractTs,
+      tsx: extractTs,
+    };
+    const extracted = extractors[language](root);
+    const { definitions, imports, goPackage, phpNamespace, jvmPackage } = extracted;
 
+    // Ruby's references come from the extractor, which needs more than a query can say (local variables, symbols).
+    const references: Reference[] = extracted.references ?? [];
+    const source = {
+      python: PY_REFERENCES,
+      go: GO_REFERENCES,
+      php: PHP_REFERENCES,
+      swift: SWIFT_REFERENCES,
+      java: JAVA_REFERENCES,
+      kotlin: KOTLIN_REFERENCES,
+      ruby: undefined,
+      tsx: TS_REFERENCES + JSX_REFERENCES,
+      typescript: TS_REFERENCES,
+    }[language];
     let query = queries.get(language);
-    if (!query) {
-      const source = {
-        python: PY_REFERENCES,
-        go: GO_REFERENCES,
-        php: PHP_REFERENCES,
-        tsx: TS_REFERENCES + JSX_REFERENCES,
-        typescript: TS_REFERENCES,
-      }[language];
+    if (!query && source) {
       query = new Query(lang, source);
       queries.set(language, query);
     }
-    const references: Reference[] = [];
-    for (const match of query.matches(root)) {
+    for (const match of query?.matches(root) ?? []) {
       const value = match.captures.find((c) => c.name === "value")?.node;
       const name = value ?? match.captures.find((c) => c.name === "name")?.node;
       const object = match.captures.find((c) => c.name === "object")?.node;
@@ -787,15 +1860,33 @@ export async function extractSymbols(path: string, source: string): Promise<File
         references.push({ name: lastSegment(fqn), line: line(qualified), ...(kind ? { kind } : {}) });
         continue;
       }
+      // Swift's `.chunked(size)`: a static member or enum case of a type the context implies, not a bare call.
+      const implicit = match.captures.find((c) => c.name === "implicit")?.node;
+      if (implicit) {
+        references.push({ name: implicit.text, object: ".", line: line(implicit) });
+        continue;
+      }
+      const type = match.captures.find((c) => c.name === "type")?.node;
+      if (type) {
+        references.push({ name: type.text, line: line(type), kind: "type" });
+        continue;
+      }
       if (!name) continue;
-      let objectText = object?.text;
+      let objectText = object?.text.replace(/\s+/g, "");
       if (language === "php" && object?.type === "qualified_name") {
         const fqn = phpFqn(object.text, phpNamespace);
         imports.push({ local: lastSegment(fqn), imported: lastSegment(fqn), from: fqn, line: line(object) });
         objectText = lastSegment(fqn);
       }
       if (value && !objectText && (value.text.length <= 2 || GO_VALUE_NOISE.has(value.text))) continue;
-      const kind = language === "php" ? phpKind(name) : value ? "value" : undefined;
+      const kind =
+        language === "php"
+          ? phpKind(name)
+          : value
+            ? "value"
+            : constructs(language, name, objectText)
+              ? "new"
+              : undefined;
       references.push({
         name: name.text,
         ...(objectText ? { object: objectText } : {}),
@@ -803,13 +1894,18 @@ export async function extractSymbols(path: string, source: string): Promise<File
         ...(kind ? { kind } : {}),
       });
     }
+    if (language === "kotlin") kotlinScopeReceivers(root, references);
     return {
       language,
       ...(goPackage ? { goPackage } : {}),
       ...(phpNamespace ? { phpNamespace } : {}),
+      ...(jvmPackage ? { jvmPackage } : {}),
       definitions,
       imports,
       references,
+      ...(language === "swift" || language === "java" || language === "kotlin"
+        ? { variables: declaredVariables(language, root) }
+        : {}),
     };
   } finally {
     tree.delete();

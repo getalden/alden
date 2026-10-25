@@ -31,7 +31,7 @@ beforeEach(async () => {
   await mkdir(join(repo, "src"));
   await writeFile(join(repo, "src/rank.ts"), "export function rankQueue(queue) {\n  return queue;\n}\n");
   await writeFile(join(repo, "src/cli.ts"), 'import { rankQueue } from "./rank";\nrankQueue([]);\n');
-  await writeFile(join(repo, "src/other.rb"), "def main\nend\n");
+  await writeFile(join(repo, "src/other.rs"), "fn main() {}\n");
   git(repo, "add", ".");
   git(repo, "commit", "-q", "-m", "init");
 });
@@ -73,7 +73,7 @@ describe("local review with the code graph", () => {
 
   it("flags a re-signed function's callers and says what the graph couldn't cover", async () => {
     await writeFile(join(repo, "src/rank.ts"), "export function rankQueue(queue, now) {\n  return queue;\n}\n");
-    await writeFile(join(repo, "src/other.rb"), "def main\n  puts 1\nend\n");
+    await writeFile(join(repo, "src/other.rs"), 'fn main() {\n    println!("1");\n}\n');
     const briefing = await reviewLocalChanges(config, repo);
 
     const callers = briefing.checks.find((c) => c.id === "callers.outside");
@@ -84,7 +84,7 @@ describe("local review with the code graph", () => {
     });
     expect(briefing.needsYourEyes.some((i) => i.anchor?.path === "src/cli.ts")).toBe(true);
     expect(briefing.notChecked).toContain(
-      "Callers of changes in src/other.rb (the code graph reads TypeScript, JavaScript, Python, Go and PHP)",
+      "Callers of changes in src/other.rs (the code graph reads TypeScript, JavaScript, Python, Go, PHP, Ruby, Swift, Java and Kotlin)",
     );
     expect(briefing.notChecked.some((n) => n.startsWith("Callers and code outside the diff"))).toBe(false);
   });

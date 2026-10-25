@@ -31,7 +31,7 @@ function notCheckedFor(context: ReviewContext): string[] {
     titleLine,
     ...(outside.length > 0
       ? [
-          `Callers of changes in ${outside.slice(0, 3).join(", ")}${more} (the code graph reads TypeScript, JavaScript, Python, Go and PHP)`,
+          `Callers of changes in ${outside.slice(0, 3).join(", ")}${more} (the code graph reads TypeScript, JavaScript, Python, Go, PHP, Ruby, Swift, Java and Kotlin)`,
         ]
       : []),
     ...(context.graph.complete ? [] : ["Some callers: indexing the repo ran out of time"]),

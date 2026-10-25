@@ -13,6 +13,9 @@ removed or re-signed code that's still called, and gives the model those call si
 | Python | Supported |
 | Go | Supported |
 | PHP, with Laravel and Symfony patterns | Supported |
+| Ruby, with Rails patterns | Supported |
+| Swift | Supported |
+| Java and Kotlin | Supported |
 
 Changed files in other languages are listed under "Not checked". Blade templates aren't parsed, but are searched
 for fully qualified calls (see [Laravel and Symfony](#laravel-and-symfony)).
@@ -41,6 +44,11 @@ for fully qualified calls (see [Laravel and Symfony](#laravel-and-symfony)).
      prefixes in every `composer.json` (`autoload` and `autoload-dev`), or failing that the one file whose path ends
      in the class's namespace path. Classes in the same namespace see each other without `use`. Type hints count as
      uses, since frameworks mostly use a class by injecting it.
+   - Ruby and Swift: no imports to follow (Rails autoloads, and a Swift module sees all its files), so every file sees
+     every class. Methods are matched by the class they're called on; see [Ruby, Swift, Java and Kotlin](#ruby-swift-java-and-kotlin).
+   - Java and Kotlin: `package` clauses and imports (single, wildcard `.*` and Kotlin's `as` aliases), across both
+     languages, so Kotlin calling a Java class (or the other way round) is found. Classes in the same package see each
+     other without imports.
 
 5. **Moved and deleted files.** A file the change moves or deletes is treated like a removed symbol: files that still
    import it by its old path (and that the PR didn't change) are listed under "Callers outside the diff" as
@@ -50,7 +58,8 @@ for fully qualified calls (see [Laravel and Symfony](#laravel-and-symfony)).
 
 Indexing stops after 60 seconds. When that happens, the briefing says the results may be incomplete. As a guide,
 Kubernetes (13,500 Go files outside `vendor/`) indexes in about 18 seconds the first time and 1.5 seconds after that,
-and symfony/symfony (12,000 PHP files) in about 12 seconds and 1 second.
+and symfony/symfony (12,000 PHP files) in about 12 seconds and 1 second. Swift parses more slowly than the others:
+Alamofire (100 files) takes about a second the first time.
 `vendor/`, `node_modules/` and build output are skipped.
 
 ## Related files
@@ -72,14 +81,15 @@ place has none, and model findings never have any.
 
 ## Signatures
 
-For Go and PHP, "Changed public signatures" uses the graph: it compares each function's and method's whole
+For Go, PHP, Ruby, Swift, Java and Kotlin, "Changed public signatures" uses the graph: it compares each function's and method's whole
 declaration before and after the change, keyed by type, so multi-line parameter lists compare properly and two types'
 `Close` methods don't get mixed up. A Go interface's signature is its method set; a struct's is its name, since adding
 fields breaks nobody using keyed literals. Moving a declaration to another file in the same Go package isn't reported.
 TypeScript and Python use a heuristic that reads declarations from the diff's changed lines.
 
 A change that only appends parameters existing calls don't need to pass (a default value, an optional `b?: T`, a
-rest parameter, Python's `*args` or keyword-only defaults, Go's variadic `...T`) counts as compatible: it's listed,
+rest parameter, Python's `*args` or keyword-only defaults, Go's variadic `...T`, Ruby keyword arguments with defaults
+or a `&block`) counts as compatible: it's listed,
 but callers are flagged as reached by a behaviour change rather than broken.
 
 ## How sure it is
@@ -95,6 +105,62 @@ but callers are flagged as reached by a behaviour change rather than broken.
 Alden doesn't infer types, so a method call on a variable of another type with the same method name, in a file that
 imports the package, is counted too. In Go, a bare name in another package is always that package's own, so Go's
 name-only matches are only the uncertain cases below: calls through interfaces, and methods named without a call.
+
+## Ruby, Swift, Java and Kotlin
+
+With no type inference, a method call is matched by what it's called on:
+
+- **Sure matches.** Calls on the class itself (`Rule.find`, `Store.shared`), on a variable named like it (`rule.apply`,
+  `ruleRunner.run`), on what a class-level getter returns (`Rule.find(1).apply`), and bare or `self` calls inside the
+  class or its subclasses.
+- **Declared types.** A receiver declared with a type is that type, whatever it's named: fields, parameters and
+  locals (`val transport: Transport`, `Client client`, `weak var client: StatsigClientType?`), and values built by a
+  constructor (`val call = DnsCall()`, `var x = new Foo()`, `let request = DataRequest(…)`, Ruby's
+  `client = Api::Client.new`). A call on one of the class's own types (itself, a subclass, an implementation) is sure;
+  on a parent or interface it's a name match; on any other type it isn't listed, even when the name matches.
+- **More receivers.** A parameter, field or local typed as a parent or interface reaches every implementation, as a
+  name match. Kotlin's `x::method` is a call on `x`, and bare calls in `Foo(…).apply { }`, `x.run { }` and
+  `with(x) { }` are on that receiver. Swift's `$state` is the property wrapper `@Protected var state` declares, in any
+  file. A call on what a function in the same file returns (`loadServiceMethod(m).invoke()`) is on its declared
+  return type.
+- **Swift leading-dot calls.** `.chunked(size)` names a static member or enum case of a type only the context knows, so
+  it's a name match for any `chunked` that isn't too common a name.
+- **Name matches.** Other calls with the same method name, in files that use the class (Java and Kotlin: import it or
+  share its package; Ruby and Swift: mention it) or reach it through a parent class. Very common names (`call`, `save`,
+  `update`, `count`, `toString`…) count only as sure matches.
+- **Constructors.** A changed `initialize` (Ruby), `init` (Swift), Java constructor or Kotlin `constructor` is called by
+  every `Foo.new`, `Foo(...)` or `new Foo(...)`.
+- **Visibility.** Private methods (Ruby's `private` sections, `private def` and `private :name`; `private` and
+  `fileprivate` in Swift; `private` in Java; `private` and `protected` in Kotlin) aren't followed outside their file,
+  except a Ruby module's: those are for the classes including it. A method the change makes private is still
+  followed, since its callers outside now break.
+- **Nested classes and imported members (Java, Kotlin).** `MockResponse.Builder`'s methods are reached from files
+  importing `MockResponse`. A member imported by name (Kotlin's `import okhttp3.internal.Locks.withLock`, Java's
+  `import static …Util.closeQuietly`) is reached wherever that file calls it.
+- **Swift extensions and Kotlin extension functions** belong to the type they extend; Kotlin `companion object` members
+  belong to the class. A top-level Kotlin extension on a type from outside the repo (`fun NavGraphBuilder.topicScreen()`)
+  is reached where it's imported, and from its own package, called bare on an implicit receiver.
+
+### Rails
+
+- **Jobs.** `perform_later` and `perform_now` call `perform`.
+- **Callbacks and macros.** Method names given as symbols in a class body count as calls: `before_action :set_rule`,
+  `validate :check_dates`, `after_commit :sync, if: :changed?`. Association names (`has_many :entries`) don't.
+- **Dynamic calls.** `send(:name)`, `public_send(:name)` and `try(:name)` call `name`.
+- **Concerns.** `include`, `extend` and `prepend` count as parents, so a concern's methods are reached through the
+  models that include it. Methods in `included do` and `class_methods do` blocks belong to the concern.
+- **Scopes.** `scope :active, -> {…}` defines `active`.
+- **Namespaces.** Classes are told apart by their full name, so a change to `RedbarkAccount::Processor` doesn't list
+  every `PlaidAccount::Processor.new` in the app. A bare `Processor` is looked up as Ruby does: in the modules around
+  it, innermost first, then at the top level. `ActivityPub::FetchRepliesService.new.call` is a call on that service.
+- **RSpec.** In `RSpec.describe Rule::Runner do`, `described_class` and `subject` stand for `Rule::Runner`.
+  `let(:service) { instance_double(VerifyQuoteService) }` (or `Foo.new`, or `allow(Foo).to receive(:new).and_return(x)`)
+  types the variable, and `expect(service).to have_received(:call)` and `allow(…).to receive(:call)` count as calls.
+- **Policies and serializers.** In `StatusPolicy`, Pundit's `record` is a `Status`; in `REST::StatusSerializer`,
+  `object` is.
+
+`method_missing`, `define_method` and string-built calls aren't traced. Swift's protocol witnesses and Kotlin's and
+Java's interface calls are followed by method name, or by the receiver's declared type when it has one.
 
 ## Go
 

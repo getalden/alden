@@ -26,6 +26,20 @@ const DECLARATIONS: Record<string, RegExp[]> = {
     /^\s*(?:final\s+|abstract\s+|readonly\s+)*(?:class|interface|trait|enum)\s+([A-Za-z_]\w*)/,
   ],
   go: [/^func\s+(?:\([^)]*\)\s*)?([A-Z]\w*)\s*[([]/, /^type\s+([A-Z]\w*)\s/],
+  // Ruby's `private` is a section, not a modifier on the line, so private methods count too until the graph reads them.
+  rb: [/^\s*def\s+(?:self\.)?([a-z_]\w*[?!=]?)/, /^\s*(?:class|module)\s+([A-Z]\w*(?:::[A-Z]\w*)*)/],
+  swift: [
+    /^\s*(?:@\w+\s+)*(?:(?:public|open|internal|static|class|final|override|mutating|nonisolated)\s+)*func\s+([A-Za-z_]\w*)/,
+    /^\s*(?:@\w+\s+)*(?:(?:public|open|internal|final)\s+)*(?:class|struct|enum|protocol|actor)\s+([A-Za-z_]\w*)/,
+  ],
+  java: [
+    /^\s*(?:public|protected)\s+(?:(?:static|final|abstract|synchronized|default)\s+)*(?:<[^>]+>\s+)?[\w.<>[\], ?]+\s+([a-zA-Z_]\w*)\s*\(/,
+    /^\s*(?:public\s+)?(?:(?:abstract|final|static|sealed)\s+)*(?:class|interface|enum|record)\s+([A-Za-z_]\w*)/,
+  ],
+  kt: [
+    /^\s*(?:(?:public|internal|open|override|suspend|inline|operator|infix|abstract)\s+)*fun\s+(?:<[^>]+>\s+)?(?:[\w.]+\.)?([a-zA-Z_]\w*)\s*\(/,
+    /^\s*(?:(?:public|internal|open|abstract|sealed|data|enum|inner|value|annotation)\s+)*(?:class|interface|object)\s+([A-Za-z_]\w*)/,
+  ],
 };
 
 function language(path: string): keyof typeof DECLARATIONS | undefined {
@@ -33,6 +47,10 @@ function language(path: string): keyof typeof DECLARATIONS | undefined {
   if (path.endsWith(".py")) return "py";
   if (path.endsWith(".php")) return "php";
   if (path.endsWith(".go")) return "go";
+  if (path.endsWith(".rb")) return "rb";
+  if (path.endsWith(".swift")) return "swift";
+  if (path.endsWith(".java")) return "java";
+  if (/\.kts?$/.test(path)) return "kt";
   return undefined;
 }
 
@@ -60,7 +78,9 @@ export function declarationIn(path: string, text: string): { name: string; signa
   if (!lang) return undefined;
   // Only modifiers before the parameter list count: `__construct(private Mailer $m)` is still a public constructor.
   const head = text.split("(")[0] ?? text;
-  if ((lang === "php" || lang === "ts") && /\b(private|protected)\b/.test(head)) return undefined;
+  if ((lang === "php" || lang === "ts" || lang === "kt") && /\b(private|protected)\b/.test(head)) return undefined;
+  if (lang === "java" && /\bprivate\b/.test(head)) return undefined;
+  if (lang === "swift" && /\b(private|fileprivate)\b/.test(head)) return undefined;
   for (const pattern of DECLARATIONS[lang] ?? []) {
     const name = pattern.exec(text)?.[1];
     if (name) return { name, signature: normalise(text) };
@@ -93,7 +113,13 @@ export interface GraphSignatures {
 }
 
 /** Languages whose definitions carry their signature in the graph. */
-const hasGraphSignatures = (path: string) => path.endsWith(".go") || path.endsWith(".php");
+const hasGraphSignatures = (path: string) => /\.(go|php|rb|rake|swift|java|kts?)$/.test(path);
+
+/** Ruby and Swift files share one namespace: a declaration moving between them changes nothing for callers. */
+const sameNamespace = (a: string, b: string) =>
+  (a.endsWith(".go") && b.endsWith(".go") && posix.dirname(a) === posix.dirname(b)) ||
+  (/\.(rb|rake)$/.test(a) && /\.(rb|rake)$/.test(b)) ||
+  (a.endsWith(".swift") && b.endsWith(".swift"));
 
 const declaration = (c: ChangedSymbol, signature: string, withLine: boolean): Declaration => ({
   name: c.name,
@@ -121,7 +147,7 @@ export function graphSignatureChanges(changes: ChangedSymbol[]): SignatureChange
         kind: "changed",
         before: declaration(c, c.previousSignature, false),
         after: declaration(c, c.signature, true),
-        compatible: compatibleChange(c.previousSignature, c.signature),
+        compatible: compatibleChange(c.previousSignature, c.signature, c.path),
       });
     }
   }
@@ -130,8 +156,8 @@ export function graphSignatureChanges(changes: ChangedSymbol[]): SignatureChange
     const moved = [...unmatched].find((a) => key(a) === key(before) && a.signature === before.signature);
     if (moved) {
       unmatched.delete(moved);
-      // Within one Go package, moving between files changes nothing for callers. (A PHP class's file is its name.)
-      if (!moved.path.endsWith(".go") || posix.dirname(moved.path) !== posix.dirname(before.path)) {
+      // Within one Go package (or a Ruby app, a Swift module), moving between files changes nothing for callers.
+      if (!sameNamespace(moved.path, before.path)) {
         out.push({
           kind: "moved",
           before: declaration(before, before.signature ?? "", false),
@@ -181,7 +207,7 @@ function diffSignatureChanges(files: DiffFile[]): SignatureChange[] {
           kind: "changed",
           before,
           after: edited,
-          compatible: compatibleChange(before.signature, edited.signature),
+          compatible: compatibleChange(before.signature, edited.signature, edited.path),
         });
       }
       continue;
@@ -231,9 +257,11 @@ export function splitParameters(signature: string): { head: string; params: stri
 
 /**
  * A parameter every existing call already satisfies: it has a default (`b = 1`, `$b = 1`), is optional (`b?: T`),
- * collects the rest (`...rest`, `*args`, `**kwargs`, Go's `xs ...T`), or is Python's bare `*` separator.
+ * collects the rest (`...rest`, `*args`, `**kwargs`, Go's `xs ...T`), or is Python's bare `*` separator. In Ruby, a
+ * keyword with a default (`from: nil`) or a block (`&block`) too; a bare `from:` is required.
  */
-function optionalParameter(param: string): boolean {
+function optionalParameter(param: string, ruby = false): boolean {
+  if (ruby && (/^\w+:\s*\S/.test(param) || /^&\w*$/.test(param))) return true;
   return /=/.test(param) || /^[\w$]+\?\s*:/.test(param) || /\.\.\./.test(param) || /^\*{1,2}\w*/.test(param);
 }
 
@@ -241,11 +269,12 @@ function optionalParameter(param: string): boolean {
  * Whether callers written against `before` still work with `after`: same name, return type and existing parameters,
  * plus only parameters callers needn't pass. `f(a)` → `f(a, b = 1)` is compatible; `f(a)` → `f(a, b)` or `f(b)` isn't.
  */
-export function compatibleChange(before: string, after: string): boolean {
+export function compatibleChange(before: string, after: string, path = ""): boolean {
   const old = splitParameters(before);
   const now = splitParameters(after);
   if (!old || !now) return false;
   if (old.head !== now.head || old.tail !== now.tail || now.params.length <= old.params.length) return false;
   if (old.params.some((p, i) => p !== now.params[i])) return false;
-  return now.params.slice(old.params.length).every(optionalParameter);
+  const ruby = /\.(rb|rake)$/.test(path);
+  return now.params.slice(old.params.length).every((p) => optionalParameter(p, ruby));
 }

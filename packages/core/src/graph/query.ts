@@ -1,4 +1,4 @@
-import type { Definition, FileSymbols } from "./extract.js";
+import type { Definition, FileSymbols, TypedVariable } from "./extract.js";
 import { dirOf, type Resolver } from "./resolve.js";
 
 /** A place that calls (or instantiates, or renders) a symbol. */
@@ -34,6 +34,8 @@ interface Binding {
   reexport: boolean;
   /** The import's line in the importing file. */
   line: number;
+  /** Java and Kotlin: a member imported by name (`import okhttp3.internal.Locks.withLock`); `imported` is its class. */
+  member?: boolean;
 }
 
 /**
@@ -240,8 +242,271 @@ const PHP_COMMON_METHODS = new Set([
   "__toString",
 ]);
 
+/** Ruby and Rails names every model, job or service has: only calls on the class, `self` or a like-named receiver count. */
+const RUBY_COMMON_METHODS = new Set([
+  "new",
+  "call",
+  "perform",
+  "save",
+  "save!",
+  "update",
+  "update!",
+  "create",
+  "create!",
+  "destroy",
+  "destroy!",
+  "delete",
+  "find",
+  "find_by",
+  "where",
+  "each",
+  "map",
+  "select",
+  "reject",
+  "first",
+  "last",
+  "count",
+  "size",
+  "sum",
+  "include?",
+  "empty?",
+  "present?",
+  "blank?",
+  "valid?",
+  "to_s",
+  "to_h",
+  "to_a",
+  "to_json",
+  "as_json",
+  "inspect",
+  "name",
+  "value",
+  "key",
+  "fetch",
+  "merge",
+  "run",
+  "process",
+  "execute",
+  "render",
+  "reload",
+  "touch",
+  "errors",
+  "attributes",
+]);
+
+/** Swift's equivalents: collection, Combine and lifecycle names. */
+const SWIFT_COMMON_METHODS = new Set([
+  "init",
+  "append",
+  "insert",
+  "remove",
+  "removeAll",
+  "map",
+  "compactMap",
+  "flatMap",
+  "filter",
+  "reduce",
+  "forEach",
+  "contains",
+  "first",
+  "sorted",
+  "description",
+  "hash",
+  "encode",
+  "decode",
+  "load",
+  "save",
+  "update",
+  "reload",
+  "start",
+  "stop",
+  "run",
+  "cancel",
+  "resume",
+  "send",
+  "sink",
+  "store",
+  "get",
+  "set",
+  "callAsFunction",
+]);
+
+/** Java and Kotlin: collection, stream, builder and scope-function names. */
+const JVM_COMMON_METHODS = new Set([
+  "get",
+  "set",
+  "add",
+  "remove",
+  "put",
+  "size",
+  "isEmpty",
+  "contains",
+  "equals",
+  "hashCode",
+  "toString",
+  "close",
+  "run",
+  "call",
+  "apply",
+  "accept",
+  "test",
+  "build",
+  "builder",
+  "of",
+  "valueOf",
+  "getName",
+  "getId",
+  "getValue",
+  "setValue",
+  "iterator",
+  "stream",
+  "map",
+  "filter",
+  "forEach",
+  "collect",
+  "start",
+  "stop",
+  "init",
+  "execute",
+  "invoke",
+  "length",
+  "append",
+  "clear",
+  "copy",
+  "compareTo",
+  "next",
+  "hasNext",
+  "let",
+  "also",
+  "with",
+  "takeIf",
+  "orElse",
+  "subscribe",
+  "onCreate",
+  "onDestroy",
+]);
+
 /** Receivers that mean "this object or class" in any language. */
 const SELF_NAMES = new Set(["self", "this", "cls", "$this", "static", "parent"]);
+
+/** Ruby apps (autoloaded constants) and Swift modules: every file sees every type without importing it. */
+const moduleWide = (path: string) => /\.(rb|rake|swift)$/.test(path);
+
+/** Java and Kotlin share packages and imports, and call each other. */
+const isJvm = (path: string) => /\.(java|kts?)$/.test(path);
+
+/** Which language a module-wide file's types live with: a Ruby class is never a Swift type. */
+const moduleOf = (path: string) => (path.endsWith(".swift") ? "swift" : "ruby");
+
+/** The method a language runs on construction: `Foo.new`, `Foo(…)`, `new Foo()`. */
+function isConstructor(symbol: SymbolRef): boolean {
+  const { path, name } = symbol;
+  if (path.endsWith(".php")) return name === "__construct";
+  if (/\.(rb|rake)$/.test(path)) return name === "initialize";
+  if (path.endsWith(".swift")) return name === "init";
+  if (path.endsWith(".java")) return name === symbol.container;
+  if (/\.kts?$/.test(path)) return name === "constructor";
+  return false;
+}
+
+/** Class methods that hand back an instance: `Rule.find(id).apply`, `Store.shared.fetch()`. */
+const INSTANCE_GETTERS = new Set([
+  "new",
+  "find",
+  "find_by",
+  "find_by!",
+  "find_or_create_by",
+  "find_or_create_by!",
+  "first",
+  "last",
+  "take",
+  "sole",
+  "create",
+  "create!",
+  "shared",
+  "instance",
+  "getInstance",
+  "default",
+  "current",
+]);
+
+/** Whether a call's receiver is one of the classes, or an instance one of them just handed back. */
+function onClass(object: string, classes: Set<string>): boolean {
+  // `Rule::Runner.new` is Runner's: the namespace in front of a class doesn't count as a step.
+  const parts = object
+    .replace(/\([^()]*\)/g, "")
+    .split(/&?\./)
+    .map((part) => part.split("::").at(-1) ?? part)
+    .filter(Boolean);
+  const last = parts.at(-1) ?? object;
+  if (classes.has(last)) return true;
+  return parts.length === 2 && classes.has(parts[0] ?? "") && INSTANCE_GETTERS.has(last);
+}
+
+/** The class in a Ruby receiver that `onClass` matched: `Rule` in `Rule` or `Rule.find(id)`. */
+function rubyReceiverClass(object: string): string | undefined {
+  const parts = object
+    .replace(/\([^()]*\)/g, "")
+    .split(/&?\./)
+    .filter(Boolean);
+  const last = parts.at(-1) ?? object;
+  if (/^[A-Z]/.test(last)) return last;
+  return parts.length === 2 && /^[A-Z]/.test(parts[0] ?? "") ? parts[0] : undefined;
+}
+
+/**
+ * Whether a receiver is named after one of the classes: `rule`, `@rule`, `current_rule`, `self.rule` for Rule;
+ * `ruleRunner` for RuleRunner. Where any file can reach any class, that's the best sign a call is on an instance.
+ */
+/** The declared type of `transport`, `this.transport` or `self.client?` at a line, by the innermost declaration. */
+function declaredType(symbols: FileSymbols, object: string, line: number): string | undefined {
+  const name = object.replace(/^(self|this)\./, "").replace(/[?!]+$/, "");
+  let found: TypedVariable | undefined;
+  for (const v of symbols.variables ?? []) {
+    if (v.name === name && v.startLine <= line && line <= v.endLine && (!found || v.startLine >= found.startLine))
+      found = v;
+  }
+  return found?.type;
+}
+
+/** `Map<String, List<Int>> f()` → `Map f()`: a signature without its type arguments, however deeply nested. */
+function withoutTypeArguments(signature: string): string {
+  let depth = 0;
+  let out = "";
+  for (const char of signature) {
+    if (char === "<") depth++;
+    else if (char === ">" && depth > 0) depth--;
+    else if (depth === 0) out += char;
+  }
+  return out;
+}
+
+/** `loadServiceMethod(m)` → `ServiceMethod`: what a function defined in the same file returns, by its signature. */
+function returnType(symbols: FileSymbols, object: string): string | undefined {
+  const called = object.replace(/^(self|this)\./, "").match(/^(\w+)\(.*\)[?!]*$/)?.[1];
+  if (!called || /^\p{Lu}/u.test(called)) return undefined;
+  const def = symbols.definitions.find((d) => d.name === called && (d.kind === "method" || d.kind === "function"));
+  const signature = withoutTypeArguments(def?.signature ?? "").replace(/\s+/g, " ");
+  // Kotlin `fun f(): Foo`, Swift `func f() -> Foo`, Java `Foo f(Bar b)`.
+  const written =
+    signature.match(/\)\s*(?::|->)\s*([\w.]+)[?!]?\s*(?:where\b.*)?$/)?.[1] ??
+    signature.match(new RegExp(`([\\w.]+)(?:\\[\\])?\\s+${called}\\s*\\(`))?.[1];
+  const type = written?.split(".").at(-1);
+  return type && /^\p{Lu}/u.test(type) ? type : undefined;
+}
+
+function namedLike(object: string, classes: Iterable<string>): boolean {
+  const last = (object.split(/\.|::/).at(-1) ?? object)
+    .replace(/^@+/, "")
+    .replace(/[?!]$/, "")
+    .replace(/_/g, "")
+    .toLowerCase();
+  for (const name of classes) {
+    const wanted = name.toLowerCase();
+    if (wanted.length >= 3 && (last === wanted || last.endsWith(wanted))) return true;
+  }
+  return false;
+}
 
 const snake = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 
@@ -321,10 +586,56 @@ export class CodeGraph {
 
   private goTypeIndex: GoTypes | undefined;
 
+  /** Java and Kotlin: "com.acme.Foo" → the file defining it, for every top-level class, object and function. */
+  private readonly jvmNames = new Map<string, string>();
+  /** Swift: `$state` → the property wrapper `@Protected var state` declares, from any file (extensions use it too). */
+  private readonly swiftWrappers = new Map<string, string>();
+
+  /**
+   * Ruby and Swift: "ruby#Name" → the files defining (or reopening, or extending) the type. Ruby keys by the full
+   * constant path ("ruby#Rule::Runner").
+   */
+  private readonly moduleTypes = new Map<string, string[]>();
+
+  /** Ruby: a class's own name → the full constant paths of every class and module with that name. */
+  private readonly rubyNames = new Map<string, string[]>();
+
+  /** Ruby: resolved constants, by file, line and constant as written. */
+  private readonly rubyResolved = new Map<string, SymbolRef | undefined>();
+
   constructor(
     private readonly files: Map<string, FileSymbols>,
     private readonly resolve: Resolver,
   ) {
+    for (const [path, symbols] of [...files].sort(([a], [b]) => a.localeCompare(b))) {
+      for (const variable of symbols.variables ?? []) {
+        if (variable.name.startsWith("$") && !this.swiftWrappers.has(variable.name))
+          this.swiftWrappers.set(variable.name, variable.type);
+      }
+      for (const def of symbols.definitions) {
+        if (def.extension && isJvm(path)) {
+          const fqn = symbols.jvmPackage ? `${symbols.jvmPackage}.${def.name}` : def.name;
+          if (!this.jvmNames.has(fqn)) this.jvmNames.set(fqn, path);
+        }
+        if (def.container) continue;
+        if (isJvm(path)) {
+          const name = def.qualified ?? def.name;
+          const fqn = symbols.jvmPackage ? `${symbols.jvmPackage}.${name}` : name;
+          if (!this.jvmNames.has(fqn)) this.jvmNames.set(fqn, path);
+        } else if (moduleWide(path) && def.kind !== "function") {
+          const key = `${moduleOf(path)}#${def.qualified ?? def.name}`;
+          const list = this.moduleTypes.get(key) ?? [];
+          if (!list.includes(path)) list.push(path);
+          this.moduleTypes.set(key, list);
+          if (moduleOf(path) === "ruby" && def.kind !== "variable") {
+            const qualified = def.qualified ?? def.name;
+            const names = this.rubyNames.get(def.name) ?? [];
+            if (!names.includes(qualified)) names.push(qualified);
+            this.rubyNames.set(def.name, names);
+          }
+        }
+      }
+    }
     for (const path of files.keys()) {
       if (!path.endsWith(".go") || path.endsWith("_test.go")) continue;
       const dir = dirOf(path);
@@ -332,6 +643,10 @@ export class CodeGraph {
     }
     for (const [path, symbols] of files) {
       const list: Binding[] = [];
+      if (isJvm(path)) {
+        this.bindings.set(path, this.jvmBindings(symbols));
+        continue;
+      }
       for (const imp of symbols.imports) {
         const target = resolve(path, imp.from);
         if (target === undefined) continue;
@@ -384,7 +699,10 @@ export class CodeGraph {
           const parent = this.resolveClass(path, base);
           if (!parent) continue;
           const key = `${parent.path}#${parent.name}`;
-          this.descendants.set(key, [...(this.descendants.get(key) ?? []), { path, name: def.name }]);
+          const child = this.rubyCanonical(path, def) ?? { path, name: def.name };
+          const list = this.descendants.get(key) ?? [];
+          if (!list.some((c) => c.path === child.path && c.name === child.name)) list.push(child);
+          this.descendants.set(key, list);
         }
         if (!def.facadeFor) continue;
         const target = this.resolveClass(path, def.facadeFor);
@@ -395,10 +713,84 @@ export class CodeGraph {
     }
   }
 
-  /** A class name as written in a PHP file (imported, relative to its namespace, or fully qualified) → its file. */
-  private resolveClass(fromFile: string, written: string): SymbolRef | undefined {
+  /**
+   * Java and Kotlin imports, matched against the repo's own classes and functions: `com.acme.Foo` binds Foo (or its
+   * alias), `com.acme.*` binds everything top-level in the package.
+   */
+  private jvmBindings(symbols: FileSymbols): Binding[] {
+    const list: Binding[] = [];
+    for (const imp of symbols.imports) {
+      if (imp.imported === "*") {
+        for (const [fqn, target] of this.jvmNames) {
+          const name = fqn.slice(imp.from.length + 1);
+          if (!fqn.startsWith(`${imp.from}.`) || name.includes(".")) continue;
+          list.push({ local: name, namespace: false, target, imported: name, reexport: false, line: imp.line });
+        }
+        continue;
+      }
+      const target = this.jvmNames.get(imp.from);
+      const extension =
+        target !== undefined && this.files.get(target)?.definitions.some((d) => d.extension && d.name === imp.imported);
+      if (target === undefined || extension) {
+        // `import pkg.Locks.withLock` (Kotlin) or `import static pkg.Util.helper` (Java): a member of a class.
+        const owner = imp.from.slice(0, imp.from.lastIndexOf("."));
+        const ownerFile = extension ? target : this.jvmNames.get(owner);
+        if (ownerFile !== undefined) {
+          list.push({
+            local: imp.local,
+            namespace: false,
+            target: ownerFile,
+            imported: owner.split(".").at(-1) ?? owner,
+            reexport: false,
+            line: imp.line,
+            member: true,
+          });
+        }
+        continue;
+      }
+      list.push({
+        local: imp.local,
+        namespace: false,
+        target,
+        imported: imp.imported,
+        reexport: false,
+        line: imp.line,
+      });
+    }
+    return list;
+  }
+
+  /** A class name as written in a PHP, Ruby, Swift, Java or Kotlin file → the file defining it. */
+  private resolveClass(fromFile: string, written: string, line?: number): SymbolRef | undefined {
     const symbols = this.files.get(fromFile);
-    if (!symbols || !fromFile.endsWith(".php")) return undefined;
+    if (!symbols) return undefined;
+    if (moduleOf(fromFile) === "ruby" && moduleWide(fromFile))
+      return this.resolveRuby(fromFile, symbols, written, line);
+    if (moduleWide(fromFile)) {
+      const name = written.split(/::|\./).at(-1) ?? written;
+      const path = this.moduleTypes.get(`${moduleOf(fromFile)}#${name}`)?.[0];
+      return path ? { path, name } : undefined;
+    }
+    if (isJvm(fromFile)) {
+      const name = written.split(".").at(-1) ?? written;
+      // `DnsCallStateMachine.Transport`: a nested class, through its outer class.
+      const [first, ...rest] = written.split(".");
+      if (first && rest.length > 0 && /^\p{Lu}/u.test(first)) {
+        const outer = this.resolveClass(fromFile, first);
+        const qualified = [outer?.name, ...rest].join(".");
+        const nested =
+          outer && this.files.get(outer.path)?.definitions.find((d) => !d.container && d.qualified === qualified);
+        if (outer && nested) return { path: outer.path, name: nested.name };
+      }
+      // A class nested in this file, named bare.
+      if (symbols.definitions.some((d) => !d.container && d.name === name && d.qualified !== undefined))
+        return { path: fromFile, name };
+      const imported = this.bindings.get(fromFile)?.find((b) => b.local === name);
+      if (imported) return { path: imported.target, name: imported.imported };
+      const path = this.jvmNames.get(symbols.jvmPackage ? `${symbols.jvmPackage}.${name}` : name);
+      return path ? { path, name } : undefined;
+    }
+    if (!fromFile.endsWith(".php")) return undefined;
     const name = written.split("\\").at(-1) ?? written;
     let fqn: string;
     if (written.startsWith("\\")) fqn = written.slice(1);
@@ -415,20 +807,81 @@ export class CodeGraph {
   }
 
   /**
+   * A Ruby constant as written at `line` (anywhere in the file without one) → the class or module it names, looked up
+   * as Ruby does: in the namespaces around it, innermost first, then at the top level. `Rule::Runner` matches a class
+   * whose full path ends with it. A name only one class in the repo has needs no namespace to match.
+   */
+  private resolveRuby(fromFile: string, symbols: FileSymbols, written: string, line?: number): SymbolRef | undefined {
+    const cacheKey = `${fromFile}:${line ?? ""}:${written}`;
+    if (this.rubyResolved.has(cacheKey)) return this.rubyResolved.get(cacheKey);
+    const path = written.replace(/^::/, "");
+    const short = path.split("::").at(-1) ?? path;
+    const candidates = this.rubyNames.get(short) ?? [];
+    let found: string | undefined;
+    if (candidates.length === 1) found = candidates[0];
+    else if (candidates.length > 1) {
+      // Namespaces around the reference: each enclosing class's full path and the namespaces above it.
+      const nesting: string[] = [];
+      const enclosing = symbols.definitions
+        .filter(
+          (d) =>
+            !d.container && d.kind === "class" && (line === undefined || (d.startLine <= line && line <= d.endLine)),
+        )
+        .sort((a, b) => b.startLine - a.startLine);
+      for (const d of enclosing) {
+        const parts = (d.qualified ?? d.name).split("::");
+        for (let i = parts.length; i > 0; i--) {
+          const ns = parts.slice(0, i).join("::");
+          if (!nesting.includes(ns)) nesting.push(ns);
+        }
+      }
+      for (const ns of nesting) {
+        if (candidates.includes(`${ns}::${path}`)) {
+          found = `${ns}::${path}`;
+          break;
+        }
+      }
+      found ??=
+        candidates.find((c) => c === path) ?? candidates.find((c) => path.includes("::") && c.endsWith(`::${path}`));
+    }
+    const file = found ? this.moduleTypes.get(`ruby#${found}`)?.[0] : undefined;
+    const ref = file ? { path: file, name: short } : undefined;
+    this.rubyResolved.set(cacheKey, ref);
+    return ref;
+  }
+
+  /** A Ruby class defined in `path` → the class as the graph keys it: the first file opening it. */
+  private rubyCanonical(path: string, def: Definition): SymbolRef | undefined {
+    if (moduleOf(path) !== "ruby" || !moduleWide(path)) return undefined;
+    const file = this.moduleTypes.get(`ruby#${def.qualified ?? def.name}`)?.[0];
+    return file ? { path: file, name: def.name } : undefined;
+  }
+
+  /** The class a Ruby method's container names, from the file defining the method. */
+  private rubyClassOf(path: string, container: string, line?: number): SymbolRef | undefined {
+    const defs = this.files.get(path)?.definitions ?? [];
+    const def =
+      defs.find(
+        (d) => !d.container && d.name === container && line !== undefined && d.startLine <= line && line <= d.endLine,
+      ) ?? defs.find((d) => !d.container && d.name === container);
+    return def ? this.rubyCanonical(path, def) : undefined;
+  }
+
+  /**
    * The classes whose name can stand for `container` at a call site: itself, the interfaces and parents it
    * extends (a container binding or a type hint calls through those), and facades pointing at it.
    */
   private classFamily(symbol: SymbolRef, container: string): SymbolRef[] {
-    const family: SymbolRef[] = [{ path: symbol.path, name: container }];
-    const def = this.files.get(symbol.path)?.definitions.find((d) => d.name === container && !d.container);
-    for (const base of def?.bases ?? []) {
-      const resolved = this.resolveClass(symbol.path, base);
-      if (resolved) family.push(resolved);
-    }
+    // A Ruby class or Swift type can be opened in several files; the graph keys it by the first.
+    const start = moduleWide(symbol.path)
+      ? (this.rubyClassOf(symbol.path, container) ??
+        this.resolveClass(symbol.path, container) ?? { path: symbol.path, name: container })
+      : { path: symbol.path, name: container };
+    const family: SymbolRef[] = [start, ...this.parentsOf(start)];
     // Downwards too: subclasses and classes using it as a trait inherit the method, so `$song->album` reaches a
-    // relationship defined in a trait Song uses.
-    const seen = new Set([`${symbol.path}#${container}`]);
-    let frontier = [{ path: symbol.path, name: container }];
+    // relationship defined in a trait Song uses (and a Ruby concern's methods reach the models including it).
+    const seen = new Set([`${start.path}#${start.name}`]);
+    let frontier = [start];
     for (let depth = 0; depth < 4 && frontier.length > 0; depth++) {
       const next: SymbolRef[] = [];
       for (const member of frontier) {
@@ -444,6 +897,42 @@ export class CodeGraph {
     }
     for (const member of [...family]) family.push(...(this.facades.get(`${member.path}#${member.name}`) ?? []));
     return family;
+  }
+
+  /** The classes, interfaces and modules a class extends, implements or mixes in, that the repo defines. */
+  private parentsOf(ref: SymbolRef): SymbolRef[] {
+    return this.basesOf(ref).flatMap((base) => this.resolveClass(ref.path, base) ?? []);
+  }
+
+  /** What a class extends, implements or mixes in, across every file that opens it (Ruby, Swift). */
+  private basesOf(ref: SymbolRef): string[] {
+    const own = this.files.get(ref.path)?.definitions.find((d) => d.name === ref.name && !d.container);
+    const paths = moduleWide(ref.path)
+      ? (this.moduleTypes.get(`${moduleOf(ref.path)}#${own?.qualified ?? ref.name}`) ?? [])
+      : [ref.path];
+    return paths.flatMap(
+      (path) => this.files.get(path)?.definitions.find((d) => d.name === ref.name && !d.container)?.bases ?? [],
+    );
+  }
+
+  /** Ruby: whether `line` is inside one of the classes, by the innermost class or module around it. */
+  private insideRubyClass(path: string, symbols: FileSymbols, line: number, keys: Set<string>): boolean {
+    const around = symbols.definitions
+      .filter((d) => !d.container && d.kind === "class" && d.startLine <= line && line <= d.endLine)
+      .sort((a, b) => b.startLine - a.startLine)[0];
+    const ref = around ? this.rubyCanonical(path, around) : undefined;
+    return ref !== undefined && keys.has(`${ref.path}#${ref.name}`);
+  }
+
+  /** Whether `line` is inside one of the classes (or a method declared for one, such as a Kotlin extension). */
+  private insideClass(symbols: FileSymbols, line: number, classes: Set<string>): boolean {
+    return symbols.definitions.some(
+      (d) =>
+        classes.has(d.container ?? d.name) &&
+        (d.container !== undefined || d.kind === "class" || d.kind === "interface") &&
+        d.startLine <= line &&
+        line <= d.endLine,
+    );
   }
 
   /** An Eloquent model: extends Model (or a class named like one), Authenticatable or Pivot, possibly via parents. */
@@ -597,13 +1086,18 @@ export class CodeGraph {
     return family;
   }
 
-  /** Go: one directory is one package. PHP: one namespace, whose classes need no `use` for each other. */
+  /**
+   * Go: one directory is one package. PHP: one namespace, whose classes need no `use` for each other. Java and Kotlin:
+   * one `package`. Ruby and Swift: the whole app or module.
+   */
   private samePackage(a: string, b: string): boolean {
     if (a.endsWith(".go") && b.endsWith(".go")) return dirOf(a) === dirOf(b);
     if (a.endsWith(".php") && b.endsWith(".php")) {
       const namespace = this.files.get(a)?.phpNamespace;
       return namespace !== undefined && namespace === this.files.get(b)?.phpNamespace;
     }
+    if (moduleWide(a) && moduleWide(b)) return moduleOf(a) === moduleOf(b);
+    if (isJvm(a) && isJvm(b)) return this.files.get(a)?.jvmPackage === this.files.get(b)?.jvmPackage;
     return false;
   }
 
@@ -684,6 +1178,9 @@ export class CodeGraph {
     const isMethod = symbol.container !== undefined;
     const isPhp = symbol.path.endsWith(".php");
     const isGo = symbol.path.endsWith(".go");
+    // Ruby, Swift, Java and Kotlin: methods are called on instances whose type the graph doesn't track, and without a
+    // receiver from inside the class.
+    const typed = moduleWide(symbol.path) || isJvm(symbol.path);
     // PHP methods are also reached through interfaces, parents and facades; Go methods through the interfaces their
     // type implements and the structs embedding it; everything else through its own name.
     const goMembers = isMethod && isGo ? this.goFamily({ ...symbol, container: lookFor }) : undefined;
@@ -705,7 +1202,7 @@ export class CodeGraph {
     }
     const family = goMembers
       ? goMembers.map((m) => m.ref)
-      : isMethod && isPhp
+      : isMethod && (isPhp || typed)
         ? this.classFamily(symbol, lookFor)
         : [{ path: symbol.path, name: lookFor }];
     const exported = new Map<string, Set<string>>();
@@ -717,6 +1214,36 @@ export class CodeGraph {
     // Go: `Type.Method` (a method expression) is the type itself only in its own package; elsewhere a bare `check` is
     // a variable that happens to share an unexported type's name. Interfaces and embedders don't count as the type.
     const classNames = new Set(goMembers ? [] : family.map((m) => m.name));
+    const familyPaths = new Set(family.map((m) => m.path));
+    // Ruby, Swift, Java, Kotlin: a receiver named after a parent class (`function.call` for a subclass's `call`) may
+    // reach the method, or a sibling's; only the class itself and its descendants make a sure match.
+    const parents =
+      typed && isMethod ? new Set(this.parentsOf({ path: symbol.path, name: lookFor }).map((p) => p.name)) : undefined;
+    const ownNames = new Set([...classNames].filter((n) => n === lookFor || !parents?.has(n)));
+    // Ruby: which classes those are, so `Plaid::Processor.new` doesn't count for `Redbark::Processor`.
+    const ruby = typed && moduleOf(symbol.path) === "ruby" && moduleWide(symbol.path);
+    const keyOf = (r: SymbolRef) => `${r.path}#${r.name}`;
+    const parentKeys = new Set(
+      typed && isMethod ? this.parentsOf(family[0] ?? { path: symbol.path, name: lookFor }).map(keyOf) : [],
+    );
+    const familyKeys = new Set(family.map(keyOf));
+    const ownKeys = new Set(family.filter((m, i) => i === 0 || !parentKeys.has(keyOf(m))).map(keyOf));
+    // Java and Kotlin: the classes a nested class sits in (`MockResponse` for `MockResponse.Builder`), which is what
+    // files import.
+    const outerNames = new Set(
+      family.flatMap(
+        (m) =>
+          this.files
+            .get(m.path)
+            ?.definitions.find((d) => d.name === m.name && !d.container)
+            ?.qualified?.split(".")
+            .slice(0, -1) ?? [],
+      ),
+    );
+    const constructs = isMethod && isConstructor(symbol);
+    const extension = this.files
+      .get(symbol.path)
+      ?.definitions.some((d) => d.extension && d.name === symbol.name && d.container === symbol.container);
     const methodNames = !isMethod
       ? undefined
       : isPhp
@@ -738,7 +1265,8 @@ export class CodeGraph {
         const names_ = exported.get(b.target);
         if (!names_) continue;
         if (b.namespace) namespaces.add(b.local);
-        else if (names_.has(b.imported)) names.add(b.local);
+        else if (names_.has(b.imported) || outerNames.has(b.imported)) names.add(b.local);
+        else if (b.member && b.local === symbol.name && familyPaths.has(b.target)) names.add(b.local);
       }
       if (names.size === 0 && namespaces.size === 0) continue;
       // Go: the closest way this file reaches the method, by its own package and the packages it imports.
@@ -752,11 +1280,79 @@ export class CodeGraph {
         }
       }
 
+      // Java and Kotlin: a file that imports the class by name (not just shares its package) uses it on purpose.
+      const importsClass = (this.bindings.get(path) ?? []).some(
+        (b) => familyPaths.has(b.target) && !b.member && (classNames.has(b.imported) || outerNames.has(b.imported)),
+      );
+      // A method imported by name is called as itself: `withLock { … }`, `lock.withLock { … }` for an extension.
+      const importsMember =
+        typed &&
+        (this.bindings.get(path) ?? []).some((b) => b.member && familyPaths.has(b.target) && b.local === symbol.name);
+      // Ruby and Swift: whether the file names the class at all, which a name match then needs.
+      let mentions: boolean | undefined;
+      const mentionsClass = () =>
+        (mentions ??= symbols.references.some(
+          (r) => classNames.has(r.name) || (r.object !== undefined && onClass(r.object, classNames)),
+        ));
+
       for (const ref of symbols.references) {
         if (isMethod && methodNames) {
-          // A PHP constructor runs on `new Class(...)` and `parent::__construct()`.
-          if (symbol.name === "__construct" && ref.kind === "new" && names.has(ref.name)) {
-            add(path, ref.line, "import");
+          // A constructor runs on `new Class(...)` (`Class.new`, `Class(...)`), and PHP's on `parent::__construct()`.
+          if (constructs && ref.kind === "new" && names.has(ref.name)) {
+            const made = ruby ? this.resolveClass(path, ref.qualified ?? ref.name, ref.line) : undefined;
+            if (!ruby || (made && ownKeys.has(keyOf(made)))) add(path, ref.line, "import");
+            continue;
+          }
+          if (typed) {
+            if (ref.kind === "type" || ref.kind === "new" || !methodNames.calls.has(ref.name)) continue;
+            // A Kotlin extension function is also called bare from its own package, on an implicit receiver.
+            if (importsMember || (extension && ref.object === undefined && this.samePackage(path, symbol.path))) {
+              add(path, ref.line, "import");
+              continue;
+            }
+            // No receiver, or self/this: the class's own method only from inside the class (or a subclass, a
+            // module including it, a Kotlin extension of it).
+            if (ref.object === undefined || SELF_NAMES.has(ref.object)) {
+              const inside = ruby
+                ? this.insideRubyClass(path, symbols, ref.line, ownKeys)
+                : this.insideClass(symbols, ref.line, ownNames);
+              if (inside) add(path, ref.line, "import");
+              continue;
+            }
+            const common = isJvm(symbol.path)
+              ? JVM_COMMON_METHODS
+              : symbol.path.endsWith(".swift")
+                ? SWIFT_COMMON_METHODS
+                : RUBY_COMMON_METHODS;
+            // `Rule.apply_all` or `rule.apply`: on the class, or on something named like it. Anything else is a name
+            // match, and only for names rare enough to mean something: through a parent class, in a file importing
+            // the class, or (where every file sees every class) in a file that at least names it.
+            const on = (names_: Set<string>, keys: Set<string>) => {
+              if (!onClass(ref.object ?? "", names_)) return false;
+              if (!ruby) return true;
+              const written = ref.qualified ?? rubyReceiverClass(ref.object ?? "");
+              const target = written ? this.resolveClass(path, written, ref.line) : undefined;
+              return target !== undefined && keys.has(keyOf(target));
+            };
+            // Swift, Java, Kotlin: a receiver declared with a type is that type, whatever it's named.
+            const declared = ruby
+              ? undefined
+              : (declaredType(symbols, ref.object, ref.line) ??
+                this.swiftWrappers.get(ref.object.replace(/^self\./, "")) ??
+                returnType(symbols, ref.object));
+            if (declared !== undefined) {
+              if (ownNames.has(declared)) add(path, ref.line, "import");
+              // Declared as a parent or interface: the call may dispatch to this class, however common the name.
+              else if (classNames.has(declared)) add(path, ref.line, "name");
+              continue;
+            }
+            if (on(ownNames, ownKeys) || namedLike(ref.object, ownNames)) add(path, ref.line, "import");
+            else if (common.has(ref.name)) continue;
+            else if (on(classNames, familyKeys) || namedLike(ref.object, classNames)) add(path, ref.line, "name");
+            else if (importsClass) add(path, ref.line, "import");
+            // Swift's `.chunked(size)` names a member of a type only the context knows.
+            else if (ref.object === ".") add(path, ref.line, "name");
+            else if (!moduleWide(symbol.path) || mentionsClass()) add(path, ref.line, "name");
             continue;
           }
           const asProperty = ref.kind === "property";

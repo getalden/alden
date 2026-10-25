@@ -179,7 +179,7 @@ function importersOf(
 }
 
 /** Languages whose callers the graph can find across files. */
-const CALLERS_READY = new Set(["typescript", "tsx", "python", "go", "php"]);
+const CALLERS_READY = new Set(["typescript", "tsx", "python", "go", "php", "ruby", "swift", "java", "kotlin"]);
 
 /** Production code first: that's where a break hurts; tests follow. Within each, sure matches before name-only ones. */
 const productionFirst = (sites: CallSite[]) =>

@@ -1,4 +1,5 @@
-import type { DiffFile } from "../diff/parse.js";
+import { commentChanges } from "../diff/comments.js";
+import type { DiffFile, DiffLine } from "../diff/parse.js";
 import { reverseApply } from "../review/manifests.js";
 import { type Definition, extractSymbols, type FileSymbols } from "./extract.js";
 import { languageOf } from "./parser.js";
@@ -26,21 +27,24 @@ export interface ChangedSymbol {
 
 /**
  * Where each changed line lands in the new file. Added lines have their own number; a deleted line is placed at the
- * new-file line that follows it, so deleting from a function's middle still counts as changing that function.
+ * new-file line that follows it, so deleting from a function's middle still counts as changing that function. Lines in
+ * `skip` don't count.
  */
-export function changedNewLines(file: DiffFile): Set<number> {
+export function changedNewLines(file: DiffFile, skip?: Set<DiffLine>): Set<number> {
   const lines = new Set<number>();
   for (const hunk of file.hunks) {
     let next = hunk.newStart;
     let pendingDeletion = false;
     for (const line of hunk.lines) {
       if (line.kind === "del") {
-        pendingDeletion = true;
+        if (!skip?.has(line)) pendingDeletion = true;
         continue;
       }
+      // A deletion followed by skipped lines (a method replaced by a comment and a new method) lands after them.
+      if (pendingDeletion && line.kind === "add" && skip?.has(line)) continue;
       if (pendingDeletion) lines.add(line.newLine ?? next);
       pendingDeletion = false;
-      if (line.kind === "add" && line.newLine !== undefined) lines.add(line.newLine);
+      if (line.kind === "add" && line.newLine !== undefined && !skip?.has(line)) lines.add(line.newLine);
       if (line.newLine !== undefined) next = line.newLine + 1;
     }
     if (pendingDeletion) lines.add(Math.max(1, next - 1));
@@ -78,6 +82,8 @@ export function changedSymbols(
     const existedBefore = old ? new Set(old.definitions.map(key)) : undefined;
     const oldByKey = new Map((old?.definitions ?? []).map((d) => [key(d), d]));
     const changed = file.status === "removed" ? new Set<number>() : changedNewLines(file);
+    // A comment or blank line between methods doesn't change the class around it.
+    const code = file.status === "removed" ? new Set<number>() : changedNewLines(file, commentChanges(file));
     const added = addedNewLines(file);
 
     if (symbols) {
@@ -89,7 +95,8 @@ export function changedSymbols(
           if (lineNumber < def.startLine || lineNumber > def.endLine) continue;
           if (!best || def.endLine - def.startLine < best.endLine - best.startLine) best = def;
         }
-        if (best) hits.set(best, (hits.get(best) ?? 0) + 1);
+        const isType = best?.kind === "class" || best?.kind === "interface";
+        if (best && (!isType || code.has(lineNumber))) hits.set(best, (hits.get(best) ?? 0) + 1);
       }
       for (const [def, count] of hits) {
         // New if the old version didn't have it. Without the old version, if every line of it is an added line
@@ -102,7 +109,8 @@ export function changedSymbols(
           name: def.name,
           kind: def.kind,
           ...(def.container ? { container: def.container } : {}),
-          exported: def.exported,
+          // Made private by this change: whatever called it from outside breaks, so it still counts as public.
+          exported: def.exported || oldByKey.get(key(def))?.exported === true,
           change: allNew || file.status === "added" ? "added" : "modified",
           startLine: def.startLine,
           endLine: def.endLine,
